@@ -1,0 +1,109 @@
+{
+  "project_name": "ASD Master - Software Gestionale per Associazione Sportiva Dilettantistica",
+  "language": "Italiano",
+  "archetype": "Performance Pro & Swiss High-Contrast (Sport Management)",
+  "context": "Web App Fullstack per Mac Locale",
+  "design_principles": [
+    "Fusion over Imitation: Combine high-density athletic dashboard clarity with Swiss editorial precision.",
+    "Emotion First: Evoke trust, legal compliance, and energy for club administrators and coaches.",
+    "Content is King: Clear typography for member records, payment ledgers, and medical alert badges.",
+    "Contrast & Hierarchy: Crisp borders, zero mud, distinct badge colors for expired vs valid certificates.",
+    "Negative Space: Clean spacing in data tables and sidebars to avoid visual clutter."
+  ],
+  "typography": {
+    "heading_font": "Outfit, sans-serif",
+    "body_font": "Plus Jakarta Sans, sans-serif",
+    "mono_font": "JetBrains Mono, monospace",
+    "imports": "<link href=\"https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap\" rel=\"stylesheet\">",
+    "hierarchy": {
+      "h1": "text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight",
+      "h2": "text-2xl sm:text-3xl font-bold tracking-tight",
+      "h3": "text-xl sm:text-2xl font-semibold",
+      "h4": "text-lg font-medium",
+      "body": "text-sm sm:text-base leading-relaxed",
+      "caption_labels": "text-xs font-semibold uppercase tracking-wider text-slate-400"
+    }
+  },
+  "colors": {
+    "palette": {
+      "primary": "#0284C7",
+      "primary_hover": "#0369A1",
+      "emerald_active": "#10B981",
+      "rose_alert": "#F43F5E",
+      "amber_warning": "#F59E0B",
+      "indigo_accent": "#6366F1",
+      "dark_bg": "#0B0F17",
+      "dark_card": "#151C28",
+      "dark_border": "#26334D",
+      "light_bg": "#F8FAFC",
+      "light_card": "#FFFFFF",
+      "light_border": "#E2E8F0"
+    },
+    "medical_status_colors": {
+      "valido": "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+      "in_scadenza": "bg-amber-500/15 text-amber-400 border-amber-500/30",
+      "scaduto": "bg-rose-500/15 text-rose-400 border-rose-500/30"
+    },
+    "rules": "Never use transparent backgrounds without backdrop-blur. High contrast on active states. Tinted slates over pure black."
+  },
+  "layout": {
+    "sidebar_width": "w-64",
+    "grid_density": "High density grid for dashboards (gap-4 to gap-6). Generous internal padding (p-6 to p-8) for containers.",
+    "mobile_first": true,
+    "header_height": "h-16"
+  },
+  "image_urls": {
+    "athletes": [
+      {
+        "url": "https://images.unsplash.com/photo-1535725213980-3cddc939d616?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAxODF8MHwxfHNlYXJjaHwyfHxzcG9ydHMlMjBhdGhsZXRlJTIwcG9ydHJhaXQlMjBhdGhsZXRpYyUyMHRyYWluaW5nfGVufDB8fHx8MTc4OTgyMzg4NXww&ixlib=rb-4.1.0&q=85",
+        "description": "Athlete portrait female runner"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1606335544053-c43609e6155d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAxODF8MHwxfHNlYXJjaHwzfHxzcG9ydHMlMjBhdGhsZXRlJTIwcG9ydHJhaXQlMjBhdGhsZXRpYyUyMHRyYWluaW5nfGVufDB8fHx8MTc4OTgyMzg4NXww&ixlib=rb-4.1.0&q=85",
+        "description": "Male athlete training portrait"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1784239494532-e0964e4a8d99?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAxODF8MHwxfHNlYXJjaHw0fHxzcG9ydHMlMjBhdGhsZXRlJTIwcG9ydHJhaXQlMjBhdGhsZXRpYyUyMHRyYWluaW5nfGVufDB8fHx8MTc4OTgyMzg4NXww&ixlib=rb-4.1.0&q=85",
+        "description": "Young soccer athlete in uniform"
+      }
+    ],
+    "facilities": [
+      {
+        "url": "https://images.unsplash.com/photo-1771909720886-a90afd1b37f5?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzd8MHwxfHNlYXJjaHwzfHxzcG9ydHMlMjBjbHViJTIwZmFjaWxpdHklMjBneW1uYXNpdW0lMjBpbmRvb3IlMjBhcmVuYXxlbnwwfHx8fDE3ODk4MjM4ODV8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Indoor sports arena gymnasium"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1768554630751-6448593749eb?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzd8MHwxfHNlYXJjaHwyfHxzcG9ydHMlMjBjbHViJTIwZmFjaWxpdHklMjBneW1uYXNpdW0lMjBpbmRvb3IlMjBhcmVuYXxlbnwwfHx8fDE3ODk4MjM4ODV8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Basketball court wooden floor"
+      }
+    ]
+  },
+  "key_features_and_modules": [
+    "Dashboard Statistiche ASD (Soci attivi, tesserati CONI/EPS, incassi del mese, certificati in scadenza/scaduti, grafico andamento iscrizioni)",
+    "Anagrafica Soci Completa (CRUD, foto socio, codice fiscale, data nascita, indirizzo, telefono, email, tag disciplina, contatto emergenza)",
+    "Tesseramenti (Stagione sportiva e.g. 2024/2025, Ente EPS/FSN tipo CSEN/UISP/ASI/FIP/FIGC, N. tessera, data emissione e scadenza)",
+    "Quote e Registro Pagamenti (Emissione ricevute con numerazione progressiva ASD, causale, importo, metodo di pagamento, stampa/PDF ricevuta)",
+    "Certificati Medici & Alert (Gestione tipo agonistico/non agonistico, data rilascio, scadenza, medico, badge con alert visivo rosso per scaduti e giallo per in scadenza a 30gg, filtro rapido)",
+    "Documenti Allegati Socio (Upload file allegati come carte identita, liberatorie privacy, certificati scansionati)",
+    "Corsi & Calendario Eventi (Calendario settimanale/mensile lezioni, assegnazione istruttori, orari e campo/palestra)",
+    "Registro Presenze (Griglia presenze per corso e data con pulsante rapido check-in socio)",
+    "Comunicazioni Soci (Modelli messaggi per sollecito certificato medico, sollecito quota, convocazione assemblea dei soci)",
+    "Assistente AI ASD (Generazione automatica verbali assemblea, lettere sollecito, riepiloghi statistici, regolamento interno ASD)",
+    "Sistema Backup / Restore ZIP Sicuro (Gestione completa esportazione ed importazione ZIP senza errori di percorso tipo 'Percorso non ammesso nel backup')",
+    "Impostazioni ASD (Ragione Sociale ASD, Codice Fiscale / P.IVA, N. Iscrizione Registro CONI/RAS, Presidente, IBAN, Logo ASD)"
+  ],
+  "instructions_to_main_agent": [
+    "All components must be written in JavaScript (.js / .jsx), NOT TypeScript (.tsx).",
+    "Integrate lucide-react icons for clear sports and administrative visuals.",
+    "Ensure all interactive elements (buttons, inputs, tabs, modal triggers, status badges, action items) include data-testid attributes for testing.",
+    "Ensure the Backup and Restore ZIP functionality handles clean paths safely to avoid errors such as 'Percorso non ammesso nel backup'.",
+    "Keep all text strictly in Italian as requested by the user choices.",
+    "Provide seed data with realistic Italian names, ASD information (e.g. 'ASD Poliposportiva Roma Centro'), realistic fiscal codes, sports disciplines (Calcio, Basket, Pallavolo, Ginnastica, Tennis), and various certificate statuses."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": {
+    "data_testid_rule": "MUST add data-testid to every button, form input, tab, card link, dialog trigger, and status badge.",
+    "no_transparent_overlays": "Never use raw transparent background on drop-downs, sticky headers, or modal overlays. Always apply backdrop-blur with bg-slate-900/80 or bg-white/90.",
+    "toast_notifications": "Use sonner for instant toast feedback on CRUD operations, payment creation, certificate update, and backup/restore process.",
+    "contrast_and_accessibility": "Ensure high-contrast text ratios for all status badges and metric cards."
+  }
+}
