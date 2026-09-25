@@ -22,7 +22,7 @@ WORKDIR /opt/bodymind
 COPY railway_fix49_parts/ /tmp/fix49_parts/
 
 RUN cat /tmp/fix49_parts/FIX49_PAYLOAD.b64.part* \
-    | tr -d '\\n\\r\\t ' \
+    | tr -d '\n\r\t ' \
     | base64 -d > /tmp/bodymind_fix49_railway.zip \
  && echo "7b9c5a7a9e26d5369abffc8391f2563b27178e9053e350cb66db5e1e85a0e62e  /tmp/bodymind_fix49_railway.zip" | sha256sum -c - \
  && unzip -q /tmp/bodymind_fix49_railway.zip -d /opt/bodymind \
