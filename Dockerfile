@@ -38,6 +38,8 @@ RUN python -m py_compile asd_app/routes_backup.py asd_app/routes_bodymind_fix10.
  && pip install --no-cache-dir -r requirements_runtime.txt \
  && pip install --no-cache-dir "gunicorn>=22,<24"
 
+COPY migration_upload.py /opt/migration_upload.py
+
 EXPOSE 8080
 
 CMD ["sh","-c","python -c 'from asd_app.core import init_db; init_db()' && exec gunicorn --bind 0.0.0.0:${PORT:-8080} --workers 1 --threads 4 --timeout 300 --access-logfile - --error-logfile - app:app"]
