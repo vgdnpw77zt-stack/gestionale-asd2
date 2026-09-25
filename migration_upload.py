@@ -99,14 +99,53 @@ class H(BaseHTTPRequestHandler):
     def auth(self):
         return TOKEN and self.headers.get("Authorization","")==f"Bearer {TOKEN}"
     def do_GET(self):
-        if self.path=="/health":
+        from urllib.parse import urlparse, parse_qs
+        parsed=urlparse(self.path)
+        if parsed.path=="/health":
             return self.out(200,{"ok":True,"mode":"migration","data":str(DATA)})
-        if self.path=="/status":
+        if parsed.path=="/status":
             if not self.auth(): return self.out(403,{"ok":False})
             live=DATA/"tenants"/"default"/"asd.db"
             return self.out(200,{"ok":True,"top2":(DATA/"top2_app"/".TOP2_OFFICIAL").exists(),
                 "backup_restored":(DATA/".TOP2_BACKUP_RESTORED").exists(),
                 "db":db_check(live) if live.exists() else None})
+        if parsed.path=="/migrate":
+            q=parse_qs(parsed.query)
+            supplied=(q.get("token") or [""])[0]
+            if not TOKEN or supplied!=TOKEN:
+                return self.out(403,{"ok":False,"error":"forbidden"})
+            html=f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BodyMind Top2 Migration</title><style>
+body{{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:#f5f7fb;margin:0;color:#0f172a}}
+.wrap{{max-width:760px;margin:40px auto;padding:20px}} .card{{background:#fff;border:1px solid #dbe3ec;border-radius:18px;padding:22px;margin:16px 0;box-shadow:0 8px 28px rgba(15,23,42,.06)}}
+h1{{margin-top:0}} input{{width:100%;padding:14px;border:1px solid #cbd5e1;border-radius:12px;background:#fff}}
+button{{margin-top:12px;background:#071426;color:#fff;border:0;border-radius:12px;padding:13px 18px;font-weight:700;cursor:pointer}}
+button:disabled{{opacity:.5}} .ok{{color:#15803d;font-weight:700}} .err{{color:#b91c1c;font-weight:700}} progress{{width:100%;height:18px;margin-top:12px}}
+small{{color:#64748b}} pre{{white-space:pre-wrap;word-break:break-word;background:#f8fafc;padding:12px;border-radius:10px}}
+</style></head><body><div class="wrap"><h1>BodyMind · Migrazione Top2</h1>
+<p>Carica prima <b>Top2(1).zip</b>, poi <b>backup_completo_20260925_211334_682609.zip</b>. Il sistema salva automaticamente una copia di sicurezza prima del restore.</p>
+<div class="card"><h2>1. Top2 ufficiale</h2><input id="app" type="file" accept=".zip"><button onclick="send('app')">Carica Top2</button><progress id="papp" max="100" value="0"></progress><pre id="oapp"></pre></div>
+<div class="card"><h2>2. Backup completo</h2><input id="backup" type="file" accept=".zip"><button onclick="send('backup')">Carica e ripristina backup</button><progress id="pbackup" max="100" value="0"></progress><pre id="obackup"></pre></div>
+<div class="card"><h2>Stato</h2><button onclick="status()">Controlla stato</button><pre id="status"></pre></div>
+</div><script>
+const TOKEN={json.dumps(TOKEN)};
+function send(kind){{
+ const inp=document.getElementById(kind), file=inp.files[0], out=document.getElementById('o'+kind), p=document.getElementById('p'+kind);
+ if(!file){{out.textContent='Seleziona il file ZIP.';return}}
+ const xhr=new XMLHttpRequest(); xhr.open('POST',kind==='app'?'/upload-app':'/upload-backup');
+ xhr.setRequestHeader('Authorization','Bearer '+TOKEN);
+ xhr.upload.onprogress=e=>{{if(e.lengthComputable)p.value=Math.round(e.loaded/e.total*100)}};
+ xhr.onload=()=>{{out.textContent=xhr.status+' '+xhr.responseText; if(xhr.status===200)out.className='ok'; else out.className='err'}};
+ xhr.onerror=()=>{{out.textContent='Errore di rete';out.className='err'}};
+ xhr.send(file);
+}}
+function status(){{
+ fetch('/status',{{headers:{{Authorization:'Bearer '+TOKEN}}}}).then(r=>r.text()).then(t=>document.getElementById('status').textContent=t)
+}}
+</script></body></html>"""
+            b=html.encode()
+            self.send_response(200); self.send_header("Content-Type","text/html; charset=utf-8")
+            self.send_header("Content-Length",str(len(b))); self.end_headers(); self.wfile.write(b); return
         self.out(404,{"ok":False})
     def do_POST(self):
         if not self.auth(): return self.out(403,{"ok":False,"error":"forbidden"})
