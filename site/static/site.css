@@ -158,3 +158,37 @@ footer{padding:45px clamp(24px,6vw,96px);border-top:1px solid var(--line);displa
 @media(prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}.marquee-track{animation:none}.reveal{opacity:1;transform:none;transition:none}.hero-media{transform:none!important}
 }
+
+
+/* Hero photo override — BodyMind hoop photo, full bleed */
+.hero-media{
+  inset:0 !important;
+  transform:none;
+}
+.hero-media img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  object-position:center 45% !important;
+  filter:saturate(.92) contrast(1.04) brightness(.82) !important;
+}
+.hero-media:after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:
+    linear-gradient(90deg,rgba(5,5,6,.94) 0%,rgba(5,5,6,.78) 24%,rgba(5,5,6,.42) 48%,rgba(5,5,6,.08) 76%,rgba(5,5,6,.12) 100%),
+    linear-gradient(0deg,rgba(5,5,6,.58) 0%,transparent 32%);
+}
+@media(max-width:900px){
+  .hero-media{inset:0 !important}
+  .hero-media img{
+    object-position:58% 42% !important;
+    filter:saturate(.94) contrast(1.03) brightness(.78) !important;
+  }
+  .hero-media:after{
+    background:
+      linear-gradient(0deg,rgba(5,5,6,.90) 0%,rgba(5,5,6,.48) 42%,rgba(5,5,6,.12) 78%),
+      linear-gradient(90deg,rgba(5,5,6,.28),transparent 72%);
+  }
+}
