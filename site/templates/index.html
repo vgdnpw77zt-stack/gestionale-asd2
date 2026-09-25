@@ -35,7 +35,7 @@
   <main id="top">
     <section class="hero">
       <div class="hero-media" data-parallax>
-        <img src="{{ c.hero.image or url_for('static', filename='media/hero.webp') }}" alt="Danza aerea BodyMind Aerial Studio" fetchpriority="high">
+        <img src="{{ url_for('static', filename='media/hero.webp') }}?v=hero-ring-20260925-1" alt="Danza aerea BodyMind Aerial Studio" fetchpriority="high">
       </div>
       <div class="hero-vignette"></div>
       <div class="hero-orbit orbit-a"></div>
