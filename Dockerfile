@@ -1,7 +1,10 @@
 FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 ASDPRO_RUNTIME_DIR=/data ASD_PRO_DATA_DIR=/data ASD_MAX_UPLOAD_MB=500
-WORKDIR /opt/bodymind-migration
-COPY migration_upload.py /opt/bodymind-migration/migration_upload.py
-COPY migration_upload.py /opt/migration_upload.py
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tesseract-ocr tesseract-ocr-ita poppler-utils libgl1 libglib2.0-0 fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
+WORKDIR /opt/bodymind
+COPY requirements_runtime.txt /opt/bodymind/requirements_runtime.txt
+RUN pip install --no-cache-dir -r /opt/bodymind/requirements_runtime.txt
+COPY runtime_launcher.py /opt/bodymind/runtime_launcher.py
+RUN mkdir -p /opt/bodymind-migration && cp /opt/bodymind/runtime_launcher.py /opt/bodymind-migration/migration_upload.py
 EXPOSE 8080
-CMD ["python","/opt/migration_upload.py"]
+CMD ["python","/opt/bodymind-migration/migration_upload.py"]
