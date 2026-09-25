@@ -1,9 +1,194 @@
-<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ c.seo.title }}</title><meta name="description" content="{{ c.seo.description }}"><link rel="stylesheet" href="{{ url_for('static', filename='site.css') }}"></head><body>
-<header class="nav"><a class="brand" href="#top">{{ c.brand.name }}</a><nav><a href="#corsi">Corsi</a><a href="#studio">Studio</a><a href="#contatti">Contatti</a><a class="pill" href="{{ c.links.family }}">Area Famiglie</a></nav></header>
-<main id="top">
-<section class="hero">{% if c.hero.image %}<div class="hero-image" style="background-image:url('{{ c.hero.image }}')"></div>{% endif %}<div class="hero-copy"><div class="eyebrow">{{ c.hero.eyebrow }}</div><h1>{{ c.hero.title }}</h1><p>{{ c.hero.text }}</p><div class="actions"><a class="btn" href="#corsi">{{ c.hero.cta }}</a><a class="btn ghost" href="#contatti">Prenota una prova</a></div></div></section>
-<section id="corsi" class="section"><div class="kicker">PERCORSI</div><h2>Trova il tuo spazio in aria.</h2><div class="grid">{% for item in c.courses %}<article class="card"><span>0{{ loop.index }}</span><h3>{{ item.title }}</h3><p>{{ item.text }}</p></article>{% endfor %}</div></section>
-<section id="studio" class="split"><div><div class="kicker">{{ c.about.title|upper }}</div><h2>{{ c.brand.tagline }}</h2></div><p>{{ c.about.text }}</p></section>
-<section class="section schedule"><div><div class="kicker">{{ c.schedule.title|upper }}</div><h2>{{ c.brand.city }}</h2></div><p>{{ c.schedule.text }}</p></section>
-<section id="contatti" class="contact"><div><div class="kicker">CONTATTI</div><h2>Vuoi provare?</h2><p>Scrivici per disponibilità, livelli e prova.</p></div><div class="contact-list">{% if c.contact.instagram %}<div><small>Instagram</small><strong>{{ c.contact.instagram }}</strong></div>{% endif %}{% if c.contact.email %}<div><small>Email</small><strong>{{ c.contact.email }}</strong></div>{% endif %}{% if c.contact.phone %}<div><small>Telefono</small><strong>{{ c.contact.phone }}</strong></div>{% endif %}<div><small>Sede</small><strong>{{ c.contact.address }}</strong></div></div></section>
-</main><footer><span>© BodyMind Aerial Studio</span><a href="{{ c.links.app }}">Accesso Gestionale</a></footer></body></html>
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#050506">
+  <meta name="description" content="{{ c.seo.description }}">
+  <title>{{ c.seo.title }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='site.css') }}?v=bodymind-premium-1">
+</head>
+<body>
+  <div class="noise" aria-hidden="true"></div>
+  <div class="cursor-glow" aria-hidden="true"></div>
+
+  <header class="nav" data-nav>
+    <a class="brand" href="#top" aria-label="BodyMind Aerial Studio">
+      <img src="{{ c.visuals.logo }}" alt="BodyMind Aerial Studio" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+      <span>{{ c.brand.name }}</span>
+    </a>
+    <nav>
+      <a href="#corsi">Corsi</a>
+      <a href="#studio">BodyMind</a>
+      <a href="#gallery">Gallery</a>
+      <a href="#sede">Sede</a>
+      <a class="nav-cta" href="#contatti">Prova con noi</a>
+    </nav>
+    <button class="menu-btn" type="button" aria-label="Apri menu" data-menu>Menu</button>
+  </header>
+
+  <div class="mobile-menu" data-mobile-menu>
+    <a href="#corsi">Corsi</a><a href="#studio">BodyMind</a><a href="#gallery">Gallery</a>
+    <a href="#sede">Sede</a><a href="#contatti">Prova con noi</a>
+  </div>
+
+  <main id="top">
+    <section class="hero">
+      <div class="hero-media" data-parallax>
+        <img src="{{ c.hero.image or c.visuals.hero_fallback }}" alt="Danza aerea BodyMind Aerial Studio" fetchpriority="high">
+      </div>
+      <div class="hero-vignette"></div>
+      <div class="hero-orbit orbit-a"></div>
+      <div class="hero-orbit orbit-b"></div>
+      <div class="hero-content">
+        <p class="eyebrow reveal">{{ c.hero.eyebrow }}</p>
+        <h1 class="reveal">
+          <span>Il corpo</span> <em>sale.</em><br>
+          <span>La mente</span> <em>si libera.</em>
+        </h1>
+        <p class="hero-text reveal">{{ c.hero.text }}</p>
+        <div class="hero-actions reveal">
+          <a class="btn btn-light" href="#corsi">{{ c.hero.cta }}</a>
+          <a class="btn btn-line" href="#contatti">Prenota una prova <span>↗</span></a>
+        </div>
+      </div>
+      <div class="hero-side-label">AERIAL · MOVEMENT · EMOTION</div>
+      <a class="scroll-cue" href="#intro"><span></span>Scorri</a>
+    </section>
+
+    <section class="marquee" aria-label="Discipline BodyMind">
+      <div class="marquee-track">
+        <span>TECNICA</span><i>✦</i><span>TESSUTI</span><i>✦</i><span>CERCHIO</span><i>✦</i>
+        <span>KIDS & JUNIOR</span><i>✦</i><span>PERFORMANCE</span><i>✦</i><span>FLOW</span><i>✦</i>
+        <span>TECNICA</span><i>✦</i><span>TESSUTI</span><i>✦</i><span>CERCHIO</span><i>✦</i>
+        <span>KIDS & JUNIOR</span><i>✦</i><span>PERFORMANCE</span><i>✦</i><span>FLOW</span><i>✦</i>
+      </div>
+    </section>
+
+    <section id="intro" class="intro">
+      <div class="section-index reveal">01 / BODYMIND</div>
+      <div class="intro-grid">
+        <p class="intro-kicker reveal">DANZA AEREA AD APRILIA</p>
+        <h2 class="display reveal">Non insegniamo soltanto<br><em>figure in aria.</em></h2>
+        <div class="intro-copy reveal">
+          <p>{{ c.about.text }}</p>
+          <a class="text-link" href="#studio">Scopri il nostro approccio <span>→</span></a>
+        </div>
+      </div>
+    </section>
+
+    <section id="corsi" class="courses">
+      <div class="section-head">
+        <div>
+          <div class="section-index reveal">02 / CORSI</div>
+          <h2 class="display reveal">Trova il tuo<br><em>spazio in aria.</em></h2>
+        </div>
+        <p class="section-note reveal">Percorsi progressivi, attenzione alla tecnica e un lavoro che valorizza ogni livello di partenza.</p>
+      </div>
+
+      <div class="course-list">
+        {% for item in c.courses %}
+        <article class="course-card reveal">
+          <div class="course-number">0{{ loop.index }}</div>
+          <div class="course-copy">
+            <h3>{{ item.title }}</h3>
+            <p>{{ item.text }}</p>
+          </div>
+          <div class="course-arrow">↗</div>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section id="gallery" class="gallery">
+      <div class="gallery-lead">
+        <div class="section-index reveal">03 / MOVIMENTO</div>
+        <h2 class="display reveal">Forza che diventa<br><em>forma.</em></h2>
+      </div>
+      <div class="gallery-grid">
+        {% for image in c.visuals.gallery %}
+        <figure class="gallery-item g{{ loop.index }} reveal">
+          <img src="{{ image }}" alt="BodyMind Aerial Studio · danza aerea" loading="lazy">
+          <figcaption>BodyMind / 0{{ loop.index }}</figcaption>
+        </figure>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section id="studio" class="manifesto">
+      <div class="manifesto-halo" aria-hidden="true"></div>
+      <div class="section-index reveal">04 / IL METODO</div>
+      <p class="manifesto-pre reveal">CORPO · MENTE · PRESENZA</p>
+      <blockquote class="reveal">
+        “La tecnica ti porta in alto.<br>
+        <em>La consapevolezza cambia il modo in cui voli.</em>”
+      </blockquote>
+      <div class="manifesto-grid">
+        <div class="manifesto-point reveal"><strong>01</strong><h3>Tecnica</h3><p>Fondamenta precise, progressione e controllo dell’attrezzo.</p></div>
+        <div class="manifesto-point reveal"><strong>02</strong><h3>Forza</h3><p>Preparazione fisica funzionale al gesto aereo e alla sicurezza.</p></div>
+        <div class="manifesto-point reveal"><strong>03</strong><h3>Espressione</h3><p>Fluidità, qualità del movimento e presenza scenica.</p></div>
+        <div class="manifesto-point reveal"><strong>04</strong><h3>Crescita</h3><p>Un percorso che costruisce fiducia, autonomia e consapevolezza.</p></div>
+      </div>
+    </section>
+
+    <section id="sede" class="location">
+      <div class="location-copy">
+        <div class="section-index reveal">05 / DOVE SIAMO</div>
+        <p class="location-small reveal">BODYMIND AERIAL STUDIO</p>
+        <h2 class="display reveal">Aprilia.<br><em>Il tuo spazio per volare.</em></h2>
+        <p class="location-address reveal">{{ c.contact.address }}</p>
+        <p class="location-text reveal">{{ c.schedule.text }}</p>
+        <div class="location-actions reveal">
+          <a class="btn btn-light" href="https://www.google.com/maps/search/?api=1&query=Palagym+Aprilia+Via+della+Meccanica+Aprilia" target="_blank" rel="noopener">Apri indicazioni ↗</a>
+          <a class="btn btn-line" href="#contatti">Chiedi disponibilità</a>
+        </div>
+      </div>
+      <div class="location-visual" aria-hidden="true">
+        <div class="ring ring-1"></div><div class="ring ring-2"></div><div class="ring ring-3"></div>
+        <div class="location-word">APRILIA</div>
+      </div>
+    </section>
+
+    <section id="contatti" class="contact">
+      <div class="contact-top">
+        <p class="eyebrow reveal">INIZIA DA QUI</p>
+        <h2 class="contact-title reveal">Vieni a<br><em>volare.</em></h2>
+      </div>
+      <div class="contact-bottom">
+        <p class="reveal">Scrivici per una prova, per conoscere il livello più adatto o per avere informazioni sui corsi.</p>
+        <div class="contact-actions reveal">
+          {% if c.contact.instagram %}
+          <a class="contact-link" href="https://instagram.com/{{ c.contact.instagram|replace('@','') }}" target="_blank" rel="noopener">
+            <small>Instagram</small><strong>{{ c.contact.instagram }}</strong><span>↗</span>
+          </a>
+          {% endif %}
+          {% if c.contact.whatsapp %}
+          <a class="contact-link" href="https://wa.me/{{ c.contact.whatsapp|replace(' ','')|replace('+','') }}" target="_blank" rel="noopener">
+            <small>WhatsApp</small><strong>{{ c.contact.whatsapp }}</strong><span>↗</span>
+          </a>
+          {% endif %}
+          <a class="contact-link" href="{{ c.links.family }}">
+            <small>Già con noi?</small><strong>Area Famiglie</strong><span>↗</span>
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="footer-brand">
+      <img src="{{ c.visuals.logo }}" alt="" loading="lazy">
+      <span>{{ c.brand.name }}</span>
+    </div>
+    <p>{{ c.contact.address }}</p>
+    <div class="footer-links">
+      <a href="{{ c.links.family }}">Area Famiglie</a>
+      <a href="{{ c.links.app }}">Gestionale</a>
+      <a href="/studio-admin">Studio Sito</a>
+    </div>
+    <small>© {{ c.brand.name }} · ASD</small>
+  </footer>
+
+  <script src="{{ url_for('static', filename='site.js') }}?v=bodymind-premium-1"></script>
+</body>
+</html>
