@@ -82,12 +82,12 @@ a{color:inherit}
 .gallery-lead{padding:0 clamp(6px,2vw,36px) 64px}
 .gallery-grid{display:grid;grid-template-columns:1.12fr .88fr;grid-template-rows:660px 520px;gap:12px}
 .gallery-item{position:relative;margin:0;overflow:hidden;background:#0d0b0e}
-.gallery-item img{width:100%;height:100%;object-fit:cover;filter:saturate(.72) contrast(1.05);transition:transform 1s cubic-bezier(.2,.75,.2,1),filter .6s}
-.gallery-item:hover img{transform:scale(1.035);filter:saturate(1) contrast(1.02)}
+.gallery-photo{width:100%;height:100%;background-image:url('/static/media/gallery-sprite.webp');background-repeat:no-repeat;background-size:200% 200%;filter:saturate(.78) contrast(1.06);transition:transform 1s cubic-bezier(.2,.75,.2,1),filter .6s}
+.gallery-item:hover .gallery-photo{transform:scale(1.035);filter:saturate(1) contrast(1.02)}
+.sprite.s1{background-position:0 0}.sprite.s2{background-position:100% 0}.sprite.s3{background-position:0 100%}.sprite.s4{background-position:100% 100%}
 .gallery-item:after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(0,0,0,.48),transparent 40%)}
 .gallery-item figcaption{position:absolute;z-index:2;left:18px;bottom:16px;font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:#d9d3d6}
 .g3{grid-column:1/2}.g4{grid-column:2/3}
-.g1 img{object-position:center 40%}.g2 img{object-position:center 30%}
 
 .manifesto{padding:150px clamp(24px,6vw,96px);min-height:900px;background:radial-gradient(circle at 50% 30%,rgba(116,25,75,.18),transparent 40%),#09070a;overflow:hidden}
 .manifesto-halo{position:absolute;width:620px;height:620px;border:1px solid rgba(255,255,255,.08);border-radius:50%;top:120px;left:50%;transform:translateX(-50%)}
