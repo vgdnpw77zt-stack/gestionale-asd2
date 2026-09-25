@@ -96,7 +96,7 @@ def load_content():
     content = merge_defaults(DEFAULT_CONTENT, raw)
 
     # One-time migration from the original placeholder site to the premium BodyMind design.
-    if int(content.get("_design_version", 0) or 0) < 2:
+    if int(content.get("_design_version", 0) or 0) < 3:
         content["hero"]["eyebrow"] = "BODYMIND AERIAL STUDIO · APRILIA"
         content["hero"]["text"] = "Danza aerea per bambine, ragazze e adulte. Tecnica, forza, espressione e libertà in un percorso costruito intorno alla persona."
         content["hero"]["image"] = ""
@@ -105,7 +105,7 @@ def load_content():
         content["about"] = deepcopy(DEFAULT_CONTENT["about"])
         content["contact"]["address"] = DEFAULT_CONTENT["contact"]["address"]
         content["seo"]["description"] = DEFAULT_CONTENT["seo"]["description"]
-        content["_design_version"] = 2
+        content["_design_version"] = 3
         changed = True
 
     old_addresses = {
