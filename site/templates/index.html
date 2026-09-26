@@ -71,7 +71,7 @@
 
 <section id="corsi" class="courses section-pad">
 <div class="section-head"><div><p class="section-label reveal">I NOSTRI PERCORSI</p><h2 class="display reveal">Trova il tuo<br><em>spazio in aria.</em></h2></div><p class="side-copy reveal">Ogni percorso parte dal livello reale dell’allieva. Tecnica, controllo e fiducia crescono insieme.</p></div>
-<div class="course-list">{% for item in c.courses %}<article class="course reveal"><div><h3>{{ item.title }}</h3><p>{{ item.text }}</p></div><a href="#orari" aria-label="Vedi sedi e orari per {{ item.title }}">Sedi e orari <span>↗</span></a></article>{% endfor %}</div>
+<div class="course-list">{% for item in c.courses %}<article class="course reveal"><div><h3>{{ item.title }}</h3><p>{{ item.text }}</p></div><div class="course-actions">{% if c.videos|length > loop.index0 and c.videos[loop.index0].url %}<button type="button" data-video-url="{{ c.videos[loop.index0].url }}" data-video-title="{{ item.title }}">Guarda il video <span>▶</span></button>{% endif %}<a href="#orari" aria-label="Vedi sedi e orari per {{ item.title }}">Sedi e orari <span>↗</span></a></div></article>{% endfor %}</div>
 </section>
 
 <section id="video" class="video-section section-pad">
