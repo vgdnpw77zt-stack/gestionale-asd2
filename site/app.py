@@ -221,6 +221,13 @@ def favicon():
     svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#050507"/><circle cx="32" cy="32" r="22" fill="none" stroke="#e8dce5" stroke-width="2"/><text x="32" y="39" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" font-weight="700" fill="white">BM</text></svg>"""
     return Response(svg, mimetype="image/svg+xml", headers={"Cache-Control":"public, max-age=86400"})
 
+@app.get("/apple-touch-icon.png")
+@app.get("/apple-touch-icon-precomposed.png")
+@app.get("/apple-touch-icon-240x240.png")
+@app.get("/apple-touch-icon-240x240-precomposed.png")
+def apple_touch_icon():
+    return seed_media("logo")
+
 @app.get("/robots.txt")
 def robots():
     return Response("User-agent: *\nAllow: /\nDisallow: /studio-admin\nSitemap: https://bodymindaerialstudio.life/sitemap.xml\n", mimetype="text/plain")
