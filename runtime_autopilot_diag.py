@@ -31,3 +31,16 @@ for rel in FILES:
             chunk=' || '.join(str(n)+':'+clean(lines[n-1]) for n in g)
             print(f'[upload-diag] {rel} range {g[0]}-{g[-1]}: {chunk}', flush=True)
 print('[upload-diag] end', flush=True)
+
+p=APP/'asd_app/routes_bodymind_fix49.py'
+if p.exists():
+    src=p.read_text(encoding='utf-8',errors='replace')
+    lines=src.splitlines()
+    for i,line in enumerate(lines):
+        if 'fetch(' in line or '/autopilot/upload' in line or 'FormData' in line or 'AbortController' in line:
+            a=max(0,i-4); b=min(len(lines),i+7)
+            chunk=[]
+            for j in range(a,b):
+                cleaned=re.sub(r'\\s+',' ',lines[j].strip())
+                chunk.append(str(j+1)+':'+cleaned[:500])
+            print('[autopilot-diag-fetch] '+' || '.join(chunk),flush=True)
