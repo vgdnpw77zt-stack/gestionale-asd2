@@ -11,6 +11,7 @@ COPY release_autopilot_r5.py /opt/bodymind/release_autopilot_r5.py
 COPY release_autopilot_r6.py /opt/bodymind/release_autopilot_r6.py
 COPY release_autopilot_r8.py /opt/bodymind/release_autopilot_r8.py
 COPY release_autopilot_r9.py /opt/bodymind/release_autopilot_r9.py
+COPY runtime_r9_diag.py /opt/bodymind/runtime_r9_diag.py
 COPY release_cleanup_r2.py /opt/bodymind/release_cleanup_r2.py
 COPY runtime_launcher.py /opt/bodymind/runtime_launcher.py
 RUN mkdir -p /opt/bodymind-migration && cp /opt/bodymind/runtime_launcher.py /opt/bodymind-migration/migration_upload.py
