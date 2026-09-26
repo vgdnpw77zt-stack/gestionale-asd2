@@ -1,4 +1,4 @@
-import os, json, secrets, urllib.request, re
+import os, json, secrets, urllib.request, re, hashlib, hmac, base64
 from pathlib import Path
 from functools import wraps
 from copy import deepcopy
@@ -157,6 +157,23 @@ def maps_url(address):
     return "https://www.google.com/maps/search/?api=1&query=" + quote_plus(address or "")
 app.jinja_env.globals["maps_url"] = maps_url
 
+def verify_site_admin_password(candidate: str) -> bool:
+    spec = os.environ.get("SITE_ADMIN_PASSWORD_HASH","").strip()
+    if spec:
+        try:
+            algo, iterations, salt_b64, hash_b64 = spec.split("$", 3)
+            if algo != "pbkdf2_sha256":
+                return False
+            pad = lambda v: v + "=" * (-len(v) % 4)
+            salt = base64.urlsafe_b64decode(pad(salt_b64))
+            expected = base64.urlsafe_b64decode(pad(hash_b64))
+            actual = hashlib.pbkdf2_hmac("sha256", candidate.encode("utf-8"), salt, int(iterations))
+            return hmac.compare_digest(actual, expected)
+        except Exception:
+            return False
+    expected = os.environ.get("SITE_ADMIN_PASSWORD","")
+    return bool(expected) and secrets.compare_digest(candidate, expected)
+
 def admin_required(fn):
     @wraps(fn)
     def wrapped(*args, **kwargs):
@@ -283,10 +300,10 @@ def admin_login():
         if request.form.get("csrf") != session.get("_csrf"):
             return "CSRF non valido", 400
         expected_user = os.environ.get("SITE_ADMIN_USER","Dan2478")
-        expected = os.environ.get("SITE_ADMIN_PASSWORD","")
-        if not expected:
+        has_password = bool(os.environ.get("SITE_ADMIN_PASSWORD_HASH","") or os.environ.get("SITE_ADMIN_PASSWORD",""))
+        if not has_password:
             flash("Password amministratore non configurata sul server.","error")
-        elif secrets.compare_digest(request.form.get("username",""), expected_user) and secrets.compare_digest(request.form.get("password",""), expected):
+        elif secrets.compare_digest(request.form.get("username",""), expected_user) and verify_site_admin_password(request.form.get("password","")):
             session.clear()
             session["site_admin"] = True
             csrf_token()
