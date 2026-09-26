@@ -14,7 +14,7 @@
 
   <header class="nav" data-nav>
     <a class="brand" href="#top" aria-label="BodyMind Aerial Studio">
-      <img src="/site-media/brand_logo.png?v=20260926-logo-real" alt="BodyMind Aerial Studio" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+      <img src="{{ c.visuals.logo }}" alt="BodyMind Aerial Studio" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
       <span>{{ c.brand.name }}</span>
     </a>
     <nav>
@@ -35,7 +35,7 @@
   <main id="top">
     <section class="hero">
       <div class="hero-media" data-parallax>
-        <img src="/site-media/home_hero.jpg?v=20260926-hero-real" alt="Danza aerea BodyMind Aerial Studio" fetchpriority="high">
+        <img src="{{ c.hero.image or c.visuals.hero_fallback }}" alt="Danza aerea BodyMind Aerial Studio" fetchpriority="high" onerror="this.onerror=null;this.src='{{ url_for('static', filename='media/hero.webp') }}?v=hero-safe-20260926'">
       </div>
       <div class="hero-vignette"></div>
       <div class="hero-orbit orbit-a"></div>
@@ -175,7 +175,7 @@
 
   <footer>
     <div class="footer-brand">
-      <img src="/site-media/brand_logo.png?v=20260926-logo-real" alt="" loading="lazy">
+      <img src="{{ c.visuals.logo }}" alt="" loading="lazy">
       <span>{{ c.brand.name }}</span>
     </div>
     <p>{{ c.contact.address }}</p>
