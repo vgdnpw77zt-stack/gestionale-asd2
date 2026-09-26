@@ -6,7 +6,8 @@ if not MARKER.exists():
     raise SystemExit("TOP2_OFFICIAL marker missing; refusing to start")
 
 runpy.run_path("/opt/bodymind/release_apply.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_autopilot_r3.py", run_name="__main__")\nrunpy.run_path("/opt/bodymind/release_autopilot_r4.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_autopilot_r3.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_autopilot_r4.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_cleanup_r2.py", run_name="__main__")
 
 incoming = pathlib.Path("/data/incoming")
@@ -23,7 +24,6 @@ sys.path.insert(0, str(APP))
 from asd_app.core import init_db
 init_db()
 
-# Optional idempotent admin bootstrap for the production tenant.
 admin_user = os.environ.get("BODYMIND_ADMIN_USER", "").strip()
 admin_password = os.environ.get("BODYMIND_ADMIN_PASSWORD", "")
 admin_password_hash = os.environ.get("BODYMIND_ADMIN_PASSWORD_HASH", "").strip()
@@ -41,7 +41,8 @@ if admin_user and (admin_password_hash or admin_password):
             pairs, vals = [], []
             for key, value in updates.items():
                 if key in cols:
-                    pairs.append(f"{key}=?"); vals.append(value)
+                    pairs.append(f"{key}=?")
+                    vals.append(value)
             vals.append(row[0])
             conn_admin.execute("UPDATE users SET " + ",".join(pairs) + " WHERE id=?", vals)
         else:
@@ -53,7 +54,6 @@ if admin_user and (admin_password_hash or admin_password):
     finally:
         conn_admin.close()
 
-# Read-only startup audit: refuse to serve a corrupt tenant DB.
 db_path = pathlib.Path("/data/tenants/default/asd.db")
 if db_path.exists():
     conn = sqlite3.connect(str(db_path), timeout=15)
