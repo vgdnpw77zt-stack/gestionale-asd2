@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 WORKDIR /opt/bodymind
 COPY requirements_runtime.txt /opt/bodymind/requirements_runtime.txt
 RUN pip install --no-cache-dir -r /opt/bodymind/requirements_runtime.txt
-COPY release_apply.py /opt/bodymind/release_apply.py
+COPY release_apply.py /opt/bodymind/release_apply.py\nCOPY release_autopilot_r3.py /opt/bodymind/release_autopilot_r3.py
 COPY release_cleanup_r2.py /opt/bodymind/release_cleanup_r2.py
 COPY runtime_launcher.py /opt/bodymind/runtime_launcher.py
 RUN mkdir -p /opt/bodymind-migration && cp /opt/bodymind/runtime_launcher.py /opt/bodymind-migration/migration_upload.py
