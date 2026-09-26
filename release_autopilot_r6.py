@@ -92,15 +92,27 @@ if not MARKER.exists():
     mutate('asd_app/athlete_matcher.py', patch_matcher)
 
     def patch_classifier(s: str) -> str:
-        # R5 introduced the explicit medical-text hint, but a floor of 40 is
-        # still too weak versus the generic keyword "documento" (40 points).
-        # An explicit "certificato medico" heading is a strong TYPE signal.
-        old = 'scores["certificato_medico"] = max(scores.get("certificato_medico", 0), 40)'
-        new = 'scores["certificato_medico"] = max(scores.get("certificato_medico", 0), 70)'
+        # AUTOPILOT R6: "documento" da solo non significa documento d'identita.
+        # Manteniamo prudente l'hint medico di R5 e rimuoviamo il falso pareggio
+        # creato dal generico nome file "documento.pdf".
+        s = s.replace(
+            'scores["certificato_medico"] = max(scores.get("certificato_medico", 0), 70)',
+            'scores["certificato_medico"] = max(scores.get("certificato_medico", 0), 40)'
+        )
+        old = '''            weight = 40 if k in filename_stem else 22
+            # Pagamenti/gare/saggi richiedono parole esplicite, quindi leggermente più peso.
+'''
+        new = '''            weight = 40 if k in filename_stem else 22
+            # "documento" è un termine generico: senza "identita", "carta", ecc.
+            # non deve competere con un tipo esplicito come "certificato medico".
+            if doc_type == "documento_identita" and k == "documento":
+                weight = 4 if k in filename_stem else 2
+            # Pagamenti/gare/saggi richiedono parole esplicite, quindi leggermente più peso.
+'''
         if new in s:
             return s
         if old not in s:
-            raise RuntimeError('R6 classifier anchor missing: explicit medical hint')
+            raise RuntimeError('R6 classifier anchor missing: generic documento weight')
         return s.replace(old, new, 1)
 
     mutate('asd_app/document_classifier.py', patch_classifier)
