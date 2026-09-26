@@ -119,14 +119,14 @@ def documenti_verify(doc_id: int):
 '''
         s=s.replace(route_anchor,verify_route+route_anchor,1)
 
-        preview_anchor='''                        <a class="pro-cta slim ghost" href="/documenti/preview/{d['id']}" target="_blank" rel="noopener">Anteprima</a>
-'''
-        ok_markup='''                        {f"<form method='POST' action='/documenti/verify/{int(d['id'])}' class='inline-form bm-r10-ok-form'>{csrf_input()}<input type='hidden' name='tesserato_id' value='{tesserato_id}'><button class='pro-cta slim bm-r10-ok' type='submit'>✓ OK</button></form>" if ((int(d['inbound_id'] or 0) if 'inbound_id' in d.keys() else 0) and ((int(d['confidence'] or 0) if 'confidence' in d.keys() else 0) < 100 or str((d['status'] if 'status' in d.keys() else '') or '').lower() in ('da_verificare','needs_review','richiede_conferma','associato_tipo_da_verificare'))) else ''}
-                        <a class="pro-cta slim ghost" href="/documenti/preview/{d['id']}" target="_blank" rel="noopener">Anteprima</a>
-'''
-        if preview_anchor not in s:
+        doc_lines=s.splitlines(True)
+        preview_idx=next((i for i,line in enumerate(doc_lines) if "/documenti/preview/{d['id']}" in line and "Anteprima" in line),None)
+        if preview_idx is None:
             raise RuntimeError('R10 preview action anchor missing')
-        s=s.replace(preview_anchor,ok_markup,1)
+        pfx=doc_lines[preview_idx][:len(doc_lines[preview_idx])-len(doc_lines[preview_idx].lstrip())]
+        ok_line_raw='''{f"<form method='POST' action='/documenti/verify/{int(d['id'])}' class='inline-form bm-r10-ok-form'>{csrf_input()}<input type='hidden' name='tesserato_id' value='{tesserato_id}'><button class='pro-cta slim bm-r10-ok' type='submit'>✓ OK</button></form>" if ((int(d['inbound_id'] or 0) if 'inbound_id' in d.keys() else 0) and ((int(d['confidence'] or 0) if 'confidence' in d.keys() else 0) < 100 or str((d['status'] if 'status' in d.keys() else '') or '').lower() in ('da_verificare','needs_review','richiede_conferma','associato_tipo_da_verificare'))) else ''}\n'''
+        doc_lines.insert(preview_idx,pfx+ok_line_raw)
+        s=''.join(doc_lines)
 
         style_anchor='''       html body #archivio-doc .doc-archive-actions .pro-cta *,html body #archivio-asd-bulk .actions .pro-cta *{{color:#fff!important;-webkit-text-fill-color:#fff!important;pointer-events:none!important}}
 '''
