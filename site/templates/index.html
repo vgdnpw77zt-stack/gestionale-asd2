@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#050506">
   <meta name="description" content="{{ c.seo.description }}">
   <title>{{ c.seo.title }}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='site.css') }}?v=bodymind-premium-2">
+  <link rel="stylesheet" href="{{ url_for('static', filename='site.css') }}?v=bodymind-premium-logohero-1">
 </head>
 <body>
   <div class="noise" aria-hidden="true"></div>
@@ -14,7 +14,7 @@
 
   <header class="nav" data-nav>
     <a class="brand" href="#top" aria-label="BodyMind Aerial Studio">
-      <img src="{{ c.visuals.logo }}" alt="BodyMind Aerial Studio" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+      <img src="/site-media/brand_logo.png?v=20260926-logo-real" alt="BodyMind Aerial Studio" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
       <span>{{ c.brand.name }}</span>
     </a>
     <nav>
@@ -35,7 +35,7 @@
   <main id="top">
     <section class="hero">
       <div class="hero-media" data-parallax>
-        <img src="{{ url_for('static', filename='media/hero.webp') }}?v=hero-ring-20260925-1" alt="Danza aerea BodyMind Aerial Studio" fetchpriority="high">
+        <img src="/site-media/home_hero.jpg?v=20260926-hero-real" alt="Danza aerea BodyMind Aerial Studio" fetchpriority="high">
       </div>
       <div class="hero-vignette"></div>
       <div class="hero-orbit orbit-a"></div>
@@ -175,7 +175,7 @@
 
   <footer>
     <div class="footer-brand">
-      <img src="{{ c.visuals.logo }}" alt="" loading="lazy">
+      <img src="/site-media/brand_logo.png?v=20260926-logo-real" alt="" loading="lazy">
       <span>{{ c.brand.name }}</span>
     </div>
     <p>{{ c.contact.address }}</p>
@@ -187,6 +187,6 @@
     <small>© {{ c.brand.name }} · ASD</small>
   </footer>
 
-  <script src="{{ url_for('static', filename='site.js') }}?v=bodymind-premium-2"></script>
+  <script src="{{ url_for('static', filename='site.js') }}?v=bodymind-premium-logohero-1"></script>
 </body>
 </html>

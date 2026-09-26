@@ -228,6 +228,19 @@ def admin():
         return redirect(url_for("admin"))
     return render_template("admin.html", c=c)
 
+@app.post("/__asset-upload/<kind>")
+def temporary_asset_upload(kind):
+    expected = os.environ.get("SITE_ASSET_TOKEN","")
+    supplied = request.headers.get("X-BodyMind-Token","")
+    if not expected or not secrets.compare_digest(expected, supplied):
+        return {"ok":False}, 403
+    names = {"hero":"home_hero.jpg","logo":"brand_logo.png"}
+    if kind not in names or "file" not in request.files:
+        return {"ok":False}, 400
+    ensure_data()
+    request.files["file"].save(UPLOADS / names[kind])
+    return {"ok":True,"url":f"/site-media/{names[kind]}"}, 200
+
 @app.get("/healthz")
 def healthz():
     return {"ok":True,"service":"bodymind-public-site"}, 200

@@ -192,3 +192,17 @@ footer{padding:45px clamp(24px,6vw,96px);border-top:1px solid var(--line);displa
       linear-gradient(90deg,rgba(5,5,6,.28),transparent 72%);
   }
 }
+
+/* Brand scale upgrade */
+.nav{height:102px}
+.nav.scrolled{height:84px}
+.brand{min-width:270px}
+.brand img{width:205px;height:82px;object-fit:contain;object-position:left center;transform:scale(1.04);transform-origin:left center}
+.footer-brand img{width:150px;height:76px}
+@media(max-width:900px){
+  .nav{height:82px;padding:0 16px}
+  .nav.scrolled{height:74px}
+  .brand{min-width:0}
+  .brand img{width:158px;height:66px;transform:none}
+  .mobile-menu{inset:82px 0 auto}
+}
