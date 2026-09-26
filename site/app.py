@@ -82,7 +82,7 @@ DEFAULT_CONTENT = {
         "title":"BodyMind Aerial Studio | Danza Aerea ad Aprilia",
         "description":"BodyMind Aerial Studio ad Aprilia: danza aerea, tessuti, cerchio, corsi Kids & Junior e percorsi performance."
     },
-    "_design_version":9,
+    "_design_version":10,
 }
 
 SEED_SOURCES = {
@@ -238,7 +238,7 @@ def security_headers(resp):
         resp.headers["X-Robots-Tag"] = "noindex, nofollow"
     else:
         resp.headers.setdefault("Cache-Control","no-store")
-    resp.headers["X-BodyMind-Site"] = "v9-performing"
+    resp.headers["X-BodyMind-Site"] = "v10-curated"
     return resp
 
 @app.get("/")
@@ -387,7 +387,7 @@ def admin():
             flash(str(exc),"error")
             return render_template("admin.html", c=c)
 
-        c["_design_version"] = 7
+        c["_design_version"] = 10
         save_content(c)
         flash("Sito aggiornato e pubblicato.","ok")
         return redirect(url_for("admin"))
@@ -402,7 +402,7 @@ def admin():
 def healthz():
     ensure_data()
     seeded = sum(1 for k in SEED_SOURCES if _seed_paths(k)[0].exists())
-    return {"ok":True,"service":"bodymind-public-site","design":"v9-performing","seeded_assets":seeded,"persistent_data":str(DATA)}, 200
+    return {"ok":True,"service":"bodymind-public-site","design":"v10-curated","seeded_assets":seeded,"persistent_data":str(DATA)}, 200
 
 if __name__ == "__main__":
     ensure_data()
