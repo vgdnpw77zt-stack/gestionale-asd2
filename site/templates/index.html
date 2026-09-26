@@ -12,7 +12,7 @@
 <meta property="og:title" content="{{ c.seo.title }}">
 <meta property="og:description" content="{{ c.seo.description }}">
 <meta property="og:url" content="https://bodymindaerialstudio.life/">
-<meta property="og:image" content="https://bodymindaerialstudio.life/static/media/bodymind-hero-safe.jpg?v=hero-safe-20260926">
+<meta property="og:image" content="https://bodymindaerialstudio.life/seed-media/gallery4?v=7">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/favicon.ico">
 <link rel="apple-touch-icon" href="/seed-media/logo?v=7">
@@ -48,11 +48,11 @@
 
 <div class="hero-media-wrap reveal">
 {% if c.hero.video_file %}
-<video class="hero-video" autoplay muted loop playsinline preload="metadata" poster="{{ c.hero.image or url_for('static',filename='media/bodymind-hero-safe.jpg') }}">
+<video class="hero-video" autoplay muted loop playsinline preload="metadata" poster="{{ c.hero.image or c.visuals.hero_fallback }}">
 <source src="{{ c.hero.video_file }}">
 </video>
 {% else %}
-<img class="hero-fallback" src="{{ c.hero.image or url_for('static',filename='media/bodymind-hero-safe.jpg') }}?v=hero-safe-20260926" alt="Danza aerea BodyMind ad Aprilia" fetchpriority="high" decoding="async">
+<img class="hero-fallback" src="{{ c.hero.image or c.visuals.hero_fallback }}" alt="Danza aerea BodyMind ad Aprilia" fetchpriority="high" decoding="async">
 {% endif %}
 <div class="hero-media-label">BodyMind in movimento</div>
 </div>

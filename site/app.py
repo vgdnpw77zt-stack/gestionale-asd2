@@ -74,7 +74,7 @@ DEFAULT_CONTENT = {
     "links":{"app":"https://app.bodymindaerialstudio.life","family":"https://app.bodymindaerialstudio.life/area-famiglie"},
     "visuals":{
         "logo":"/seed-media/logo?v=7",
-        "hero_fallback":"/static/media/bodymind-hero-safe.jpg?v=hero-safe-20260926",
+        "hero_fallback":"/seed-media/gallery4?v=7",
         "location_photo":"/seed-media/gallery3?v=7",
         "gallery":[f"/seed-media/gallery{i}?v=7" for i in range(1,7)]
     },
