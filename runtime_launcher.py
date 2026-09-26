@@ -11,7 +11,6 @@ runpy.run_path("/opt/bodymind/release_autopilot_r4.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_autopilot_r5.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_autopilot_r6.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_autopilot_r8.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/runtime_r9_diag.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_autopilot_r9.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_cleanup_r2.py", run_name="__main__")
 
