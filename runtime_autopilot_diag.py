@@ -3,6 +3,8 @@ import re, hashlib
 APP=Path('/data/top2_app')
 FILES=['asd_app/routes_bodymind_fix49.py','asd_app/routes_inbound_documents.py','asd_app/routes_email_documents.py','asd_app/core.py']
 TERMS=['/autopilot/upload','fetch(','AbortController','setTimeout','FormData','preventDefault','type="file"',"type='file'",'<form','addEventListener','onsubmit','onclick']
+def clean(line):
+    return re.sub(r'\s+',' ',line.strip())[:360]
 print('[upload-diag] begin', flush=True)
 for rel in FILES:
     p=APP/rel
@@ -26,6 +28,6 @@ for rel in FILES:
             last=n
         if cur: groups.append(cur)
         for g in groups[:18]:
-            chunk=' || '.join(f'{n}:{re.sub(r"\\s+"," ",lines[n-1].strip())[:360]}' for n in g)
+            chunk=' || '.join(str(n)+':'+clean(lines[n-1]) for n in g)
             print(f'[upload-diag] {rel} range {g[0]}-{g[-1]}: {chunk}', flush=True)
 print('[upload-diag] end', flush=True)
