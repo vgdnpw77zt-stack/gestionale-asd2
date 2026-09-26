@@ -238,7 +238,7 @@ def security_headers(resp):
         resp.headers["X-Robots-Tag"] = "noindex, nofollow"
     else:
         resp.headers.setdefault("Cache-Control","no-store")
-    resp.headers["X-BodyMind-Site"] = "v10-curated"
+    resp.headers["X-BodyMind-Site"] = "v11-fullscreen"
     return resp
 
 @app.get("/")
@@ -282,10 +282,11 @@ def admin_login():
     if request.method == "POST":
         if request.form.get("csrf") != session.get("_csrf"):
             return "CSRF non valido", 400
+        expected_user = os.environ.get("SITE_ADMIN_USER","Dan2478")
         expected = os.environ.get("SITE_ADMIN_PASSWORD","")
         if not expected:
             flash("Password amministratore non configurata sul server.","error")
-        elif secrets.compare_digest(request.form.get("password",""), expected):
+        elif secrets.compare_digest(request.form.get("username",""), expected_user) and secrets.compare_digest(request.form.get("password",""), expected):
             session.clear()
             session["site_admin"] = True
             csrf_token()
@@ -402,7 +403,7 @@ def admin():
 def healthz():
     ensure_data()
     seeded = sum(1 for k in SEED_SOURCES if _seed_paths(k)[0].exists())
-    return {"ok":True,"service":"bodymind-public-site","design":"v10-curated","seeded_assets":seeded,"persistent_data":str(DATA)}, 200
+    return {"ok":True,"service":"bodymind-public-site","design":"v11-fullscreen","seeded_assets":seeded,"persistent_data":str(DATA)}, 200
 
 if __name__ == "__main__":
     ensure_data()
