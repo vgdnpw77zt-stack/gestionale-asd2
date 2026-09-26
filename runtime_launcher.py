@@ -25,8 +25,10 @@ init_db()
 # Optional idempotent admin bootstrap for the production tenant.
 admin_user = os.environ.get("BODYMIND_ADMIN_USER", "").strip()
 admin_password = os.environ.get("BODYMIND_ADMIN_PASSWORD", "")
-if admin_user and admin_password:
+admin_password_hash = os.environ.get("BODYMIND_ADMIN_PASSWORD_HASH", "").strip()
+if admin_user and (admin_password_hash or admin_password):
     from werkzeug.security import generate_password_hash
+    effective_hash = admin_password_hash or effective_hash
     db_path_admin = pathlib.Path("/data/tenants/default/asd.db")
     conn_admin = sqlite3.connect(str(db_path_admin), timeout=15)
     try:
@@ -34,7 +36,7 @@ if admin_user and admin_password:
         now_admin = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
         row = conn_admin.execute("SELECT id FROM users WHERE username=?", (admin_user,)).fetchone()
         if row:
-            updates = {"password": generate_password_hash(admin_password), "role": "admin", "active": 1, "must_change_password": 0, "updated_at": now_admin}
+            updates = {"password": effective_hash, "role": "admin", "active": 1, "must_change_password": 0, "updated_at": now_admin}
             pairs, vals = [], []
             for key, value in updates.items():
                 if key in cols:
@@ -42,7 +44,7 @@ if admin_user and admin_password:
             vals.append(row[0])
             conn_admin.execute("UPDATE users SET " + ",".join(pairs) + " WHERE id=?", vals)
         else:
-            values = {"username": admin_user, "password": generate_password_hash(admin_password), "role": "admin", "active": 1, "must_change_password": 0, "created_at": now_admin, "updated_at": now_admin}
+            values = {"username": admin_user, "password": effective_hash, "role": "admin", "active": 1, "must_change_password": 0, "created_at": now_admin, "updated_at": now_admin}
             keys = [k for k in values if k in cols]
             conn_admin.execute("INSERT INTO users(" + ",".join(keys) + ") VALUES(" + ",".join("?" for _ in keys) + ")", [values[k] for k in keys])
         conn_admin.commit()
