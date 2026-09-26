@@ -92,51 +92,47 @@ if not MARKER.exists():
     mutate('asd_app/athlete_matcher.py', patch_matcher)
 
     def patch_classifier(s: str) -> str:
-        # AUTOPILOT R6: rendi la correzione indipendente dai marker precedenti.
-        # Il codice reale sul volume può essere stato ripristinato/alterato anche
-        # se .BODYMIND_AUTOPILOT_R5 esiste ancora.
+        # AUTOPILOT R6 is self-contained even if an older R5 marker already
+        # exists on the persistent volume.
         s = s.replace(
             'scores["certificato_medico"] = max(scores.get("certificato_medico", 0), 70)',
             'scores["certificato_medico"] = max(scores.get("certificato_medico", 0), 40)'
         )
 
-        # 1) "documento" da solo non significa documento d'identita.
-        guard = 'if doc_type == "documento_identita" and k == "documento":'
-        if guard not in s:
+        generic_guard = '# AUTOPILOT R6 generic-document guard'
+        if generic_guard not in s:
             needle = '            weight = 40 if k in filename_stem else 22\n'
             replacement = '''            weight = 40 if k in filename_stem else 22
-            # AUTOPILOT R6 GENERIC DOCUMENT GUARD
+            # AUTOPILOT R6 generic-document guard
+            # "documento" da solo non significa documento d'identita.
             if doc_type == "documento_identita" and k == "documento":
                 weight = 4 if k in filename_stem else 2
 '''
             if needle not in s:
-                raise RuntimeError('R6 classifier anchor missing: weight line')
-            s = s.replace(needle, replacement, 1)
+                # A partially migrated volume may already contain the logic
+                # without the R6 marker.
+                if 'if doc_type == "documento_identita" and k == "documento":' not in s:
+                    raise RuntimeError('R6 classifier anchor missing: weight line')
+            else:
+                s = s.replace(needle, replacement, 1)
 
-        # 2) Un'intestazione "CERTIFICATO MEDICO" nel testo digitale/OCR,
-        # nelle prime righe del documento, e' un segnale di tipo forte e
-        # indipendente dal nome/cognome dell'atleta.
-        if 'AUTOPILOT R6 MEDICAL HEADER' not in s:
-            hay_anchor = '    hay = _clean(" ".join([filename_stem, subject or "", body or "", extracted_text or ""]))\n'
-            hay_new = '''    hay = _clean(" ".join([filename_stem, subject or "", body or "", extracted_text or ""]))
-    # AUTOPILOT R6 MEDICAL HEADER
-    r6_extracted_head = _clean(extracted_text or "")[:700]
-    r6_medical_header = bool(re.search(r"\\bcertificat\\w*\\s+medic\\w*\\b", r6_extracted_head))
+        explicit_guard = '# AUTOPILOT R6 explicit-medical-heading'
+        if explicit_guard not in s:
+            ranked = '    ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)\n'
+            explicit = '''    # AUTOPILOT R6 explicit-medical-heading
+    # A literal "certificato medico" heading in extracted/OCR text is a
+    # strong document-TYPE signal; this is intentionally narrower than a
+    # generic mention of health/medical terms.
+    extracted_clean_r6 = _clean(extracted_text or "")
+    if re.search(r"\\bcertificat\\w*\\s+medic\\w*\\b", extracted_clean_r6):
+        scores["certificato_medico"] = max(scores.get("certificato_medico", 0), 70)
+        if "intestazione certificato medico" not in hits.setdefault("certificato_medico", []):
+            hits["certificato_medico"].append("intestazione certificato medico")
+
 '''
-            if hay_anchor not in s:
-                raise RuntimeError('R6 classifier anchor missing: hay')
-            s = s.replace(hay_anchor, hay_new, 1)
-
-            rank_anchor = '    ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)\n'
-            rank_new = '''    if r6_medical_header:
-        scores["certificato_medico"] = max(scores.get("certificato_medico", 0), 50)
-        hits.setdefault("certificato_medico", []).append("intestazione CERTIFICATO MEDICO")
-
-    ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-'''
-            if rank_anchor not in s:
-                raise RuntimeError('R6 classifier anchor missing: ranked')
-            s = s.replace(rank_anchor, rank_new, 1)
+            if ranked not in s:
+                raise RuntimeError('R6 classifier anchor missing: ranking')
+            s = s.replace(ranked, explicit + ranked, 1)
         return s
 
     mutate('asd_app/document_classifier.py', patch_classifier)
