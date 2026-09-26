@@ -1,12 +1,12 @@
-import os, sys, pathlib, runpy
+import os, sys, pathlib, runpy, sqlite3
 
 APP = pathlib.Path("/data/top2_app")
 MARKER = APP / ".TOP2_OFFICIAL"
 if not MARKER.exists():
     raise SystemExit("TOP2_OFFICIAL marker missing; refusing to start")
 
-# Apply the versioned code-only production release before importing the application.
 runpy.run_path("/opt/bodymind/release_apply.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_cleanup_r2.py", run_name="__main__")
 
 incoming = pathlib.Path("/data/incoming")
 for name in ("top2.zip", "backup.zip"):
@@ -21,6 +21,31 @@ os.chdir(APP)
 sys.path.insert(0, str(APP))
 from asd_app.core import init_db
 init_db()
+
+# Read-only startup audit: refuse to serve a corrupt tenant DB.
+db_path = pathlib.Path("/data/tenants/default/asd.db")
+if db_path.exists():
+    conn = sqlite3.connect(str(db_path), timeout=15)
+    try:
+        integrity = str(conn.execute("PRAGMA integrity_check").fetchone()[0])
+        journal = str(conn.execute("PRAGMA journal_mode").fetchone()[0])
+        tesserati = int(conn.execute("SELECT COUNT(*) FROM tesserati").fetchone()[0])
+    finally:
+        conn.close()
+    if integrity.lower() != "ok":
+        raise SystemExit(f"SQLite integrity check failed: {integrity}")
+    def count_files(path):
+        q = pathlib.Path(path)
+        return sum(1 for x in q.rglob("*") if x.is_file()) if q.exists() else 0
+    print(
+        "[startup-audit] db=ok "
+        f"journal={journal} tesserati={tesserati} "
+        f"media={count_files('/data/tenants/default/media')} "
+        f"onboarding={count_files('/data/onboarding_docs')} "
+        f"signatures={count_files('/data/signatures')} "
+        f"user_static={count_files('/data/user_static')}",
+        flush=True,
+    )
 
 port = os.environ.get("PORT", "8080")
 args = [
