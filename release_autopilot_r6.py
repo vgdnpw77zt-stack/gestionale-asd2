@@ -99,21 +99,19 @@ if not MARKER.exists():
             'scores["certificato_medico"] = max(scores.get("certificato_medico", 0), 70)',
             'scores["certificato_medico"] = max(scores.get("certificato_medico", 0), 40)'
         )
-        old = '''            weight = 40 if k in filename_stem else 22
-            # Pagamenti/gare/saggi richiedono parole esplicite, quindi leggermente più peso.
-'''
-        new = '''            weight = 40 if k in filename_stem else 22
+        guard = 'if doc_type == "documento_identita" and k == "documento":'
+        if guard in s:
+            return s
+        needle = '            weight = 40 if k in filename_stem else 22\n'
+        replacement = '''            weight = 40 if k in filename_stem else 22
             # "documento" è un termine generico: senza "identita", "carta", ecc.
             # non deve competere con un tipo esplicito come "certificato medico".
             if doc_type == "documento_identita" and k == "documento":
                 weight = 4 if k in filename_stem else 2
-            # Pagamenti/gare/saggi richiedono parole esplicite, quindi leggermente più peso.
 '''
-        if new in s:
-            return s
-        if old not in s:
-            raise RuntimeError('R6 classifier anchor missing: generic documento weight')
-        return s.replace(old, new, 1)
+        if needle not in s:
+            raise RuntimeError('R6 classifier anchor missing: weight line')
+        return s.replace(needle, replacement, 1)
 
     mutate('asd_app/document_classifier.py', patch_classifier)
 
