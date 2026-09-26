@@ -26,6 +26,14 @@ if not APP.joinpath('.TOP2_OFFICIAL').exists():
     raise SystemExit('TOP2_OFFICIAL marker missing')
 
 if not MARKER.exists():
+    # Recover any partial R10 write from the pre-R10 backups before retrying.
+    for rel in ('asd_app/core.py','asd_app/routes_documenti.py','asd_app/routes_a159_total_audit_fix.py'):
+        p=APP/rel; b=BACKUPS/rel
+        if p.exists() and b.exists():
+            cur=p.read_text(encoding='utf-8',errors='replace')
+            if 'BODYMIND_R10_' in cur or 'bodymind-r10-document-ux' in cur:
+                shutil.copy2(b,p)
+                print('[document-ux-r10] restored partial '+rel,flush=True)
     def patch_core(s):
         if 'BODYMIND_R10_ABSOLUTE_DOCUMENT_PATHS' in s:
             return s
@@ -36,7 +44,7 @@ if not MARKER.exists():
         block='''# BODYMIND_R10_ABSOLUTE_DOCUMENT_PATHS
 def _resolve_workspace_document_path(stored_path: str) -> Path:
     media_root = get_workspace_media_dir().resolve()
-    raw_text = str(stored_path or '').replace("\\", "/").strip()
+    raw_text = str(stored_path or '').replace("\\\\", "/").strip()
     if not raw_text:
         return (media_root / "__missing_document__").resolve()
     raw = Path(raw_text)
@@ -145,30 +153,30 @@ def documenti_verify(doc_id: int):
         if close_pos < 0:
             raise RuntimeError('R10 document page close anchor missing')
         script='''   <script id="bodymind-r10-document-ux">
-   document.addEventListener('DOMContentLoaded',function(){
+   document.addEventListener('DOMContentLoaded',function(){{
      const archive=document.getElementById('archivio-doc');
      const dossier=document.getElementById('dossier-onboarding');
-     if(archive&&dossier&&dossier.parentNode){dossier.parentNode.insertBefore(archive,dossier);}
+     if(archive&&dossier&&dossier.parentNode){{dossier.parentNode.insertBefore(archive,dossier);}}
      const quick=[...document.querySelectorAll('.card')].find(x=>x.querySelector('.kicker')&&x.querySelector('.kicker').textContent.trim()==='Azioni rapide');
      if(quick)quick.remove();
      const models=document.getElementById('modelli-doc');
      if(models)models.remove();
      const upload=document.getElementById('upload-doc');
-     if(upload){
+     if(upload){{
        const grid=upload.parentElement;
        const metrics=[...document.querySelectorAll('.metric-strip')][0];
        const anchor=(metrics&&metrics.nextSibling)?metrics.nextSibling:null;
-       if(grid&&grid.classList.contains('grid-2')){
+       if(grid&&grid.classList.contains('grid-2')){{
          grid.parentNode.insertBefore(upload,anchor||grid);
          grid.remove();
-       }
+       }}
        const kicker=upload.querySelector('.kicker'); if(kicker)kicker.textContent='Aggiungi documento';
        const h=upload.querySelector('.section-title'); if(h)h.textContent='Carica documento';
        const desc=upload.querySelector('.small-muted'); if(desc)desc.textContent='Un solo punto di caricamento. Il file comparirà subito nell’elenco documenti qui sopra.';
-     }
+     }}
      const note=document.querySelector('#archivio-doc .small-muted');
      if(note)note.textContent='Prima controlla ciò che è già presente. Se un documento richiede conferma compare il pulsante ✓ OK.';
-   });
+   }});
    </script>
 '''
         s=s[:close_pos]+script+s[close_pos:]
