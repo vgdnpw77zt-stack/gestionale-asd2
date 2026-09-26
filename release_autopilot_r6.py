@@ -92,6 +92,9 @@ if not MARKER.exists():
     mutate('asd_app/athlete_matcher.py', patch_matcher)
 
     def patch_mobile(s: str) -> str:
+        # R5 already exposes separate document/identity labels on mobile; preserve that newer UI.
+        if 'document_state_label' in s and 'identity_state_label' in s:
+            return s
         old_doc = "if(d.document_label||d.document_type) html+=badge('Tipo documento: '+(d.document_label||d.document_type)+(d.document_confidence?' · '+d.document_confidence+'%':'')+(d.document_confidence_label?' · '+d.document_confidence_label:''), d.document_confidence>=60?'':'warn');"
         new_doc = "if(d.document_label||d.document_type){const docState=(d.document_type_needs_review||Number(d.document_confidence||0)<60)?'Tipo documento da confermare':'Documento riconosciuto';html+=badge(docState+': '+(d.document_label||d.document_type)+(d.document_confidence?' · '+d.document_confidence+'%':''),Number(d.document_confidence||0)>=60&&!d.document_type_needs_review?'':'warn');}"
         s = req_replace(s, old_doc, new_doc, 'mobile document state')
