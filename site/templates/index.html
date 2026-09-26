@@ -12,7 +12,7 @@
 <meta property="og:title" content="{{ c.seo.title }}">
 <meta property="og:description" content="{{ c.seo.description }}">
 <meta property="og:url" content="https://bodymindaerialstudio.life/">
-<meta property="og:image" content="https://bodymindaerialstudio.life/seed-media/gallery4?v=7">
+<meta property="og:image" content="https://bodymindaerialstudio.life/static/media/bodymind-hero-safe.jpg?v=hero-safe-20260926">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/favicon.ico">
 <link rel="apple-touch-icon" href="/seed-media/logo?v=7">
@@ -48,15 +48,11 @@
 
 <div class="hero-media-wrap reveal">
 {% if c.hero.video_file %}
-<video class="hero-video" autoplay muted loop playsinline preload="metadata" poster="{{ c.hero.image or c.visuals.hero_fallback }}">
+<video class="hero-video" autoplay muted loop playsinline preload="metadata" poster="{{ c.hero.image or url_for('static',filename='media/bodymind-hero-safe.jpg') }}">
 <source src="{{ c.hero.video_file }}">
 </video>
-{% elif instagram_embed(c.hero.video_url) %}
-<div class="hero-reel-shell">
-<iframe class="hero-reel" src="{{ instagram_embed(c.hero.video_url) }}" title="BodyMind Aerial Studio in movimento" loading="eager" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
-</div>
 {% else %}
-<img class="hero-fallback" src="{{ c.hero.image or c.visuals.hero_fallback }}" alt="Danza aerea BodyMind ad Aprilia" fetchpriority="high">
+<img class="hero-fallback" src="{{ c.hero.image or url_for('static',filename='media/bodymind-hero-safe.jpg') }}?v=hero-safe-20260926" alt="Danza aerea BodyMind ad Aprilia" fetchpriority="high" decoding="async">
 {% endif %}
 <div class="hero-media-label">BodyMind in movimento</div>
 </div>
@@ -71,7 +67,7 @@
 
 <section id="corsi" class="courses section-pad">
 <div class="section-head"><div><p class="section-label reveal">I NOSTRI PERCORSI</p><h2 class="display reveal">Trova il tuo<br><em>spazio in aria.</em></h2></div><p class="side-copy reveal">Ogni percorso parte dal livello reale dell’allieva. Tecnica, controllo e fiducia crescono insieme.</p></div>
-<div class="course-list">{% for item in c.courses %}<article class="course reveal"><div><h3>{{ item.title }}</h3><p>{{ item.text }}</p></div><div class="course-actions">{% if c.videos|length > loop.index0 and c.videos[loop.index0].url %}<button type="button" data-video-url="{{ c.videos[loop.index0].url }}" data-video-title="{{ item.title }}">Guarda il video <span>▶</span></button>{% endif %}<a href="#orari" aria-label="Vedi sedi e orari per {{ item.title }}">Sedi e orari <span>↗</span></a></div></article>{% endfor %}</div>
+<div class="course-list">{% for item in c.courses %}<article class="course reveal"><div><h3>{{ item.title }}</h3><p>{{ item.text }}</p></div><div class="course-actions">{% if c.videos|length > loop.index0 and c.videos[loop.index0].url %}<a href="{{ c.videos[loop.index0].url }}" target="_blank" rel="noopener">Guarda il video <span>▶</span></a>{% endif %}<a href="#orari" aria-label="Vedi sedi e orari per {{ item.title }}">Sedi e orari <span>↗</span></a></div></article>{% endfor %}</div>
 </section>
 
 <section id="video" class="video-section section-pad">
@@ -79,10 +75,10 @@
 <div class="video-grid">
 {% for video in c.videos %}
 {% if video.url %}
-<button class="video-card reveal" type="button" data-video-url="{{ video.url }}" data-video-title="{{ video.title }}">
+<a class="video-card reveal" href="{{ video.url }}" target="_blank" rel="noopener">
 <div class="video-card-bg"><span class="play">▶</span></div>
-<div class="video-card-copy"><h3>{{ video.title }}</h3><p>{{ video.subtitle }}</p><span>Guarda il reel ↗</span></div>
-</button>
+<div class="video-card-copy"><h3>{{ video.title }}</h3><p>{{ video.subtitle }}</p><span>Guarda il video ↗</span></div>
+</a>
 {% endif %}
 {% endfor %}
 </div>
@@ -145,14 +141,6 @@
 <div><a href="{{ c.links.family }}">Area Famiglie</a><a href="https://www.instagram.com/bodymind.aerialstudio/" target="_blank" rel="noopener">Instagram</a></div>
 <small>© BodyMind Aerial Studio ASD</small>
 </footer>
-
-<div class="video-modal" data-video-modal hidden>
-<div class="video-modal-backdrop" data-video-close></div>
-<div class="video-modal-dialog" role="dialog" aria-modal="true" aria-label="Video BodyMind">
-<button class="video-close" type="button" data-video-close aria-label="Chiudi">×</button>
-<div class="video-modal-frame" data-video-frame></div>
-</div>
-</div>
 
 <script src="{{ url_for('static',filename='site.js') }}?v=v7-premium"></script>
 </body>
