@@ -5,7 +5,7 @@ MARKER = APP / ".TOP2_OFFICIAL"
 if not MARKER.exists():
     raise SystemExit("TOP2_OFFICIAL marker missing; refusing to start")
 
-runpy.run_path("/opt/bodymind/release_apply.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_apply.py", run_name="__main__")\nrunpy.run_path("/opt/bodymind/release_autopilot_r3.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_cleanup_r2.py", run_name="__main__")
 
 incoming = pathlib.Path("/data/incoming")
