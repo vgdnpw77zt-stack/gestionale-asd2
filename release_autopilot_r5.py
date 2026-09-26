@@ -45,3 +45,26 @@ for rel in FILES:
             hits.append(f'{no}:{cleaned}')
     print(f"[autopilot-r5-probe] hits {rel}: " + ' || '.join(hits[:140]), flush=True)
 print('[autopilot-r5-probe] end', flush=True)
+
+
+RANGES = {
+    'asd_app/athlete_matcher.py': [(136, 207)],
+    'asd_app/routes_email_documents.py': [(167, 235), (381, 473)],
+    'asd_app/medical_certificate_dates.py': [(291, 323)],
+    'asd_app/document_classifier.py': [(88, 151)],
+    'asd_app/routes_inbound_documents.py': [(1, 260)],
+}
+for rel, ranges in RANGES.items():
+    p = APP / rel
+    if not p.exists():
+        print(f'[autopilot-r5-probe2] missing {rel}', flush=True)
+        continue
+    lines = p.read_text(encoding='utf-8', errors='replace').splitlines()
+    for start,end in ranges:
+        chunk=[]
+        for no in range(start, min(end, len(lines))+1):
+            cleaned=re.sub(r'\s+',' ',lines[no-1].strip())
+            if len(cleaned)>300: cleaned=cleaned[:297]+'...'
+            chunk.append(f'{no}:{cleaned}')
+        print(f"[autopilot-r5-probe2] range {rel} {start}-{end}: " + ' || '.join(chunk), flush=True)
+print('[autopilot-r5-probe2] end', flush=True)
