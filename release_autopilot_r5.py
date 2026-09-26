@@ -48,11 +48,11 @@ print('[autopilot-r5-probe] end', flush=True)
 
 
 RANGES = {
-    'asd_app/athlete_matcher.py': [(136, 207)],
+    'asd_app/athlete_matcher.py': [(18, 75), (136, 207)],
     'asd_app/routes_email_documents.py': [(167, 235), (381, 473)],
     'asd_app/medical_certificate_dates.py': [(291, 323)],
     'asd_app/document_classifier.py': [(88, 151)],
-    'asd_app/routes_inbound_documents.py': [(1, 260)],
+    'asd_app/routes_inbound_documents.py': [(1, 260), (260, 470)],
 }
 for rel, ranges in RANGES.items():
     p = APP / rel
