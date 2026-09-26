@@ -12,7 +12,7 @@
 <meta property="og:title" content="{{ c.seo.title }}">
 <meta property="og:description" content="{{ c.seo.description }}">
 <meta property="og:url" content="https://bodymindaerialstudio.life/">
-<meta property="og:image" content="https://bodymindaerialstudio.life/seed-media/hero?v=6">
+<meta property="og:image" content="https://bodymindaerialstudio.life/static/media/bodymind-hero.webp?v=hero-final-20260926">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/favicon.ico">
 <link rel="apple-touch-icon" href="/seed-media/logo?v=6">
@@ -46,7 +46,7 @@
 <div class="hero-meta reveal"><span><b>01</b> Tessuti</span><span><b>02</b> Cerchio</span><span><b>03</b> Kids · Junior · Adulte</span></div>
 </div>
 <div class="hero-photo-wrap" data-parallax>
-<div class="hero-photo-frame"><img src="{{ c.hero.image or c.visuals.hero_fallback }}" alt="Danza aerea BodyMind ad Aprilia" fetchpriority="high"></div>
+<div class="hero-photo-frame"><img src="{% if c.hero.image %}{{ c.hero.image }}{% else %}{{ url_for('static', filename='media/bodymind-hero.webp') }}?v=hero-final-20260926{% endif %}" alt="Danza aerea BodyMind ad Aprilia" fetchpriority="high" decoding="async"></div>
 <div class="hero-caption">BODYMIND / AERIAL MOVEMENT</div>
 </div>
 <a class="scroll-cue" href="#intro"><span></span>SCOPRI BODYMIND</a>
