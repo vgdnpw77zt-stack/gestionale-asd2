@@ -82,7 +82,7 @@ DEFAULT_CONTENT = {
         "title":"BodyMind Aerial Studio | Danza Aerea ad Aprilia",
         "description":"BodyMind Aerial Studio ad Aprilia: danza aerea, tessuti, cerchio, corsi Kids & Junior e percorsi performance."
     },
-    "_design_version":7,
+    "_design_version":9,
 }
 
 SEED_SOURCES = {
@@ -123,7 +123,7 @@ def load_content():
     except Exception:
         raw = {}
     c = merge_defaults(DEFAULT_CONTENT, raw)
-    if int(c.get("_design_version", 0) or 0) < 7:
+    if int(c.get("_design_version", 0) or 0) < 9:
         c.setdefault("hero", {})
         c["hero"]["video_url"] = c["hero"].get("video_url") or DEFAULT_CONTENT["hero"]["video_url"]
         c["hero"]["video_file"] = c["hero"].get("video_file") or ""
@@ -132,7 +132,7 @@ def load_content():
         c.setdefault("visuals", {})
         if not c["visuals"].get("hero_fallback"):
             c["visuals"]["hero_fallback"] = DEFAULT_CONTENT["visuals"]["hero_fallback"]
-        c["_design_version"] = 7
+        c["_design_version"] = 9
         save_content(c)
     return c
 
@@ -238,7 +238,7 @@ def security_headers(resp):
         resp.headers["X-Robots-Tag"] = "noindex, nofollow"
     else:
         resp.headers.setdefault("Cache-Control","no-store")
-    resp.headers["X-BodyMind-Site"] = "v8-editorial"
+    resp.headers["X-BodyMind-Site"] = "v9-performing"
     return resp
 
 @app.get("/")
@@ -398,36 +398,11 @@ def admin():
         c.setdefault("videos",[]).append({"title":"","subtitle":"","url":""})
     return render_template("admin.html", c=c)
 
-@app.post("/__internal/site-assets/hero")
-def _internal_upload_hero():
-    expected = os.environ.get("SITE_ASSET_TOKEN","")
-    supplied = request.headers.get("Authorization","")
-    if not expected or not secrets.compare_digest(supplied, f"Bearer {expected}"):
-        abort(404)
-    storage = request.files.get("file")
-    if not storage or not storage.filename:
-        return {"ok":False,"error":"missing file"}, 400
-    ext = storage.filename.rsplit(".",1)[-1].lower() if "." in storage.filename else ""
-    if ext != "mp4":
-        return {"ok":False,"error":"mp4 required"}, 400
-    ensure_data()
-    final = UPLOADS / "hero_performing_20260926.mp4"
-    tmp = UPLOADS / "hero_performing_20260926.tmp"
-    storage.save(tmp)
-    if tmp.stat().st_size < 10000 or tmp.stat().st_size > 25 * 1024 * 1024:
-        tmp.unlink(missing_ok=True)
-        return {"ok":False,"error":"invalid size"}, 400
-    tmp.replace(final)
-    c = load_content()
-    c.setdefault("hero",{})["video_file"] = "/site-media/hero_performing_20260926.mp4"
-    save_content(c)
-    return {"ok":True,"hero":c["hero"]["video_file"],"bytes":final.stat().st_size}, 200
-
 @app.get("/healthz")
 def healthz():
     ensure_data()
     seeded = sum(1 for k in SEED_SOURCES if _seed_paths(k)[0].exists())
-    return {"ok":True,"service":"bodymind-public-site","design":"v8-editorial","seeded_assets":seeded,"persistent_data":str(DATA)}, 200
+    return {"ok":True,"service":"bodymind-public-site","design":"v9-performing","seeded_assets":seeded,"persistent_data":str(DATA)}, 200
 
 if __name__ == "__main__":
     ensure_data()
