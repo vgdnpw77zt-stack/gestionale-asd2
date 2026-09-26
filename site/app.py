@@ -398,6 +398,31 @@ def admin():
         c.setdefault("videos",[]).append({"title":"","subtitle":"","url":""})
     return render_template("admin.html", c=c)
 
+@app.post("/__internal/site-assets/hero")
+def _internal_upload_hero():
+    expected = os.environ.get("SITE_ASSET_TOKEN","")
+    supplied = request.headers.get("Authorization","")
+    if not expected or not secrets.compare_digest(supplied, f"Bearer {expected}"):
+        abort(404)
+    storage = request.files.get("file")
+    if not storage or not storage.filename:
+        return {"ok":False,"error":"missing file"}, 400
+    ext = storage.filename.rsplit(".",1)[-1].lower() if "." in storage.filename else ""
+    if ext != "mp4":
+        return {"ok":False,"error":"mp4 required"}, 400
+    ensure_data()
+    final = UPLOADS / "hero_performing_20260926.mp4"
+    tmp = UPLOADS / "hero_performing_20260926.tmp"
+    storage.save(tmp)
+    if tmp.stat().st_size < 10000 or tmp.stat().st_size > 25 * 1024 * 1024:
+        tmp.unlink(missing_ok=True)
+        return {"ok":False,"error":"invalid size"}, 400
+    tmp.replace(final)
+    c = load_content()
+    c.setdefault("hero",{})["video_file"] = "/site-media/hero_performing_20260926.mp4"
+    save_content(c)
+    return {"ok":True,"hero":c["hero"]["video_file"],"bytes":final.stat().st_size}, 200
+
 @app.get("/healthz")
 def healthz():
     ensure_data()
