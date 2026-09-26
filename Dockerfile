@@ -9,7 +9,6 @@ COPY release_autopilot_r3.py /opt/bodymind/release_autopilot_r3.py
 COPY release_autopilot_r4.py /opt/bodymind/release_autopilot_r4.py
 COPY release_autopilot_r5.py /opt/bodymind/release_autopilot_r5.py
 COPY release_autopilot_r6.py /opt/bodymind/release_autopilot_r6.py
-COPY release_autopilot_r7.py /opt/bodymind/release_autopilot_r7.py
 COPY release_autopilot_r8.py /opt/bodymind/release_autopilot_r8.py
 COPY release_cleanup_r2.py /opt/bodymind/release_cleanup_r2.py
 COPY runtime_launcher.py /opt/bodymind/runtime_launcher.py
