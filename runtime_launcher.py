@@ -28,7 +28,7 @@ admin_password = os.environ.get("BODYMIND_ADMIN_PASSWORD", "")
 admin_password_hash = os.environ.get("BODYMIND_ADMIN_PASSWORD_HASH", "").strip()
 if admin_user and (admin_password_hash or admin_password):
     from werkzeug.security import generate_password_hash
-    effective_hash = admin_password_hash or effective_hash
+    effective_hash = admin_password_hash or generate_password_hash(admin_password)
     db_path_admin = pathlib.Path("/data/tenants/default/asd.db")
     conn_admin = sqlite3.connect(str(db_path_admin), timeout=15)
     try:
