@@ -206,8 +206,8 @@ if not MARKER.exists():
     r = matcher.match_athlete(ambiguous, 'certificato medico', filename='CM Di Nicola.pdf')
     assert r['action'] != 'auto_save', r
 
-    c = classifier.classify_document(filename='scan.pdf', extracted_text='CERTIFICATO MEDICO SPORTIVO NON AGONISTICO IDONEITA SPORTIVA')
-    assert c.get('type') == 'certificato_medico' and int(c.get('confidence') or 0) >= 60, c
+    c = classifier.classify_document(filename='documento.pdf', extracted_text='CERTIFICATO MEDICO')
+    assert c.get('type') == 'certificato_medico' and int(c.get('confidence') or 0) >= 60 and int(c.get('confidence') or 0) != 45, c
 
     med = load_module('asd_app/medical_certificate_dates.py', '_bodymind_r6_med')
     assert inspect.signature(med._ocr_pdf).parameters['max_pages'].default >= 3
