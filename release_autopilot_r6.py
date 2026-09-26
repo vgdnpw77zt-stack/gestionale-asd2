@@ -91,6 +91,20 @@ if not MARKER.exists():
 
     mutate('asd_app/athlete_matcher.py', patch_matcher)
 
+    def patch_classifier(s: str) -> str:
+        # R5 introduced the explicit medical-text hint, but a floor of 40 is
+        # still too weak versus the generic keyword "documento" (40 points).
+        # An explicit "certificato medico" heading is a strong TYPE signal.
+        old = 'scores["certificato_medico"] = max(scores.get("certificato_medico", 0), 40)'
+        new = 'scores["certificato_medico"] = max(scores.get("certificato_medico", 0), 70)'
+        if new in s:
+            return s
+        if old not in s:
+            raise RuntimeError('R6 classifier anchor missing: explicit medical hint')
+        return s.replace(old, new, 1)
+
+    mutate('asd_app/document_classifier.py', patch_classifier)
+
     def patch_mobile(s: str) -> str:
         # R5 already exposes separate document/identity labels on mobile; preserve that newer UI.
         if 'document_state_label' in s and 'identity_state_label' in s:
