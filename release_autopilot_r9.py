@@ -78,11 +78,14 @@ if not MARKER.exists():
     def patch_tesserati(s):
         if 'BODYMIND_R9_SHEET_DOCUMENTS' in s:
             return s
-        anchor='''        pays = c.execute("SELECT COUNT(*) AS n FROM pagamenti WHERE tesserato_id=?", (tesserato_id,)).fetchone()['n']\n'''
+        anchor_line = 'pays = c.execute("SELECT COUNT(*) AS n FROM pagamenti WHERE tesserato_id=?", (tesserato_id,)).fetchone()[\'n\']'
         insert='''        # BODYMIND_R9_SHEET_DOCUMENTS\n        document_rows = [dict(x) for x in c.execute("""\n            SELECT id,titolo,categoria,original_filename,data_caricamento,data_scadenza\n            FROM documenti\n            WHERE tesserato_id=? AND COALESCE(visibile,1)=1\n            ORDER BY COALESCE(data_caricamento,created_at,'') DESC,id DESC\n            LIMIT 12\n        """, (tesserato_id,)).fetchall()]\n        if document_rows:\n            parts=[]\n            for dr in document_rows:\n                title = dr.get('titolo') or dr.get('original_filename') or 'Documento'\n                meta = ' · '.join(x for x in [str(dr.get('categoria') or ''), str(dr.get('data_caricamento') or '')[:10]] if x)\n                expiry = str(dr.get('data_scadenza') or '')\n                if expiry: meta += (' · ' if meta else '') + 'scadenza ' + expiry\n                parts.append(f"<div class='bm30-doc-row'><div><b>{e(title)}</b><div class='small-muted'>{e(meta)}</div></div><a class='pro-cta slim ghost' href='/documenti/file/{int(dr.get('id') or 0)}' target='_blank'>Apri</a></div>")\n            document_html = ''.join(parts)\n        else:\n            document_html = "<div class='small-muted'>Nessun documento associato.</div>"\n'''
-        if anchor not in s:
+        lines = s.splitlines(True)
+        hit_index = next((i for i,line in enumerate(lines) if anchor_line in line), None)
+        if hit_index is None:
             raise RuntimeError('R9 tesserato documents query anchor missing')
-        s=s.replace(anchor,insert+anchor,1)
+        lines.insert(hit_index, insert)
+        s=''.join(lines)
 
         css_anchor=".bm30-formgrid input,.bm30-formgrid textarea,.bm30-formgrid select{{width:100%;min-height:44px}}"
         css_new=css_anchor+".bm30-doc-row{{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid rgba(120,170,220,.14)}}.bm30-doc-row:last-child{{border-bottom:0}}"
