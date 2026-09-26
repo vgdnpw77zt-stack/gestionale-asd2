@@ -210,7 +210,7 @@ def tesserato_document_file(doc_id: int):
         if pay_idx is None:
             raise RuntimeError('R9 athlete documents query anchor missing')
         pp=lines[pay_idx][:len(lines[pay_idx])-len(lines[pay_idx].lstrip())]
-        docs_raw="""# BODYMIND_R9_SHEET_DOCUMENTS
+        docs_raw='''# BODYMIND_R9_SHEET_DOCUMENTS
 document_rows = [dict(x) for x in c.execute("""
     SELECT id,titolo,categoria,original_filename,data_caricamento,data_scadenza
     FROM documenti
@@ -230,7 +230,7 @@ if document_rows:
     document_html = ''.join(parts)
 else:
     document_html = "<div class='small-muted'>Nessun documento associato.</div>"
-"""
+'''
         lines.insert(pay_idx,indent_block(docs_raw,pp))
         s=''.join(lines)
 
