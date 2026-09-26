@@ -2,9 +2,9 @@ from __future__ import annotations
 from pathlib import Path
 import shutil, compileall
 
-APP = Path("/data/top2_app")
-MARKER = APP / ".BODYMIND_AUTOPILOT_R3"
-BACKUPS = Path("/data/release_backups/20260926_autopilot_r3")
+APP = Path('/data/top2_app')
+MARKER = APP / '.BODYMIND_AUTOPILOT_R3'
+BACKUPS = Path('/data/release_backups/20260926_autopilot_r3')
 
 def backup(rel: str):
     src = APP / rel
@@ -16,15 +16,15 @@ def backup(rel: str):
 def mutate(rel: str, fn):
     p = APP / rel
     if not p.exists():
-        raise RuntimeError(f"missing target: {rel}")
-    old = p.read_text(encoding="utf-8")
+        raise RuntimeError(f'missing target: {rel}')
+    old = p.read_text(encoding='utf-8')
     new = fn(old)
     if new != old:
         backup(rel)
-        p.write_text(new, encoding="utf-8")
+        p.write_text(new, encoding='utf-8')
 
-if not APP.joinpath(".TOP2_OFFICIAL").exists():
-    raise SystemExit("TOP2_OFFICIAL marker missing")
+if not APP.joinpath('.TOP2_OFFICIAL').exists():
+    raise SystemExit('TOP2_OFFICIAL marker missing')
 
 if not MARKER.exists():
     BACKUPS.mkdir(parents=True, exist_ok=True)
@@ -35,7 +35,7 @@ if not MARKER.exists():
         anchor = """    scored.sort(key=lambda x: x["score"], reverse=True)
     best = scored[0] if scored else {"row": None, "score": 0, "reasons": []}
 """
-        block = """    # AUTOPILOT R3 exact full-name identity: extracted/OCR text is authoritative
+        block = '''    # AUTOPILOT R3 exact full-name identity: extracted/OCR text is authoritative
     # for association only when the full name identifies one athlete uniquely.
     hay_norm = _norm(text or "")
     exact_full = []
@@ -55,16 +55,16 @@ if not MARKER.exists():
 
     scored.sort(key=lambda x: x["score"], reverse=True)
     best = scored[0] if scored else {"row": None, "score": 0, "reasons": []}
-"""
+'''
         if anchor not in s:
             raise RuntimeError("R3 anchor athlete matcher not found")
         return s.replace(anchor, block, 1)
 
-    mutate("asd_app/athlete_matcher.py", patch_matcher)
+    mutate('asd_app/athlete_matcher.py', patch_matcher)
 
     def patch_email(s: str) -> str:
         if "identity_certain = (match_result.get('action') == 'auto_save'" not in s:
-            old = """            # Sicurezza: serve match tesserato forte E tipo documento abbastanza chiaro.
+            old = '''            # Sicurezza: serve match tesserato forte E tipo documento abbastanza chiaro.
             # Se il tesserato è certo ma il documento è ambiguo, non lo infiliamo nella scheda: va confermato.
             can_auto_save = (match_result.get('action') == 'auto_save' and doc_conf >= 60 and doc_area != 'unknown')
             tesserato_id = int(row['id']) if row is not None and can_auto_save else None
@@ -72,10 +72,8 @@ if not MARKER.exists():
             status = 'pagamento_da_verificare' if doc_area == 'pagamenti' else 'associato'
         else:
             status = 'richiede_conferma' if match_result.get('action') in ('auto_save', 'confirm') else 'needs_manual_match'
-"""
-            new = """            # AUTOPILOT R3: separa identita atleta e classificazione del documento.
-            # Se l'identita e' certa, il file viene associato all'atleta anche quando
-            # il tipo documento e' ambiguo. Il 45% resta un avviso sul TIPO, non blocca l'identita.
+'''
+            new = '''            # AUTOPILOT R3: identita atleta e tipo documento sono due certezze distinte.
             identity_certain = (match_result.get('action') == 'auto_save' and row is not None)
             type_certain = (doc_conf >= 60 and doc_area != 'unknown')
             tesserato_id = int(row['id']) if identity_certain else None
@@ -93,9 +91,9 @@ if not MARKER.exists():
                 status = 'associato'
         else:
             status = 'richiede_conferma' if match_result.get('action') == 'confirm' else 'needs_manual_match'
-"""
+'''
             if old not in s:
-                raise RuntimeError("R3 anchor process_inbound_attachment not found")
+                raise RuntimeError('R3 anchor process_inbound_attachment not found')
             s = s.replace(old, new, 1)
 
         oldret = "return {'status': status, 'tesserato_id': tesserato_id, 'saved': str(saved), 'classification': classification, 'match': {'action': match_result.get('action'), 'score': int(best.get('score') or 0), 'reasons': best.get('reasons') or []}, 'medical_dates': medical_dates, 'medical_sync': medical_sync, 'payment': payment}"
@@ -113,11 +111,11 @@ if not MARKER.exists():
         s = s.replace("if status == 'associato' or status == 'pagamento_da_verificare':", "if status in ('associato', 'associato_tipo_da_verificare', 'pagamento_da_verificare'):")
         return s
 
-    mutate("asd_app/routes_email_documents.py", patch_email)
+    mutate('asd_app/routes_email_documents.py', patch_email)
 
     def patch_mobile(s: str) -> str:
-        if ".confirm-link{" not in s:
-            s = s.replace(".tip{font-size:12px;color:#64748b;margin-top:10px}", ".tip{font-size:12px;color:#64748b;margin-top:10px}.confirm-link{display:inline-flex;margin-top:10px;padding:10px 12px;border-radius:12px;background:#0b5bd3;color:#fff;text-decoration:none;font-size:12px;font-weight:850}")
+        if '.confirm-link{' not in s:
+            s = s.replace('.tip{font-size:12px;color:#64748b;margin-top:10px}', '.tip{font-size:12px;color:#64748b;margin-top:10px}.confirm-link{display:inline-flex;margin-top:10px;padding:10px 12px;border-radius:12px;background:#0b5bd3;color:#fff;text-decoration:none;font-size:12px;font-weight:850}')
 
         s = s.replace("html+=badge((d.document_label||d.document_type)+(d.document_confidence?' · '+d.document_confidence+'%':''));", "html+=badge('Tipo documento: '+(d.document_label||d.document_type)+(d.document_confidence?' · '+d.document_confidence+'%':'')+(d.document_confidence_label?' · '+d.document_confidence_label:''), d.document_confidence>=60?'':'warn');")
         s = s.replace("html+='<div class=\"kv\"><span>Match</span><b>'+esc(d.match_score?d.match_score+'%':'—')+'</b></div>';", "html+='<div class=\"kv\"><span>Identità atleta</span><b>'+esc(d.match_score?d.match_score+'%':'—')+'</b></div>';")
@@ -130,11 +128,11 @@ if not MARKER.exists():
    html+='</article>'; return html;"""
         if old in s:
             s = s.replace(old, new, 1)
-        elif "Atleta associata automaticamente." not in s:
-            raise RuntimeError("R3 anchor mobile detailCard not found")
+        elif 'Atleta associata automaticamente.' not in s:
+            raise RuntimeError('R3 anchor mobile detailCard not found')
         return s
 
-    mutate("asd_app/routes_bodymind_fix49.py", patch_mobile)
+    mutate('asd_app/routes_bodymind_fix49.py', patch_mobile)
 
     def patch_inbound(s: str) -> str:
         if "'associato_tipo_da_verificare': 'Associato atleta · tipo da verificare'," not in s:
@@ -145,12 +143,12 @@ if not MARKER.exists():
             s = s.replace("    doc_rows = ''.join(f\"\"\"\n        <tr>", "    doc_rows = ''.join(f\"\"\"\n        <tr id='doc-{int(rv(r, 'id', 0) or 0)}'>", 1)
         return s
 
-    mutate("asd_app/routes_inbound_documents.py", patch_inbound)
+    mutate('asd_app/routes_inbound_documents.py', patch_inbound)
 
-    ok = compileall.compile_dir(str(APP / "asd_app"), quiet=1)
+    ok = compileall.compile_dir(str(APP / 'asd_app'), quiet=1)
     if not ok:
-        raise RuntimeError("Autopilot R3 compile failed")
-    MARKER.write_text("BodyMind Autopilot R3 applied\n", encoding="utf-8")
-    print("[autopilot-r3] applied", flush=True)
+        raise RuntimeError('Autopilot R3 compile failed')
+    MARKER.write_text('BodyMind Autopilot R3 applied\n', encoding='utf-8')
+    print('[autopilot-r3] applied', flush=True)
 else:
-    print("[autopilot-r3] already applied", flush=True)
+    print('[autopilot-r3] already applied', flush=True)
