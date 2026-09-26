@@ -7,6 +7,7 @@ RUN pip install --no-cache-dir -r /opt/bodymind/requirements_runtime.txt
 COPY release_apply.py /opt/bodymind/release_apply.py
 COPY release_autopilot_r3.py /opt/bodymind/release_autopilot_r3.py
 COPY release_autopilot_r4.py /opt/bodymind/release_autopilot_r4.py
+COPY release_autopilot_r5.py /opt/bodymind/release_autopilot_r5.py
 COPY release_autopilot_r6.py /opt/bodymind/release_autopilot_r6.py
 COPY release_cleanup_r2.py /opt/bodymind/release_cleanup_r2.py
 COPY runtime_launcher.py /opt/bodymind/runtime_launcher.py
