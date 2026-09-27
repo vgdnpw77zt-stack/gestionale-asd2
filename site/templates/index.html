@@ -20,7 +20,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500;1,600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <title>{{ c.seo.title }}</title>
-<link rel="stylesheet" href="{{ url_for('static',filename='site.css') }}?v=v12-programs">
+<link rel="stylesheet" href="{{ url_for('static',filename='site.css') }}?v=v13-curated">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"SportsActivityLocation","name":"BodyMind Aerial Studio","url":"https://bodymindaerialstudio.life/","address":{"@type":"PostalAddress","addressLocality":"Aprilia","addressRegion":"LT","addressCountry":"IT"},"sameAs":["https://www.instagram.com/bodymind.aerialstudio/"]}</script>
 </head>
 <body>
@@ -93,7 +93,7 @@
 <div class="program-grid">
 {% for item in c.courses %}
 <article class="program-card p{{ loop.index }} reveal">
-<div class="program-image"><img src="{{ program_images[loop.index0] }}" alt="{{ item.title }} BodyMind" loading="lazy"></div>
+{% if c.videos|length > loop.index0 and c.videos[loop.index0].url %}<a class="program-image program-image-link" href="{{ c.videos[loop.index0].url }}" target="_blank" rel="noopener" aria-label="Guarda {{ item.title }} BodyMind"><img src="{{ program_images[loop.index0] }}" alt="{{ item.title }} BodyMind" loading="lazy"></a>{% else %}<div class="program-image"><img src="{{ program_images[loop.index0] }}" alt="{{ item.title }} BodyMind" loading="lazy"></div>{% endif %}
 <div class="program-overlay"></div>
 <div class="program-content">
 <p class="program-eyebrow">{{ program_eyebrows[loop.index0] }}</p>
@@ -110,7 +110,7 @@
 </section>
 
 <section id="kids" class="kids-focus section-blush">
-<div class="kids-image reveal"><img src="{{ c.visuals.gallery[1] }}" alt="Kids & Junior BodyMind" loading="lazy"></div>
+{% set kids_archive_image = c.visuals.gallery[3] if c.visuals.gallery|length > 3 else c.visuals.gallery[1] %}<div class="kids-image reveal"><img src="{{ kids_archive_image }}" alt="Kids & Junior BodyMind" loading="lazy"></div>
 <div class="kids-copy reveal">
 <p class="section-label">KIDS & JUNIOR</p>
 <h2>Crescere<br><em>in aria.</em></h2>
@@ -134,16 +134,15 @@
 <p class="section-label">BODYMIND IN MOVIMENTO</p>
 <h2>La scena non si spiega.<br><em>Si guarda.</em></h2>
 </div>
-<div class="film-grid">
-{% for video in c.videos %}
-{% if video.url %}
+<div class="film-grid film-grid-single">
+{% if c.videos|length > 3 and c.videos[3].url %}
+{% set video = c.videos[3] %}
 <a class="film-card reveal" href="{{ video.url }}" target="_blank" rel="noopener">
-<div class="film-card-art art{{ loop.index }}" aria-hidden="true"><span class="art-ring"></span><span class="art-line"></span><span class="art-glow"></span></div>
+<div class="film-card-art art4" aria-hidden="true"><span class="art-ring"></span><span class="art-line"></span><span class="art-glow"></span></div>
 <div class="film-card-gradient"></div>
 <div class="film-card-copy"><small>BODYMIND FILM</small><h3>{{ video.title }}</h3><p>{{ video.subtitle }}</p><span>Guarda ↗</span></div>
 </a>
 {% endif %}
-{% endfor %}
 </div>
 </section>
 
@@ -209,6 +208,6 @@
 <div class="footer-links"><a href="{{ c.links.family }}">Area Famiglie</a><a href="https://www.instagram.com/bodymind.aerialstudio/" target="_blank" rel="noopener">Instagram</a></div>
 </footer>
 
-<script src="{{ url_for('static',filename='site.js') }}?v=v12-programs"></script>
+<script src="{{ url_for('static',filename='site.js') }}?v=v13-curated"></script>
 </body>
 </html>
