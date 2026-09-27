@@ -12,9 +12,8 @@ COPY release_autopilot_r6.py /opt/bodymind/release_autopilot_r6.py
 COPY release_autopilot_r8.py /opt/bodymind/release_autopilot_r8.py
 COPY release_autopilot_r9.py /opt/bodymind/release_autopilot_r9.py
 COPY release_document_ux_r10.py /opt/bodymind/release_document_ux_r10.py
+COPY release_simplify_r11.py /opt/bodymind/release_simplify_r11.py
 COPY release_cleanup_r2.py /opt/bodymind/release_cleanup_r2.py
-COPY runtime_simplify_probe.py /opt/bodymind/runtime_simplify_probe.py
-COPY runtime_route_probe.py /opt/bodymind/runtime_route_probe.py
 COPY runtime_launcher.py /opt/bodymind/runtime_launcher.py
 RUN mkdir -p /opt/bodymind-migration && cp /opt/bodymind/runtime_launcher.py /opt/bodymind-migration/migration_upload.py
 EXPOSE 8080
