@@ -1,21 +1,16 @@
-import inspect
-TARGET_PREFIXES=('/mobile','/documenti','/document-hub','/documenti-automatici')
-try:
-    import app as entry
-    flask_app=entry.app
-    print('[mobile-probe] BEGIN',flush=True)
-    for rule in list(flask_app.url_map.iter_rules()):
-        path=str(rule.rule)
-        if path.startswith(TARGET_PREFIXES):
-            fn=flask_app.view_functions.get(rule.endpoint)
-            try:
-                src=inspect.getsourcefile(fn) or ''
-                lines,lineno=inspect.getsourcelines(fn)
-                excerpt=' || '.join(x.strip()[:700] for x in lines[:220])
-            except Exception as exc:
-                src='';lineno=0;excerpt='ERR '+repr(exc)
-            print(f'[mobile-probe] RULE {path} endpoint={rule.endpoint} methods={sorted(rule.methods)} src={src} line={lineno}',flush=True)
-            print(f'[mobile-probe] SOURCE {path} {excerpt}',flush=True)
-    print('[mobile-probe] END',flush=True)
-except Exception as exc:
-    print('[mobile-probe] FATAL '+repr(exc),flush=True)
+from pathlib import Path
+APP=Path('/data/top2_app')
+print('[mobile2] BEGIN',flush=True)
+for rel,ranges in {
+ 'asd_app/routes_bodymind_fix22.py':[(1,220)],
+ 'asd_app/routes_bodymind_fix23.py':[(1,210)],
+}.items():
+    p=APP/rel
+    if not p.exists():
+        print('[mobile2] MISSING '+rel,flush=True); continue
+    lines=p.read_text(encoding='utf-8',errors='replace').splitlines()
+    print('[mobile2] FILE '+rel+' lines='+str(len(lines)),flush=True)
+    for a,b in ranges:
+        for n in range(a,min(b,len(lines))+1):
+            print(f'[mobile2] {rel}:{n}:{lines[n-1][:1400]}',flush=True)
+print('[mobile2] END',flush=True)
