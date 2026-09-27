@@ -323,7 +323,7 @@ def r11_documento_atleta(doc_id):
 '''
         s=s.replace(helper_anchor,queue_code+helper_anchor,1)
 
-        old_metric="'Documenti da chiudere': (_scalar(conn, f"SELECT COUNT(*) FROM document_hub WHERE {_open_doc_where()}") if _has_table(conn,'document_hub') else 0, '/document-hub?f=aperti', 'Apri Document Hub'),"
+        old_metric='''\'Documenti da chiudere\': (_scalar(conn, f"SELECT COUNT(*) FROM document_hub WHERE {_open_doc_where()}") if _has_table(conn,'document_hub') else 0, '/document-hub?f=aperti', 'Apri Document Hub'),'''
         new_metric="'Documenti da verificare': (_r11_pending_count(conn), '/documenti/da-verificare', 'Solo documenti che richiedono una scelta'),"
         if old_metric not in s:
             raise RuntimeError('R11 A202 metric anchor missing')
