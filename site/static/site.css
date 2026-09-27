@@ -118,8 +118,7 @@ footer{display:grid;grid-template-columns:1fr 1fr auto;gap:30px;align-items:cent
 @media(max-width:600px){.film-grid.film-grid-single{grid-template-columns:1fr}.film-grid.film-grid-single .film-card{min-height:500px}}
 
 
-/* V14 — Kids Reel */
-.kids-reel{position:relative;overflow:hidden;background:#0a0a0d}
-.kids-reel iframe{display:block;width:100%;height:100%;min-height:640px;border:0;background:#0a0a0d}
-@media(max-width:900px){.kids-reel iframe{min-height:620px}}
-@media(max-width:600px){.kids-reel iframe{min-height:560px}}
+/* V15 — Kids native autoplay video */
+.kids-reel-native{position:relative;overflow:hidden;background:#0a0a0d}
+.kids-reel-native video{position:absolute;inset:0;width:100%;height:100%;display:block;object-fit:cover;object-position:center;background:#0a0a0d}
+.kids-reel-native:after{pointer-events:none}
