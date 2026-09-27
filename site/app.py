@@ -38,14 +38,14 @@ DEFAULT_CONTENT = {
         "video_url":"https://www.instagram.com/reel/DdWNf0_NJ41/"
     },
     "courses":[
-        {"title":"Danza Aerea","text":"Tessuti e cerchio: tecnica, forza, mobilità e qualità del movimento, dal primo approccio alle sequenze più evolute."},
-        {"title":"Kids & Junior","text":"Un percorso dedicato alle più giovani per crescere in sicurezza, sviluppando coordinazione, fiducia e creatività."},
-        {"title":"Performance","text":"Lavoro avanzato su presenza scenica, fluidità, combinazioni e costruzione coreografica per esibizioni e obiettivi sportivi."}
+        {"title":"TRAINING","text":"Tecnica, forza, mobilità e qualità del movimento: il lavoro quotidiano che costruisce controllo, sicurezza e progressione."},
+        {"title":"COMPETITION","text":"Preparazione gara, pulizia tecnica, linee, difficoltà e costruzione dell’esercizio con un lavoro mirato alla competizione."},
+        {"title":"SHOW","text":"Presenza scenica, fluidità, musicalità e costruzione coreografica: il movimento diventa spettacolo."}
     ],
     "videos":[
-        {"title":"BodyMind in movimento","subtitle":"Un assaggio del nostro lavoro in aria","url":"https://www.instagram.com/reel/DdWNf0_NJ41/"},
-        {"title":"Kids & Junior","subtitle":"Crescere in aria con tecnica, fiducia e creatività","url":"https://www.instagram.com/reel/Da3EnTHN16f/"},
-        {"title":"Tecnica e performance","subtitle":"Controllo, linee, presenza e costruzione scenica","url":"https://www.instagram.com/reel/DZSACDftK8u/"},
+        {"title":"TRAINING","subtitle":"Allenamento, tecnica e costruzione del movimento","url":"https://www.instagram.com/reel/DOGdeS2Ddt1/?stkn=MWgyZHN2ajR1YjhlaA=="},
+        {"title":"COMPETITION","subtitle":"Il doppio gara e il lavoro orientato alla competizione","url":"https://www.instagram.com/p/DWgXpPKDQd2/?stkn=MWg5NGdjZTFxd2d6bQ=="},
+        {"title":"SHOW","subtitle":"Presenza scenica, performance e spettacolo","url":"https://www.instagram.com/reel/Ddle2ZbN086/?stkn=cHMxNzVwcHN1ZnV3"},
         {"title":"Dentro BodyMind","subtitle":"Allenamento, atmosfera e vita dello studio","url":"https://www.instagram.com/reel/DdLuWlqtx1i/"}
     ],
     "venues":[
@@ -82,7 +82,7 @@ DEFAULT_CONTENT = {
         "title":"BodyMind Aerial Studio | Danza Aerea ad Aprilia",
         "description":"BodyMind Aerial Studio ad Aprilia: danza aerea, tessuti, cerchio, corsi Kids & Junior e percorsi performance."
     },
-    "_design_version":11,
+    "_design_version":12,
 }
 
 SEED_SOURCES = {
@@ -133,6 +133,23 @@ def load_content():
         if not c["visuals"].get("hero_fallback"):
             c["visuals"]["hero_fallback"] = DEFAULT_CONTENT["visuals"]["hero_fallback"]
         c["_design_version"] = 9
+        save_content(c)
+    if int(c.get("_design_version", 0) or 0) < 12:
+        while len(c.get("courses", [])) < 3:
+            c.setdefault("courses", []).append({"title":"","text":""})
+        c["courses"][0]["title"] = "TRAINING"
+        c["courses"][1]["title"] = "COMPETITION"
+        c["courses"][2]["title"] = "SHOW"
+        while len(c.get("videos", [])) < 4:
+            c.setdefault("videos", []).append({"title":"","subtitle":"","url":""})
+        c["videos"][0].update({"title":"TRAINING","subtitle":"Allenamento, tecnica e costruzione del movimento","url":"https://www.instagram.com/reel/DOGdeS2Ddt1/?stkn=MWgyZHN2ajR1YjhlaA=="})
+        c["videos"][1].update({"title":"COMPETITION","subtitle":"Il doppio gara e il lavoro orientato alla competizione","url":"https://www.instagram.com/p/DWgXpPKDQd2/?stkn=MWg5NGdjZTFxd2d6bQ=="})
+        c["videos"][2].update({"title":"SHOW","subtitle":"Presenza scenica, performance e spettacolo","url":"https://www.instagram.com/reel/Ddle2ZbN086/?stkn=cHMxNzVwcHN1ZnV3"})
+        c.setdefault("visuals", {}).setdefault("gallery", deepcopy(DEFAULT_CONTENT["visuals"]["gallery"]))
+        while len(c["visuals"]["gallery"]) < 6:
+            c["visuals"]["gallery"].append(DEFAULT_CONTENT["visuals"]["gallery"][len(c["visuals"]["gallery"])])
+        c["visuals"]["gallery"][4] = "/static/media/bodymind-competition-double.webp"
+        c["_design_version"] = 12
         save_content(c)
     return c
 
@@ -255,7 +272,7 @@ def security_headers(resp):
         resp.headers["X-Robots-Tag"] = "noindex, nofollow"
     else:
         resp.headers.setdefault("Cache-Control","no-store")
-    resp.headers["X-BodyMind-Site"] = "v11-fullscreen"
+    resp.headers["X-BodyMind-Site"] = "v12-programs"
     return resp
 
 @app.get("/")
@@ -405,7 +422,7 @@ def admin():
             flash(str(exc),"error")
             return render_template("admin.html", c=c)
 
-        c["_design_version"] = 11
+        c["_design_version"] = 12
         save_content(c)
         flash("Sito aggiornato e pubblicato.","ok")
         return redirect(url_for("admin"))
@@ -420,7 +437,7 @@ def admin():
 def healthz():
     ensure_data()
     seeded = sum(1 for k in SEED_SOURCES if _seed_paths(k)[0].exists())
-    return {"ok":True,"service":"bodymind-public-site","design":"v11-fullscreen","seeded_assets":seeded,"persistent_data":str(DATA)}, 200
+    return {"ok":True,"service":"bodymind-public-site","design":"v12-programs","seeded_assets":seeded,"persistent_data":str(DATA)}, 200
 
 if __name__ == "__main__":
     ensure_data()
