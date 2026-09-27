@@ -68,6 +68,37 @@ def _r11_pending_count(conn):
     return int(_scalar(conn, f"SELECT COUNT(*) FROM inbound_documents i WHERE {_r11_pending_where('i')}") or 0)
 
 
+@app.after_request
+def _r11_simplify_dashboard_response(resp):
+    # BODYMIND_R11_DASHBOARD_SIMPLIFY
+    try:
+        if request.path != '/' or request.method != 'GET' or int(getattr(resp,'status_code',200) or 200) != 200:
+            return resp
+        ctype=str(resp.headers.get('Content-Type','')).lower()
+        if 'text/html' not in ctype:
+            return resp
+        html=resp.get_data(as_text=True)
+        conn=db()
+        try:
+            pending_docs=_r11_pending_count(conn)
+        finally:
+            conn.close()
+        html=html.replace('/documenti-automatici#docs','/documenti/da-verificare')
+        html=html.replace('/document-hub?f=verificare','/documenti/da-verificare')
+        html=html.replace('/document-hub?f=aperti','/documenti/da-verificare')
+        html=re.sub(
+            r"(<a[^>]+href=['\"]/documenti/da-verificare['\"][^>]*>.*?<h3>)(?:Da verificare|Documenti da verificare)(</h3>.*?<strong class=['\"]value['\"]>)\d+(</strong>)",
+            lambda m:m.group(1)+'Documenti da verificare'+m.group(2)+str(int(pending_docs))+m.group(3),
+            html,count=1,flags=re.S
+        )
+        html=re.sub(r"<a class=['\"]a121-card[^'\"]*['\"] href=['\"]/documenti-automatici['\"][^>]*>.*?</a>","",html,count=1,flags=re.S)
+        html=re.sub(r"<a class=['\"]a121-card[^'\"]*['\"] href=['\"]/generatore-documenti['\"][^>]*>.*?</a>","",html,count=1,flags=re.S)
+        resp.set_data(html)
+    except Exception:
+        pass
+    return resp
+
+
 def _r11_doc_label(value):
     labels={
         'certificato_medico':'Certificato medico',
@@ -329,36 +360,6 @@ def r11_documento_atleta(doc_id):
             raise RuntimeError('R11 A202 metric anchor missing')
         s=s.replace(old_metric,new_metric,1)
 
-        # Enhance the existing dashboard wrapper without depending on its exact end marker.
-        wrap_start=s.find('def a202_dashboard_wrapper(*args, **kwargs):')
-        if wrap_start<0:
-            raise RuntimeError('R11 dashboard wrapper missing')
-        mov_anchor='movimenti = _scalar(conn, "SELECT COUNT(*) FROM movimenti") if _has_table(conn,\'movimenti\') else 0'
-        mov_pos=s.find(mov_anchor,wrap_start)
-        if mov_pos<0:
-            raise RuntimeError('R11 dashboard count anchor missing')
-        insert_after=mov_pos+len(mov_anchor)
-        s=s[:insert_after]+"\n            pending_docs = _r11_pending_count(conn)"+s[insert_after:]
-        insert_anchor='        if isinstance(resp, str):\n'
-        insert_pos=s.find(insert_anchor,insert_after)
-        if insert_pos<0:
-            raise RuntimeError('R11 dashboard response anchor missing')
-        cleanup=r'''        # BODYMIND_R11_DASHBOARD_SIMPLIFY
-        html = html.replace('/documenti-automatici#docs','/documenti/da-verificare')
-        html = html.replace('/document-hub?f=verificare','/documenti/da-verificare')
-        html = html.replace('/document-hub?f=aperti','/documenti/da-verificare')
-        html = re.sub(
-            r"(<a[^>]+href=['\"]/documenti/da-verificare['\"][^>]*>.*?<h3>)(?:Da verificare|Documenti da verificare)(</h3>.*?<strong class=['\"]value['\"]>)\d+(</strong>)",
-            lambda m: m.group(1)+'Documenti da verificare'+m.group(2)+str(int(pending_docs))+m.group(3),
-            html, count=1, flags=re.S
-        )
-        r11_script = f"""<script id='bodymind-r11-dashboard-cleanup'>(function(){{function go(){{var root=document.querySelector('.pro-dashboard')||document;var pending={int(pending_docs)};root.querySelectorAll('a[href]').forEach(function(a){{var href=a.getAttribute('href')||'';var txt=(a.textContent||'').replace(/\\s+/g,' ').trim().toLowerCase();if(txt.includes('da verificare')&&txt.includes('document')){{a.setAttribute('href','/documenti/da-verificare');var nums=a.querySelectorAll('strong,.value,.a121-value');for(var i=nums.length-1;i>=0;i--){{if(/^\\d+$/.test((nums[i].textContent||'').trim())){{nums[i].textContent=String(pending);break;}}}}var h=a.querySelector('h3');if(h)h.textContent='Documenti da verificare';}}if(href==='/documenti-automatici'&&txt.includes('documenti automatici'))a.remove();if(href==='/generatore-documenti'&&txt.includes('generatore documenti'))a.remove();}});}}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',go,{{once:true}});else go();}})();</script>"""
-        if '</body>' in html:
-            html = html.replace('</body>', r11_script+'</body>', 1)
-        else:
-            html += r11_script
-'''
-        s=s[:insert_pos]+cleanup+s[insert_pos:]
         return s
 
     patch_file('asd_app/routes_a202_operational_integrity.py',patch_a202)
