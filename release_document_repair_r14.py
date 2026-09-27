@@ -62,13 +62,13 @@ if not MARKER.exists():
     s=p.read_text(encoding='utf-8')
     if 'BODYMIND_R14_REMOVE_QUEUE_ITEM' not in s:
         backup_file(rel)
-        dossier_anchor="""        dossier=f"<a class='r11-btn ghost' href='/documenti?tesserato_id={tid}'>Dossier</a>" if tid else ''
+        dossier_anchor='''        dossier=f"<a class='r11-btn ghost' href='/documenti?tesserato_id={tid}'>Dossier</a>" if tid else ''
         return f"""
-"""
-        dossier_new="""        dossier=f"<a class='r11-btn ghost' href='/documenti?tesserato_id={tid}'>Dossier</a>" if tid else ''
+'''
+        dossier_new='''        dossier=f"<a class='r11-btn ghost' href='/documenti?tesserato_id={tid}'>Dossier</a>" if tid else ''
         remove_form=f"""<form method='post' action='/documenti/da-verificare/{did}/elimina' class='r11-inline' onsubmit="return confirm('Rimuovere questa voce dalla coda? Il file fisico, se presente, non verrà cancellato.')">{csrf_input()}<button class='r11-btn danger' type='submit'>Rimuovi voce</button></form>"""
         return f"""
-"""
+'''
         if dossier_anchor not in s: raise RuntimeError('R14 dossier anchor missing')
         s=s.replace(dossier_anchor,dossier_new,1)
         s=s.replace("{ok}{dossier}\n          </div>","{ok}{dossier}{remove_form}\n          </div>",1)
