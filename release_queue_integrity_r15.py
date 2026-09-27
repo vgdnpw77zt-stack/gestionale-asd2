@@ -83,22 +83,22 @@ if not MARKER.exists():
             raise RuntimeError('R15 identity anchor missing')
         s=s.replace(old_identity,new_identity,1)
 
-        old_assign="""        assign = ''
+        old_assign='''        assign = ''
         if not tid:
             assign=f"""<form method='post' action='/documenti/da-verificare/{did}/atleta' class='r11-inline'>{csrf_input()}<select name='tesserato_id' required>{athlete_options}</select><button class='r11-btn' type='submit'>Assegna atleta</button></form>"""
-"""
-        new_assign="""        assign = ''
+'''
+        new_assign='''        assign = ''
         if not tid and file_ok:
             assign=f"""<form method='post' action='/documenti/da-verificare/{did}/atleta' class='r11-inline'>{csrf_input()}<select name='tesserato_id' required>{athlete_options}</select><button class='r11-btn' type='submit'>Assegna atleta</button></form>"""
-"""
+'''
         if old_assign not in s:
             raise RuntimeError('R15 assign anchor missing')
         s=s.replace(old_assign,new_assign,1)
 
-        old_type="""        type_form=f"""<form method='post' action='/documenti/da-verificare/{did}/tipo' class='r11-inline'>{csrf_input()}<select name='document_type'>{options}</select><button class='r11-btn ghost' type='submit'>Correggi tipo</button></form>"""
-"""
-        new_type="""        type_form=(f"""<form method='post' action='/documenti/da-verificare/{did}/tipo' class='r11-inline'>{csrf_input()}<select name='document_type'>{options}</select><button class='r11-btn ghost' type='submit'>Correggi tipo</button></form>""" if file_ok else '')
-"""
+        old_type='''        type_form=f"""<form method='post' action='/documenti/da-verificare/{did}/tipo' class='r11-inline'>{csrf_input()}<select name='document_type'>{options}</select><button class='r11-btn ghost' type='submit'>Correggi tipo</button></form>"""
+'''
+        new_type='''        type_form=(f"""<form method='post' action='/documenti/da-verificare/{did}/tipo' class='r11-inline'>{csrf_input()}<select name='document_type'>{options}</select><button class='r11-btn ghost' type='submit'>Correggi tipo</button></form>""" if file_ok else '')
+'''
         if old_type not in s:
             raise RuntimeError('R15 type anchor missing')
         s=s.replace(old_type,new_type,1)
