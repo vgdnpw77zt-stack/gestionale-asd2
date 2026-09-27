@@ -28,6 +28,18 @@ try:
               'id':did,'file':r['original_filename'],'saved_path':r['saved_path'],'exists':p.is_file(),
               'status':r['status'],'type':r['document_type'],'score':r['match_score'],'tid':r['tesserato_id']
             },ensure_ascii=False),flush=True)
+
+    athletes=conn.execute("SELECT id,nome,cognome FROM tesserati ORDER BY cognome,nome").fetchall()
+    for token in ('ferlan','pimpinelli','giulia'):
+        matches=[]
+        for a in athletes:
+            blob=((str(a['nome'] or '')+' '+str(a['cognome'] or '')).lower())
+            if token in blob:
+                matches.append({'id':a['id'],'nome':a['nome'],'cognome':a['cognome']})
+        print('[r14-verify] ATHLETE_MATCH '+token+' '+json.dumps(matches,ensure_ascii=False),flush=True)
+    for sid in (11,):
+        a=conn.execute("SELECT id,nome,cognome FROM tesserati WHERE id=?",(sid,)).fetchone()
+        print('[r14-verify] SUGGESTED_ID '+str(sid)+' '+json.dumps(dict(a) if a else None,ensure_ascii=False),flush=True)
     old=conn.execute("SELECT COUNT(*) FROM inbound_documents WHERE saved_path LIKE '/Users/imac/%'").fetchone()[0]
     print('[r14-verify] OLD_PREFIX_LEFT='+str(old),flush=True)
 finally:
