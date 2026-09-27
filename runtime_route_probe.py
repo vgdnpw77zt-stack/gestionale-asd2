@@ -15,6 +15,17 @@ try:
                 src=''; lineno=0; excerpt='ERR '+repr(exc)
             print(f'[route-probe] RULE {rule.rule} endpoint={rule.endpoint} methods={sorted(rule.methods)} src={src} line={lineno}',flush=True)
             print(f'[route-probe] SOURCE {rule.rule} {excerpt}',flush=True)
+
+    try:
+        import asd_app.routes_a202_operational_integrity as a202
+        fn=getattr(a202,'_original_dashboard',None)
+        if fn:
+            src=inspect.getsourcefile(fn) or ''
+            lines,lineno=inspect.getsourcelines(fn)
+            print(f'[route-probe] ORIGINAL_DASH src={src} line={lineno}',flush=True)
+            print('[route-probe] ORIGINAL_DASH_SOURCE '+' || '.join(x.strip()[:650] for x in lines[:180]),flush=True)
+    except Exception as exc:
+        print('[route-probe] ORIGINAL_DASH_ERR '+repr(exc),flush=True)
     try:
         from asd_app import core
         fn=core.layout
