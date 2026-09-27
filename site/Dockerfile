@@ -5,4 +5,4 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 RUN mkdir -p /data/uploads
-CMD ["sh","-c","python site_probe.py && gunicorn --bind 0.0.0.0:${PORT:-8080} --workers 2 --threads 2 --timeout 60 app:app"]
+CMD ["sh","-c","gunicorn --bind 0.0.0.0:${PORT:-8080} --workers 2 --threads 2 --timeout 60 app:app"]
