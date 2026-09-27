@@ -15,8 +15,8 @@ COPY release_document_ux_r10.py /opt/bodymind/release_document_ux_r10.py
 COPY release_simplify_r11.py /opt/bodymind/release_simplify_r11.py
 COPY release_mobile_r12.py /opt/bodymind/release_mobile_r12.py
 COPY release_unified_r13.py /opt/bodymind/release_unified_r13.py
+COPY release_document_repair_r14.py /opt/bodymind/release_document_repair_r14.py
 COPY release_cleanup_r2.py /opt/bodymind/release_cleanup_r2.py
-COPY runtime_missingdoc_probe.py /opt/bodymind/runtime_missingdoc_probe.py
 COPY runtime_launcher.py /opt/bodymind/runtime_launcher.py
 RUN mkdir -p /opt/bodymind-migration && cp /opt/bodymind/runtime_launcher.py /opt/bodymind-migration/migration_upload.py
 EXPOSE 8080
