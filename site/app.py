@@ -37,6 +37,7 @@ DEFAULT_CONTENT = {
         "video_file":"",
         "video_url":"https://www.instagram.com/reel/DdWNf0_NJ41/"
     },
+    "kids":{"reel_url":"https://www.instagram.com/reel/DGD1bGQsSoD/?stkn=MWgxbTU3b2Z6MjFkZQ=="},
     "courses":[
         {"title":"TRAINING","text":"Tecnica, forza, mobilità e qualità del movimento: il lavoro quotidiano che costruisce controllo, sicurezza e progressione."},
         {"title":"COMPETITION","text":"Preparazione gara, pulizia tecnica, linee, difficoltà e costruzione dell’esercizio con un lavoro mirato alla competizione."},
@@ -272,7 +273,7 @@ def security_headers(resp):
         resp.headers["X-Robots-Tag"] = "noindex, nofollow"
     else:
         resp.headers.setdefault("Cache-Control","no-store")
-    resp.headers["X-BodyMind-Site"] = "v13-curated"
+    resp.headers["X-BodyMind-Site"] = "v14-kids-reel"
     return resp
 
 @app.get("/")
@@ -348,6 +349,7 @@ def admin():
         groups = {
             "brand":["name","tagline","city"],
             "hero":["eyebrow","title","text","cta","video_url"],
+            "kids":["reel_url"],
             "about":["title","text"],
             "contact":["instagram","email","phone","whatsapp","address"],
             "links":["app","family"],
@@ -437,7 +439,7 @@ def admin():
 def healthz():
     ensure_data()
     seeded = sum(1 for k in SEED_SOURCES if _seed_paths(k)[0].exists())
-    return {"ok":True,"service":"bodymind-public-site","design":"v12-programs","seeded_assets":seeded,"persistent_data":str(DATA)}, 200
+    return {"ok":True,"service":"bodymind-public-site","design":"v14-kids-reel","seeded_assets":seeded,"persistent_data":str(DATA)}, 200
 
 if __name__ == "__main__":
     ensure_data()
