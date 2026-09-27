@@ -272,7 +272,7 @@ def security_headers(resp):
         resp.headers["X-Robots-Tag"] = "noindex, nofollow"
     else:
         resp.headers.setdefault("Cache-Control","no-store")
-    resp.headers["X-BodyMind-Site"] = "v12-programs"
+    resp.headers["X-BodyMind-Site"] = "v13-curated"
     return resp
 
 @app.get("/")
