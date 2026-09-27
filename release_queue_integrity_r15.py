@@ -106,18 +106,12 @@ if not MARKER.exists():
         old_open="""            <a class='r11-btn primary' target='_blank' rel='noopener' href='/documenti-automatici/file/{did}'>Apri</a>
             {ok}{dossier}{remove_form}
 """
-        new_open="""            {f"<a class='r11-btn primary' target='_blank' rel='noopener' href='/documenti-automatici/file/{did}'>Apri</a>" if file_ok else "<span class='r11-missing'>File non disponibile sul volume</span>"}
+        new_open="""            {f"<a class='r11-btn primary' target='_blank' rel='noopener' href='/documenti-automatici/file/{did}'>Apri</a>" if file_ok else "<span style='display:inline-flex;align-items:center;min-height:42px;padding:8px 12px;border-radius:12px;background:rgba(127,29,29,.22);border:1px solid rgba(248,113,113,.35);color:#fecaca;font-size:12px;font-weight:900'>File non disponibile sul volume</span>"}
             {ok if file_ok else ''}{dossier}{remove_form}
 """
         if old_open not in s:
             raise RuntimeError('R15 open anchor missing')
         s=s.replace(old_open,new_open,1)
-
-        css_anchor=".r11-btn.danger{background:#3b1620;border-color:#7f1d1d;color:#fecaca!important}"
-        css_new=css_anchor+".r11-missing{display:inline-flex;align-items:center;min-height:42px;padding:8px 12px;border-radius:12px;background:rgba(127,29,29,.22);border:1px solid rgba(248,113,113,.35);color:#fecaca;font-size:12px;font-weight:900}"
-        if css_anchor not in s:
-            raise RuntimeError('R15 CSS anchor missing')
-        s=s.replace(css_anchor,css_new,1)
 
         p.write_text(s,encoding='utf-8')
         if not compileall.compile_file(str(p),quiet=1):
