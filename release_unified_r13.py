@@ -310,6 +310,33 @@ def _r13_accept_unified(conn, inbound):
 """
         if old_choices in s:
             s=s.replace(old_choices,new_choices,1)
+
+        # Fallback for runtime variants already touched by older Autopilot releases.
+        # Keep the legacy page consistent even if whitespace/extra helper text changed.
+        s=s.replace("'iscrizione': 'Domanda iscrizione',","'modulo_unico_tesseramento': 'Modulo iscrizione / Modulo Unico MU-2026.1',")
+        s=s.replace("'iscrizione': 'Domanda iscrizione',","'modulo_unico_tesseramento': 'Modulo iscrizione BodyMind',")
+        for legacy_line in (
+            "        'manleva': 'Manleva',\\n",
+            "        'liberatoria_immagini': 'Liberatoria immagini',\\n",
+            "        'consenso_minore': 'Consenso minore',\\n",
+            "        'autorizzazione_genitore': 'Autorizzazione genitore',\\n",
+        ):
+            s=s.replace(legacy_line,'')
+        s=s.replace("('certificato_medico','Certificato medico'),('iscrizione','Domanda iscrizione'),",
+                    "('modulo_unico_tesseramento','Modulo iscrizione / Modulo Unico MU-2026.1'),('certificato_medico','Certificato medico'),")
+        for legacy_choice in (
+            "('manleva','Manleva'),",
+            "('liberatoria_immagini','Liberatoria immagini'),",
+            "('consenso_minore','Consenso minore'),",
+            "('autorizzazione_genitore','Autorizzazione genitore'),",
+        ):
+            s=s.replace(legacy_choice,'')
+        if 'BODYMIND_R13_LEGACY_SELECTOR' not in s:
+            selector_anchor='def _type_selector(row) -> str:'
+            if selector_anchor in s:
+                s=s.replace(selector_anchor,"# BODYMIND_R13_LEGACY_SELECTOR\\n"+selector_anchor,1)
+            else:
+                s += "\\n# BODYMIND_R13_LEGACY_SELECTOR\\n"
         return s
 
     patch_file('asd_app/routes_inbound_documents.py',patch_inbound)
