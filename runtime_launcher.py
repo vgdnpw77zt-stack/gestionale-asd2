@@ -15,6 +15,7 @@ runpy.run_path("/opt/bodymind/release_autopilot_r9.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_document_ux_r10.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_simplify_r11.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mobile_r12.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_unified_r13.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_cleanup_r2.py", run_name="__main__")
 
 incoming = pathlib.Path("/data/incoming")
@@ -30,7 +31,6 @@ os.chdir(APP)
 sys.path.insert(0, str(APP))
 from asd_app.core import init_db
 init_db()
-runpy.run_path("/opt/bodymind/runtime_unified_probe.py", run_name="__main__")
 
 admin_user = os.environ.get("BODYMIND_ADMIN_USER", "").strip()
 admin_password = os.environ.get("BODYMIND_ADMIN_PASSWORD", "")
