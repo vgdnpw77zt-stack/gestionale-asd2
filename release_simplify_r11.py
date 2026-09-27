@@ -329,20 +329,19 @@ def r11_documento_atleta(doc_id):
             raise RuntimeError('R11 A202 metric anchor missing')
         s=s.replace(old_metric,new_metric,1)
 
-        # Enhance the existing dashboard wrapper without replacing its accounting panel.
+        # Enhance the existing dashboard wrapper without depending on its exact end marker.
         wrap_start=s.find('def a202_dashboard_wrapper(*args, **kwargs):')
         if wrap_start<0:
             raise RuntimeError('R11 dashboard wrapper missing')
-        wrap_end=s.find("\napp.view_functions",wrap_start)
-        if wrap_end<0:
-            raise RuntimeError('R11 dashboard wrapper end missing')
-        block=s[wrap_start:wrap_end]
         mov_anchor='movimenti = _scalar(conn, "SELECT COUNT(*) FROM movimenti") if _has_table(conn,\'movimenti\') else 0'
-        if mov_anchor not in block:
+        mov_pos=s.find(mov_anchor,wrap_start)
+        if mov_pos<0:
             raise RuntimeError('R11 dashboard count anchor missing')
-        block=block.replace(mov_anchor,mov_anchor+"\n            pending_docs = _r11_pending_count(conn)",1)
+        insert_after=mov_pos+len(mov_anchor)
+        s=s[:insert_after]+"\n            pending_docs = _r11_pending_count(conn)"+s[insert_after:]
         insert_anchor='        if isinstance(resp, str):\n'
-        if insert_anchor not in block:
+        insert_pos=s.find(insert_anchor,insert_after)
+        if insert_pos<0:
             raise RuntimeError('R11 dashboard response anchor missing')
         cleanup=r'''        # BODYMIND_R11_DASHBOARD_SIMPLIFY
         html = html.replace('/documenti-automatici#docs','/documenti/da-verificare')
@@ -359,8 +358,7 @@ def r11_documento_atleta(doc_id):
         else:
             html += r11_script
 '''
-        block=block.replace(insert_anchor,cleanup+insert_anchor,1)
-        s=s[:wrap_start]+block+s[wrap_end:]
+        s=s[:insert_pos]+cleanup+s[insert_pos:]
         return s
 
     patch_file('asd_app/routes_a202_operational_integrity.py',patch_a202)
