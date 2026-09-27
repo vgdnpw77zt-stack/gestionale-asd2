@@ -30,6 +30,7 @@ os.chdir(APP)
 sys.path.insert(0, str(APP))
 from asd_app.core import init_db
 init_db()
+runpy.run_path("/opt/bodymind/runtime_unified_probe.py", run_name="__main__")
 
 admin_user = os.environ.get("BODYMIND_ADMIN_USER", "").strip()
 admin_password = os.environ.get("BODYMIND_ADMIN_PASSWORD", "")
