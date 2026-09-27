@@ -47,7 +47,7 @@ DEFAULT_CONTENT = {
         {"title":"TRAINING","subtitle":"Allenamento, tecnica e costruzione del movimento","url":"https://www.instagram.com/reel/DOGdeS2Ddt1/?stkn=MWgyZHN2ajR1YjhlaA=="},
         {"title":"COMPETITION","subtitle":"Il doppio gara e il lavoro orientato alla competizione","url":"https://www.instagram.com/p/DWgXpPKDQd2/?stkn=MWg5NGdjZTFxd2d6bQ=="},
         {"title":"SHOW","subtitle":"Presenza scenica, performance e spettacolo","url":"https://www.instagram.com/reel/Ddle2ZbN086/?stkn=cHMxNzVwcHN1ZnV3"},
-        {"title":"Dentro BodyMind","subtitle":"Allenamento, atmosfera e vita dello studio","url":"https://www.instagram.com/reel/DdLuWlqtx1i/"}
+        {"title":"Dentro BodyMind","subtitle":"Allenamento, atmosfera e vita dello studio","url":"https://www.instagram.com/reel/DXEbNkAjT8K/?stkn=eDlzYzJsdHdoNWQ4"}
     ],
     "venues":[
         {
@@ -83,7 +83,7 @@ DEFAULT_CONTENT = {
         "title":"BodyMind Aerial Studio | Danza Aerea ad Aprilia",
         "description":"BodyMind Aerial Studio ad Aprilia: danza aerea, tessuti, cerchio, corsi Kids & Junior e percorsi performance."
     },
-    "_design_version":12,
+    "_design_version":16,
 }
 
 SEED_SOURCES = {
@@ -151,6 +151,19 @@ def load_content():
             c["visuals"]["gallery"].append(DEFAULT_CONTENT["visuals"]["gallery"][len(c["visuals"]["gallery"])])
         c["visuals"]["gallery"][4] = "/static/media/bodymind-competition-double.webp"
         c["_design_version"] = 12
+        save_content(c)
+    if int(c.get("_design_version", 0) or 0) < 16:
+        while len(c.get("videos", [])) < 4:
+            c.setdefault("videos", []).append({"title":"","subtitle":"","url":""})
+        c["videos"][3].update({
+            "title":"Dentro BodyMind",
+            "subtitle":"Allenamento, atmosfera e vita dello studio",
+            "url":"https://www.instagram.com/reel/DXEbNkAjT8K/?stkn=eDlzYzJsdHdoNWQ4"
+        })
+        c.setdefault("kids", {})
+        c["kids"]["reel_url"] = c["kids"].get("reel_url") or "https://www.instagram.com/reel/DGD1bGQsSoD/?stkn=MWgxbTU3b2Z6MjFkZQ=="
+        c["kids"]["video_file"] = c["kids"].get("video_file") or ""
+        c["_design_version"] = 16
         save_content(c)
     return c
 
@@ -273,7 +286,7 @@ def security_headers(resp):
         resp.headers["X-Robots-Tag"] = "noindex, nofollow"
     else:
         resp.headers.setdefault("Cache-Control","no-store")
-    resp.headers["X-BodyMind-Site"] = "v15-kids-autoplay"
+    resp.headers["X-BodyMind-Site"] = "v16-kids-cinematic"
     return resp
 
 @app.get("/")
@@ -433,7 +446,7 @@ def admin():
             flash(str(exc),"error")
             return render_template("admin.html", c=c)
 
-        c["_design_version"] = 12
+        c["_design_version"] = 16
         save_content(c)
         flash("Sito aggiornato e pubblicato.","ok")
         return redirect(url_for("admin"))
@@ -448,7 +461,7 @@ def admin():
 def healthz():
     ensure_data()
     seeded = sum(1 for k in SEED_SOURCES if _seed_paths(k)[0].exists())
-    return {"ok":True,"service":"bodymind-public-site","design":"v15-kids-autoplay","seeded_assets":seeded,"persistent_data":str(DATA)}, 200
+    return {"ok":True,"service":"bodymind-public-site","design":"v16-kids-cinematic","seeded_assets":seeded,"persistent_data":str(DATA)}, 200
 
 if __name__ == "__main__":
     ensure_data()
