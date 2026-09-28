@@ -366,7 +366,7 @@ def security_headers(resp):
         resp.headers["X-Robots-Tag"] = "noindex, nofollow"
     else:
         resp.headers.setdefault("Cache-Control","no-store")
-    resp.headers["X-BodyMind-Site"] = "v22-pianeta-orari"
+    resp.headers["X-BodyMind-Site"] = "v23-training-full"
     return resp
 
 @app.get("/")
@@ -546,7 +546,7 @@ def healthz():
     ensure_data()
     seeded = sum(1 for k in SEED_SOURCES if _seed_paths(k)[0].exists())
     visits = _site_visit_count(increment=False)
-    return {"ok":True,"service":"bodymind-public-site","design":"v22-pianeta-orari","seeded_assets":seeded,"persistent_data":str(DATA),"visits":visits}, 200
+    return {"ok":True,"service":"bodymind-public-site","design":"v23-training-full","seeded_assets":seeded,"persistent_data":str(DATA),"visits":visits}, 200
 
 if __name__ == "__main__":
     ensure_data()
