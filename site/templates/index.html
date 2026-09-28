@@ -20,7 +20,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500;1,600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <title>{{ c.seo.title }}</title>
-<link rel="stylesheet" href="{{ url_for('static',filename='site.css') }}?v=v25-mobile-cta">
+<link rel="stylesheet" href="{{ url_for('static',filename='site.css') }}?v=v26-editorial">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"SportsActivityLocation","name":"BodyMind Aerial Studio","url":"https://bodymindaerialstudio.life/","address":{"@type":"PostalAddress","addressLocality":"Aprilia","addressRegion":"LT","addressCountry":"IT"},"sameAs":["https://www.instagram.com/bodymind.aerialstudio/"]}</script>
 </head>
 <body>
@@ -123,6 +123,13 @@
 <p class="program-eyebrow">{{ program_eyebrows[loop.index0] }}</p>
 <h3>{{ item.title }}</h3>
 <p>{{ item.text }}</p>
+{% if loop.index == 2 %}
+<a class="competition-palmares" href="{{ c.videos[loop.index0].url }}" target="_blank" rel="noopener" aria-label="Palmarès BodyMind Competition: 10 podi, 4 ori, 3 argenti, 3 bronzi. Guarda il reel">
+  <span class="palmares-kicker">PALMARÈS · 10 PODI</span>
+  <span class="palmares-medals"><b>🥇 4</b><b>🥈 3</b><b>🥉 3</b></span>
+  <span class="palmares-link">Guarda il reel ↗</span>
+</a>
+{% endif %}
 <div class="program-links">
 {% if c.videos|length > loop.index0 and c.videos[loop.index0].url %}<a href="{{ c.videos[loop.index0].url }}" target="_blank" rel="noopener">Vedi in movimento ↗</a>{% endif %}
 <a href="#sedi">Sedi e orari</a>
@@ -175,6 +182,7 @@
 <div class="movement-head reveal">
 <p class="section-label">BODYMIND IN MOVIMENTO</p>
 <h2>La scena non si spiega.<br><em>Si guarda.</em></h2>
+<p class="movement-invite reveal">Clicca e dai un’occhiata dentro BodyMind.</p>
 </div>
 <div class="film-grid film-grid-single">
 {% if c.videos|length > 3 and c.videos[3].url %}
@@ -264,6 +272,6 @@
 <div class="footer-visits" aria-label="Visitatori unici del sito"><span>VISITE UNICHE</span><strong>{{ "{:,}".format(visits|int).replace(",", ".") }}</strong></div>
 </footer>
 
-<script src="{{ url_for('static',filename='site.js') }}?v=v16-kids-cinematic"></script>
+<script src="{{ url_for('static',filename='site.js') }}?v=v26-editorial"></script>
 </body>
 </html>
