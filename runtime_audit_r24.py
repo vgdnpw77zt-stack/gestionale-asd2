@@ -1,3 +1,4 @@
+# R24 read-only production audit trigger
 from __future__ import annotations
 from pathlib import Path
 import ast, json, re, sqlite3, unicodedata
