@@ -14,13 +14,21 @@ def backup(rel):
         dst.parent.mkdir(parents=True,exist_ok=True)
         shutil.copy2(src,dst)
 
-if not MARKER.exists():
-    rel='asd_app/routes_documenti.py'
-    p=APP/rel
-    if not p.exists():
-        raise RuntimeError('R23 target missing: '+rel)
-    s=p.read_text(encoding='utf-8')
+rel='asd_app/routes_documenti.py'
+p=APP/rel
+if not p.exists():
+    raise RuntimeError('R23 target missing: '+rel)
 
+# Recover only a partial R23 attempt. Never restore an older application release.
+if not MARKER.exists():
+    current=p.read_text(encoding='utf-8',errors='replace')
+    prior=BACKUPS/rel
+    if 'BODYMIND_R23_' in current and prior.exists():
+        shutil.copy2(prior,p)
+        print('[dossier-r23] restored partial R23 routes_documenti only',flush=True)
+
+if not MARKER.exists():
+    s=p.read_text(encoding='utf-8')
     if 'BODYMIND_R23_REMOVE_MISSING_DOSSIER_REF' not in s:
         backup(rel)
 
@@ -64,8 +72,7 @@ def documenti_remove_missing_reference(doc_id: int):
         if preview_idx is None:
             raise RuntimeError('R23 preview action anchor missing')
         pfx=lines[preview_idx][:len(lines[preview_idx])-len(lines[preview_idx].lstrip())]
-        missing_line=r'''{f"<span class='bm-r23-missing-badge'>File non disponibile</span><form method='POST' action='/documenti/riferimento-mancante/{int(d['id'])}/rimuovi' class='inline-form bm-r23-missing-form' onsubmit=\"return confirm('Rimuovere solo questo riferimento senza file dal dossier?')\">{csrf_input()}<input type='hidden' name='tesserato_id' value='{tesserato_id}'><button class='pro-cta slim bm-r23-remove-ref' type='submit'>Rimuovi riferimento</button></form>" if not document_abs_path(str(d['filename'] or '')).is_file() else ''}
-'''
+        missing_line='''{f"<span class='bm-r23-missing-badge'>File non disponibile</span><form method='POST' action='/documenti/riferimento-mancante/{int(d['id'])}/rimuovi' class='inline-form bm-r23-missing-form'>{csrf_input()}<input type='hidden' name='tesserato_id' value='{tesserato_id}'><button class='pro-cta slim bm-r23-remove-ref' type='submit'>Rimuovi riferimento</button></form>" if not document_abs_path(str(d['filename'] or '')).is_file() else ''}\n'''
         lines.insert(preview_idx,pfx+missing_line)
         s=''.join(lines)
 
@@ -78,7 +85,6 @@ def documenti_remove_missing_reference(doc_id: int):
         if style_anchor not in s:
             raise RuntimeError('R23 style anchor missing')
         s=s.replace(style_anchor,style_extra,1)
-
         p.write_text(s,encoding='utf-8')
 
     if not compileall.compile_file(str(p),quiet=1):
@@ -97,6 +103,6 @@ def documenti_remove_missing_reference(doc_id: int):
 
     MARKER.write_text('BodyMind dossier missing reference R23 applied\n',encoding='utf-8')
     print('[dossier-r23] applied',flush=True)
-    print('[dossier-r23-selftest] PASS missing-only-ui physical-file-guard soft-hide no-file-delete',flush=True)
+    print('[dossier-r23-selftest] PASS partial-recovery missing-only-ui physical-file-guard soft-hide no-file-delete',flush=True)
 else:
     print('[dossier-r23] already applied',flush=True)
