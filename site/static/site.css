@@ -830,3 +830,59 @@ footer{display:grid;grid-template-columns:1fr 1fr auto auto;gap:30px;align-items
     box-shadow:inset 0 0 65px rgba(15,5,13,.08);
   }
 }
+
+
+/* V28 desktop cards */
+@media(min-width:981px){
+  .program-card.p2 .program-image,
+  .program-card.p3 .program-image{bottom:0!important}
+
+  .program-card.p2 .program-image{padding:0 2px;background:#120b11}
+  .program-card.p2 .program-image:before{opacity:.58}
+  .program-card.p2 .program-image img,
+  .program-card.p2:hover .program-image img{
+    object-fit:contain!important;
+    object-position:center 42%!important;
+    transform:scale(1.035)!important;
+    transform-origin:center 42%;
+  }
+
+  .program-card.p3 .program-image img,
+  .program-card.p3:hover .program-image img{
+    object-fit:cover!important;
+    object-position:center 50%!important;
+    transform:none!important;
+  }
+
+  .program-card.p2 .program-content,
+  .program-card.p3 .program-content{
+    background:linear-gradient(180deg,rgba(9,5,9,.08),rgba(9,5,9,.32) 22%,rgba(9,5,9,.50))!important;
+    backdrop-filter:blur(7px);
+    -webkit-backdrop-filter:blur(7px);
+    border-top:1px solid rgba(255,255,255,.08);
+    text-shadow:0 3px 18px rgba(0,0,0,.72)!important;
+  }
+  .program-card.p2 .program-overlay,
+  .program-card.p3 .program-overlay{
+    background:linear-gradient(180deg,rgba(6,4,7,.01) 48%,rgba(7,4,7,.08) 69%,rgba(8,5,9,.26))!important;
+  }
+  .program-card.p2 .competition-palmares{
+    background:rgba(14,7,12,.28);
+    border-color:rgba(255,255,255,.14);
+  }
+
+  .kids-reel-native{background:radial-gradient(circle at 50% 38%,rgba(143,47,99,.18),rgba(9,7,10,.94) 72%)}
+  .kids-reel-native video,
+  .kids-reel-native.is-playing video,
+  .kids-reel-native:hover video{
+    inset:0!important;
+    width:100%!important;
+    height:100%!important;
+    object-fit:contain!important;
+    object-position:center center!important;
+    transform:none!important;
+  }
+  .kids-video-shade{
+    background:linear-gradient(180deg,rgba(10,5,10,.12),transparent 36%,transparent 72%,rgba(9,4,8,.20));
+  }
+}
