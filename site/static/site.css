@@ -245,3 +245,84 @@ footer{display:grid;grid-template-columns:1fr 1fr auto auto;gap:30px;align-items
 @media(max-width:600px){
   .program-card.p1 .program-overlay{background:linear-gradient(180deg,rgba(255,255,255,.01) 8%,rgba(249,244,247,.18) 38%,rgba(247,241,244,.97) 100%)}
 }
+
+
+/* V20 — full-body Training + achievements ribbon */
+.achievement-marquee{
+  position:absolute;
+  z-index:8;
+  top:104px;
+  left:clamp(18px,5vw,76px);
+  right:clamp(18px,5vw,76px);
+  min-height:44px;
+  display:flex;
+  align-items:center;
+  overflow:hidden;
+  border:1px solid rgba(255,255,255,.11);
+  border-radius:999px;
+  background:linear-gradient(90deg,rgba(18,8,17,.78),rgba(49,14,37,.78),rgba(18,8,17,.78));
+  box-shadow:0 14px 40px rgba(0,0,0,.18);
+  backdrop-filter:blur(18px) saturate(135%);
+  -webkit-backdrop-filter:blur(18px) saturate(135%);
+}
+.achievement-window{width:100%;overflow:hidden;mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent);-webkit-mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent)}
+.achievement-track{display:flex;width:max-content;will-change:transform;animation:bodymind-achievement-scroll 24s linear infinite}
+.achievement-set{display:flex;align-items:center;gap:17px;min-height:42px;padding:0 28px;white-space:nowrap}
+.achievement-kicker{font-size:8px;font-weight:900;letter-spacing:.18em;color:#f1c3d8}
+.achievement-medal{display:inline-flex;align-items:center;gap:6px;font-size:10px;font-style:normal;letter-spacing:.07em}
+.achievement-medal i{font-style:normal;font-size:16px;filter:saturate(.9)}
+.achievement-medal strong{font-size:14px;line-height:1;color:#fff}
+.achievement-medal em{font-style:normal;font-size:8px;font-weight:900;letter-spacing:.13em;color:#d9ccd3}
+.achievement-medal.gold strong{color:#f5d97b}.achievement-medal.silver strong{color:#e8edf0}.achievement-medal.bronze strong{color:#e2aa79}
+.achievement-dot{width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,.34)}
+.achievement-note{font:italic 600 13px/1 var(--serif);color:#d9b3c7}
+.achievement-marquee:hover .achievement-track{animation-play-state:paused}
+@keyframes bodymind-achievement-scroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+/* Training: editorial full-body treatment — no crop, no zoom on hover. */
+.program-card.p1{background:linear-gradient(180deg,#e7d8df 0%,#f1e8ec 55%,#f7f1f4 100%)}
+.program-card.p1 .program-image{
+  inset:14px 16px 118px;
+  width:auto;
+  height:auto;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+  border-radius:22px;
+  background:radial-gradient(circle at 50% 38%,rgba(255,255,255,.72),rgba(231,216,223,.38) 58%,rgba(214,194,205,.22));
+}
+.program-card.p1 .program-image img{
+  position:relative;
+  inset:auto;
+  width:100%;
+  height:100%;
+  object-fit:contain!important;
+  object-position:center bottom!important;
+  transform:scale(.94)!important;
+  transform-origin:center bottom;
+  filter:saturate(.93) contrast(1.02);
+}
+.program-card.p1:hover .program-image img{transform:scale(.94)!important}
+.program-card.p1 .program-overlay{
+  background:linear-gradient(180deg,rgba(255,255,255,0) 38%,rgba(247,241,244,.42) 66%,rgba(247,241,244,.98) 88%,#f7f1f4 100%);
+}
+.program-card.p1 .program-content{padding-top:22px}
+
+@media(max-width:980px){
+  .hero-stage{padding-top:148px}
+  .achievement-marquee{top:88px;left:16px;right:16px}
+  .program-card.p1 .program-image{inset:12px 12px 122px}
+}
+@media(max-width:600px){
+  .hero-stage{padding-top:142px}
+  .achievement-marquee{top:84px;left:12px;right:12px;min-height:40px}
+  .achievement-set{gap:12px;padding:0 18px;min-height:38px}
+  .achievement-note{font-size:12px}
+  .program-card.p1 .program-image{inset:10px 10px 134px}
+  .program-card.p1 .program-image img{transform:scale(.92)!important}
+  .program-card.p1:hover .program-image img{transform:scale(.92)!important}
+}
+@media(prefers-reduced-motion:reduce){
+  .achievement-track{animation:none;transform:none}
+}
