@@ -105,7 +105,7 @@ if not MARKER.exists():
         html_anchor='''    html=f"""
     <main class='r11-page'>
 '''
-        html_new='''    missing_link=(f"<a class='r17-missing-link' href='/documenti/file-mancanti'>{missing_count} senza file</a>" if missing_count else '')
+        html_new='''    missing_link=(f"<a href='/documenti/file-mancanti' style='display:block;margin-top:8px;font-size:10px;color:#fecaca!important;text-decoration:none;padding:6px 8px;border-radius:999px;background:rgba(127,29,29,.24);border:1px solid rgba(248,113,113,.28)'>{missing_count} senza file</a>" if missing_count else '')
     html=f"""
     <main class='r11-page'>
 '''
@@ -118,12 +118,6 @@ if not MARKER.exists():
         if count_anchor not in s:
             raise RuntimeError('R17 queue hero count anchor missing')
         s=s.replace(count_anchor,count_new,1)
-
-        css_anchor=".r11-count small{display:block;font-size:10px;text-transform:uppercase;color:#9fb4cb}"
-        css_new=css_anchor+".r17-missing-link{display:block;margin-top:8px;font-size:10px;color:#fecaca!important;text-decoration:none;padding:6px 8px;border-radius:999px;background:rgba(127,29,29,.24);border:1px solid rgba(248,113,113,.28)}"
-        if css_anchor not in s:
-            raise RuntimeError('R17 queue css anchor missing')
-        s=s.replace(css_anchor,css_new,1)
 
         route_anchor="# BODYMIND_R14_REMOVE_QUEUE_ITEM"
         route_code=r'''# BODYMIND_R17_MISSING_FILES
