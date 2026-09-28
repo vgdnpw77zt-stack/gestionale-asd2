@@ -1,4 +1,4 @@
-import os, json, secrets, urllib.request, re, hashlib, hmac, base64
+import os, json, secrets, urllib.request, re, hashlib, hmac, base64, sqlite3
 from pathlib import Path
 from functools import wraps
 from copy import deepcopy
@@ -11,6 +11,7 @@ DATA = Path(os.environ.get("SITE_DATA_DIR") or (BASE / "data"))
 UPLOADS = DATA / "uploads"
 SEEDS = DATA / "seed_assets"
 CONTENT_FILE = DATA / "site_content.json"
+METRICS_DB = DATA / "site_metrics.db"
 
 IMAGE_EXT = {"png","jpg","jpeg","webp"}
 IMAGE_MIME = {"image/png","image/jpeg","image/webp"}
@@ -102,6 +103,34 @@ def ensure_data():
     SEEDS.mkdir(parents=True, exist_ok=True)
     if not CONTENT_FILE.exists():
         CONTENT_FILE.write_text(json.dumps(DEFAULT_CONTENT, ensure_ascii=False, indent=2), encoding="utf-8")
+
+def _site_visit_count(increment=True):
+    """Persistent public page-view counter. No IPs/cookies/user identifiers stored."""
+    ensure_data()
+    try:
+        conn = sqlite3.connect(str(METRICS_DB), timeout=5)
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("CREATE TABLE IF NOT EXISTS site_metrics (key TEXT PRIMARY KEY, value INTEGER NOT NULL DEFAULT 0)")
+            conn.execute("INSERT OR IGNORE INTO site_metrics(key,value) VALUES('public_home_views',0)")
+            if increment:
+                conn.execute("BEGIN IMMEDIATE")
+                conn.execute("UPDATE site_metrics SET value=value+1 WHERE key='public_home_views'")
+            value = conn.execute("SELECT value FROM site_metrics WHERE key='public_home_views'").fetchone()[0]
+            conn.commit()
+            return int(value or 0)
+        finally:
+            conn.close()
+    except Exception as exc:
+        app.logger.warning("site visit counter unavailable: %s", exc)
+        return 0
+
+def _is_obvious_bot():
+    ua = (request.headers.get("User-Agent") or "").lower()
+    if not ua:
+        return True
+    markers = ("bot","crawler","spider","slurp","preview","facebookexternalhit","whatsapp","telegrambot","curl","wget","monitor","uptime")
+    return any(marker in ua for marker in markers)
 
 def merge_defaults(defaults, value):
     if isinstance(defaults, dict):
@@ -286,12 +315,13 @@ def security_headers(resp):
         resp.headers["X-Robots-Tag"] = "noindex, nofollow"
     else:
         resp.headers.setdefault("Cache-Control","no-store")
-    resp.headers["X-BodyMind-Site"] = "v16-kids-cinematic"
+    resp.headers["X-BodyMind-Site"] = "v17-visit-counter"
     return resp
 
 @app.get("/")
 def home():
-    return render_template("index.html", c=load_content())
+    visits = _site_visit_count(increment=not _is_obvious_bot())
+    return render_template("index.html", c=load_content(), visits=visits)
 
 @app.get("/seed-media/<slot>")
 def seed_media(slot):
@@ -461,7 +491,7 @@ def admin():
 def healthz():
     ensure_data()
     seeded = sum(1 for k in SEED_SOURCES if _seed_paths(k)[0].exists())
-    return {"ok":True,"service":"bodymind-public-site","design":"v16-kids-cinematic","seeded_assets":seeded,"persistent_data":str(DATA)}, 200
+    return {"ok":True,"service":"bodymind-public-site","design":"v17-visit-counter","seeded_assets":seeded,"persistent_data":str(DATA)}, 200
 
 if __name__ == "__main__":
     ensure_data()
