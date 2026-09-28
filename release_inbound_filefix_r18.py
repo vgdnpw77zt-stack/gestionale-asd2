@@ -169,7 +169,7 @@ try:
         dtype=str(row['document_type'] or '')
         dconf=int(row['document_confidence'] or 0)
         strong_type=(dtype not in ('','altro') and dconf>=60)
-        new_status=('pagamento_da_verificare' if dtype=='ricevuta_pagamento' else ('associato' if strong_type else 'associato_tipo_da_verificare'))
+        new_status=('richiede_conferma' if dtype=='modulo_unico_tesseramento' else ('pagamento_da_verificare' if dtype=='ricevuta_pagamento' else ('associato' if strong_type else 'associato_tipo_da_verificare')))
         ic=cols(conn,'inbound_documents')
         sets=["tesserato_id=?","match_score=?","match_action='auto_save'","status=?"]
         params=[tid,score,new_status]
@@ -196,7 +196,7 @@ try:
                 'filename':saved,'original_filename':str(row['original_filename'] or Path(saved).name),
                 'data_caricamento':datetime.now().date().isoformat(),'visibile':1,
                 'doc_type':dtype,'confidence':dconf,'match_score':score,'source':'autopilot',
-                'status':'salvato','inbound_id':int(row['id'])
+                'status':('richiede_conferma' if dtype=='modulo_unico_tesseramento' else 'salvato'),'inbound_id':int(row['id'])
             }
             values={k:v for k,v in values.items() if k in dc}
             if existing:
