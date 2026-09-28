@@ -104,17 +104,42 @@ def ensure_data():
     if not CONTENT_FILE.exists():
         CONTENT_FILE.write_text(json.dumps(DEFAULT_CONTENT, ensure_ascii=False, indent=2), encoding="utf-8")
 
+def _client_ip():
+    """Best available originating IP behind Railway/CDN proxies."""
+    for header in ("CF-Connecting-IP", "X-Forwarded-For", "X-Real-IP"):
+        raw = (request.headers.get(header) or "").strip()
+        if raw:
+            value = raw.split(",", 1)[0].strip()
+            if value:
+                return value
+    return (request.remote_addr or "").strip()
+
 def _site_visit_count(increment=True):
-    """Persistent public page-view counter. No IPs/cookies/user identifiers stored."""
+    """Persistent unique-visitor counter: one lifetime visit per IP.
+
+    Raw IP addresses are never stored. A keyed SHA-256 digest is persisted so
+    repeat requests from the same IP can be ignored across restarts/deploys.
+    The pre-V18 page-view total is preserved as the historical baseline.
+    """
     ensure_data()
     try:
         conn = sqlite3.connect(str(METRICS_DB), timeout=5)
         try:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("CREATE TABLE IF NOT EXISTS site_metrics (key TEXT PRIMARY KEY, value INTEGER NOT NULL DEFAULT 0)")
+            conn.execute("""CREATE TABLE IF NOT EXISTS site_unique_visitors (
+                ip_hash TEXT PRIMARY KEY,
+                first_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )""")
             conn.execute("INSERT OR IGNORE INTO site_metrics(key,value) VALUES('public_home_views',0)")
             if increment:
-                conn.execute("UPDATE site_metrics SET value=value+1 WHERE key='public_home_views'")
+                ip = _client_ip()
+                if ip:
+                    key = str(app.secret_key or "").encode("utf-8")
+                    digest = hmac.new(key, ip.encode("utf-8"), hashlib.sha256).hexdigest()
+                    cur = conn.execute("INSERT OR IGNORE INTO site_unique_visitors(ip_hash) VALUES(?)", (digest,))
+                    if cur.rowcount == 1:
+                        conn.execute("UPDATE site_metrics SET value=value+1 WHERE key='public_home_views'")
             value = conn.execute("SELECT value FROM site_metrics WHERE key='public_home_views'").fetchone()[0]
             conn.commit()
             return int(value or 0)
@@ -314,7 +339,7 @@ def security_headers(resp):
         resp.headers["X-Robots-Tag"] = "noindex, nofollow"
     else:
         resp.headers.setdefault("Cache-Control","no-store")
-    resp.headers["X-BodyMind-Site"] = "v17-visit-counter"
+    resp.headers["X-BodyMind-Site"] = "v18-unique-ip"
     return resp
 
 @app.get("/")
@@ -491,7 +516,7 @@ def healthz():
     ensure_data()
     seeded = sum(1 for k in SEED_SOURCES if _seed_paths(k)[0].exists())
     visits = _site_visit_count(increment=False)
-    return {"ok":True,"service":"bodymind-public-site","design":"v17-visit-counter","seeded_assets":seeded,"persistent_data":str(DATA),"visits":visits}, 200
+    return {"ok":True,"service":"bodymind-public-site","design":"v18-unique-ip","seeded_assets":seeded,"persistent_data":str(DATA),"visits":visits}, 200
 
 if __name__ == "__main__":
     ensure_data()
