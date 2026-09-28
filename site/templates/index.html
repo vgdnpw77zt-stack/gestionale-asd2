@@ -20,7 +20,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500;1,600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <title>{{ c.seo.title }}</title>
-<link rel="stylesheet" href="{{ url_for('static',filename='site.css') }}?v=v21-framing">
+<link rel="stylesheet" href="{{ url_for('static',filename='site.css') }}?v=v22-pianeta-orari">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"SportsActivityLocation","name":"BodyMind Aerial Studio","url":"https://bodymindaerialstudio.life/","address":{"@type":"PostalAddress","addressLocality":"Aprilia","addressRegion":"LT","addressCountry":"IT"},"sameAs":["https://www.instagram.com/bodymind.aerialstudio/"]}</script>
 </head>
 <body>
@@ -160,7 +160,8 @@
 <div class="kids-venue">
 <strong>{{ c.venues[1].name }}</strong>
 <span>{{ c.venues[1].address }}</span>
-<span>{{ c.venues[1].days }}{% if c.venues[1].time %} · {{ c.venues[1].time }}{% endif %}</span>
+<span>{{ c.venues[1].days }}</span>
+{% if c.venues[1].kids_time %}<span class="kids-time-line"><b>Kids</b> {{ c.venues[1].kids_time }}</span>{% elif c.venues[1].time %}<span>{{ c.venues[1].time }}</span>{% endif %}
 </div>
 {% endif %}
 <div class="kids-actions">
@@ -204,7 +205,15 @@
 <div class="location-top"><div><small>BODYMIND · APRILIA</small><h3>{{ venue.name }}</h3></div><a href="{{ maps_url(venue.address) }}" target="_blank" rel="noopener">Apri mappa ↗</a></div>
 <p class="address">{{ venue.address }}</p>
 <p class="course-name">{{ venue.course }}</p>
+{% if venue.kids_time or venue.adult_time %}
+<div class="schedule-stack">
+  <div class="schedule-row schedule-days"><span>{{ venue.days }}</span><strong>Orari</strong></div>
+  {% if venue.kids_time %}<div class="schedule-row schedule-detail"><span>Kids</span><strong>{{ venue.kids_time }}</strong></div>{% endif %}
+  {% if venue.adult_time %}<div class="schedule-row schedule-detail"><span>Adult</span><strong>{{ venue.adult_time }}</strong></div>{% endif %}
+</div>
+{% else %}
 <div class="schedule-row"><span>{{ venue.days }}</span>{% if venue.time %}<strong>{{ venue.time }}</strong>{% endif %}</div>
+{% endif %}
 {% if venue.note %}<p class="note">{{ venue.note }}</p>{% endif %}
 </article>
 {% endif %}
