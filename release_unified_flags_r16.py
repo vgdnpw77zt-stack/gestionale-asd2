@@ -10,7 +10,6 @@ BACKUPS=Path('/data/release_backups/20260928_unified_flags_r16')
 
 TESSERATO_FLAGS=(
     'consenso_informato',
-    'liberatoria_immagini',
     'manleva_firmata',
     'iscrizione_firmata',
     'documenti_onboarding_ok',
@@ -78,7 +77,7 @@ def sync_unified_module_flags(conn, tesserato_id: int, source: str = 'modulo_uni
         return
     tcols=_cols(conn,'tesserati')
     covered=(
-        'consenso_informato','liberatoria_immagini','manleva_firmata',
+        'consenso_informato','manleva_firmata',
         'iscrizione_firmata','documenti_onboarding_ok',
         'privacy_ok','liberatoria_ok','regolamento_ok',
     )
