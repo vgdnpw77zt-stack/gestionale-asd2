@@ -20,7 +20,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500;1,600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <title>{{ c.seo.title }}</title>
-<link rel="stylesheet" href="{{ url_for('static',filename='site.css') }}?v=v26-editorial">
+<link rel="stylesheet" href="{{ url_for('static',filename='site.css') }}?v=v27-desktop-cards">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"SportsActivityLocation","name":"BodyMind Aerial Studio","url":"https://bodymindaerialstudio.life/","address":{"@type":"PostalAddress","addressLocality":"Aprilia","addressRegion":"LT","addressCountry":"IT"},"sameAs":["https://www.instagram.com/bodymind.aerialstudio/"]}</script>
 </head>
 <body>
@@ -117,7 +117,7 @@
 <div class="program-grid">
 {% for item in c.courses %}
 <article class="program-card p{{ loop.index }} reveal">
-{% if c.videos|length > loop.index0 and c.videos[loop.index0].url %}<a class="program-image program-image-link" href="{{ c.videos[loop.index0].url }}" target="_blank" rel="noopener" aria-label="Guarda {{ item.title }} BodyMind"><img src="{{ program_images[loop.index0] }}" alt="{{ item.title }} BodyMind" loading="lazy"></a>{% else %}<div class="program-image"><img src="{{ program_images[loop.index0] }}" alt="{{ item.title }} BodyMind" loading="lazy"></div>{% endif %}
+{% if c.videos|length > loop.index0 and c.videos[loop.index0].url %}<a class="program-image program-image-link" style="--program-bg:url('{{ program_images[loop.index0] }}')" href="{{ c.videos[loop.index0].url }}" target="_blank" rel="noopener" aria-label="Guarda {{ item.title }} BodyMind"><img src="{{ program_images[loop.index0] }}" alt="{{ item.title }} BodyMind" loading="lazy"></a>{% else %}<div class="program-image" style="--program-bg:url('{{ program_images[loop.index0] }}')"><img src="{{ program_images[loop.index0] }}" alt="{{ item.title }} BodyMind" loading="lazy"></div>{% endif %}
 <div class="program-overlay"></div>
 <div class="program-content">
 <p class="program-eyebrow">{{ program_eyebrows[loop.index0] }}</p>
