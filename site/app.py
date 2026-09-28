@@ -62,10 +62,12 @@ DEFAULT_CONTENT = {
         {
             "name":"Pianeta Forma",
             "address":"Via Aldo Moro 94/98, Aprilia (LT)",
-            "course":"Kids & Junior",
+            "course":"Kids · Adult",
             "days":"Martedì e giovedì",
             "time":"",
-            "note":"Contattaci per l’orario aggiornato del gruppo Kids & Junior."
+            "kids_time":"16:15–17:15",
+            "adult_time":"20:00–22:00",
+            "note":""
         }
     ],
     "about":{
@@ -84,7 +86,7 @@ DEFAULT_CONTENT = {
         "title":"BodyMind Aerial Studio | Danza Aerea ad Aprilia",
         "description":"BodyMind Aerial Studio ad Aprilia: danza aerea, tessuti, cerchio, corsi Kids & Junior e percorsi performance."
     },
-    "_design_version":20,
+    "_design_version":22,
 }
 
 SEED_SOURCES = {
@@ -228,6 +230,21 @@ def load_content():
         })
         c["_design_version"] = 20
         save_content(c)
+    if int(c.get("_design_version", 0) or 0) < 22:
+        while len(c.get("venues", [])) < 2:
+            c.setdefault("venues", []).append({"name":"","address":"","course":"","days":"","time":"","note":""})
+        c["venues"][1].update({
+            "name":"Pianeta Forma",
+            "address":"Via Aldo Moro 94/98, Aprilia (LT)",
+            "course":"Kids · Adult",
+            "days":"Martedì e giovedì",
+            "time":"",
+            "kids_time":"16:15–17:15",
+            "adult_time":"20:00–22:00",
+            "note":""
+        })
+        c["_design_version"] = 22
+        save_content(c)
     return c
 
 def csrf_token():
@@ -349,7 +366,7 @@ def security_headers(resp):
         resp.headers["X-Robots-Tag"] = "noindex, nofollow"
     else:
         resp.headers.setdefault("Cache-Control","no-store")
-    resp.headers["X-BodyMind-Site"] = "v21-framing"
+    resp.headers["X-BodyMind-Site"] = "v22-pianeta-orari"
     return resp
 
 @app.get("/")
@@ -451,6 +468,7 @@ def admin():
             for i in range(4)
         ]
 
+        previous_venues = c.get("venues", [])
         c["venues"] = [
             {
                 "name":request.form.get(f"venue_{i}_name","").strip(),
@@ -458,6 +476,8 @@ def admin():
                 "course":request.form.get(f"venue_{i}_course","").strip(),
                 "days":request.form.get(f"venue_{i}_days","").strip(),
                 "time":request.form.get(f"venue_{i}_time","").strip(),
+                "kids_time":request.form.get(f"venue_{i}_kids_time", (previous_venues[i].get("kids_time","") if i < len(previous_venues) else "")).strip(),
+                "adult_time":request.form.get(f"venue_{i}_adult_time", (previous_venues[i].get("adult_time","") if i < len(previous_venues) else "")).strip(),
                 "note":request.form.get(f"venue_{i}_note","").strip(),
             }
             for i in range(4)
@@ -510,7 +530,7 @@ def admin():
             flash(str(exc),"error")
             return render_template("admin.html", c=c)
 
-        c["_design_version"] = 20
+        c["_design_version"] = 22
         save_content(c)
         flash("Sito aggiornato e pubblicato.","ok")
         return redirect(url_for("admin"))
@@ -526,7 +546,7 @@ def healthz():
     ensure_data()
     seeded = sum(1 for k in SEED_SOURCES if _seed_paths(k)[0].exists())
     visits = _site_visit_count(increment=False)
-    return {"ok":True,"service":"bodymind-public-site","design":"v21-framing","seeded_assets":seeded,"persistent_data":str(DATA),"visits":visits}, 200
+    return {"ok":True,"service":"bodymind-public-site","design":"v22-pianeta-orari","seeded_assets":seeded,"persistent_data":str(DATA),"visits":visits}, 200
 
 if __name__ == "__main__":
     ensure_data()
