@@ -17,6 +17,7 @@ COPY release_mobile_r12.py /opt/bodymind/release_mobile_r12.py
 COPY release_unified_r13.py /opt/bodymind/release_unified_r13.py
 COPY release_document_repair_r14.py /opt/bodymind/release_document_repair_r14.py
 COPY release_queue_integrity_r15.py /opt/bodymind/release_queue_integrity_r15.py
+COPY release_unified_flags_r16.py /opt/bodymind/release_unified_flags_r16.py
 COPY release_cleanup_r2.py /opt/bodymind/release_cleanup_r2.py
 COPY runtime_unified_probe.py /opt/bodymind/runtime_unified_probe.py
 COPY runtime_launcher.py /opt/bodymind/runtime_launcher.py
