@@ -26,6 +26,20 @@ if not APP.joinpath('.TOP2_OFFICIAL').exists():
 
 if not MARKER.exists():
     BACKUPS.mkdir(parents=True,exist_ok=True)
+    # Recover only a partial R25 attempt; never restore an older release wholesale.
+    for rel in (
+        'asd_app/onboarding_flow.py',
+        'asd_app/routes_documenti.py',
+        'asd_app/routes_email_documents.py',
+        'asd_app/routes_inbound_documents.py',
+    ):
+        p=APP/rel
+        b=BACKUPS/rel
+        if p.exists() and b.exists():
+            current=p.read_text(encoding='utf-8',errors='replace')
+            if 'BODYMIND_R25_' in current:
+                shutil.copy2(b,p)
+                print('[document-flow-r25] restored partial R25 '+rel,flush=True)
 
     def onboarding(s):
         if 'BODYMIND_R25_MINOR_MU_SYNC' in s:
@@ -142,8 +156,13 @@ if not MARKER.exists():
     def inbound(s):
         if 'BODYMIND_R25_MANUAL_TYPE_MU' in s:
             return s
-        old="            new_status = 'pagamento_da_verificare' if new_type == 'ricevuta_pagamento' else 'associato'"
-        new="            # BODYMIND_R25_MANUAL_TYPE_MU\n            new_status = ('richiede_conferma' if new_type == 'modulo_unico_tesseramento' else ('pagamento_da_verificare' if new_type == 'ricevuta_pagamento' else 'associato'))"
+        old="""        if row['tesserato_id']:
+            new_status = 'pagamento_da_verificare' if new_type == 'ricevuta_pagamento' else 'associato'
+"""
+        new="""        if row['tesserato_id']:
+            # BODYMIND_R25_MANUAL_TYPE_MU
+            new_status = ('richiede_conferma' if new_type == 'modulo_unico_tesseramento' else ('pagamento_da_verificare' if new_type == 'ricevuta_pagamento' else 'associato'))
+"""
         if old not in s:
             raise RuntimeError('R25 manual type anchor missing')
         return s.replace(old,new,1)
