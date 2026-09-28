@@ -373,3 +373,15 @@ footer{display:grid;grid-template-columns:1fr 1fr auto auto;gap:30px;align-items
   .program-card.p3 .program-image img,
   .program-card.p3:hover .program-image img{transform:scale(.96)!important}
 }
+
+
+/* V22 — venue schedule details */
+.schedule-stack{border-block:1px solid rgba(75,27,54,.1)}
+.schedule-stack .schedule-row{border:0}
+.schedule-stack .schedule-row + .schedule-row{border-top:1px solid rgba(75,27,54,.08)}
+.schedule-days{padding-bottom:12px}
+.schedule-detail{padding:11px 0}
+.schedule-detail span{font-size:12px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:#7c6170}
+.schedule-detail strong{font-size:16px}
+.kids-time-line{display:flex!important;gap:8px;align-items:center}
+.kids-time-line b{font-size:9px;letter-spacing:.09em;text-transform:uppercase;color:#8f2f63}
