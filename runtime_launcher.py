@@ -27,7 +27,8 @@ if not (APP / ".BODYMIND_OCR_REMATCH_R20").exists():
     runpy.run_path("/opt/bodymind/release_ocr_rematch_r20.py", run_name="__main__")
 if not (APP / ".BODYMIND_FORCE_PDF_OCR_R21").exists():
     runpy.run_path("/opt/bodymind/release_force_pdf_ocr_r21.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_document_flow_r25.py", run_name="__main__")\nrunpy.run_path("/opt/bodymind/release_document_preview_r26.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_document_flow_r25.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_document_preview_r26.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_cleanup_r2.py", run_name="__main__")
 incoming = pathlib.Path("/data/incoming")
 for name in ("top2.zip", "backup.zip"):
