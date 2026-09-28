@@ -234,10 +234,11 @@ try:
 
     index=build_index()
     values=','.join('?' for _ in ACTIVE_STATUSES)
-    rows=conn.execute(f"""SELECT * FROM inbound_documents
-        WHERE (LOWER(COALESCE(status,'')) IN ({values}) OR LOWER(COALESCE(status,''))='file_missing')
-          AND COALESCE(deleted_at,'')=''
-        ORDER BY id""",ACTIVE_STATUSES).fetchall()
+    rows=conn.execute("""SELECT * FROM inbound_documents
+        WHERE COALESCE(deleted_at,'')=''
+          AND TRIM(COALESCE(saved_path,''))<>''
+          AND LOWER(COALESCE(status,'')) NOT IN ('deleted','removed','cancelled')
+        ORDER BY id""").fetchall()
 
     for row in rows:
         did=int(row['id'])
@@ -286,10 +287,14 @@ try:
         WHERE LOWER(COALESCE(status,''))='file_missing' AND COALESCE(deleted_at,'')=''""").fetchone()[0]
     missing_rows=conn.execute("""SELECT id,original_filename,saved_path,missing_previous_status FROM inbound_documents
         WHERE LOWER(COALESCE(status,''))='file_missing' AND COALESCE(deleted_at,'')='' ORDER BY id""").fetchall()
+    pending_rows=conn.execute(f"""SELECT id,original_filename,status,document_type,document_confidence,match_score,match_action,tesserato_id,matched_tesserato_id,suggested_tesserato_id,saved_path
+        FROM inbound_documents WHERE LOWER(COALESCE(status,'')) IN ({values}) AND COALESCE(deleted_at,'')='' ORDER BY id""",ACTIVE_STATUSES).fetchall()
 finally:
     conn.close()
 
 print(f'[missing-r17] repaired={repaired} linked_fixed={linked_fixed} newly_missing={newly_missing} restored={restored} active_pending={active_pending} missing_open={missing_open} missing_ids={missing_ids}',flush=True)
 for r in missing_rows:
     print(f"[missing-r17-item] id={int(r['id'])} previous={str(r['missing_previous_status'] or '')} file={str(r['original_filename'] or '')} path={str(r['saved_path'] or '')}",flush=True)
+for r in pending_rows:
+    print(f"[pending-r17-item] id={int(r['id'])} status={str(r['status'] or '')} file={str(r['original_filename'] or '')} type={str(r['document_type'] or '')} doc_conf={int(r['document_confidence'] or 0)} match={int(r['match_score'] or 0)} action={str(r['match_action'] or '')} tid={int(r['tesserato_id'] or 0)} matched={int(r['matched_tesserato_id'] or 0)} suggested={int(r['suggested_tesserato_id'] or 0)} path={str(r['saved_path'] or '')}",flush=True)
 print('[missing-r17-selftest] PASS recover-before-hide missing-excluded-from-pending reversible-state separate-delete-page',flush=True)
