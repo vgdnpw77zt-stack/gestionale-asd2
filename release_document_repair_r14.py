@@ -190,7 +190,7 @@ try:
         strong_identity=(current_tid>0 and score>=92)
         strong_type=(dtype not in ('','altro') and conf>=60)
         if strong_identity:
-            new_status='associato' if strong_type and dtype!='ricevuta_pagamento' else ('pagamento_da_verificare' if dtype=='ricevuta_pagamento' else 'associato_tipo_da_verificare')
+            new_status=('richiede_conferma' if dtype=='modulo_unico_tesseramento' else ('associato' if strong_type and dtype!='ricevuta_pagamento' else ('pagamento_da_verificare' if dtype=='ricevuta_pagamento' else 'associato_tipo_da_verificare')))
             conn.execute("UPDATE inbound_documents SET status=? WHERE id=?",(new_status,int(r['id'])))
             if new_status=='associato': auto_closed+=1
 
@@ -206,7 +206,7 @@ try:
                     'tesserato_id':current_tid,'titolo':filename,'categoria':CATEGORIES.get(dtype,'Altro'),
                     'filename':saved,'original_filename':filename,'data_caricamento':datetime.now().date().isoformat(),
                     'visibile':1,'doc_type':dtype,'confidence':conf,'match_score':score,'source':'autopilot',
-                    'status':'salvato','inbound_id':int(r['id'])
+                    'status':('richiede_conferma' if dtype=='modulo_unico_tesseramento' else 'salvato'),'inbound_id':int(r['id'])
                 }
                 vals={k:v for k,v in vals.items() if k in dcols}
                 if existing:
@@ -221,24 +221,7 @@ try:
                                      [vals[k] for k in keys])
                 docs_synced+=1
 
-            # A confidently recognised Modulo Unico satisfies the single onboarding form.
-            if dtype=='modulo_unico_tesseramento' and strong_type:
-                if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='onboarding_document_requests'").fetchone():
-                    ocols={x[1] for x in conn.execute("PRAGMA table_info(onboarding_document_requests)").fetchall()}
-                    sets=["status='accepted'"]; vals=[]
-                    now=datetime.now().isoformat(timespec='seconds')
-                    if 'returned_at' in ocols: sets.append("returned_at=COALESCE(returned_at,?)"); vals.append(now)
-                    if 'accepted_at' in ocols: sets.append("accepted_at=COALESCE(accepted_at,?)"); vals.append(now)
-                    if 'accepted_by' in ocols: sets.append("accepted_by='autopilot'")
-                    vals.append(current_tid)
-                    conn.execute("UPDATE onboarding_document_requests SET "+','.join(sets)+" WHERE tesserato_id=? AND document_type='modulo_unico_tesseramento' AND required=1 AND status NOT IN ('accepted','manual_accepted','deleted','cancelled')",vals)
-                if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='minori'").fetchone():
-                    mcols={x[1] for x in conn.execute("PRAGMA table_info(minori)").fetchall()}
-                    if 'consenso_firmato' in mcols:
-                        if 'data_consenso' in mcols:
-                            conn.execute("UPDATE minori SET consenso_firmato=1,data_consenso=COALESCE(NULLIF(data_consenso,''),?) WHERE tesserato_id=?",(datetime.now().date().isoformat(),current_tid))
-                        else:
-                            conn.execute("UPDATE minori SET consenso_firmato=1 WHERE tesserato_id=?",(current_tid,))
+            # R25 trust boundary: automatic identity/type recognition never accepts a Modulo Unico.\n            # The verified/OK action is the only place allowed to synchronize consent/onboarding flags.\n
 
     conn.commit()
     remaining=conn.execute("""SELECT COUNT(*) FROM inbound_documents WHERE lower(coalesce(status,'')) IN
