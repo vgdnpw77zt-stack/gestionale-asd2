@@ -153,21 +153,6 @@ if not MARKER.exists():
 
     patch('asd_app/routes_email_documents.py',email)
 
-    def inbound(s):
-        if 'BODYMIND_R25_MANUAL_TYPE_MU' in s:
-            return s
-        old="""        if row['tesserato_id']:
-            new_status = 'pagamento_da_verificare' if new_type == 'ricevuta_pagamento' else 'associato'
-"""
-        new="""        if row['tesserato_id']:
-            # BODYMIND_R25_MANUAL_TYPE_MU
-            new_status = ('richiede_conferma' if new_type == 'modulo_unico_tesseramento' else ('pagamento_da_verificare' if new_type == 'ricevuta_pagamento' else 'associato'))
-"""
-        if old not in s:
-            raise RuntimeError('R25 manual type anchor missing')
-        return s.replace(old,new,1)
-
-    patch('asd_app/routes_inbound_documents.py',inbound)
 
     if not compileall.compile_dir(str(APP/'asd_app'),quiet=1):
         raise RuntimeError('R25 compile failed')
@@ -175,7 +160,6 @@ if not MARKER.exists():
         'minor-sync':'BODYMIND_R25_MINOR_MU_SYNC' in (APP/'asd_app/onboarding_flow.py').read_text(encoding='utf-8'),
         'dossier-sync':'BODYMIND_R25_DOSSIER_MU_VERIFY' in (APP/'asd_app/routes_documenti.py').read_text(encoding='utf-8'),
         'trust-boundary':'BODYMIND_R25_MU_TRUST_BOUNDARY' in (APP/'asd_app/routes_email_documents.py').read_text(encoding='utf-8'),
-        'manual-type':'BODYMIND_R25_MANUAL_TYPE_MU' in (APP/'asd_app/routes_inbound_documents.py').read_text(encoding='utf-8'),
     }
     failed=[k for k,v in checks.items() if not v]
     if failed:
