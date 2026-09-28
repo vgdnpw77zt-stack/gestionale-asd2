@@ -593,3 +593,151 @@ footer{display:grid;grid-template-columns:1fr 1fr auto auto;gap:30px;align-items
   .competition-palmares{opacity:1;transform:none;transition:none}
   .mobile-action-dock{transition:none!important}
 }
+
+
+/* V27 — desktop program card reconstruction
+   Desktop only: mobile/tablet V26 framing remains untouched. */
+@media(min-width:981px){
+  .program-grid{
+    grid-template-columns:1.16fr .84fr;
+    grid-template-rows:1fr 1fr;
+    min-height:1020px;
+    gap:18px;
+  }
+  .program-card{
+    background:#100910;
+  }
+
+  /* Give photography a real stage and keep copy in its own lower editorial band. */
+  .program-card .program-image{
+    left:0!important;
+    right:0!important;
+    top:0!important;
+    width:auto!important;
+    height:auto!important;
+    border-radius:0!important;
+  }
+  .program-card.p1 .program-image{bottom:154px!important}
+  .program-card.p2 .program-image{bottom:178px!important}
+  .program-card.p3 .program-image{bottom:150px!important}
+
+  .program-card .program-image:before{
+    content:"";
+    position:absolute;
+    z-index:0;
+    inset:-18px;
+    background-image:var(--program-bg);
+    background-size:cover;
+    background-position:center;
+    filter:blur(22px) saturate(.72);
+    opacity:0;
+    transform:scale(1.08);
+    pointer-events:none;
+  }
+  .program-card .program-image img{
+    z-index:1;
+    transition:none!important;
+  }
+
+  /* TRAINING — larger, true full-bleed. Crop only background ceiling/floor, not the athlete. */
+  .program-card.p1{
+    background:#f4ecef;
+  }
+  .program-card.p1 .program-image{
+    background:#e8dde2;
+  }
+  .program-card.p1 .program-image img,
+  .program-card.p1:hover .program-image img{
+    object-fit:cover!important;
+    object-position:50% 46%!important;
+    transform:none!important;
+  }
+  .program-card.p1 .program-overlay{
+    background:linear-gradient(180deg,rgba(255,255,255,0) 58%,rgba(247,241,244,.12) 78%,rgba(247,241,244,.98) 100%)!important;
+  }
+
+  /* COMPETITION — never crop the two performers. A soft image-derived backdrop fills unused space. */
+  .program-card.p2 .program-image{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    overflow:hidden;
+    background:#160d14;
+  }
+  .program-card.p2 .program-image:before{opacity:.42}
+  .program-card.p2 .program-image img,
+  .program-card.p2:hover .program-image img{
+    position:relative!important;
+    inset:auto!important;
+    width:100%!important;
+    height:100%!important;
+    object-fit:contain!important;
+    object-position:center center!important;
+    transform:none!important;
+  }
+
+  /* SHOW — use the entire photographic area; the subject stays centred. */
+  .program-card.p3 .program-image{
+    overflow:hidden;
+    background:#130b11;
+  }
+  .program-card.p3 .program-image img,
+  .program-card.p3:hover .program-image img{
+    position:absolute!important;
+    inset:0!important;
+    width:100%!important;
+    height:100%!important;
+    object-fit:cover!important;
+    object-position:50% 50%!important;
+    transform:none!important;
+  }
+
+  /* Text belongs to a calm lower band, not on top of faces/bodies. */
+  .program-card .program-content{
+    bottom:0;
+    padding:22px 24px 20px;
+  }
+  .program-card.p1 .program-content{
+    background:linear-gradient(180deg,rgba(247,241,244,.86),#f7f1f4 28%);
+  }
+  .program-card.p2 .program-content,
+  .program-card.p3 .program-content{
+    background:linear-gradient(180deg,rgba(13,7,12,.82),rgba(10,6,10,.98) 30%);
+  }
+  .program-card.p2 .program-overlay,
+  .program-card.p3 .program-overlay{
+    background:linear-gradient(180deg,rgba(7,4,7,.02) 55%,rgba(8,5,9,.20) 74%,rgba(8,5,9,.94) 100%)!important;
+  }
+
+  /* Competition: links first, palmarès closes the card at the bottom. */
+  .program-card.p2 .program-content{
+    display:flex;
+    flex-direction:column;
+  }
+  .program-card.p2 .program-content>p{order:1}
+  .program-card.p2 .program-links{order:2;margin-top:13px}
+  .program-card.p2 .competition-palmares{
+    order:3;
+    margin-top:10px;
+    padding:8px 11px;
+    border-radius:12px;
+  }
+  .program-card.p2 .palmares-kicker{font-size:7px}
+  .program-card.p2 .palmares-medals{gap:8px}
+  .program-card.p2 .palmares-medals b{font-size:10px}
+  .program-card.p2 .palmares-link{font-size:7px}
+
+  /* Slightly calmer type on the two compact right cards. */
+  .program-card.p2 .program-content h3,
+  .program-card.p3 .program-content h3{
+    font-size:clamp(32px,3vw,49px);
+    margin-bottom:8px;
+  }
+  .program-card.p2 .program-content>p,
+  .program-card.p3 .program-content>p{
+    font-size:12px;
+    line-height:1.45;
+  }
+  .program-card.p2 .program-links,
+  .program-card.p3 .program-links{margin-top:12px}
+}
