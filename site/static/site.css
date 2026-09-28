@@ -385,3 +385,28 @@ footer{display:grid;grid-template-columns:1fr 1fr auto auto;gap:30px;align-items
 .schedule-detail strong{font-size:16px}
 .kids-time-line{display:flex!important;gap:8px;align-items:center}
 .kids-time-line b{font-size:9px;letter-spacing:.09em;text-transform:uppercase;color:#8f2f63}
+
+
+/* V23 — Training near-text full-body
+   Enlarge by giving the image more real estate, not by cropping/zooming it. */
+.program-card.p1 .program-image{
+  inset:2px 3px 80px;
+}
+.program-card.p1 .program-image img,
+.program-card.p1:hover .program-image img{
+  object-fit:contain!important;
+  object-position:center bottom!important;
+  transform:scale(1)!important;
+  transform-origin:center bottom;
+}
+
+@media(max-width:980px){
+  .program-card.p1 .program-image{inset:2px 3px 92px}
+  .program-card.p1 .program-image img,
+  .program-card.p1:hover .program-image img{transform:scale(.995)!important}
+}
+@media(max-width:600px){
+  .program-card.p1 .program-image{inset:3px 4px 104px}
+  .program-card.p1 .program-image img,
+  .program-card.p1:hover .program-image img{transform:scale(.99)!important}
+}
