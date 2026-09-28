@@ -34,6 +34,22 @@ if not MARKER.exists():
 
         route_anchor='@app.route("/documenti/modelli/download/<path:filename>")'
         route_code=r'''# BODYMIND_R23_REMOVE_MISSING_DOSSIER_REF
+def _r23_missing_ref_html(d, tesserato_id):
+    try:
+        if document_abs_path(str(d["filename"] or "")).is_file():
+            return ""
+        doc_id = int(d["id"])
+        tid = int(tesserato_id or 0)
+    except Exception:
+        return ""
+    return (
+        "<span class='bm-r23-missing-badge'>File non disponibile</span>"
+        + f"<form method='POST' action='/documenti/riferimento-mancante/{doc_id}/rimuovi' class='inline-form bm-r23-missing-form'>"
+        + csrf_input()
+        + f"<input type='hidden' name='tesserato_id' value='{tid}'>"
+        + "<button class='pro-cta slim bm-r23-remove-ref' type='submit'>Rimuovi riferimento</button></form>"
+    )
+
 @app.post("/documenti/riferimento-mancante/<int:doc_id>/rimuovi")
 @login_required
 def documenti_remove_missing_reference(doc_id: int):
@@ -72,7 +88,7 @@ def documenti_remove_missing_reference(doc_id: int):
         if preview_idx is None:
             raise RuntimeError('R23 preview action anchor missing')
         pfx=lines[preview_idx][:len(lines[preview_idx])-len(lines[preview_idx].lstrip())]
-        missing_line='''{f"<span class='bm-r23-missing-badge'>File non disponibile</span><form method='POST' action='/documenti/riferimento-mancante/{int(d['id'])}/rimuovi' class='inline-form bm-r23-missing-form'>{csrf_input()}<input type='hidden' name='tesserato_id' value='{tesserato_id}'><button class='pro-cta slim bm-r23-remove-ref' type='submit'>Rimuovi riferimento</button></form>" if not document_abs_path(str(d['filename'] or '')).is_file() else ''}\n'''
+        missing_line='''{_r23_missing_ref_html(d, tesserato_id)}\n'''
         lines.insert(preview_idx,pfx+missing_line)
         s=''.join(lines)
 
