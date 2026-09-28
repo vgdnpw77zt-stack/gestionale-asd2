@@ -104,3 +104,50 @@ print(f'[audit-r22-links] literal_post_actions={len(literal_actions)} unresolved
 print(f'[audit-r22-links] literal_hrefs={len(literal_hrefs)} unresolved_hrefs={len(unresolved_hrefs)} values={unresolved_hrefs[:30]}',flush=True)
 
 print('[audit-r22] END',flush=True)
+
+
+# R22B targeted missing-reference detail (read only).
+conn=sqlite3.connect(str(DB),timeout=30); conn.row_factory=sqlite3.Row
+try:
+    roots=[Path('/data/tenants/default/media'),Path('/data/onboarding_docs'),Path('/data/signatures'),Path('/data/user_static')]
+    def matches_for(raw, original=''):
+        names=[]
+        for v in (raw,original):
+            n=Path(str(v or '')).name
+            if n and n not in names: names.append(n)
+        hits=[]
+        for root in roots:
+            if not root.exists(): continue
+            for name in names:
+                try:
+                    for p in root.rglob(name):
+                        if p.is_file() and str(p) not in hits: hits.append(str(p))
+                except Exception:
+                    pass
+        return hits[:10]
+
+    if has_table(conn,'inbound_documents'):
+        for did in (14,44):
+            r=conn.execute("SELECT * FROM inbound_documents WHERE id=?",(did,)).fetchone()
+            if not r: continue
+            raw=str(r['saved_path'] or '')
+            print('[audit-r22-inbound-detail] id=%s status=%s type=%s tid=%s file=%s path=%s exists=%s matches=%s' % (
+                did,str(r['status'] or ''),str(r['document_type'] or ''),str(r['tesserato_id'] or ''),
+                str(r['original_filename'] or ''),raw,Path(raw).is_file(),matches_for(raw,str(r['original_filename'] or ''))
+            ),flush=True)
+
+    if has_table(conn,'documenti'):
+        dc=cols(conn,'documenti')
+        select_cols=[c for c in ('id','tesserato_id','titolo','categoria','filename','original_filename','doc_type','status','inbound_id','visibile','source') if c in dc]
+        rows=conn.execute("SELECT "+','.join(select_cols)+" FROM documenti "+("WHERE COALESCE(visibile,1)=1" if 'visibile' in dc else '')+" ORDER BY id").fetchall()
+        for r in rows:
+            raw=str(r['filename'] or '') if 'filename' in r.keys() else ''
+            if raw and Path(raw).is_file(): continue
+            original=str(r['original_filename'] or '') if 'original_filename' in r.keys() else ''
+            rec={k:r[k] for k in r.keys()}
+            rec['exists']=False
+            rec['matches']=matches_for(raw,original)
+            print('[audit-r22-document-detail] '+repr(rec),flush=True)
+finally:
+    conn.close()
+print('[audit-r22-detail] END',flush=True)
