@@ -19,6 +19,7 @@ runpy.run_path("/opt/bodymind/release_unified_r13.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_document_repair_r14.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_queue_integrity_r15.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_unified_flags_r16.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_missing_docs_r17.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_cleanup_r2.py", run_name="__main__")
 
 incoming = pathlib.Path("/data/incoming")
