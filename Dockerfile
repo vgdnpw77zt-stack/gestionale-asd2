@@ -21,6 +21,7 @@ COPY release_unified_flags_r16.py /opt/bodymind/release_unified_flags_r16.py
 COPY release_missing_docs_r17.py /opt/bodymind/release_missing_docs_r17.py
 COPY release_inbound_filefix_r18.py /opt/bodymind/release_inbound_filefix_r18.py
 COPY release_pending_dedupe_r19.py /opt/bodymind/release_pending_dedupe_r19.py
+COPY release_ocr_rematch_r20.py /opt/bodymind/release_ocr_rematch_r20.py
 COPY release_cleanup_r2.py /opt/bodymind/release_cleanup_r2.py
 COPY runtime_launcher.py /opt/bodymind/runtime_launcher.py
 RUN mkdir -p /opt/bodymind-migration && cp /opt/bodymind/runtime_launcher.py /opt/bodymind-migration/migration_upload.py
