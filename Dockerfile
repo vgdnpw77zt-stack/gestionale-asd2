@@ -25,6 +25,7 @@ COPY release_dossier_missing_r23.py /opt/bodymind/release_dossier_missing_r23.py
 COPY release_ocr_rematch_r20.py /opt/bodymind/release_ocr_rematch_r20.py
 COPY release_force_pdf_ocr_r21.py /opt/bodymind/release_force_pdf_ocr_r21.py
 COPY release_cleanup_r2.py /opt/bodymind/release_cleanup_r2.py
+COPY runtime_audit_r24.py /opt/bodymind/runtime_audit_r24.py
 COPY runtime_launcher.py /opt/bodymind/runtime_launcher.py
 RUN mkdir -p /opt/bodymind-migration && cp /opt/bodymind/runtime_launcher.py /opt/bodymind-migration/migration_upload.py
 EXPOSE 8080
