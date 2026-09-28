@@ -151,10 +151,6 @@ conn=sqlite3.connect(str(DB),timeout=30); conn.row_factory=sqlite3.Row
 assigned=[]
 try:
     athletes=conn.execute("SELECT id,nome,cognome FROM tesserati ORDER BY id").fetchall()
-    for a in athletes:
-        joined=compact(str(a['nome'] or '')+' '+str(a['cognome'] or ''))
-        if int(a['id'])==11 or any(key in joined for key in ('ferlan','pimpinelli','giulia')):
-            print(f"[filefix-r18-roster] id={int(a['id'])} nome={str(a['nome'] or '')} cognome={str(a['cognome'] or '')}",flush=True)
     vals=','.join('?' for _ in ACTIVE)
     rows=conn.execute(f"""SELECT * FROM inbound_documents
         WHERE LOWER(COALESCE(status,'')) IN ({vals})
