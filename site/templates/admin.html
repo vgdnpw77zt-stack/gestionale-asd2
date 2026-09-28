@@ -24,7 +24,8 @@
 <div class="venue-admin">
 <div class="cols"><label>Nome sede<input name="venue_{{loop.index0}}_name" value="{{venue.name}}"></label><label>Indirizzo<input name="venue_{{loop.index0}}_address" value="{{venue.address}}"></label></div>
 <div class="cols"><label>Corso / gruppo<input name="venue_{{loop.index0}}_course" value="{{venue.course}}"></label><label>Giorni<input name="venue_{{loop.index0}}_days" value="{{venue.days}}"></label></div>
-<div class="cols"><label>Orario<input name="venue_{{loop.index0}}_time" value="{{venue.time}}" placeholder="es. 16:30–17:30"></label><label>Nota<input name="venue_{{loop.index0}}_note" value="{{venue.note}}"></label></div>
+<div class="cols"><label>Orario generico<input name="venue_{{loop.index0}}_time" value="{{venue.time}}" placeholder="es. 16:30–17:30"></label><label>Nota<input name="venue_{{loop.index0}}_note" value="{{venue.note}}"></label></div>
+<div class="cols"><label>Orario Kids<input name="venue_{{loop.index0}}_kids_time" value="{{venue.kids_time|default('')}}" placeholder="es. 16:15–17:15"></label><label>Orario Adult<input name="venue_{{loop.index0}}_adult_time" value="{{venue.adult_time|default('')}}" placeholder="es. 20:00–22:00"></label></div>
 </div>
 {% endfor %}
 </section>
