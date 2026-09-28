@@ -14,6 +14,13 @@ if not MARKER.exists():
     p=APP/rel
     if not p.exists():
         raise RuntimeError('R26 target missing')
+    # Recover only a partial R26 attempt from its own backup.
+    dst=BACKUPS/rel
+    if dst.exists():
+        current=p.read_text(encoding='utf-8',errors='replace')
+        if 'BODYMIND_R26_DOCUMENT_VIEWER' in current:
+            shutil.copy2(dst,p)
+            print('[document-preview-r26] restored partial R26',flush=True)
     s=p.read_text(encoding='utf-8')
 
     if 'BODYMIND_R26_DOCUMENT_VIEWER' not in s:
@@ -76,13 +83,14 @@ def documenti_visualizza_r26(doc_id: int):
         end=s.find('</script>',m)
         if end<0:
             raise RuntimeError('R26 script end missing')
+        # This script is injected inside an existing Python f-string, so JS braces must be doubled.
         js=r'''
-   document.addEventListener('DOMContentLoaded',function(){
-     document.querySelectorAll('a[href^="/documenti/preview/"]').forEach(function(a){
+   document.addEventListener('DOMContentLoaded',function(){{
+     document.querySelectorAll('a[href^="/documenti/preview/"]').forEach(function(a){{
        const m=(a.getAttribute('href')||'').match(/^\/documenti\/preview\/(\d+)/);
-       if(m){a.setAttribute('href','/documenti/visualizza/'+m[1]);}
-     });
-   });
+       if(m){{a.setAttribute('href','/documenti/visualizza/'+m[1]);}}
+     }});
+   }});
 '''
         s=s[:end]+js+s[end:]
         p.write_text(s,encoding='utf-8')
