@@ -215,3 +215,33 @@ footer{display:grid;grid-template-columns:1fr 1fr auto auto;gap:30px;align-items
 @media(max-width:980px){
   .footer-visits{justify-self:start;padding-left:0;border-left:0;margin-top:3px}
 }
+
+
+/* V19 — program card contrast */
+.program-card.p1 .program-overlay{
+  background:linear-gradient(180deg,rgba(255,255,255,.02) 10%,rgba(250,246,248,.16) 42%,rgba(247,241,244,.96) 100%);
+}
+.program-card.p1 .program-content{color:#120d10;text-shadow:none}
+.program-card.p1 .program-eyebrow{color:#6d244b}
+.program-card.p1 .program-content h3{color:#120d10}
+.program-card.p1 .program-content>p{color:#33272e}
+.program-card.p1 .program-links a{
+  color:#171217;
+  border-color:rgba(23,18,23,.28);
+  background:rgba(255,255,255,.42);
+  backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);
+}
+.program-card.p1 .program-links a:first-child{color:#6f174b;border-color:rgba(111,23,75,.34)}
+.program-card.p2 .program-overlay,.program-card.p3 .program-overlay{
+  background:linear-gradient(180deg,rgba(6,4,7,.08) 12%,rgba(8,5,9,.38) 48%,rgba(8,5,9,.96) 100%);
+}
+.program-card.p2 .program-content,.program-card.p3 .program-content{color:#fff;text-shadow:0 2px 14px rgba(0,0,0,.28)}
+.program-card.p2 .program-content>p,.program-card.p3 .program-content>p{color:#f1e8ed}
+.program-card.p2 .program-links a,.program-card.p3 .program-links a{
+  background:rgba(7,4,8,.34);
+  border-color:rgba(255,255,255,.28);
+}
+@media(max-width:600px){
+  .program-card.p1 .program-overlay{background:linear-gradient(180deg,rgba(255,255,255,.01) 8%,rgba(249,244,247,.18) 38%,rgba(247,241,244,.97) 100%)}
+}
