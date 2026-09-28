@@ -114,7 +114,6 @@ def _site_visit_count(increment=True):
             conn.execute("CREATE TABLE IF NOT EXISTS site_metrics (key TEXT PRIMARY KEY, value INTEGER NOT NULL DEFAULT 0)")
             conn.execute("INSERT OR IGNORE INTO site_metrics(key,value) VALUES('public_home_views',0)")
             if increment:
-                conn.execute("BEGIN IMMEDIATE")
                 conn.execute("UPDATE site_metrics SET value=value+1 WHERE key='public_home_views'")
             value = conn.execute("SELECT value FROM site_metrics WHERE key='public_home_views'").fetchone()[0]
             conn.commit()
@@ -491,7 +490,8 @@ def admin():
 def healthz():
     ensure_data()
     seeded = sum(1 for k in SEED_SOURCES if _seed_paths(k)[0].exists())
-    return {"ok":True,"service":"bodymind-public-site","design":"v17-visit-counter","seeded_assets":seeded,"persistent_data":str(DATA)}, 200
+    visits = _site_visit_count(increment=False)
+    return {"ok":True,"service":"bodymind-public-site","design":"v17-visit-counter","seeded_assets":seeded,"persistent_data":str(DATA),"visits":visits}, 200
 
 if __name__ == "__main__":
     ensure_data()
