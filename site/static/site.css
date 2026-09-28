@@ -326,3 +326,50 @@ footer{display:grid;grid-template-columns:1fr 1fr auto auto;gap:30px;align-items
 @media(prefers-reduced-motion:reduce){
   .achievement-track{animation:none;transform:none}
 }
+
+
+/* V21 — safer full-body framing */
+.program-card.p1 .program-image{
+  inset:8px 10px 106px;
+}
+.program-card.p1 .program-image img{
+  transform:scale(.98)!important;
+}
+.program-card.p1:hover .program-image img{
+  transform:scale(.98)!important;
+}
+
+/* SHOW: keep the whole performer centered, including the feet. */
+.program-card.p3{
+  background:linear-gradient(180deg,#140b12 0%,#1d0d18 100%);
+}
+.program-card.p3 .program-image{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:radial-gradient(circle at 50% 42%,rgba(106,38,79,.24),rgba(12,7,12,.92) 72%);
+}
+.program-card.p3 .program-image img{
+  object-fit:contain!important;
+  object-position:center center!important;
+  transform:scale(.98)!important;
+  transform-origin:center center;
+}
+.program-card.p3:hover .program-image img{
+  transform:scale(.98)!important;
+}
+
+@media(max-width:980px){
+  .program-card.p1 .program-image{inset:8px 10px 108px}
+  .program-card.p1 .program-image img,
+  .program-card.p1:hover .program-image img{transform:scale(.97)!important}
+  .program-card.p3 .program-image img,
+  .program-card.p3:hover .program-image img{transform:scale(.97)!important}
+}
+@media(max-width:600px){
+  .program-card.p1 .program-image{inset:7px 8px 118px}
+  .program-card.p1 .program-image img,
+  .program-card.p1:hover .program-image img{transform:scale(.96)!important}
+  .program-card.p3 .program-image img,
+  .program-card.p3:hover .program-image img{transform:scale(.96)!important}
+}
