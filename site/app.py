@@ -46,7 +46,7 @@ DEFAULT_CONTENT = {
     ],
     "videos":[
         {"title":"TRAINING","subtitle":"Allenamento, tecnica e costruzione del movimento","url":"https://www.instagram.com/reel/DOGdeS2Ddt1/?stkn=MWgyZHN2ajR1YjhlaA=="},
-        {"title":"COMPETITION","subtitle":"Il doppio gara e il lavoro orientato alla competizione","url":"https://www.instagram.com/p/DWgXpPKDQd2/?stkn=MWg5NGdjZTFxd2d6bQ=="},
+        {"title":"COMPETITION","subtitle":"Preparazione gara, tecnica e risultati BodyMind","url":"https://www.instagram.com/reel/DIHPtAbsg7B/?stkn=NHc5ejFsaWExd3Ri"},
         {"title":"SHOW","subtitle":"Presenza scenica, performance e spettacolo","url":"https://www.instagram.com/reel/Ddle2ZbN086/?stkn=cHMxNzVwcHN1ZnV3"},
         {"title":"Dentro BodyMind","subtitle":"Allenamento, atmosfera e vita dello studio","url":"https://www.instagram.com/reel/DXEbNkAjT8K/?stkn=eDlzYzJsdHdoNWQ4"}
     ],
@@ -84,7 +84,7 @@ DEFAULT_CONTENT = {
         "title":"BodyMind Aerial Studio | Danza Aerea ad Aprilia",
         "description":"BodyMind Aerial Studio ad Aprilia: danza aerea, tessuti, cerchio, corsi Kids & Junior e percorsi performance."
     },
-    "_design_version":16,
+    "_design_version":20,
 }
 
 SEED_SOURCES = {
@@ -218,6 +218,16 @@ def load_content():
         c["kids"]["video_file"] = c["kids"].get("video_file") or ""
         c["_design_version"] = 16
         save_content(c)
+    if int(c.get("_design_version", 0) or 0) < 20:
+        while len(c.get("videos", [])) < 4:
+            c.setdefault("videos", []).append({"title":"","subtitle":"","url":""})
+        c["videos"][1].update({
+            "title":"COMPETITION",
+            "subtitle":"Preparazione gara, tecnica e risultati BodyMind",
+            "url":"https://www.instagram.com/reel/DIHPtAbsg7B/?stkn=NHc5ejFsaWExd3Ri"
+        })
+        c["_design_version"] = 20
+        save_content(c)
     return c
 
 def csrf_token():
@@ -339,7 +349,7 @@ def security_headers(resp):
         resp.headers["X-Robots-Tag"] = "noindex, nofollow"
     else:
         resp.headers.setdefault("Cache-Control","no-store")
-    resp.headers["X-BodyMind-Site"] = "v19-contrast"
+    resp.headers["X-BodyMind-Site"] = "v20-achievements"
     return resp
 
 @app.get("/")
@@ -500,7 +510,7 @@ def admin():
             flash(str(exc),"error")
             return render_template("admin.html", c=c)
 
-        c["_design_version"] = 16
+        c["_design_version"] = 20
         save_content(c)
         flash("Sito aggiornato e pubblicato.","ok")
         return redirect(url_for("admin"))
@@ -516,7 +526,7 @@ def healthz():
     ensure_data()
     seeded = sum(1 for k in SEED_SOURCES if _seed_paths(k)[0].exists())
     visits = _site_visit_count(increment=False)
-    return {"ok":True,"service":"bodymind-public-site","design":"v19-contrast","seeded_assets":seeded,"persistent_data":str(DATA),"visits":visits}, 200
+    return {"ok":True,"service":"bodymind-public-site","design":"v20-achievements","seeded_assets":seeded,"persistent_data":str(DATA),"visits":visits}, 200
 
 if __name__ == "__main__":
     ensure_data()
