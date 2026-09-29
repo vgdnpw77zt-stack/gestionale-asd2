@@ -883,6 +883,17 @@ def _bodymind_logo_file():
     return candidates[0][2] if candidates else None
 
 
+@app.after_request
+def bodymind_operator_voice_headers(resp):
+    try:
+        if request.path.startswith("/operatore-bodymind"):
+            resp.headers["Permissions-Policy"] = "microphone=(self)"
+            resp.headers.setdefault("Cache-Control","no-store")
+    except Exception:
+        pass
+    return resp
+
+
 @app.get("/bodymind-media/logo")
 @login_required
 def bodymind_operator_logo():
