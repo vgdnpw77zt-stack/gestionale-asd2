@@ -28,6 +28,7 @@ COPY release_document_flow_r25.py /opt/bodymind/release_document_flow_r25.py
 COPY release_document_preview_r26.py /opt/bodymind/release_document_preview_r26.py
 COPY operator_bodymind_runtime_r29.py /opt/bodymind/operator_bodymind_runtime_r29.py
 COPY release_operator_r29.py /opt/bodymind/release_operator_r29.py
+COPY release_operator_r30.py /opt/bodymind/release_operator_r30.py
 COPY release_cleanup_r2.py /opt/bodymind/release_cleanup_r2.py
 COPY runtime_launcher.py /opt/bodymind/runtime_launcher.py
 RUN mkdir -p /opt/bodymind-migration && cp /opt/bodymind/runtime_launcher.py /opt/bodymind-migration/migration_upload.py
