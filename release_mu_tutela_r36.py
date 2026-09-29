@@ -158,6 +158,17 @@ if not MARKER.exists():
                 failures.append((tid,'consenso_firmato'))
             if 'autorizzazioni_ok' in mk and int(m['autorizzazioni_ok'] or 0)!=1:
                 failures.append((tid,'autorizzazioni_ok'))
+            # No legacy MU-covered onboarding request may keep showing parental tutela as missing.
+            if table(conn,'onboarding_document_requests') and {'tesserato_id','document_type','status'}.issubset(cols(conn,'onboarding_document_requests')):
+                ph=','.join('?' for _ in COVERED_REQUEST_TYPES)
+                pending=conn.execute(
+                    "SELECT document_type,status FROM onboarding_document_requests "
+                    "WHERE tesserato_id=? AND lower(coalesce(document_type,'')) IN ("+ph+") "
+                    "AND lower(coalesce(status,'')) NOT IN ('deleted','cancelled','accepted','manual_accepted')",
+                    [tid,*sorted(COVERED_REQUEST_TYPES)]
+                ).fetchall()
+                if pending:
+                    failures.append((tid,'mu-covered requests still pending',[(str(x[0]),str(x[1])) for x in pending]))
 
         integrity=str(conn.execute('PRAGMA integrity_check').fetchone()[0])
         fk=len(conn.execute('PRAGMA foreign_key_check').fetchall())
