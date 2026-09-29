@@ -266,7 +266,8 @@ def _payment_method(text: str) -> str:
     if "bonific" in n: return "bonifico"
     if "sumup" in n or "carta" in n or "pos" in n: return "sumup"
     if "contant" in n or "cash" in n: return "contanti"
-    return "altro"
+    if "altro" in n: return "altro"
+    return ""
 
 def _classify_asd_document(filename: str, extracted_text: str=""):
     """Return a strong ASD-level archive category only when evidence is explicit."""
@@ -296,15 +297,16 @@ def _mu_review_items(conn):
     if not parts: return []
     coverage=[x for x in ("consenso_informato","manleva_firmata","iscrizione_firmata","documenti_onboarding_ok","privacy_ok","liberatoria_ok","regolamento_ok") if x in tc]
     if not coverage: return []
+    selects=["d.*","t.nome","t.cognome"]+[f"t.{f} AS t_{f}" for f in coverage]
     rows=conn.execute(
-        "SELECT d.*,t.nome,t.cognome FROM documenti d JOIN tesserati t ON t.id=d.tesserato_id "
+        "SELECT "+",".join(selects)+" FROM documenti d JOIN tesserati t ON t.id=d.tesserato_id "
         "WHERE ("+" OR ".join(parts)+") AND coalesce(d.tesserato_id,0)>0 "
         +("AND coalesce(d.visibile,1)=1 " if "visibile" in dc else "")
         +"ORDER BY d.id DESC"
     ).fetchall()
     out=[]
     for r in rows:
-        miss=[f for f in coverage if int(r[f] or 0)!=1]
+        miss=[f for f in coverage if int(r["t_"+f] or 0)!=1]
         if miss:
             out.append({"doc_id":int(r["id"]),"tid":int(r["tesserato_id"]),"name":(str(r["nome"] or "")+" "+str(r["cognome"] or "")).strip(),"flags":miss})
     return out
@@ -631,6 +633,8 @@ def _answer(conn, text: str):
                 return {"text":"Mi manca l’importo dell’incasso.","mode":"clarify","links":_links_for(tid)}
             amount=candidates[0]
             method=_payment_method(raw)
+            if not method:
+                return {"text":f"Ho atleta, mese e importo per {name}. Mi serve anche il metodo: contanti, bonifico, SumUp/carta oppure altro.","mode":"clarify","links":_links_for(tid)}
             note="Registrato tramite Operatore BodyMind"
             aid=_set_pending_action(conn,"register_payment",{"tesserato_id":tid,"month":month,"year":year,"amount":amount,"method":method,"reference":"","note":note})
             return {
