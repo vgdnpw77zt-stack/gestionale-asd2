@@ -171,6 +171,17 @@ else:
     current=TARGET.read_text(encoding='utf-8',errors='replace') if TARGET.exists() else ''
     desired=SRC.read_text(encoding='utf-8')
     if current!=desired:
+        # Never replace the persistent runtime with syntactically invalid operator code.
+        import py_compile, tempfile
+        tmp=Path('/tmp/bodymind_operator_candidate.py')
+        tmp.write_text(desired,encoding='utf-8')
+        try:
+            py_compile.compile(str(tmp),doraise=True)
+        except Exception as exc:
+            raise RuntimeError('R29 operator refresh rejected: '+repr(exc))
         TARGET.write_text(desired,encoding='utf-8')
         print('[operator-r29] operator module refreshed from image',flush=True)
+    # Also validate the existing persistent target on every boot.
+    if not compileall.compile_file(str(TARGET),quiet=1):
+        raise RuntimeError('R29 operator runtime compile failed')
     print('[operator-r29] already applied',flush=True)
