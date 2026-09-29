@@ -1,4 +1,4 @@
-# R39 build and route guards
+# R39 build and route guards - deploy trigger
 import os, sys, pathlib, runpy, sqlite3
 
 APP = pathlib.Path("/data/top2_app")
