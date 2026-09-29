@@ -30,6 +30,7 @@ if not (APP / ".BODYMIND_FORCE_PDF_OCR_R21").exists():
 runpy.run_path("/opt/bodymind/release_document_flow_r25.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_document_preview_r26.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_r29.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_route_cleanup_r31.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_r30.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_cleanup_r2.py", run_name="__main__")
 incoming = pathlib.Path("/data/incoming")
