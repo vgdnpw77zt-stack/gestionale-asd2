@@ -315,7 +315,7 @@ def _is_mu(row) -> bool:
     t=_doc_type(row)
     return any(x in t for x in (
         "modulo unico","modulo_unico","mu-2026","mu 2026",
-        "iscrizione manleva","domanda iscrizione"
+        "iscrizione manleva","domanda iscrizione","modulo iscrizione"
     ))
 
 
