@@ -509,6 +509,5 @@ esac
 echo "[5/5] BodyMind AI Bridge ONLINE."
 echo "Controllo: launchctl list | grep bodymind"
 '''
-'''
     script=script.replace('__BASE__',base)
     return Response(script,mimetype='text/plain; charset=utf-8')
