@@ -16,7 +16,7 @@ from .core import (
     app, db, layout, login_required, csrf_token, current_username, current_role, e
 )
 
-OPERATOR_VERSION = "R29.1"
+OPERATOR_VERSION = "R30.0"
 PENDING_STATUSES = (
     "needs_manual_match","associato_tipo_da_verificare","richiede_conferma",
     "needs_review","da_verificare","pending",
@@ -184,6 +184,16 @@ def _match_athlete(conn, text: str):
     return None, []
 
 
+def _context_athlete(conn, text: str):
+    tid=int(session.get("bodymind_operator_last_tesserato") or 0)
+    if tid<=0:
+        return None
+    n=_norm(text)
+    follow=("lei","lui","sua","suo","quanto paga","il certificato","il modulo","la quota","i pagamenti","la ricevuta","cosa manca","e invece")
+    if not any(x in n for x in follow):
+        return None
+    return conn.execute("SELECT * FROM tesserati WHERE id=?",(tid,)).fetchone()
+
 def _athlete_name(row) -> str:
     return (str(row["nome"] or "")+" "+str(row["cognome"] or "")).strip()
 
@@ -220,6 +230,84 @@ def _doc_type(row) -> str:
             values.append(str(row[key] or ""))
     return _norm(" ".join(values))
 
+
+MONTHS = {
+    "gennaio":1,"febbraio":2,"marzo":3,"aprile":4,"maggio":5,"giugno":6,
+    "luglio":7,"agosto":8,"settembre":9,"ottobre":10,"novembre":11,"dicembre":12,
+}
+
+def _parse_month_year(text: str):
+    n=_norm(text)
+    month=None
+    for name,num in MONTHS.items():
+        if name in n:
+            month=num
+            break
+    if month is None:
+        m=re.search(r"\b(?:mese\s*)?(1[0-2]|0?[1-9])(?:[/-](20\d{2}))?\b",n)
+        if m and any(x in n for x in ("pag","incass","quota","mensil")):
+            month=int(m.group(1))
+            year=int(m.group(2)) if m.group(2) else None
+        else:
+            year=None
+    else:
+        year=None
+    y=re.search(r"\b(20\d{2})\b",n)
+    if y: year=int(y.group(1))
+    if month is not None and year is None:
+        now=datetime.now()
+        year=now.year
+        # If a named month far in the future is mentioned late in the calendar year,
+        # keep current year; the operator will state the interpreted period before confirmation.
+    return month,year
+
+def _payment_method(text: str) -> str:
+    n=_norm(text)
+    if "bonific" in n: return "bonifico"
+    if "sumup" in n or "carta" in n or "pos" in n: return "sumup"
+    if "contant" in n or "cash" in n: return "contanti"
+    return "altro"
+
+def _classify_asd_document(filename: str, extracted_text: str=""):
+    """Return a strong ASD-level archive category only when evidence is explicit."""
+    n=_norm((filename or "")+" "+(extracted_text or "")[:12000])
+    rules=[
+        ("Verbali",("verbale consiglio","verbale direttivo","verbale assemblea","verbale riunione","consiglio direttivo","assemblea soci","assemblea dei soci")),
+        ("Statuto e atti",("statuto","atto costitutivo","atto di costituzione")),
+        ("Affiliazione",("affiliazione","rasd","registro nazionale attivita sportive","csen")),
+        ("Assicurazioni",("polizza assicur","assicurazione rc","responsabilita civile","wakam")),
+        ("Contratti",("contratto","accordo uso spazi","locazione","comodato","convenzione")),
+        ("Amministrazione",("rendiconto","bilancio","registro volontari","libro soci","consiglio direttivo")),
+    ]
+    for folder,phrases in rules:
+        hits=[p for p in phrases if p in n]
+        if hits:
+            return {"folder":folder,"reason":hits[0],"confidence":96 if len(hits)>1 else 91}
+    return None
+
+def _mu_review_items(conn):
+    if not (_table(conn,"documenti") and _table(conn,"tesserati")):
+        return []
+    dc=_cols(conn,"documenti"); tc=_cols(conn,"tesserati")
+    parts=[]
+    if "doc_type" in dc: parts.append("lower(coalesce(d.doc_type,''))='modulo_unico_tesseramento'")
+    if "categoria" in dc: parts.append("lower(coalesce(d.categoria,'')) like '%modulo unico%'")
+    if "titolo" in dc: parts.append("lower(coalesce(d.titolo,'')) like '%modulo unico%'")
+    if not parts: return []
+    coverage=[x for x in ("consenso_informato","manleva_firmata","iscrizione_firmata","documenti_onboarding_ok","privacy_ok","liberatoria_ok","regolamento_ok") if x in tc]
+    if not coverage: return []
+    rows=conn.execute(
+        "SELECT d.*,t.nome,t.cognome FROM documenti d JOIN tesserati t ON t.id=d.tesserato_id "
+        "WHERE ("+" OR ".join(parts)+") AND coalesce(d.tesserato_id,0)>0 "
+        +("AND coalesce(d.visibile,1)=1 " if "visibile" in dc else "")
+        +"ORDER BY d.id DESC"
+    ).fetchall()
+    out=[]
+    for r in rows:
+        miss=[f for f in coverage if int(r[f] or 0)!=1]
+        if miss:
+            out.append({"doc_id":int(r["id"]),"tid":int(r["tesserato_id"]),"name":(str(r["nome"] or "")+" "+str(r["cognome"] or "")).strip(),"flags":miss})
+    return out
 
 def _is_mu(row) -> bool:
     t=_doc_type(row)
@@ -325,6 +413,7 @@ def _global_check(conn):
         "minor_issues":minor_issues,
         "payments":int(conn.execute("SELECT COUNT(*) FROM pagamenti").fetchone()[0]) if _table(conn,"pagamenti") else 0,
         "receipts":int(conn.execute("SELECT COUNT(*) FROM ricevute").fetchone()[0]) if _table(conn,"ricevute") else 0,
+        "mu_review":_mu_review_items(conn),
     }
 
 
@@ -369,6 +458,30 @@ def _execute_pending(conn):
     role=current_role()
     if role not in ("admin","manager"):
         return {"text":"Posso preparare l’operazione, ma l’account connesso non ha i permessi per confermarla.","mode":"warning"}
+    if kind=="register_payment":
+        if current_role()!="admin":
+            return {"text":"Ho preparato l’incasso, ma per registrarlo serve un account amministratore. Non ho modificato nulla.","mode":"warning"}
+        from .routes_quote_incassi import _register_monthly_payment
+        tid=int(payload["tesserato_id"]); month=int(payload["month"]); year=int(payload["year"])
+        amount=float(payload["amount"]); method=str(payload.get("method") or "altro")
+        reference=str(payload.get("reference") or ""); note=str(payload.get("note") or "")
+        pid=_register_monthly_payment(conn,tid,month,year,amount,method,reference,note)
+        receipt=conn.execute("SELECT id,numero_progressivo,anno_progressivo FROM ricevute WHERE pagamento_id=? ORDER BY id DESC LIMIT 1",(pid,)).fetchone() if _table(conn,"ricevute") else None
+        conn.execute(
+            "UPDATE bodymind_operator_actions SET status='executed',confirmed_by=?,executed_at=? WHERE id=?",
+            (_identity(),datetime.now().isoformat(timespec="seconds"),aid)
+        )
+        conn.commit(); session.pop("bodymind_operator_pending_action",None)
+        athlete=conn.execute("SELECT nome,cognome FROM tesserati WHERE id=?",(tid,)).fetchone()
+        name=(str(athlete["nome"])+" "+str(athlete["cognome"])).strip()
+        links=_links_for(tid)
+        if receipt:
+            links.insert(0,{"label":"Apri ricevuta","href":f"/ricevute/pdf/{int(receipt['id'])}"})
+        return {
+            "text":f"Incasso registrato per {name}: € {amount:.2f}, {month:02d}/{year}, metodo {method}. "+("La ricevuta progressiva è stata creata." if receipt else "Il pagamento è stato registrato; controlla Quote & Incassi per la ricevuta."),
+            "mode":"action","links":links
+        }
+
     if kind=="set_quota":
         tid=int(payload["tesserato_id"])
         amount=float(payload["amount"])
@@ -455,6 +568,8 @@ def _answer(conn, text: str):
         }
 
     athlete, ambiguous=_match_athlete(conn,raw)
+    if not athlete and not ambiguous:
+        athlete=_context_athlete(conn,raw)
     if ambiguous:
         names=", ".join(_athlete_name(x) for x in ambiguous[:5])
         return {"text":"Ho trovato più possibili tesserati: "+names+". Dimmi nome e cognome completi.","mode":"clarify"}
@@ -466,6 +581,7 @@ def _answer(conn, text: str):
         else: pieces.append("Non vedo minori con tutela incompleta secondo i flag correnti.")
         if g["missing_cert"]: pieces.append(f"{len(g['missing_cert'])} tesserati non hanno una scadenza certificato registrata.")
         if g["expiring_cert"]: pieces.append(f"{len(g['expiring_cert'])} certificati sono scaduti o scadono entro 30 giorni.")
+        if g["mu_review"]: pieces.append(f"{len(g['mu_review'])} Moduli Unici storici sono associati ma hanno flag di copertura non allineati: li considero da ricontrollare, non li correggo automaticamente.")
         pieces.append(f"Pagamenti registrati: {g['payments']}. Ricevute: {g['receipts']}.")
         return {
             "text":" ".join(pieces),
@@ -474,6 +590,7 @@ def _answer(conn, text: str):
                 {"title":"Documenti da verificare","value":g["pending_docs"],"href":"/documenti/da-verificare"},
                 {"title":"Certificati senza scadenza","value":len(g["missing_cert"]),"href":"/tesserati"},
                 {"title":"Tutela minori da rivedere","value":len(g["minor_issues"]),"href":"/tesserati"},
+                {"title":"Moduli Unici da ricontrollare","value":len(g["mu_review"]),"href":"/documenti"},
             ],
             "links":[{"label":"Apri coda documenti","href":"/documenti/da-verificare"},{"label":"Quote & Incassi","href":"/quote-incassi"}]
         }
@@ -493,9 +610,33 @@ def _answer(conn, text: str):
         return {"text":" ".join(bits),"mode":"local","links":[{"label":"Apri Tesserati","href":"/tesserati"}]}
 
     if athlete:
+        session["bodymind_operator_last_tesserato"]=int(athlete["id"])
         snap=_athlete_snapshot(conn,athlete)
         name=snap["name"]
         tid=snap["tid"]
+
+        if re.search(r"\b(registra|segna|incassa|incasso|pagamento|pagato|ricevuto)\b",n) and re.search(r"\b\d{1,4}(?:[.,]\d{1,2})?\b",n):
+            month,year=_parse_month_year(raw)
+            if month is None:
+                return {"text":f"Ho capito che vuoi registrare un pagamento per {name}, ma mi serve il mese. Dimmi per esempio “settembre 45 euro bonifico”.","mode":"clarify","links":_links_for(tid)}
+            nums=re.findall(r"\b\d{1,4}(?:[.,]\d{1,2})?\b",n)
+            # Ignore month/year tokens when extracting the amount.
+            candidates=[]
+            for token in nums:
+                val=float(token.replace(",","."))
+                if int(val)==month or (year and int(val)==year):
+                    continue
+                candidates.append(val)
+            if not candidates:
+                return {"text":"Mi manca l’importo dell’incasso.","mode":"clarify","links":_links_for(tid)}
+            amount=candidates[0]
+            method=_payment_method(raw)
+            note="Registrato tramite Operatore BodyMind"
+            aid=_set_pending_action(conn,"register_payment",{"tesserato_id":tid,"month":month,"year":year,"amount":amount,"method":method,"reference":"","note":note})
+            return {
+                "text":f"Ho preparato l’incasso per {name}: € {amount:.2f}, mese {month:02d}/{year}, metodo {method}. Se confermi lo registro nel motore Quote & Incassi e genero la ricevuta progressiva. Confermi?",
+                "mode":"confirm","action_id":aid,"links":_links_for(tid)
+            }
 
         if re.search(r"\b(paga|pagare|quota|mensile|sconto)\b",n) and re.search(r"\b\d{1,4}(?:[.,]\d{1,2})?\b",n):
             nums=re.findall(r"\b\d{1,4}(?:[.,]\d{1,2})?\b",n)
@@ -662,7 +803,7 @@ def bodymind_operator_home():
       <section class="bmo-hero">
         <div class="bmo-avatar" id="bmoAvatar"><img src="/bodymind-media/logo" alt="BodyMind"></div>
         <div>
-          <div class="bmo-kicker">BODYMIND · OPERATORE INTELLIGENTE · {OPERATOR_VERSION}</div>
+          <div class="bmo-kicker">BODYMIND · OPERATORE IA · {OPERATOR_VERSION}</div>
           <h1>Ciao, {ident}.</h1>
           <p>Parlami come parleresti a una persona in segreteria. Posso cercare nel gestionale, controllare documenti e tesserati, verificare cosa manca, leggere quote e incassi e preparare operazioni chiedendoti conferma quando servono.</p>
           <div class="bmo-status">
@@ -670,6 +811,8 @@ def bodymind_operator_home():
             <span class="bmo-pill">{g['pending_docs']} documenti da verificare</span>
             <span class="bmo-pill">{len(g['minor_issues'])} tutele da rivedere</span>
             <span class="bmo-pill">{len(g['expiring_cert'])} certificati urgenti</span>
+            <span class="bmo-pill">{len(g['mu_review'])} MU da ricontrollare</span>
+            <span class="bmo-pill" id="bmoAiPill">IA dispositivo: verifica…</span>
           </div>
         </div>
       </section>
@@ -697,7 +840,7 @@ def bodymind_operator_home():
           </div>
           <div class="bmo-upload">
             <b>Affidami documenti</b>
-            <div class="small-muted" style="margin:5px 0 7px">PDF, immagini e DOCX passano all’Autopilot. Su PC puoi selezionare anche una cartella.</div>
+            <div class="small-muted" style="margin:5px 0 7px">PDF, immagini e DOCX: riconosco documenti ASD, tesserati, certificati e Moduli Unici. Su PC puoi affidarmi anche una cartella.</div>
             <form id="bmoUploadForm" enctype="multipart/form-data">
               <input type="file" name="files" id="bmoFiles" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.docx">
               <input type="file" name="folder" id="bmoFolder" multiple webkitdirectory directory>
@@ -721,6 +864,16 @@ def bodymind_operator_home():
       const avatar=document.getElementById('bmoAvatar');
       const voice=document.getElementById('bmoVoice');
       let listening=false, recognition=null;
+      (async()=>{{
+        const p=document.getElementById('bmoAiPill'); if(!p)return;
+        try{{
+          if(window.LanguageModel && typeof LanguageModel.availability==='function'){{
+            const a=await LanguageModel.availability();
+            p.textContent='IA dispositivo: '+(a==='available'||a==='readily'?'attiva':a);
+          }} else if(window.ai?.languageModel) p.textContent='IA dispositivo: disponibile';
+          else p.textContent='IA dispositivo: non disponibile';
+        }}catch(e){{p.textContent='IA dispositivo: non disponibile'}}
+      }})();
 
       function esc(s){{const d=document.createElement('div');d.textContent=String(s??'');return d.innerHTML}}
       function addMsg(text,who='bot',data={{}}){{
@@ -858,7 +1011,8 @@ def bodymind_operator_upload():
     files=request.files.getlist("files")
     if not files:
         return jsonify({"text":"Non ho ricevuto file.","mode":"warning"}),400
-    from .routes_email_documents import process_inbound_attachment, ALLOWED_INBOUND_DOCS
+    from .routes_email_documents import process_inbound_attachment, ALLOWED_INBOUND_DOCS, extract_attachment_text, find_tesserato_for_text
+    from .routes_documenti import _save_uploaded_asd_document
     results=[]; errors=[]
     for f in files[:120]:
         try:
@@ -871,6 +1025,26 @@ def bodymind_operator_upload():
             if len(data)>40*1024*1024:
                 errors.append(name+" · oltre 40 MB")
                 continue
+            extracted=""
+            try: extracted=extract_attachment_text(name,data) or ""
+            except Exception: extracted=""
+            athlete_match=None
+            try: athlete_match=find_tesserato_for_text((name+" "+extracted).strip(),current_username())
+            except Exception: athlete_match=None
+            asd_kind=_classify_asd_document(name,extracted) if not athlete_match else None
+            if asd_kind:
+                try:
+                    f.stream.seek(0)
+                    _,saved_name=_save_uploaded_asd_document(f,asd_kind["folder"])
+                    results.append({
+                        "name":name,"status":"archiviato_asd","tesserato_id":None,
+                        "type":"documento_asd","confidence":asd_kind["confidence"],
+                        "folder":asd_kind["folder"],"reason":asd_kind["reason"],"saved_name":saved_name,
+                    })
+                    continue
+                except Exception as exc:
+                    errors.append(name+" · archivio ASD: "+str(exc)[:160])
+                    continue
             res=process_inbound_attachment(
                 name,data,subject="Operatore BodyMind",
                 sender=current_username(),body_text="Caricato dalla scrivania Operatore BodyMind",
@@ -882,12 +1056,14 @@ def bodymind_operator_upload():
                 "tesserato_id":res.get("tesserato_id"),
                 "type":(res.get("classification") or {}).get("type"),
                 "confidence":(res.get("classification") or {}).get("confidence"),
+                "folder":"Dossier/Autopilot",
             })
         except Exception as exc:
             errors.append((f.filename or "file")+" · "+str(exc)[:180])
     auto=sum(1 for r in results if r.get("tesserato_id") and r.get("status") in ("associato","archived_to_tesserato"))
-    review=sum(1 for r in results if r.get("status") in PENDING_STATUSES or not r.get("tesserato_id"))
-    text=f"Ho analizzato {len(results)} file: {auto} associati automaticamente e {review} richiedono verifica."
+    asd=sum(1 for r in results if r.get("status")=="archiviato_asd")
+    review=sum(1 for r in results if r.get("status") in PENDING_STATUSES or (not r.get("tesserato_id") and r.get("status")!="archiviato_asd"))
+    text=f"Ho analizzato {len(results)} file: {auto} associati a tesserati, {asd} archiviati come documenti ASD e {review} richiedono verifica."
     if errors:
         text+=f" {len(errors)} file non sono stati elaborati."
     return jsonify({
