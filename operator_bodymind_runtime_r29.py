@@ -16,7 +16,7 @@ from .core import (
     app, db, layout, login_required, csrf_token, current_username, current_role, e
 )
 
-OPERATOR_VERSION = "R36.0"
+OPERATOR_VERSION = "R38.0"
 PENDING_STATUSES = (
     "needs_manual_match","associato_tipo_da_verificare","richiede_conferma",
     "needs_review","da_verificare","pending",
@@ -1041,7 +1041,37 @@ def bodymind_operator_home():
     @keyframes bmoTalk{{to{{height:23px;transform:scaleY(.96)}}}}
     .bmo-voice-status{{min-height:18px;margin-top:2px;font-size:11px;color:#a8bbcf;text-align:center}}
     .bmo-attach{{display:none;min-width:48px;height:48px;border-radius:15px;border:1px solid rgba(255,255,255,.12);background:#172b40;color:#fff;font-size:18px;cursor:pointer}}
-    @media(max-width:800px){{.bmo{{padding:0 0 26px}}.bmo-hero{{grid-template-columns:1fr;text-align:center;padding:18px 14px 16px;border-radius:22px}}.bmo-avatar-wrap{{order:2}}.bmo-avatar{{width:168px;height:168px}}.bmo-avatar img{{width:126px;height:126px}}.bmo-kicker{{order:1}}.bmo-hero>div:last-child{{display:contents}}.bmo-hero h1{{order:3;font-size:36px;margin:7px 0 2px}}.bmo-hero p{{order:4;font-size:13px;line-height:1.45;max-width:360px;margin:0 auto}}.bmo-status{{order:5;justify-content:center;gap:5px;margin-top:10px}}.bmo-pill{{font-size:9px;padding:5px 7px}}.bmo-grid{{grid-template-columns:1fr;margin-top:10px}}.bmo-side{{display:none!important}}.bmo-chat{{min-height:58vh;border-radius:20px}}.bmo-messages{{max-height:45vh;padding:12px}}.bmo-msg{{max-width:96%;font-size:13px}}.bmo-compose{{position:sticky;bottom:0;grid-template-columns:64px 44px 1fr auto;gap:6px;padding:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom));z-index:20}}.bmo-mic{{min-width:64px;width:64px;height:64px;border-radius:50%;font-size:28px;background:linear-gradient(145deg,#8d285e,#d43a7d);box-shadow:0 10px 28px rgba(212,58,125,.32)}}.bmo-mic.on{{box-shadow:0 0 0 8px rgba(244,90,157,.13),0 10px 34px rgba(212,58,125,.45)}}.bmo-attach{{display:block;min-width:44px;width:44px;height:44px;align-self:center}}.bmo-compose textarea{{min-height:52px;max-height:110px;align-self:center}}.bmo-send{{height:52px;align-self:center;padding:0 10px}}.bmo-voice-status{{font-size:12px;color:#d6e1ed;margin-top:4px}}}}
+    /* BODYMIND_R38_MOBILE: compact, chat-first, no dashboard-card clutter on iPhone */
+    @media(max-width:800px){{
+      .bmo{{max-width:none;padding:0 0 calc(72px + env(safe-area-inset-bottom));}}
+      .bmo-hero{{position:sticky;top:0;z-index:18;display:grid;grid-template-columns:54px minmax(0,1fr);gap:10px;align-items:center;text-align:left;padding:9px 11px;border-radius:15px;box-shadow:none;background:rgba(7,16,31,.94);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);}}
+      .bmo-avatar-wrap{{display:block;min-width:0;}}
+      .bmo-avatar{{width:50px;height:50px;margin:0;}}
+      .bmo-avatar img{{width:38px;height:38px;}}
+      .bmo-audio-bars,.bmo-voice-status,.bmo-kicker,.bmo-hero p{{display:none!important;}}
+      .bmo-hero>div:last-child{{display:block;min-width:0;}}
+      .bmo-hero h1{{font-size:18px;line-height:1.15;margin:0 0 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}}
+      .bmo-status{{display:flex;gap:0;margin:0;}}
+      .bmo-status .bmo-pill{{display:none;}}
+      .bmo-status #bmoAiPill{{display:inline-flex;align-items:center;max-width:100%;font-size:10px;padding:5px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-color:rgba(244,90,157,.25);background:rgba(244,90,157,.09);}}
+      .bmo-grid{{display:block;margin-top:7px;}}
+      .bmo-side{{display:none!important;}}
+      .bmo-chat{{min-height:calc(100vh - 150px);min-height:calc(100dvh - 150px);border-radius:15px;border-left:0;border-right:0;}}
+      .bmo-messages{{height:calc(100vh - 226px);height:calc(100dvh - 226px);max-height:none;padding:12px 10px 18px;gap:9px;}}
+      .bmo-msg{{max-width:92%;padding:10px 12px;border-radius:16px;font-size:14px;line-height:1.42;}}
+      .bmo-cards{{display:grid;grid-template-columns:1fr 1fr;gap:6px;}}
+      .bmo-card{{min-width:0;padding:8px 9px;border-radius:11px;}}
+      .bmo-card strong{{font-size:18px;}}
+      .bmo-links{{gap:6px;}}
+      .bmo-link{{padding:7px 8px;border-radius:10px;font-size:10px;}}
+      .bmo-compose{{position:fixed;left:0;right:0;bottom:0;z-index:999;grid-template-columns:48px 40px minmax(0,1fr) 46px;gap:6px;align-items:center;padding:8px 10px calc(8px + env(safe-area-inset-bottom));background:rgba(5,12,23,.97);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);}}
+      .bmo-mic{{min-width:48px;width:48px;height:48px;border-radius:50%;font-size:22px;background:linear-gradient(145deg,#8d285e,#d43a7d);box-shadow:0 8px 20px rgba(212,58,125,.24);}}
+      .bmo-mic.on{{box-shadow:0 0 0 6px rgba(244,90,157,.12),0 8px 24px rgba(212,58,125,.34);}}
+      .bmo-attach{{display:block;min-width:40px;width:40px;height:40px;align-self:center;border-radius:12px;font-size:17px;}}
+      .bmo-compose textarea{{min-height:44px;height:44px;max-height:96px;resize:none;padding:10px 11px;align-self:center;border-radius:13px;}}
+      .bmo-send{{min-width:46px;width:46px;height:44px;padding:0;align-self:center;font-size:0;border-radius:13px;}}
+      .bmo-send::after{{content:"➤";font-size:18px;}}
+    }}
     </style>
 
     <main class="bmo">
@@ -1070,7 +1100,7 @@ def bodymind_operator_home():
       <section class="bmo-grid">
         <div class="bmo-chat">
           <div class="bmo-messages" id="bmoMessages">
-            <div class="bmo-msg bot">Sono pronto. Puoi chiedermi, per esempio: “Abbiamo caricato il modulo di Balbinetti?”, “Cosa manca a Sofia Fabiani?”, “Chi non ha il certificato?”, “Quanto paga Gaia?”, oppure “Controlla BodyMind”.</div>
+            <div class="bmo-msg bot">Sono pronto. Scrivimi o parlami: posso cercare tesserati, documenti, certificati, tutela minori, quote e incassi.</div>
           </div>
           <div class="bmo-compose">
             <button class="bmo-mic" id="bmoMic" type="button" title="Parla" aria-label="Parla con Operatore BodyMind">🎙️</button>
@@ -1168,20 +1198,7 @@ def bodymind_operator_home():
         speechSynthesis.speak(u);
       }}
 
-      async function deviceAI(question,serverText){{
-        try{{
-          let lm=null;
-          if(window.LanguageModel && typeof LanguageModel.create==='function'){{
-            const availability=await LanguageModel.availability();
-            if(availability==='available' || availability==='readily') lm=await LanguageModel.create();
-          }} else if(window.ai?.languageModel?.create){{
-            lm=await window.ai.languageModel.create();
-          }}
-          if(!lm)return null;
-          const prompt='Sei Operatore BodyMind, assistente di segreteria di una ASD italiana. Rispondi in italiano con tono professionale e naturale. Non inventare dati del gestionale. Domanda: '+question+'\\nRisposta del motore BodyMind: '+serverText+'\\nSe la domanda è generale puoi ampliarla; se riguarda dati interni resta fedele alla risposta BodyMind.';
-          return await lm.prompt(prompt);
-        }}catch(e){{return null}}
-      }}
+      // R38: local intelligence is only the paired iMac bridge; offline uses deterministic server logic.
 
       async function ask(q){{
         q=String(q||'').trim();if(!q)return;
@@ -1193,10 +1210,6 @@ def bodymind_operator_home():
           }});
           const data=await r.json();
           let text=data.text||'Non ho ricevuto una risposta.';
-          if(data.allow_device_ai){{
-            const enhanced=await deviceAI(q,text);
-            if(enhanced)text=enhanced;
-          }}
           addMsg(text,'bot',data);speak(text);
         }}catch(err){{
           addMsg('Non riesco a contattare il motore dell’Operatore in questo momento. Non ho modificato nulla.','bot');

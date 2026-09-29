@@ -13,7 +13,7 @@ from flask import Response, jsonify, request, session
 
 from .core import app, db, layout, login_required, current_role, current_username, e
 
-BRIDGE_VERSION="R36.0"
+BRIDGE_VERSION="R38.0"
 PAIR_TTL_MINUTES=10
 ONLINE_SECONDS=90
 
@@ -222,6 +222,8 @@ def bodymind_ai_bridge_setup():
       </div>
       <p>Per collegare questo iMac al gestionale, copia nel Terminale del Mac il comando seguente entro {PAIR_TTL_MINUTES} minuti:</p>
       <pre style="white-space:pre-wrap;word-break:break-all;padding:16px;border-radius:12px;background:#111;color:#eee">{e(command)}</pre>
+      <button type="button" onclick="var t=this.previousElementSibling;var r=document.createRange();r.selectNodeContents(t);var s=window.getSelection();s.removeAllRanges();s.addRange(r);try{document.execCommand('copy');this.textContent='Copiato';}catch(e){this.textContent='Seleziona e copia';}" style="margin:8px 0 4px;padding:10px 14px;border-radius:10px;border:0;font-weight:800;cursor:pointer">Copia comando</button>
+      <p style="font-size:13px;opacity:.8">Compatibile con macOS High Sierra: usa Python 3 se presente, altrimenti il Python di sistema.</p>
       <p>Il codice è monouso. La chiave definitiva viene salvata solo sul Mac e non compare in questa pagina.</p>
       <p><a href="/operatore-bodymind">← Torna all'Operatore</a></p>
     </main>
@@ -348,38 +350,64 @@ def bodymind_ai_bridge_result():
 def bodymind_ai_bridge_install_script():
     base=request.url_root.rstrip('/')
     script=r'''#!/bin/bash
-set -e
+# BodyMind AI Bridge R38 - macOS High Sierra compatible
+if [ "$#" -lt 1 ]; then
+  echo "ERRORE: manca il codice di abbinamento."
+  echo "Apri Operatore BodyMind > IA iMac e copia il comando completo."
+  exit 1
+fi
+set -u
 
 CODE="$1"
-if [ -z "$CODE" ]; then
-  echo "Uso: install.sh CODICE_ABBINAMENTO"
-  exit 1
-fi
-
 BASE="$HOME/BodyMindAI"
 mkdir -p "$BASE/logs" "$HOME/Library/LaunchAgents"
-PY3="$(command -v python3)"
-if [ -z "$PY3" ]; then
-  echo "Python 3 non trovato."
+
+echo "[1/5] Verifico llama-server locale..."
+if ! curl -fsS "http://127.0.0.1:8088/health" >/tmp/bodymind_ai_health.$$ 2>&1; then
+  echo "ERRORE: llama-server non risponde su 127.0.0.1:8088."
+  rm -f /tmp/bodymind_ai_health.$$
   exit 1
 fi
+cat /tmp/bodymind_ai_health.$$
+rm -f /tmp/bodymind_ai_health.$$
 
-PAIR_PAYLOAD="$("$PY3" -c 'import json,sys; print(json.dumps({"code":sys.argv[1],"device_name":"iMac BodyMind"}))' "$CODE")"
-PAIR_JSON="$(curl -fsS -X POST "__BASE__/bodymind-ai-bridge/pair" -H "Content-Type: application/json" -d "$PAIR_PAYLOAD")"
-TOKEN="$(printf '%s' "$PAIR_JSON" | "$PY3" -c 'import json,sys; d=json.load(sys.stdin); print(d.get("token",""))')"
+PYBIN="$(command -v python3 2>/dev/null || true)"
+if [ -z "$PYBIN" ]; then
+  PYBIN="$(command -v python 2>/dev/null || true)"
+fi
+if [ -z "$PYBIN" ]; then
+  echo "ERRORE: Python non trovato. Su macOS High Sierra va bene anche /usr/bin/python 2.7."
+  exit 1
+fi
+echo "[2/5] Python: $PYBIN"
+
+PAIR_PAYLOAD="$(printf '%s' "$CODE" | "$PYBIN" -c 'import json,sys; code=sys.stdin.read().strip(); sys.stdout.write(json.dumps({"code":code,"device_name":"iMac BodyMind"}))')"
+PAIR_JSON="$(curl -sS -X POST "__BASE__/bodymind-ai-bridge/pair" -H "Content-Type: application/json" -d "$PAIR_PAYLOAD")"
+TOKEN="$(printf '%s' "$PAIR_JSON" | "$PYBIN" -c 'import json,sys; d=json.load(sys.stdin); sys.stdout.write(d.get("token","") or "")' 2>/dev/null || true)"
 if [ -z "$TOKEN" ]; then
-  echo "Abbinamento non riuscito: $PAIR_JSON"
+  echo "ERRORE: abbinamento non riuscito."
+  echo "$PAIR_JSON"
+  echo "Genera un nuovo codice dalla pagina IA iMac e riprova."
   exit 1
 fi
 printf '%s' "$TOKEN" > "$BASE/bridge_token"
 chmod 600 "$BASE/bridge_token"
+echo "[3/5] Abbinamento Railway completato."
 
 cat > "$BASE/bodymind-bridge.py" <<'PY'
-import json, os, time, urllib.request
+from __future__ import print_function
+import io
+import json
+import os
+import time
+try:
+    from urllib.request import Request, urlopen
+except ImportError:
+    from urllib2 import Request, urlopen
 
 BASE_URL="__BASE__"
 ROOT=os.path.expanduser("~/BodyMindAI")
-TOKEN=open(os.path.join(ROOT,"bridge_token"),encoding="utf-8").read().strip()
+TOKEN=io.open(os.path.join(ROOT,"bridge_token"),"r",encoding="utf-8").read().strip()
 LOCAL="http://127.0.0.1:8088/v1/chat/completions"
 
 def req(url, method="GET", payload=None, auth=True, timeout=180):
@@ -387,10 +415,20 @@ def req(url, method="GET", payload=None, auth=True, timeout=180):
     headers={"Content-Type":"application/json"}
     if auth:
         headers["Authorization"]="Bearer "+TOKEN
-    r=urllib.request.Request(url,data=data,headers=headers,method=method)
-    with urllib.request.urlopen(r,timeout=timeout) as resp:
-        raw=resp.read().decode("utf-8")
-        return json.loads(raw) if raw else {}
+    r=Request(url,data=data,headers=headers)
+    if method not in ("GET","POST"):
+        r.get_method=lambda: method
+    resp=urlopen(r,timeout=timeout)
+    try:
+        raw=resp.read()
+    finally:
+        try:
+            resp.close()
+        except Exception:
+            pass
+    if not isinstance(raw,str):
+        raw=raw.decode("utf-8")
+    return json.loads(raw) if raw else {}
 
 def local_chat(messages,max_tokens):
     payload={
@@ -421,7 +459,11 @@ while True:
             except Exception:
                 pass
             time.sleep(3)
-    except Exception:
+    except Exception as exc:
+        try:
+            io.open(os.path.join(ROOT,"logs","bridge-last-error.log"),"w",encoding="utf-8").write(repr(exc))
+        except Exception:
+            pass
         time.sleep(5)
 PY
 
@@ -434,7 +476,7 @@ cat > "$HOME/Library/LaunchAgents/com.bodymind.ai.bridge.plist" <<EOF
   <key>Label</key><string>com.bodymind.ai.bridge</string>
   <key>ProgramArguments</key>
   <array>
-    <string>$PY3</string>
+    <string>$PYBIN</string>
     <string>$BASE/bodymind-bridge.py</string>
   </array>
   <key>RunAtLoad</key><true/>
@@ -446,10 +488,27 @@ cat > "$HOME/Library/LaunchAgents/com.bodymind.ai.bridge.plist" <<EOF
 </plist>
 EOF
 
+echo "[4/5] Avvio bridge..."
 launchctl unload "$HOME/Library/LaunchAgents/com.bodymind.ai.bridge.plist" 2>/dev/null || true
-launchctl load "$HOME/Library/LaunchAgents/com.bodymind.ai.bridge.plist"
-sleep 3
-echo "BodyMind AI Bridge installato e avviato."
+if ! launchctl load "$HOME/Library/LaunchAgents/com.bodymind.ai.bridge.plist"; then
+  echo "ERRORE: launchctl non ha caricato com.bodymind.ai.bridge."
+  exit 1
+fi
+sleep 2
+
+HEARTBEAT="$(curl -sS -H "Authorization: Bearer $TOKEN" "__BASE__/bodymind-ai-bridge/heartbeat" || true)"
+case "$HEARTBEAT" in
+  *'"ok":true'*) ;;
+  *)
+    echo "ERRORE: il bridge è installato ma Railway non accetta il token."
+    echo "$HEARTBEAT"
+    exit 1
+    ;;
+esac
+
+echo "[5/5] BodyMind AI Bridge ONLINE."
+echo "Controllo: launchctl list | grep bodymind"
+'''
 '''
     script=script.replace('__BASE__',base)
     return Response(script,mimetype='text/plain; charset=utf-8')
