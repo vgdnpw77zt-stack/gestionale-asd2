@@ -1298,6 +1298,17 @@ def bodymind_operator_upload():
 
 
 @app.after_request
+def bodymind_operator_microphone_policy(resp):
+    try:
+        if request.path.startswith("/operatore-bodymind"):
+            resp.headers["Permissions-Policy"]="microphone=(self)"
+            resp.headers["Cache-Control"]="no-store"
+    except Exception:
+        pass
+    return resp
+
+
+@app.after_request
 def bodymind_operator_mobile_entry(resp):
     try:
         if request.path!="/mobile" or request.method!="GET" or int(resp.status_code or 200)!=200:
