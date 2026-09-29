@@ -30,6 +30,7 @@ COPY operator_bodymind_runtime_r29.py /opt/bodymind/operator_bodymind_runtime_r2
 COPY release_operator_r29.py /opt/bodymind/release_operator_r29.py
 COPY release_route_cleanup_r31.py /opt/bodymind/release_route_cleanup_r31.py
 COPY release_operator_r30.py /opt/bodymind/release_operator_r30.py
+COPY release_operator_qa_r32.py /opt/bodymind/release_operator_qa_r32.py
 COPY release_cleanup_r2.py /opt/bodymind/release_cleanup_r2.py
 COPY runtime_launcher.py /opt/bodymind/runtime_launcher.py
 RUN mkdir -p /opt/bodymind-migration && cp /opt/bodymind/runtime_launcher.py /opt/bodymind-migration/migration_upload.py
