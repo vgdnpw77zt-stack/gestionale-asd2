@@ -16,7 +16,7 @@ from .core import (
     app, db, layout, login_required, csrf_token, current_username, current_role, e
 )
 
-OPERATOR_VERSION = "R34.0"
+OPERATOR_VERSION = "R36.0"
 PENDING_STATUSES = (
     "needs_manual_match","associato_tipo_da_verificare","richiede_conferma",
     "needs_review","da_verificare","pending",
@@ -1061,7 +1061,7 @@ def bodymind_operator_home():
             <span class="bmo-pill">{len(g['minor_issues'])} tutele da rivedere</span>
             <span class="bmo-pill">{len(g['expiring_cert'])} certificati urgenti</span>
             <span class="bmo-pill">{len(g['mu_review'])} MU da ricontrollare</span>
-            <span class="bmo-pill" id="bmoAiPill">IA dispositivo: verifica…</span>
+            <a class="bmo-pill" id="bmoAiPill" href="/operatore-bodymind/bridge/setup" style="text-decoration:none;color:inherit">IA iMac: verifica…</a>
             <span class="bmo-pill">IA cloud: {"pronta" if (os.environ.get("BODYMIND_AI_CLOUD") and os.environ.get("OPENAI_API_KEY")) else "non configurata"}</span>
           </div>
         </div>
@@ -1122,12 +1122,11 @@ def bodymind_operator_home():
       (async()=>{{
         const p=document.getElementById('bmoAiPill'); if(!p)return;
         try{{
-          if(window.LanguageModel && typeof LanguageModel.availability==='function'){{
-            const a=await LanguageModel.availability();
-            p.textContent='IA dispositivo: '+(a==='available'||a==='readily'?'attiva':a);
-          }} else if(window.ai?.languageModel) p.textContent='IA dispositivo: disponibile';
-          else p.textContent='IA dispositivo: non disponibile';
-        }}catch(e){{p.textContent='IA dispositivo: non disponibile'}}
+          const r=await fetch('/operatore-bodymind/bridge/status',{{headers:{{'Cache-Control':'no-cache'}}}});
+          const d=await r.json();
+          p.textContent=d.online?'IA iMac: ONLINE':'IA iMac: collega/configura';
+          p.title=d.last_seen_at?('Ultimo contatto: '+d.last_seen_at):'Apri la configurazione del bridge locale';
+        }}catch(e){{p.textContent='IA iMac: stato non disponibile'}}
       }})();
 
       function esc(s){{const d=document.createElement('div');d.textContent=String(s??'');return d.innerHTML}}
@@ -1299,6 +1298,14 @@ def bodymind_operator_chat():
         _schema(conn)
         _log(conn,"user",message)
         result=_answer(conn,message)
+        try:
+            from .routes_operator_bridge import bridge_enhance_result
+            result=bridge_enhance_result(conn,message,result,_conv_id(),_identity())
+        except Exception as bridge_exc:
+            try:
+                _log(conn,"system","Local AI bridge unavailable: "+repr(bridge_exc))
+            except Exception:
+                pass
         if result.get("allow_device_ai"):
             cloud=_cloud_ai(message,result.get("text",""))
             if cloud:
