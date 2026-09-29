@@ -34,9 +34,10 @@ runpy.run_path("/opt/bodymind/release_route_cleanup_r31.py", run_name="__main__"
 runpy.run_path("/opt/bodymind/release_operator_r30.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mu_tutela_r34.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mu_tutela_r36.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_mu_tutela_r37.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_bridge_r36.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_qa_r32.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_operator_logic_qa_r34.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_operator_logic_qa_r37.py", run_name="__main__")
 if not (APP / ".BODYMIND_TIMELINE_INSPECT_R35").exists():
     runpy.run_path("/opt/bodymind/runtime_timeline_inspect_r35.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_mobile_r33.py", run_name="__main__")
