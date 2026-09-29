@@ -1,4 +1,4 @@
-# R38 deploy trigger
+# R39 build and route guards
 import os, sys, pathlib, runpy, sqlite3
 
 APP = pathlib.Path("/data/top2_app")
@@ -44,6 +44,7 @@ if not (APP / ".BODYMIND_TIMELINE_INSPECT_R35").exists():
     runpy.run_path("/opt/bodymind/runtime_timeline_inspect_r35.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_mobile_r33.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_cleanup_r2.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_route_guard_r39.py", run_name="__main__")
 incoming = pathlib.Path("/data/incoming")
 for name in ("top2.zip", "backup.zip"):
     p = incoming / name

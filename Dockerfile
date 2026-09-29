@@ -42,7 +42,10 @@ COPY release_operator_logic_qa_r37.py /opt/bodymind/release_operator_logic_qa_r3
 COPY release_operator_mobile_r33.py /opt/bodymind/release_operator_mobile_r33.py
 COPY release_cleanup_r2.py /opt/bodymind/release_cleanup_r2.py
 COPY runtime_timeline_inspect_r35.py /opt/bodymind/runtime_timeline_inspect_r35.py
+COPY release_route_guard_r39.py /opt/bodymind/release_route_guard_r39.py
+COPY build_preflight_r39.py /opt/bodymind/build_preflight_r39.py
 COPY runtime_launcher.py /opt/bodymind/runtime_launcher.py
+RUN python /opt/bodymind/build_preflight_r39.py
 RUN mkdir -p /opt/bodymind-migration && cp /opt/bodymind/runtime_launcher.py /opt/bodymind-migration/migration_upload.py
 EXPOSE 8080
 CMD ["python","/opt/bodymind-migration/migration_upload.py"]
