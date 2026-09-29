@@ -1156,10 +1156,10 @@ def bodymind_operator_home():
         const italian=voices.filter(v=>String(v.lang||'').toLowerCase().startsWith('it'));
         const preferred=['premium','enhanced','alice','federica','elsa','cosimo','luca','it-it'];
         let it=null;
-        for(const key of preferred){
+        for(const key of preferred){{
           it=italian.find(v=>String(v.name||'').toLowerCase().includes(key));
           if(it)break;
-        }
+        }}
         if(!it)it=italian[0]||null;
         if(it)u.voice=it;
         u.rate=.96;u.pitch=.94;
