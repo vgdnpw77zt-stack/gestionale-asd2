@@ -16,7 +16,7 @@ from .core import (
     app, db, layout, login_required, csrf_token, current_username, current_role, e
 )
 
-OPERATOR_VERSION = "R33.0"
+OPERATOR_VERSION = "R34.0"
 PENDING_STATUSES = (
     "needs_manual_match","associato_tipo_da_verificare","richiede_conferma",
     "needs_review","da_verificare","pending",
@@ -324,6 +324,40 @@ def _is_medical(row) -> bool:
     return "certificato medico" in t or "certificato_medico" in t or re.search(r"\bcm\b",t) is not None
 
 
+
+def _has_trusted_mu(conn, tid: int) -> bool:
+    """True only when the MU passed a human/trusted completion boundary.
+    Automatic recognition states such as richiede_conferma never qualify.
+    """
+    tid=int(tid or 0)
+    if tid<=0:
+        return False
+    trusted={"verificato","salvato","accepted","manual_accepted","ok"}
+    if _table(conn,"documenti"):
+        dc=_cols(conn,"documenti")
+        if "tesserato_id" in dc:
+            rows=conn.execute("SELECT * FROM documenti WHERE tesserato_id=?",(tid,)).fetchall()
+            for r in rows:
+                if not _is_mu(r):
+                    continue
+                status=_norm(r["status"] if "status" in r.keys() else "")
+                visible=int((r["visibile"] if "visibile" in r.keys() else 1) or 0)
+                if visible and status in trusted:
+                    return True
+    if _table(conn,"onboarding_document_requests"):
+        oc=_cols(conn,"onboarding_document_requests")
+        if {"tesserato_id","document_type","status"}.issubset(oc):
+            row=conn.execute(
+                """SELECT 1 FROM onboarding_document_requests
+                   WHERE tesserato_id=? AND lower(coalesce(document_type,''))='modulo_unico_tesseramento'
+                     AND lower(coalesce(status,'')) IN ('accepted','manual_accepted')
+                   LIMIT 1""",(tid,)
+            ).fetchone()
+            if row:
+                return True
+    return False
+
+
 def _minor_state(conn, athlete):
     if not int(athlete["minorenne"] or 0) if "minorenne" in athlete.keys() else True:
         return {"minor":False}
@@ -343,6 +377,12 @@ def _minor_state(conn, athlete):
             out["delegation"]=int(row["delega_ritiro_ok"] or 0)==1 if "delega_ritiro_ok" in keys else None
             out["autonomous_exit"]=int(row["uscita_autonoma_ok"] or 0)==1 if "uscita_autonoma_ok" in keys else None
             out["consent_date"]=str(row["data_consenso"] or "") if "data_consenso" in keys else ""
+    if _has_trusted_mu(conn,tid):
+        out["consent"]=True
+        out["authorizations"]=True
+        out["trusted_mu"]=True
+    else:
+        out["trusted_mu"]=False
     return out
 
 
@@ -534,8 +574,18 @@ def _no(text: str) -> bool:
 
 
 def _first_name_from_intro(text: str):
-    m=re.search(r"\b(?:sono|mi chiamo)\s+([A-Za-zÀ-ÖØ-öø-ÿ'’-]{2,40})",text,re.I)
-    return (m.group(1).strip().title() if m else "")
+    raw=str(text or "").strip()
+    # Only explicit self-introductions at the start (optionally after a greeting).
+    # This deliberately avoids false positives such as "i documenti sono da verificare".
+    m=re.match(
+        r"^(?:(?:ciao|salve|buongiorno|buonasera)[,;:!]?\s*)?(?:io\s+)?(?:sono|mi chiamo)\s+([A-Za-zÀ-ÖØ-öø-ÿ'’-]{2,40})(?=$|[,;.!?\s])",
+        raw,re.I
+    )
+    if not m:
+        return ""
+    name=m.group(1).strip().title()
+    blocked={"Da","Di","Del","Della","Dei","Delle","Un","Una","Il","Lo","La","Qui","Ora","Già","Gia"}
+    return "" if name in blocked else name
 
 
 def _cloud_ai(question: str, grounded_text: str):
@@ -697,9 +747,29 @@ def _answer(conn, text: str):
             "links":[{"label":"Apri coda documenti","href":"/documenti/da-verificare"},{"label":"Quote & Incassi","href":"/quote-incassi"}]
         }
 
-    if any(x in n for x in ("documenti da verificare","coda documenti","documenti in attesa","documenti pendenti")):
+    if (
+        any(x in n for x in ("documenti da verificare","coda documenti","documenti in attesa","documenti pendenti"))
+        or (("document" in n or "modul" in n) and any(x in n for x in ("verifica","verificare","controlla","controllare","da vedere","da controllare")))
+    ) and not athlete:
         cnt=_pending_count(conn)
-        return {"text":f"Ci sono {cnt} documenti che richiedono una decisione umana.","mode":"local","links":[{"label":"Apri Da verificare","href":"/documenti/da-verificare"}]}
+        g=_global_check(conn)
+        extra=f" Inoltre {len(g['mu_review'])} Moduli Unici storici risultano da ricontrollare." if g["mu_review"] else ""
+        return {
+            "text":f"Ho controllato la coda: ci sono {cnt} documenti che richiedono una decisione umana.{extra}",
+            "mode":"local",
+            "links":[{"label":"Apri Da verificare","href":"/documenti/da-verificare"},{"label":"Apri Documenti","href":"/documenti"}]
+        }
+
+    if any(x in n for x in ("tutela minori","tutele minori","tutela genitori","tutela genitoriale","consenso minori","consensi minori","minori incompleti")) and not athlete:
+        g=_global_check(conn)
+        names=g["minor_issues"]
+        if names:
+            shown=", ".join(names[:12])
+            more=f" e altri {len(names)-12}" if len(names)>12 else ""
+            txt=f"Ho controllato le tutele: {len(names)} minori richiedono ancora un controllo secondo i dati correnti: {shown}{more}."
+        else:
+            txt="Ho controllato le tutele: non risultano minori con tutela incompleta secondo Modulo Unico verificato e flag correnti."
+        return {"text":txt,"mode":"local","links":[{"label":"Apri Tesserati","href":"/tesserati"},{"label":"Apri Documenti","href":"/documenti"}]}
 
     if ("certificat" in n) and any(x in n for x in ("chi non","manc","senza","scad")) and not athlete:
         g=_global_check(conn)
@@ -1083,8 +1153,16 @@ def bodymind_operator_home():
         const u=new SpeechSynthesisUtterance(text);
         u.lang='it-IT';u.rate=.98;u.pitch=1;
         const voices=speechSynthesis.getVoices();
-        const it=voices.find(v=>String(v.lang||'').toLowerCase().startsWith('it'));
+        const italian=voices.filter(v=>String(v.lang||'').toLowerCase().startsWith('it'));
+        const preferred=['premium','enhanced','alice','federica','elsa','cosimo','luca','it-it'];
+        let it=null;
+        for(const key of preferred){
+          it=italian.find(v=>String(v.name||'').toLowerCase().includes(key));
+          if(it)break;
+        }
+        if(!it)it=italian[0]||null;
         if(it)u.voice=it;
+        u.rate=.96;u.pitch=.94;
         u.onstart=()=>{{avatar.classList.add('speaking');if(voiceStatus)voiceStatus.textContent='Ti sto rispondendo…'}};
         u.onend=()=>{{avatar.classList.remove('speaking');if(voiceStatus)voiceStatus.textContent='Tocca il microfono e parlami'}};
         u.onerror=()=>{{avatar.classList.remove('speaking');if(voiceStatus)voiceStatus.textContent='Tocca il microfono e parlami'}};
