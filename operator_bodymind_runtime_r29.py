@@ -16,7 +16,7 @@ from .core import (
     app, db, layout, login_required, csrf_token, current_username, current_role, e
 )
 
-OPERATOR_VERSION = "R30.0"
+OPERATOR_VERSION = "R30.1"
 PENDING_STATUSES = (
     "needs_manual_match","associato_tipo_da_verificare","richiede_conferma",
     "needs_review","da_verificare","pending",
@@ -562,6 +562,82 @@ def _cloud_ai(question: str, grounded_text: str):
     except Exception:
         return None
 
+
+def _recent_operator_context(conn, limit: int = 8):
+    if not _table(conn,"bodymind_operator_messages"):
+        return []
+    try:
+        rows=conn.execute(
+            """SELECT speaker,identity_name,message,created_at
+               FROM bodymind_operator_messages
+               WHERE conversation_id=?
+               ORDER BY id DESC LIMIT ?""",
+            (_conv_id(),int(limit))
+        ).fetchall()
+        return [
+            {"speaker":str(r["speaker"] or ""),"identity":str(r["identity_name"] or ""),
+             "message":str(r["message"] or "")[:1200],"created_at":str(r["created_at"] or "")}
+            for r in reversed(rows)
+        ]
+    except Exception:
+        return []
+
+def _cloud_operator_answer(conn, question: str, athlete=None):
+    """Optional high-capability conversational layer.
+    It is read-only: deterministic BodyMind functions remain the only path for writes.
+    """
+    key=str(os.environ.get("OPENAI_API_KEY") or "").strip()
+    if not key:
+        return None
+    try:
+        from openai import OpenAI
+        model=str(os.environ.get("BODYMIND_AI_MODEL") or "gpt-5.6-sol").strip()
+        g=_global_check(conn)
+        facts={
+            "identity":_identity(),
+            "role":current_role(),
+            "athletes":g.get("athletes"),
+            "pending_docs":g.get("pending_docs"),
+            "minor_issues_count":len(g.get("minor_issues") or []),
+            "missing_cert_count":len(g.get("missing_cert") or []),
+            "expiring_cert_count":len(g.get("expiring_cert") or []),
+            "mu_review_count":len(g.get("mu_review") or []),
+            "payments":g.get("payments"),
+            "receipts":g.get("receipts"),
+        }
+        if athlete is not None:
+            snap=_athlete_snapshot(conn,athlete)
+            facts["athlete"]={
+                "id":snap["tid"],"name":snap["name"],"documents":len(snap["docs"]),
+                "inbound":len(snap["inbound"]),"mu_count":len(snap["mu"]),
+                "medical_docs":len(snap["medical_docs"]),"cert_expiry":snap["cert_expiry"],
+                "minor":snap["minor"],"quota_personalizzata":snap["quota_personalizzata"],
+                "quota_sconto":snap["quota_sconto"],"quota_tipo":snap["quota_tipo"],
+                "quota_note":snap["quota_note"],"payments_count":len(snap["payments"]),
+            }
+        recent=_recent_operator_context(conn,8)
+        prompt=(
+            "Sei Operatore BodyMind, una segreteria IA esperta di ASD italiane e danza aerea. "
+            "Devi parlare in italiano naturale, professionale, amichevole e molto competente. "
+            "Usa soltanto i fatti interni forniti. Non inventare documenti, firme, consensi, pagamenti, quote, date o autorizzazioni. "
+            "Distingui sempre PRESENTE, ASSOCIATO e VERIFICATO. Un NO esplicito a delega, uscita autonoma o immagini non è un documento mancante. "
+            "Non eseguire mai modifiche: le modifiche passano solo dagli strumenti deterministici BodyMind con conferma. "
+            "Se mancano dati, fai una domanda precisa. Se la richiesta è generale, puoi ragionare come un operatore ASD senior. "
+            "Fatti correnti: "+json.dumps(facts,ensure_ascii=False)+
+            "\nContesto conversazione: "+json.dumps(recent,ensure_ascii=False)+
+            "\nRichiesta: "+str(question or "")[:6000]
+        )
+        client=OpenAI(api_key=key)
+        resp=client.responses.create(model=model,input=prompt)
+        out=str(getattr(resp,"output_text","") or "").strip()
+        return out[:7000] if out else None
+    except Exception as exc:
+        try:
+            _log(conn,"system","Cloud AI unavailable: "+repr(exc))
+        except Exception:
+            pass
+        return None
+
 def _answer(conn, text: str):
     raw=str(text or "").strip()
     n=_norm(raw)
@@ -768,6 +844,10 @@ def _answer(conn, text: str):
             "mode":"help",
             "links":[{"label":"Da verificare","href":"/documenti/da-verificare"},{"label":"Quote & Incassi","href":"/quote-incassi"}]
         }
+
+    cloud=_cloud_operator_answer(conn,raw,athlete=None)
+    if cloud:
+        return {"text":cloud,"mode":"cloud","allow_device_ai":False}
 
     return {
         "text":"Ho capito la richiesta, ma non voglio inventare una risposta. Se riguarda BodyMind posso cercare una persona, documenti, Modulo Unico, certificati, tutela, quote, pagamenti o ricevute. Puoi anche chiedermi “controlla BodyMind”.",
