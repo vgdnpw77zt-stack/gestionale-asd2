@@ -111,7 +111,12 @@ def bridge_enhance_result(conn, message, result, conversation_id='', identity=''
         if not isinstance(result,dict):
             return result
         mode=str(result.get('mode') or '')
-        if not (result.get('allow_device_ai') or mode in ('fallback','help')):
+        # R36: the iMac may naturalize all read-only answers, but never write/confirm/navigation paths.
+        allowed_read_modes={'fallback','help','local','audit'}
+        if not (result.get('allow_device_ai') or mode in allowed_read_modes):
+            return result
+        low=str(message or '').strip().lower()
+        if mode=='local' and low in ('ciao','salve','buongiorno','buonasera'):
             return result
         _schema(conn)
         device=_latest_device(conn)
