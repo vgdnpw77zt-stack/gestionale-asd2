@@ -538,6 +538,30 @@ def _first_name_from_intro(text: str):
     return (m.group(1).strip().title() if m else "")
 
 
+def _cloud_ai(question: str, grounded_text: str):
+    """Optional conversational expansion. Disabled unless explicitly configured."""
+    if str(os.environ.get("BODYMIND_AI_CLOUD","")).strip().lower() not in ("1","true","yes","on"):
+        return None
+    if not str(os.environ.get("OPENAI_API_KEY","")).strip():
+        return None
+    try:
+        from openai import OpenAI
+        client=OpenAI()
+        model=str(os.environ.get("BODYMIND_AI_MODEL") or "gpt-6-astra").strip()
+        prompt=(
+            "Sei Operatore BodyMind, un assistente professionale di segreteria per una ASD italiana. "
+            "Parla in italiano in modo naturale, competente e conciso. "
+            "Non inventare mai dati del gestionale e non dichiarare eseguite azioni che il motore non ha eseguito. "
+            "Se il testo BodyMind contiene un dato fattuale interno, quello è la fonte di verità. "
+            "Domanda dell'utente: "+str(question)[:5000]+"\n"
+            "Risposta/fatto già verificato dal motore BodyMind: "+str(grounded_text)[:8000]
+        )
+        response=client.responses.create(model=model,input=prompt)
+        out=str(getattr(response,"output_text","") or "").strip()
+        return out[:12000] if out else None
+    except Exception:
+        return None
+
 def _answer(conn, text: str):
     raw=str(text or "").strip()
     n=_norm(raw)
@@ -817,6 +841,7 @@ def bodymind_operator_home():
             <span class="bmo-pill">{len(g['expiring_cert'])} certificati urgenti</span>
             <span class="bmo-pill">{len(g['mu_review'])} MU da ricontrollare</span>
             <span class="bmo-pill" id="bmoAiPill">IA dispositivo: verifica…</span>
+            <span class="bmo-pill">IA cloud: {"pronta" if (os.environ.get("BODYMIND_AI_CLOUD") and os.environ.get("OPENAI_API_KEY")) else "non configurata"}</span>
           </div>
         </div>
       </section>
@@ -995,6 +1020,12 @@ def bodymind_operator_chat():
         _schema(conn)
         _log(conn,"user",message)
         result=_answer(conn,message)
+        if result.get("allow_device_ai"):
+            cloud=_cloud_ai(message,result.get("text",""))
+            if cloud:
+                result["text"]=cloud
+                result["mode"]="cloud"
+                result["allow_device_ai"]=False
         _log(conn,"assistant",result.get("text",""),result)
         return jsonify(result)
     except Exception as exc:
@@ -1074,6 +1105,34 @@ def bodymind_operator_upload():
         "text":text,"mode":"upload","results":results,"errors":errors,
         "links":[{"label":"Apri Da verificare","href":"/documenti/da-verificare"},{"label":"Apri Documenti","href":"/documenti"}]
     })
+
+
+@app.after_request
+def bodymind_operator_mobile_entry(resp):
+    try:
+        if request.path!="/mobile" or request.method!="GET" or int(resp.status_code or 200)!=200:
+            return resp
+        if "text/html" not in str(resp.headers.get("Content-Type","")).lower():
+            return resp
+        html=resp.get_data(as_text=True)
+        if "bmo-mobile-entry" in html:
+            return resp
+        button="""
+        <a id="bmo-mobile-entry" href="/operatore-bodymind" aria-label="Apri Operatore BodyMind"
+           style="position:fixed;right:14px;bottom:calc(18px + env(safe-area-inset-bottom));z-index:9999;
+           display:flex;align-items:center;gap:8px;padding:11px 14px;border-radius:999px;
+           background:rgba(18,10,22,.88);border:1px solid rgba(244,90,157,.38);color:#fff;
+           text-decoration:none;font-weight:900;font-size:12px;box-shadow:0 15px 38px rgba(0,0,0,.30);
+           backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)">
+           <span style="width:25px;height:25px;border-radius:50%;display:grid;place-items:center;background:rgba(244,90,157,.20)">✦</span>
+           Operatore
+        </a>
+        """
+        html=html.replace("</body>",button+"</body>") if "</body>" in html else html+button
+        resp.set_data(html)
+    except Exception:
+        pass
+    return resp
 
 
 @app.get("/favicon.ico")
