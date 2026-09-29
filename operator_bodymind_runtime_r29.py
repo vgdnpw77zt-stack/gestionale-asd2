@@ -10,13 +10,13 @@ from datetime import date, datetime, timedelta
 from difflib import SequenceMatcher
 from pathlib import Path
 
-from flask import jsonify, redirect, request, session
+from flask import Response, jsonify, redirect, request, session, send_file
 
 from .core import (
     app, db, layout, login_required, csrf_token, current_username, current_role, e
 )
 
-OPERATOR_VERSION = "R30.1"
+OPERATOR_VERSION = "R33.0"
 PENDING_STATUSES = (
     "needs_manual_match","associato_tipo_da_verificare","richiede_conferma",
     "needs_review","da_verificare","pending",
@@ -856,6 +856,50 @@ def _answer(conn, text: str):
     }
 
 
+
+def _bodymind_logo_file():
+    """Find the actual BodyMind brand asset without hard-coding a tenant-specific filename."""
+    roots=[
+        Path("/data/user_static"),
+        Path("/data/tenants/default/user_static"),
+        Path("/data/tenants/default/media"),
+        Path("/data/top2_app/user_static"),
+        Path("/data/top2_app/static"),
+    ]
+    candidates=[]
+    for root in roots:
+        if not root.exists():
+            continue
+        try:
+            for p in root.rglob("*"):
+                if not p.is_file() or p.suffix.lower() not in {".png",".jpg",".jpeg",".webp",".svg"}:
+                    continue
+                n=p.name.lower()
+                score=(40 if "bodymind" in n else 0)+(30 if "logo" in n else 0)+(10 if "brand" in n else 0)
+                if score:
+                    candidates.append((score,-len(str(p)),p))
+        except Exception:
+            pass
+    candidates.sort(reverse=True)
+    return candidates[0][2] if candidates else None
+
+
+@app.get("/bodymind-media/logo")
+@login_required
+def bodymind_operator_logo():
+    p=_bodymind_logo_file()
+    if p:
+        return send_file(p,conditional=True,max_age=3600)
+    svg="""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+    <defs><radialGradient id="g"><stop stop-color="#f05b9d"/><stop offset="1" stop-color="#24101f"/></radialGradient></defs>
+    <circle cx="120" cy="120" r="114" fill="url(#g)"/>
+    <circle cx="120" cy="120" r="103" fill="#140b13" stroke="#f05b9d" stroke-opacity=".45"/>
+    <text x="120" y="112" text-anchor="middle" font-family="Arial,sans-serif" font-size="31" font-weight="800" fill="#fff">BODY</text>
+    <text x="120" y="147" text-anchor="middle" font-family="Arial,sans-serif" font-size="31" font-weight="300" fill="#f6b5d1">MIND</text>
+    </svg>"""
+    return Response(svg,mimetype="image/svg+xml",headers={"Cache-Control":"public,max-age=3600"})
+
+
 @app.get("/operatore-bodymind")
 @login_required
 def bodymind_operator_home():
@@ -904,16 +948,32 @@ def bodymind_operator_home():
     .bmo-upload input[type=file]{{width:100%;font-size:11px;color:#b9c7d8;margin:6px 0}}
     .bmo-upload button{{width:100%;margin-top:7px}}
     .bmo-voice-row{{display:flex;gap:8px;align-items:center;margin-top:10px;color:#9fb1c8;font-size:11px}}
-    @media(max-width:800px){{.bmo-hero{{grid-template-columns:1fr;text-align:center;padding:20px}}.bmo-avatar{{width:124px;height:124px}}.bmo-avatar img{{width:90px;height:90px}}.bmo-grid{{grid-template-columns:1fr}}.bmo-side{{position:static;order:-1}}.bmo-chat{{min-height:560px}}.bmo-msg{{max-width:94%}}}}
+    .bmo-avatar-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center}
+    .bmo-audio-bars{height:24px;display:flex;align-items:center;gap:4px;margin-top:9px;opacity:.28;transition:.2s}
+    .bmo-audio-bars i{display:block;width:4px;height:7px;border-radius:5px;background:linear-gradient(#f5b1cf,#f05b9d);transform-origin:center}
+    .bmo-avatar.listening + .bmo-audio-bars,.bmo-avatar.speaking + .bmo-audio-bars{opacity:1}
+    .bmo-avatar.listening + .bmo-audio-bars i,.bmo-avatar.speaking + .bmo-audio-bars i{animation:bmoTalk .62s ease-in-out infinite alternate}
+    .bmo-avatar.listening + .bmo-audio-bars i:nth-child(2),.bmo-avatar.speaking + .bmo-audio-bars i:nth-child(2){animation-delay:.12s}
+    .bmo-avatar.listening + .bmo-audio-bars i:nth-child(3),.bmo-avatar.speaking + .bmo-audio-bars i:nth-child(3){animation-delay:.24s}
+    .bmo-avatar.listening + .bmo-audio-bars i:nth-child(4),.bmo-avatar.speaking + .bmo-audio-bars i:nth-child(4){animation-delay:.08s}
+    .bmo-avatar.listening + .bmo-audio-bars i:nth-child(5),.bmo-avatar.speaking + .bmo-audio-bars i:nth-child(5){animation-delay:.19s}
+    @keyframes bmoTalk{to{height:23px;transform:scaleY(.96)}}
+    .bmo-voice-status{min-height:18px;margin-top:2px;font-size:11px;color:#a8bbcf;text-align:center}
+    .bmo-attach{display:none;min-width:48px;height:48px;border-radius:15px;border:1px solid rgba(255,255,255,.12);background:#172b40;color:#fff;font-size:18px;cursor:pointer}
+    @media(max-width:800px){{.bmo{{padding:0 0 26px}}.bmo-hero{{grid-template-columns:1fr;text-align:center;padding:18px 14px 16px;border-radius:22px}}.bmo-avatar-wrap{{order:2}}.bmo-avatar{{width:168px;height:168px}}.bmo-avatar img{{width:126px;height:126px}}.bmo-kicker{{order:1}}.bmo-hero>div:last-child{{display:contents}}.bmo-hero h1{{order:3;font-size:36px;margin:7px 0 2px}}.bmo-hero p{{order:4;font-size:13px;line-height:1.45;max-width:360px;margin:0 auto}}.bmo-status{{order:5;justify-content:center;gap:5px;margin-top:10px}}.bmo-pill{{font-size:9px;padding:5px 7px}}.bmo-grid{{grid-template-columns:1fr;margin-top:10px}}.bmo-side{{display:none!important}}.bmo-chat{{min-height:58vh;border-radius:20px}}.bmo-messages{{max-height:45vh;padding:12px}}.bmo-msg{{max-width:96%;font-size:13px}}.bmo-compose{{position:sticky;bottom:0;grid-template-columns:64px 44px 1fr auto;gap:6px;padding:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom));z-index:20}}.bmo-mic{{min-width:64px;width:64px;height:64px;border-radius:50%;font-size:28px;background:linear-gradient(145deg,#8d285e,#d43a7d);box-shadow:0 10px 28px rgba(212,58,125,.32)}}.bmo-mic.on{{box-shadow:0 0 0 8px rgba(244,90,157,.13),0 10px 34px rgba(212,58,125,.45)}}.bmo-attach{{display:block;min-width:44px;width:44px;height:44px;align-self:center}}.bmo-compose textarea{{min-height:52px;max-height:110px;align-self:center}}.bmo-send{{height:52px;align-self:center;padding:0 10px}}.bmo-voice-status{{font-size:12px;color:#d6e1ed;margin-top:4px}}}}
     </style>
 
     <main class="bmo">
       <section class="bmo-hero">
-        <div class="bmo-avatar" id="bmoAvatar"><img src="/bodymind-media/logo" alt="BodyMind"></div>
+        <div class="bmo-avatar-wrap">
+          <div class="bmo-avatar" id="bmoAvatar"><img src="/bodymind-media/logo" alt="BodyMind"></div>
+          <div class="bmo-audio-bars" id="bmoAudioBars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="bmo-voice-status" id="bmoVoiceStatus">Tocca il microfono e parlami</div>
+        </div>
         <div>
           <div class="bmo-kicker">BODYMIND · OPERATORE IA · {OPERATOR_VERSION}</div>
           <h1>Ciao, {ident}.</h1>
-          <p>Parlami come parleresti a una persona in segreteria. Posso cercare nel gestionale, controllare documenti e tesserati, verificare cosa manca, leggere quote e incassi e preparare operazioni chiedendoti conferma quando servono.</p>
+          <p>Parlami come parleresti a una persona in segreteria. Posso cercare nel gestionale, controllare documenti e tesserati, verificare cosa manca, leggere quote e incassi e preparare operazioni chiedendoti conferma quando serve.</p>
           <div class="bmo-status">
             <span class="bmo-pill">{g['athletes']} tesserati</span>
             <span class="bmo-pill">{g['pending_docs']} documenti da verificare</span>
@@ -932,8 +992,10 @@ def bodymind_operator_home():
             <div class="bmo-msg bot">Sono pronto. Puoi chiedermi, per esempio: “Abbiamo caricato il modulo di Balbinetti?”, “Cosa manca a Sofia Fabiani?”, “Chi non ha il certificato?”, “Quanto paga Gaia?”, oppure “Controlla BodyMind”.</div>
           </div>
           <div class="bmo-compose">
-            <button class="bmo-mic" id="bmoMic" type="button" title="Parla">🎙️</button>
-            <textarea id="bmoInput" placeholder="Scrivi o parla con l’Operatore BodyMind…" autocomplete="off"></textarea>
+            <button class="bmo-mic" id="bmoMic" type="button" title="Parla" aria-label="Parla con Operatore BodyMind">🎙️</button>
+            <button class="bmo-attach" id="bmoAttach" type="button" title="Allega documento" aria-label="Allega documento">📎</button>
+            <input id="bmoMobileFiles" type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.docx" hidden>
+            <textarea id="bmoInput" placeholder="Scrivi oppure tocca il microfono e parla…" autocomplete="off"></textarea>
             <button class="bmo-send" id="bmoSend" type="button">Invia</button>
           </div>
         </div>
@@ -972,7 +1034,10 @@ def bodymind_operator_home():
       const mic=document.getElementById('bmoMic');
       const avatar=document.getElementById('bmoAvatar');
       const voice=document.getElementById('bmoVoice');
-      let listening=false, recognition=null;
+      const voiceStatus=document.getElementById('bmoVoiceStatus');
+      const attach=document.getElementById('bmoAttach');
+      const mobileFiles=document.getElementById('bmoMobileFiles');
+      let listening=false, recognition=null, micStream=null, audioContext=null, analyser=null, meterRAF=null;
       (async()=>{{
         const p=document.getElementById('bmoAiPill'); if(!p)return;
         try{{
@@ -1009,8 +1074,9 @@ def bodymind_operator_home():
         const voices=speechSynthesis.getVoices();
         const it=voices.find(v=>String(v.lang||'').toLowerCase().startsWith('it'));
         if(it)u.voice=it;
-        u.onstart=()=>avatar.classList.add('speaking');
-        u.onend=u.onerror=()=>avatar.classList.remove('speaking');
+        u.onstart=()=>{avatar.classList.add('speaking');if(voiceStatus)voiceStatus.textContent='Ti sto rispondendo…'};
+        u.onend=()=>{avatar.classList.remove('speaking');if(voiceStatus)voiceStatus.textContent='Tocca il microfono e parlami'};
+        u.onerror=()=>{avatar.classList.remove('speaking');if(voiceStatus)voiceStatus.textContent='Tocca il microfono e parlami'};
         speechSynthesis.speak(u);
       }}
 
@@ -1053,22 +1119,100 @@ def bodymind_operator_home():
       input.addEventListener('keydown',ev=>{{if(ev.key==='Enter'&&!ev.shiftKey){{ev.preventDefault();ask(input.value)}}}});
       document.querySelectorAll('[data-q]').forEach(b=>b.addEventListener('click',()=>ask(b.dataset.q)));
 
+      function stopMicStream(){
+        if(meterRAF){cancelAnimationFrame(meterRAF);meterRAF=null}
+        try{audioContext?.close()}catch(e){}
+        audioContext=null;analyser=null;
+        if(micStream){micStream.getTracks().forEach(t=>t.stop());micStream=null}
+      }
+
+      function startMeter(stream){
+        try{
+          const AC=window.AudioContext||window.webkitAudioContext;
+          if(!AC)return;
+          audioContext=new AC();
+          const source=audioContext.createMediaStreamSource(stream);
+          analyser=audioContext.createAnalyser();analyser.fftSize=256;source.connect(analyser);
+          const data=new Uint8Array(analyser.frequencyBinCount);
+          const tick=()=>{
+            if(!analyser)return;
+            analyser.getByteFrequencyData(data);
+            let sum=0;for(let i=0;i<data.length;i++)sum+=data[i];
+            const level=Math.min(1,(sum/data.length)/90);
+            avatar.style.setProperty('--voice-level',String(level));
+            avatar.style.transform='scale('+(1+level*.045)+')';
+            meterRAF=requestAnimationFrame(tick);
+          };tick();
+        }catch(e){}
+      }
+
+      async function ensureMic(){
+        if(!window.isSecureContext)throw new Error('Il microfono richiede una connessione HTTPS sicura.');
+        if(!navigator.mediaDevices?.getUserMedia)throw new Error('Questo browser non espone l’accesso diretto al microfono.');
+        if(micStream)return micStream;
+        const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+        micStream=stream;startMeter(stream);return stream;
+      }
+
+      function humanMicError(code){
+        const c=String(code||'');
+        if(c==='not-allowed'||c==='service-not-allowed')return 'Accesso al microfono negato. Consenti il microfono a BodyMind nelle impostazioni di Safari e riprova.';
+        if(c==='audio-capture')return 'Non riesco ad accedere al microfono del dispositivo.';
+        if(c==='no-speech')return 'Non ho sentito una frase. Tocca di nuovo il microfono e parla normalmente.';
+        if(c==='network')return 'Il riconoscimento vocale del browser non è riuscito a collegarsi. Riprova.';
+        return 'Il riconoscimento vocale non è partito correttamente ('+c+'). Riprova.';
+      }
+
       const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-      if(SR){{
-        recognition=new SR();recognition.lang='it-IT';recognition.interimResults=true;recognition.continuous=false;
-        recognition.onstart=()=>{{listening=true;mic.classList.add('on');avatar.classList.add('listening')}};
-        recognition.onend=()=>{{listening=false;mic.classList.remove('on');avatar.classList.remove('listening')}};
-        recognition.onerror=()=>{{listening=false;mic.classList.remove('on');avatar.classList.remove('listening')}};
-        recognition.onresult=ev=>{{
+      if(SR){
+        recognition=new SR();recognition.lang='it-IT';recognition.interimResults=true;recognition.continuous=false;recognition.maxAlternatives=1;
+        recognition.onstart=()=>{listening=true;mic.classList.add('on');avatar.classList.add('listening');if(voiceStatus)voiceStatus.textContent='Ti ascolto… parla normalmente'};
+        recognition.onend=()=>{listening=false;mic.classList.remove('on');avatar.classList.remove('listening');avatar.style.transform='';stopMicStream();if(voiceStatus&&voiceStatus.textContent.startsWith('Ti ascolto'))voiceStatus.textContent='Tocca il microfono e parlami'};
+        recognition.onerror=ev=>{listening=false;mic.classList.remove('on');avatar.classList.remove('listening');avatar.style.transform='';stopMicStream();const t=humanMicError(ev.error);if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot')};
+        recognition.onresult=ev=>{
           let txt='';let final=false;
-          for(let i=ev.resultIndex;i<ev.results.length;i++){{txt+=ev.results[i][0].transcript;if(ev.results[i].isFinal)final=true}}
+          for(let i=ev.resultIndex;i<ev.results.length;i++){txt+=ev.results[i][0].transcript;if(ev.results[i].isFinal)final=true}
           input.value=txt.trim();
-          if(final&&input.value){{setTimeout(()=>ask(input.value),150)}}
-        }};
-        mic.addEventListener('click',()=>{{if(listening)recognition.stop();else{{speechSynthesis?.cancel();recognition.start()}}}});
-      }}else{{
-        mic.addEventListener('click',()=>{{input.focus();addMsg('Su questo browser il riconoscimento vocale diretto non è disponibile. Puoi usare la dettatura del dispositivo nel campo di testo.','bot')}});
-      }}
+          if(final&&input.value){if(voiceStatus)voiceStatus.textContent='Ho capito. Un attimo…';setTimeout(()=>ask(input.value),120)}
+        };
+        mic.addEventListener('click',async()=>{
+          if(listening){try{recognition.stop()}catch(e){};return}
+          try{
+            speechSynthesis?.cancel();
+            if(voiceStatus)voiceStatus.textContent='Attivo il microfono…';
+            await ensureMic();
+            recognition.start();
+          }catch(err){
+            stopMicStream();avatar.style.transform='';
+            const t=(err?.name==='NotAllowedError'||err?.name==='SecurityError')
+              ?'Accesso al microfono negato. Consenti il microfono a BodyMind nelle impostazioni di Safari e riprova.'
+              :('Microfono non disponibile: '+(err?.message||err));
+            if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+          }
+        });
+      }else{
+        mic.addEventListener('click',async()=>{
+          try{
+            await ensureMic();avatar.classList.add('listening');mic.classList.add('on');
+            if(voiceStatus)voiceStatus.textContent='Microfono attivo. Questo browser però non offre la trascrizione vocale web: sul Mac BodyMind useremo il Bridge locale per trascriverla.';
+            setTimeout(()=>{avatar.classList.remove('listening');mic.classList.remove('on');avatar.style.transform='';stopMicStream()},3500);
+          }catch(err){
+            const t='Non riesco ad aprire il microfono: '+(err?.message||err);if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+          }
+        });
+      }
+
+      attach?.addEventListener('click',()=>mobileFiles?.click());
+      mobileFiles?.addEventListener('change',async()=>{
+        const files=[...(mobileFiles.files||[])];if(!files.length)return;
+        const fd=new FormData();files.forEach(f=>fd.append('files',f,f.name));
+        addMsg('Ho ricevuto '+files.length+' file. Li passo all’Autopilot.','bot');
+        try{
+          const r=await fetch('/operatore-bodymind/upload',{method:'POST',headers:{'X-CSRFToken':csrf},body:fd});
+          const data=await r.json();addMsg(data.text||'Analisi completata.','bot',data);speak(data.text||'Analisi completata.');
+        }catch(e){addMsg('Il caricamento non è riuscito. Non ho modificato file esistenti.','bot')}
+        mobileFiles.value='';
+      });
 
       document.getElementById('bmoUploadForm').addEventListener('submit',async ev=>{{
         ev.preventDefault();
