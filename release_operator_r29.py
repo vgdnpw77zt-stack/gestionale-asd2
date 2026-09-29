@@ -112,7 +112,14 @@ if not MARKER.exists():
             )
 
         # Dead JS reference generated a 404 on every main-page load.
-        s=re.sub(r"<script src=['\"]/static/demo/demo_wow\.js[^>]*></script>","",s)
+        # core.py builds HTML inside a quoted Python string, so support both escaped and plain quotes.
+        for dead in (
+            "<script src=\\'/static/demo/demo_wow.js?v=a82-hardening-build\\'></script>",
+            "<script src='/static/demo/demo_wow.js?v=a82-hardening-build'></script>",
+            '<script src="/static/demo/demo_wow.js?v=a82-hardening-build"></script>',
+        ):
+            s=s.replace(dead,"")
+        s=re.sub(r"<script src=\\?['\"]/static/demo/demo_wow\.js[^>]*></script>","",s)
         return s
 
     core=patch('asd_app/core.py',patch_core)
