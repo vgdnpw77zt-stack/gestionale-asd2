@@ -32,10 +32,12 @@ COPY release_route_cleanup_r31.py /opt/bodymind/release_route_cleanup_r31.py
 COPY release_operator_r30.py /opt/bodymind/release_operator_r30.py
 COPY release_mu_tutela_r34.py /opt/bodymind/release_mu_tutela_r34.py
 COPY release_mu_tutela_r36.py /opt/bodymind/release_mu_tutela_r36.py
+COPY release_mu_tutela_r37.py /opt/bodymind/release_mu_tutela_r37.py
 COPY operator_bridge_runtime_r36.py /opt/bodymind/operator_bridge_runtime_r36.py
 COPY release_operator_bridge_r36.py /opt/bodymind/release_operator_bridge_r36.py
 COPY release_operator_qa_r32.py /opt/bodymind/release_operator_qa_r32.py
 COPY release_operator_logic_qa_r34.py /opt/bodymind/release_operator_logic_qa_r34.py
+COPY release_operator_logic_qa_r37.py /opt/bodymind/release_operator_logic_qa_r37.py
 COPY release_operator_mobile_r33.py /opt/bodymind/release_operator_mobile_r33.py
 COPY release_cleanup_r2.py /opt/bodymind/release_cleanup_r2.py
 COPY runtime_timeline_inspect_r35.py /opt/bodymind/runtime_timeline_inspect_r35.py
