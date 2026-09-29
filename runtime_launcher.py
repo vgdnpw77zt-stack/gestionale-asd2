@@ -29,6 +29,7 @@ if not (APP / ".BODYMIND_FORCE_PDF_OCR_R21").exists():
     runpy.run_path("/opt/bodymind/release_force_pdf_ocr_r21.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_document_flow_r25.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_document_preview_r26.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_operator_r29.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_cleanup_r2.py", run_name="__main__")
 incoming = pathlib.Path("/data/incoming")
 for name in ("top2.zip", "backup.zip"):
@@ -43,10 +44,6 @@ os.chdir(APP)
 sys.path.insert(0, str(APP))
 from asd_app.core import init_db
 init_db()
-if not (APP / ".BODYMIND_AUDIT_R27_DONE").exists():
-    runpy.run_path("/opt/bodymind/runtime_audit_r27.py", run_name="__main__")
-if not (APP / ".BODYMIND_OPERATOR_INSPECT_R28").exists():
-    runpy.run_path("/opt/bodymind/runtime_operator_inspect_r28.py", run_name="__main__")
 admin_user = os.environ.get("BODYMIND_ADMIN_USER", "").strip()
 admin_password = os.environ.get("BODYMIND_ADMIN_PASSWORD", "")
 admin_password_hash = os.environ.get("BODYMIND_ADMIN_PASSWORD_HASH", "").strip()
