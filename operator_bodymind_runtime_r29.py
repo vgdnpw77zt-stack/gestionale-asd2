@@ -2940,8 +2940,8 @@ def bodymind_operator_home():
               }}).then(()=>refreshCloudStatus(true)).catch(()=>{{}});
             }}
           }};
-          cloudAudio.onplay=()=>{{avatar?.classList.add('speaking');if(voiceStatus)voiceStatus.textContent='Ti sto rispondendo…';if(voiceRecover)voiceRecover.hidden=true;}};
-          cloudAudio.onended=()=>{{avatar?.classList.remove('speaking');if(voiceStatus)voiceStatus.textContent='Tocca il microfono e parlami';try{{URL.revokeObjectURL(url)}}catch(e){{}}}};
+          cloudAudio.onplay=()=>{{avatar?.classList.add('speaking');voiceOrb?.classList.add('speaking');voiceOrb?.classList.remove('listening');if(voiceStatus)voiceStatus.textContent='Ti sto rispondendo…';if(voiceStageOpen)setVoiceStage('Ti rispondo',lastSpeechText,'Quando ho finito puoi continuare a parlarmi.');if(voiceRecover)voiceRecover.hidden=true;}};
+          cloudAudio.onended=()=>{{avatar?.classList.remove('speaking');voiceOrb?.classList.remove('speaking');if(voiceStatus)voiceStatus.textContent='Tocca il microfono e parlami';if(voiceStageOpen)setVoiceStage('Segretario BodyMind','Tocca e continua.','La conversazione resta trascritta nella chat.');try{{URL.revokeObjectURL(url)}}catch(e){{}}}};
           try{{
             await cloudAudio.play();
           }}catch(e){{
@@ -2967,11 +2967,14 @@ def bodymind_operator_home():
         cloudRecording=false;
         if(cloudMaxTimer){{clearTimeout(cloudMaxTimer);cloudMaxTimer=null}}
         if(voiceStatus)voiceStatus.textContent='Trascrivo…';
+        voiceOrb?.classList.remove('listening');
+        if(voiceStageOpen)setVoiceStage('Trascrivo','Un attimo…','Sto trasformando la tua voce in testo.');
         try{{cloudRecorder.stop()}}catch(e){{}}
       }}
 
       async function cloudStartMic(ev){{
         if(ev){{ev.preventDefault();ev.stopImmediatePropagation()}}
+        if(!voiceStageOpen)openVoiceStage();
         if(cloudRecording){{await cloudStopAndTranscribe();return}}
         if(!window.MediaRecorder || !navigator.mediaDevices?.getUserMedia){{
           const t='Questo browser non supporta la registrazione cloud. Usa un browser aggiornato oppure scrivi la richiesta.';
@@ -3000,6 +3003,7 @@ def bodymind_operator_home():
               input.value=String(d.text||'').trim();
               if(!input.value)throw new Error('Trascrizione vuota');
               if(voiceStatus)voiceStatus.textContent='Ho capito. Elaboro…';
+              if(voiceStageOpen)setVoiceStage('Ho capito',input.value,'Ora controllo BodyMind.');
               await ask(input.value);
             }}catch(e){{
               const t=String(e?.message||e||'Trascrizione cloud non disponibile');
@@ -3009,11 +3013,12 @@ def bodymind_operator_home():
           cloudRecorder.start(250);
           cloudRecordingStartedAt=performance.now();
           cloudRecording=true;
-          mic.classList.add('on');avatar.classList.add('listening');
+          mic.classList.add('on');avatar.classList.add('listening');voiceOrb?.classList.add('listening');
           if(voiceStatus)voiceStatus.textContent='Ti ascolto… tocca di nuovo per inviare';
+          if(voiceStageOpen)setVoiceStage('Ti ascolto','Parla normalmente.','Tocca di nuovo l’orb per inviare subito.');
           cloudMaxTimer=setTimeout(()=>{{if(cloudRecording)cloudStopAndTranscribe()}},18000);
         }}catch(e){{
-          cloudRecording=false;mic.classList.remove('on');avatar.classList.remove('listening');
+          cloudRecording=false;mic.classList.remove('on');avatar.classList.remove('listening');voiceOrb?.classList.remove('listening');
           const t=(e?.name==='NotAllowedError'||e?.name==='SecurityError')
             ?'Microfono non autorizzato. Consenti il microfono a BodyMind e riprova.'
             :'Non riesco ad aprire il microfono.';
@@ -3021,6 +3026,9 @@ def bodymind_operator_home():
         }}
       }}
       mic.addEventListener('click',cloudStartMic,true);
+      avatar?.addEventListener('click',cloudStartMic,true);
+      voiceOrb?.addEventListener('click',cloudStartMic,true);
+      voiceOrb?.addEventListener('keydown',ev=>{{if(ev.key==='Enter'||ev.key===' ')cloudStartMic(ev)}});
 
       attach?.addEventListener('click',()=>{{
         const picker=document.createElement('input');
@@ -3036,7 +3044,10 @@ def bodymind_operator_home():
           try{{
             if(!files.length)return;
             const fd=new FormData();files.forEach(f=>fd.append('files',f,f.name));
-            addMsg('Ho ricevuto '+files.length+' file. Li passo all’Autopilot.','bot');
+            fd.append('production_mode','1');
+            const hint=document.getElementById('bmoUploadType')?.value||'';
+            if(hint)fd.append('document_type_hint',hint);
+            addMsg('Ho ricevuto '+files.length+' file. Li analizzo e porto in produzione quelli certi.','bot');
             const r=await fetch('/operatore-bodymind/upload',{{method:'POST',headers:{{'X-CSRFToken':csrf}},body:fd}});
             const data=await r.json();addMsg(data.text||'Analisi completata.','bot',data);speak(data.text||'Analisi completata.');
           }}catch(e){{
@@ -3054,7 +3065,10 @@ def bodymind_operator_home():
         const files=[...document.getElementById('bmoFiles').files,...document.getElementById('bmoFolder').files];
         if(!files.length){{addMsg('Seleziona almeno un file o una cartella.','bot');return}}
         files.forEach(f=>fd.append('files',f,f.webkitRelativePath||f.name));
-        addMsg('Sto passando '+files.length+' file all’Autopilot. Non chiudere questa pagina.','bot');
+        fd.append('production_mode',document.getElementById('bmoProductionMode')?.checked?'1':'0');
+        const declaredType=document.getElementById('bmoUploadType')?.value||'';
+        if(declaredType)fd.append('document_type_hint',declaredType);
+        addMsg('Sto elaborando '+files.length+' file. I match certi verranno portati fino alla produzione e verificati.','bot');
         try{{
           const r=await fetch('/operatore-bodymind/upload',{{method:'POST',headers:{{'X-CSRFToken':csrf}},body:fd}});
           const data=await r.json();
