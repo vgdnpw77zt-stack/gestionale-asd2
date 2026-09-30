@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>BodyMind · Analytics</title>
+<link rel="stylesheet" href="{{ url_for('static',filename='admin.css') }}?v=9">
+</head>
+<body>
+<header class="admin-head">
+  <strong>BodyMind · Analytics</strong>
+  <div>
+    <a href="{{ url_for('admin') }}">Modifica sito</a>
+    <a href="/" target="_blank" rel="noopener">Apri sito</a>
+    <form method="post" action="{{ url_for('admin_logout') }}">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <button class="textbtn">Esci</button>
+    </form>
+  </div>
+</header>
+
+<main class="admin-wrap analytics-wrap">
+  <div class="analytics-toolbar">
+    <div class="range-tabs" aria-label="Periodo analytics">
+      {% for d in [7,30,90,365] %}
+      <a class="{{ 'active' if report.days==d else '' }}" href="{{ url_for('admin_analytics',days=d) }}">{{ d }} giorni</a>
+      {% endfor %}
+    </div>
+    <a class="export-link" href="{{ url_for('admin_analytics_csv',days=report.days) }}">Esporta CSV</a>
+  </div>
+
+  <section class="analytics-intro">
+    <div>
+      <p class="admin-kicker">SOLO AREA AMMINISTRATIVA</p>
+      <h1>Andamento del sito</h1>
+      <p class="hint">Il pubblico continua a vedere solo il contatore “VISITE UNICHE”. I dettagli qui sotto sono protetti dal login admin.</p>
+    </div>
+    <div class="lifetime-box"><span>Visitatori unici storici</span><strong>{{ "{:,}".format(report.lifetime_unique|int).replace(",", ".") }}</strong></div>
+  </section>
+
+  <div class="analytics-kpis">
+    <article><span>Visite</span><strong>{{ report.pageviews }}</strong><small>caricamenti home</small></article>
+    <article><span>Visitatori</span><strong>{{ report.visitors }}</strong><small>pseudonimi unici</small></article>
+    <article><span>Sessioni</span><strong>{{ report.sessions }}</strong><small>sessioni nel periodo</small></article>
+    <article><span>Ritorni</span><strong>{{ report.returning }}</strong><small>visitatori con più sessioni</small></article>
+    <article><span>Bounce</span><strong>{{ report.bounce }}%</strong><small>sessioni non ingaggiate</small></article>
+    <article><span>Durata media</span><strong>{{ report.avg_duration }}s</strong><small>sessioni con uscita rilevata</small></article>
+    <article><span>Scroll medio</span><strong>{{ report.avg_scroll }}%</strong><small>profondità pagina</small></article>
+    <article><span>Azioni</span><strong>{{ report.conversions }}</strong><small>CTA, social, mappe, contatti</small></article>
+  </div>
+
+  <div class="analytics-grid">
+    <section>
+      <h2>Provenienza traffico</h2>
+      <div class="metric-list">
+        {% for x in report.sources %}<div><span>{{ x.name }}</span><strong>{{ x.value }}</strong></div>{% else %}<p class="hint">Nessun dato ancora.</p>{% endfor %}
+      </div>
+    </section>
+
+    <section>
+      <h2>Azioni cliccate</h2>
+      <div class="metric-list">
+        {% for x in report.actions %}<div><span>{{ x.name|replace('_click','')|replace('_',' ')|title }}</span><strong>{{ x.value }}</strong></div>{% else %}<p class="hint">Nessun click registrato.</p>{% endfor %}
+      </div>
+    </section>
+
+    <section>
+      <h2>Sezioni viste</h2>
+      <div class="metric-list">
+        {% for x in report.sections %}<div><span>{{ x.name|replace('_',' ')|title }}</span><strong>{{ x.value }}</strong></div>{% else %}<p class="hint">Nessuna sezione registrata.</p>{% endfor %}
+      </div>
+    </section>
+
+    <section>
+      <h2>Dispositivi</h2>
+      <div class="metric-list">
+        {% for x in report.devices %}<div><span>{{ x.name }}</span><strong>{{ x.value }}</strong></div>{% else %}<p class="hint">Nessun dato.</p>{% endfor %}
+      </div>
+    </section>
+
+    <section>
+      <h2>Browser</h2>
+      <div class="metric-list">
+        {% for x in report.browsers %}<div><span>{{ x.name }}</span><strong>{{ x.value }}</strong></div>{% else %}<p class="hint">Nessun dato.</p>{% endfor %}
+      </div>
+    </section>
+
+    <section>
+      <h2>Lingue</h2>
+      <div class="metric-list">
+        {% for x in report.languages %}<div><span>{{ x.name }}</span><strong>{{ x.value }}</strong></div>{% else %}<p class="hint">Nessun dato.</p>{% endfor %}
+      </div>
+    </section>
+  </div>
+
+  <section>
+    <div class="section-head-row"><h2>Andamento giornaliero</h2><span>ultimi {{ report.days }} giorni</span></div>
+    <div class="table-scroll">
+      <table class="analytics-table">
+        <thead><tr><th>Giorno</th><th>Visite</th><th>Visitatori</th></tr></thead>
+        <tbody>
+        {% for x in report.daily %}<tr><td>{{ x.day }}</td><td>{{ x.pageviews }}</td><td>{{ x.visitors }}</td></tr>{% else %}<tr><td colspan="3">Nessun dato ancora.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  {% if report.campaigns %}
+  <section>
+    <h2>Campagne UTM</h2>
+    <div class="metric-list">
+      {% for x in report.campaigns %}<div><span>{{ x.name }}</span><strong>{{ x.value }}</strong></div>{% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <section>
+    <div class="section-head-row"><h2>Ultime sessioni</h2><span>Nessun IP in chiaro</span></div>
+    <div class="table-scroll">
+      <table class="analytics-table">
+        <thead><tr><th>Ora</th><th>Sorgente</th><th>Device</th><th>Browser</th><th>Lingua</th><th>Durata</th><th>Scroll</th><th>Click</th></tr></thead>
+        <tbody>
+        {% for x in report.recent %}
+        <tr>
+          <td>{{ x.ts }}</td><td>{{ x.source or 'Diretto' }}</td><td>{{ x.device }}</td><td>{{ x.browser }}</td><td>{{ x.lang or '—' }}</td>
+          <td>{{ ((x.duration_ms|int)/1000)|round(1) }}s</td><td>{{ x.scroll_pct }}%</td><td>{{ x.clicks }}</td>
+        </tr>
+        {% else %}<tr><td colspan="8">Nessuna sessione disponibile.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="privacy-box">
+    <h2>Privacy del tracciamento</h2>
+    <p>Gli analytics sono first-party. Non viene salvato l’indirizzo IP in chiaro: viene usato solo un digest pseudonimo per distinguere le visite. Non vengono mostrati dati analytics sul sito pubblico.</p>
+  </section>
+</main>
+</body>
+</html>
