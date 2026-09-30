@@ -16,6 +16,7 @@ from .core import app, db, layout, login_required, current_role, current_usernam
 BRIDGE_VERSION="R38.0"
 PAIR_TTL_MINUTES=10
 ONLINE_SECONDS=90
+PUBLIC_BRIDGE_BASE=(os.environ.get("BODYMIND_PUBLIC_BASE") or "https://app.bodymindaerialstudio.life").rstrip("/")
 
 def _now():
     return datetime.now().replace(microsecond=0)
@@ -87,10 +88,11 @@ def _latest_device(conn):
 
 def _auth_device(conn,touch=True):
     _schema(conn)
-    auth=str(request.headers.get('Authorization') or '')
-    if not auth.lower().startswith('bearer '):
-        return None
-    token=auth.split(' ',1)[1].strip()
+    token=str(request.headers.get('X-BodyMind-Token') or '').strip()
+    if not token:
+        auth=str(request.headers.get('Authorization') or '')
+        if auth.lower().startswith('bearer '):
+            token=auth.split(' ',1)[1].strip()
     if not token:
         return None
     row=conn.execute(
@@ -210,8 +212,8 @@ def bodymind_ai_bridge_setup():
         online=_device_online(device)
     finally:
         conn.close()
-    base=request.url_root.rstrip('/')
-    command=f"""rm -f /tmp/bodymind-ai-r39.sh; curl -fSL -H 'X-BodyMind-Pair: {code}' {base}/bodymind-ai-bridge/install.sh -o /tmp/bodymind-ai-r39.sh; RC=$?; if [ "$RC" -ne 0 ]; then echo "ERRORE download installer ($RC)"; exit "$RC"; fi; TOKEN=$(sed -n 's/^TOKEN="\\(.*\\)"/\\1/p' /tmp/bodymind-ai-r39.sh | head -1); if [ -n "$TOKEN" ]; then curl -fsS -H "Authorization: Bearer $TOKEN" '{base}/bodymind-ai-bridge/diag?stage=downloaded' >/dev/null 2>&1 || true; fi; chmod 700 /tmp/bodymind-ai-r39.sh; /bin/bash /tmp/bodymind-ai-r39.sh; RC=$?; if [ "$RC" -ne 0 ] && [ -n "$TOKEN" ]; then curl -fsS -H "Authorization: Bearer $TOKEN" "{base}/bodymind-ai-bridge/diag?stage=bash_failed_$RC" >/dev/null 2>&1 || true; fi; exit "$RC""""
+    base=PUBLIC_BRIDGE_BASE
+    command=f"rm -f /tmp/bodymind-ai-r39.sh; curl -fSL -H 'X-BodyMind-Pair: {code}' {base}/bodymind-ai-bridge/install.sh -o /tmp/bodymind-ai-r39.sh && chmod 700 /tmp/bodymind-ai-r39.sh && /bin/bash /tmp/bodymind-ai-r39.sh"
     html=f"""
     <main style="max-width:900px;margin:0 auto;padding:24px">
       <h1>BodyMind AI · iMac</h1>
@@ -379,7 +381,7 @@ def bodymind_ai_bridge_result():
 
 @app.route('/bodymind-ai-bridge/install.sh',methods=['GET','POST'])
 def bodymind_ai_bridge_install_script():
-    base=request.url_root.rstrip('/')
+    base=PUBLIC_BRIDGE_BASE
     token=''
     code=str(request.headers.get('X-BodyMind-Pair') or '').strip().upper()
     if code:
@@ -392,7 +394,7 @@ def bodymind_ai_bridge_install_script():
 # BODYMIND_R39_BRIDGE_GET_ONLY_MACHINE_API
 # BODYMIND_R39_BRIDGE_DIAGNOSTIC_CHECKPOINTS
 # BODYMIND_R39_EXPLICIT_INSTALL_FILE
-# BODYMIND_R39_OUTER_BOOTSTRAP_DIAG
+# BODYMIND_R39_CUSTOM_TOKEN_HEADER
 set -u
 
 TOKEN="__TOKEN__"
@@ -407,7 +409,7 @@ mkdir -p "$BASE/logs" "$HOME/Library/LaunchAgents"
 printf '%s' "$TOKEN" > "$BASE/bridge_token"
 chmod 600 "$BASE/bridge_token"
 diag() {
-  curl -fsS -H "Authorization: Bearer $TOKEN" "__BASE__/bodymind-ai-bridge/diag?stage=$1" >/dev/null 2>&1 || true
+  curl -fsS -H "X-BodyMind-Token: $TOKEN" "__BASE__/bodymind-ai-bridge/diag?stage=$1" >/dev/null 2>&1 || true
 }
 diag paired
 echo "[1/5] Abbinamento Railway completato."
@@ -474,7 +476,7 @@ def req(url, method="GET", payload=None, auth=True, timeout=180):
     data=None if payload is None else json.dumps(payload).encode("utf-8")
     headers={"Content-Type":"application/json"}
     if auth:
-        headers["Authorization"]="Bearer "+TOKEN
+        headers["X-BodyMind-Token"]=TOKEN
     r=Request(url,data=data,headers=headers)
     if method not in ("GET","POST"):
         r.get_method=lambda: method
@@ -560,7 +562,7 @@ fi
 diag launchctl_ok
 sleep 2
 
-HEARTBEAT="$(curl -sS -H "Authorization: Bearer $TOKEN" "__BASE__/bodymind-ai-bridge/heartbeat" || true)"
+HEARTBEAT="$(curl -sS -H "X-BodyMind-Token: $TOKEN" "__BASE__/bodymind-ai-bridge/heartbeat" || true)"
 case "$HEARTBEAT" in
   *'"ok":true'*) diag heartbeat_ok ;;
   *)
