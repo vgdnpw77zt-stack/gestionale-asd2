@@ -53,6 +53,7 @@ checks={
     'python27_bridge_compat':'from urllib2 import Request, urlopen' in install_text,
     'local_llama_health':'127.0.0.1:8088/health' in install_text,
     'heartbeat_verification':'/bodymind-ai-bridge/heartbeat' in install_text,
+    'bridge_csrf_safe_get_pairing':'BODYMIND_R39_BRIDGE_CSRF_SAFE_GET_PAIRING' in install_text,
 }
 
 conn=sqlite3.connect(str(DB),timeout=20)
@@ -69,6 +70,13 @@ finally:
 
 checks['business_counts_unchanged']=before==after
 checks['db_integrity']=integrity.lower()=='ok' and fk==0
+# Machine API requests without a browser CSRF token must reach their own auth/validation handlers.
+pair_probe=client.post('/bodymind-ai-bridge/pair',json={})
+heartbeat_probe=client.post('/bodymind-ai-bridge/heartbeat',headers={'Authorization':'Bearer invalid-qa-token'})
+result_probe=client.post('/bodymind-ai-bridge/result',json={'job_id':0},headers={'Authorization':'Bearer invalid-qa-token'})
+checks['pair_not_csrf_blocked']=pair_probe.status_code==400 and 'application/json' in str(pair_probe.content_type)
+checks['heartbeat_not_csrf_blocked']=heartbeat_probe.status_code==401 and 'application/json' in str(heartbeat_probe.content_type)
+checks['result_not_csrf_blocked']=result_probe.status_code==401 and 'application/json' in str(result_probe.content_type)
 failed=[k for k,v in checks.items() if not v]
 print('[operator-experience-r38] checks='+repr(checks),flush=True)
 print('[operator-experience-r38] counts_before='+repr(before)+' counts_after='+repr(after),flush=True)
