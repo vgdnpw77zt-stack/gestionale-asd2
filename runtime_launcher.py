@@ -45,6 +45,7 @@ runpy.run_path("/opt/bodymind/release_cloud_agent_smoke_r45.py", run_name="__mai
 runpy.run_path("/opt/bodymind/release_cloud_agent_smoke_r45b.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_cloud_agent_diag_r45c.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_cloud_credit_smoke_r47.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_secretary_capability_audit_r48.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_experience_r38.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_qa_r32.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_logic_qa_r37.py", run_name="__main__")
