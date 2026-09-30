@@ -40,6 +40,7 @@ home=client.get('/operatore-bodymind')
 body=home.get_data(as_text=True)
 installer=client.get('/bodymind-ai-bridge/install.sh')
 install_text=installer.get_data(as_text=True)
+bridge_text=bridge.read_text(encoding='utf-8',errors='replace')
 checks={
     'home_200':home.status_code==200,
     'operator_r38':'OPERATORE IA · R38.0' in body,
@@ -55,7 +56,7 @@ checks={
     'heartbeat_verification':'/bodymind-ai-bridge/heartbeat' in install_text,
     'bridge_csrf_safe_get_pairing':'BODYMIND_R39_BRIDGE_CSRF_SAFE_GET_PAIRING' in install_text,
     'bridge_diag_checkpoints':'BODYMIND_R39_BRIDGE_DIAGNOSTIC_CHECKPOINTS' in install_text,
-    'explicit_installer_file':'BODYMIND_R39_EXPLICIT_INSTALL_FILE' in install_text and '/tmp/bodymind-ai-r39.sh' in setup_text and '/bin/bash /tmp/bodymind-ai-r39.sh' in setup_text and '| bash' not in setup_text,
+    'explicit_installer_file':'BODYMIND_R39_EXPLICIT_INSTALL_FILE' in install_text and '/tmp/bodymind-ai-r39.sh' in bridge_text and '/bin/bash /tmp/bodymind-ai-r39.sh' in bridge_text and '| bash' not in bridge_text,
 }
 
 conn=sqlite3.connect(str(DB),timeout=20)
