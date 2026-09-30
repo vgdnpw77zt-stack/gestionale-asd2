@@ -4,6 +4,7 @@ import json
 import os
 import re
 import sqlite3
+import hashlib
 import unicodedata
 import uuid
 from datetime import date, datetime, timedelta
@@ -16,7 +17,7 @@ from .core import (
     app, db, layout, login_required, csrf_token, current_username, current_role, e
 )
 
-OPERATOR_VERSION = "R38.0"
+OPERATOR_VERSION = "R40.0-agent-tools"
 PENDING_STATUSES = (
     "needs_manual_match","associato_tipo_da_verificare","richiede_conferma",
     "needs_review","da_verificare","pending",
@@ -206,6 +207,229 @@ def _visible_docs(conn, tid: int):
     return conn.execute(
         "SELECT * FROM documenti WHERE tesserato_id=?"+vis+" ORDER BY id DESC",(tid,)
     ).fetchall()
+
+
+
+def _document_file_candidates(stored: str):
+    raw=str(stored or "").strip()
+    if not raw:
+        return []
+    p=Path(raw)
+    out=[p] if p.is_absolute() else []
+    if not p.is_absolute():
+        for root in (
+            Path("/data/tenants/default/media"),
+            Path("/data/top2_app/media"),
+            Path("/data/top2_app/static"),
+            Path("/data/user_static"),
+        ):
+            out.append(root/p)
+    seen=[]; result=[]
+    for x in out:
+        sx=str(x)
+        if sx not in seen:
+            seen.append(sx); result.append(x)
+    return result
+
+
+def _document_fingerprint(row):
+    filename=str(row["filename"] or "") if "filename" in row.keys() else ""
+    for p in _document_file_candidates(filename):
+        try:
+            if p.is_file():
+                h=hashlib.sha256()
+                with p.open("rb") as fh:
+                    while True:
+                        chunk=fh.read(1024*1024)
+                        if not chunk: break
+                        h.update(chunk)
+                return "sha256:"+h.hexdigest(), str(p)
+        except Exception:
+            pass
+    # Exact same stored path is safe to treat as a duplicate DB reference.
+    if filename:
+        return "path:"+os.path.normpath(filename), filename
+    return "", ""
+
+
+def _duplicate_document_groups(conn, tid=None):
+    if not _table(conn,"documenti"):
+        return []
+    cols=_cols(conn,"documenti")
+    if "id" not in cols or "tesserato_id" not in cols or "filename" not in cols:
+        return []
+    wanted=["id","tesserato_id","filename"]
+    for col in ("original_filename","titolo","categoria","visibile","status","confidence","source","data_caricamento"):
+        if col in cols: wanted.append(col)
+    where=[]
+    vals=[]
+    if "visibile" in cols:
+        where.append("coalesce(visibile,1)=1")
+    if tid:
+        where.append("tesserato_id=?"); vals.append(int(tid))
+    sql="SELECT "+",".join(wanted)+" FROM documenti"
+    if where: sql+=" WHERE "+" AND ".join(where)
+    sql+=" ORDER BY tesserato_id,id"
+    rows=conn.execute(sql,tuple(vals)).fetchall()
+    buckets={}
+    for row in rows:
+        fp,resolved=_document_fingerprint(row)
+        if not fp: continue
+        key=(int(row["tesserato_id"] or 0),fp)
+        buckets.setdefault(key,[]).append((row,resolved))
+    groups=[]
+    for (athlete_id,fp),items in buckets.items():
+        if len(items)<2: continue
+        def rank(item):
+            row=item[0]
+            status=_norm(row["status"]) if "status" in row.keys() else ""
+            verified=1 if status in ("verified","verificato","ok","approved","completo") else 0
+            confidence=int(row["confidence"] or 0) if "confidence" in row.keys() and str(row["confidence"] or "").isdigit() else 0
+            return (verified,confidence,-int(row["id"]))
+        keep=max(items,key=rank)[0]
+        extras=[x[0] for x in items if int(x[0]["id"])!=int(keep["id"])]
+        athlete=conn.execute("SELECT nome,cognome FROM tesserati WHERE id=?",(athlete_id,)).fetchone() if _table(conn,"tesserati") else None
+        name=_athlete_name(athlete) if athlete else ("Tesserato "+str(athlete_id))
+        groups.append({
+            "tesserato_id":athlete_id,
+            "athlete_name":name,
+            "fingerprint":fp,
+            "keep_id":int(keep["id"]),
+            "remove_ids":[int(x["id"]) for x in extras],
+            "filename":str(keep["original_filename"] or keep["filename"] or "") if "original_filename" in keep.keys() else str(keep["filename"] or ""),
+        })
+    return groups
+
+
+def _prepare_duplicate_cleanup(conn, tid=None):
+    groups=_duplicate_document_groups(conn,tid)
+    remove_ids=[i for g in groups for i in g["remove_ids"]]
+    return groups,remove_ids
+
+
+def _agent_tool_catalog(conn):
+    return [
+        {"name":"global_status","description":"Controlla stato generale BodyMind: tesserati, documenti da verificare, certificati, tutele, pagamenti e ricevute.","write":False},
+        {"name":"search_tesserato","description":"Cerca un tesserato per nome o cognome.","write":False},
+        {"name":"inspect_tesserato","description":"Legge dossier, documenti, certificato, tutela, quota e pagamenti di un tesserato.","write":False},
+        {"name":"list_documents","description":"Elenca i documenti visibili di un tesserato.","write":False},
+        {"name":"find_duplicate_documents","description":"Trova documenti duplicati veri nel dossier di uno o di tutti i tesserati usando hash file o stesso path.","write":False},
+        {"name":"cleanup_duplicate_documents","description":"Prepara la rimozione dei record documentali duplicati mantenendo una copia per gruppo; richiede conferma.","write":True},
+        {"name":"list_pending_documents","description":"Conta e riepiloga la coda documenti da verificare.","write":False},
+        {"name":"list_payments","description":"Legge pagamenti di un tesserato oppure il conteggio globale.","write":False},
+        {"name":"set_quota","description":"Prepara la modifica della quota personalizzata di un tesserato; richiede conferma.","write":True},
+        {"name":"register_payment","description":"Prepara un incasso mensile per un tesserato; richiede conferma.","write":True},
+        {"name":"navigate","description":"Apre una sezione del gestionale: tesserati, documenti, quote-incassi, ricevute, operatore.","write":False},
+    ]
+
+
+def _execute_agent_tool(conn, plan, raw_message=""):
+    if not isinstance(plan,dict):
+        return None
+    tool=str(plan.get("tool") or "").strip()
+    args=plan.get("args") if isinstance(plan.get("args"),dict) else {}
+    if not tool or tool in ("none","unknown"):
+        return None
+
+    athlete=None
+    athlete_name=str(args.get("athlete_name") or args.get("name") or "").strip()
+    if athlete_name:
+        athlete,amb=_match_athlete(conn,athlete_name)
+        if amb:
+            names=", ".join(_athlete_name(x) for x in amb[:5])
+            return {"text":"Ho trovato più possibili tesserati: "+names+". Dimmi nome e cognome completi.","mode":"clarify"}
+        if not athlete and tool not in ("global_status","find_duplicate_documents","cleanup_duplicate_documents","list_pending_documents","navigate"):
+            return {"text":"Non trovo un tesserato corrispondente a “"+athlete_name+"”.","mode":"clarify"}
+
+    if tool=="global_status":
+        g=_global_check(conn)
+        return {"text":f"BodyMind: {g['athletes']} tesserati, {g['pending_docs']} documenti da verificare, {len(g['missing_cert'])} certificati senza scadenza, {len(g['minor_issues'])} tutele da ricontrollare, {g['payments']} pagamenti e {g['receipts']} ricevute.","mode":"agent_tool"}
+
+    if tool=="search_tesserato":
+        q=athlete_name or str(args.get("query") or raw_message or "").strip()
+        row,amb=_match_athlete(conn,q)
+        if row:
+            return {"text":"Ho trovato "+_athlete_name(row)+".","mode":"agent_tool","links":_links_for(int(row["id"]))}
+        if amb:
+            return {"text":"Possibili corrispondenze: "+", ".join(_athlete_name(x) for x in amb[:8])+".","mode":"clarify"}
+        return {"text":"Non trovo un tesserato corrispondente.","mode":"agent_tool"}
+
+    if tool=="inspect_tesserato" and athlete:
+        snap=_athlete_snapshot(conn,athlete)
+        return {"text":f"{snap['name']}: {len(snap['docs'])} documenti visibili, {len(snap['mu'])} Moduli Unici riconosciuti, {len(snap['medical_docs'])} documenti medici, {len(snap['payments'])} pagamenti. Scadenza certificato: {snap['cert_expiry'] or 'non registrata'}. Quota: "+(f"€ {float(snap['quota_personalizzata']):.2f}" if snap["quota_personalizzata"] is not None else snap["quota_tipo"])+".","mode":"agent_tool","links":_links_for(snap["tid"])}
+
+    if tool=="list_documents":
+        if not athlete:
+            return {"text":"Dimmi per quale tesserato vuoi vedere i documenti.","mode":"clarify"}
+        docs=_visible_docs(conn,int(athlete["id"]))
+        labels=[]
+        for d in docs[:30]:
+            title=""
+            for k in ("original_filename","titolo","filename"):
+                if k in d.keys() and str(d[k] or "").strip():
+                    title=str(d[k]); break
+            labels.append(title or ("Documento "+str(d["id"])))
+        return {"text":f"Per {_athlete_name(athlete)} trovo {len(docs)} documenti visibili."+((" "+ "; ".join(labels)) if labels else ""),"mode":"agent_tool","links":_links_for(int(athlete["id"]))}
+
+    if tool in ("find_duplicate_documents","cleanup_duplicate_documents"):
+        scope_tid=int(athlete["id"]) if athlete else 0
+        groups,remove_ids=_prepare_duplicate_cleanup(conn,scope_tid or None)
+        if not groups:
+            scope=(" per "+_athlete_name(athlete)) if athlete else ""
+            return {"text":"Non trovo documenti duplicati certi"+scope+". Ho confrontato contenuto file quando disponibile e riferimenti allo stesso file.","mode":"agent_tool","links":_links_for(scope_tid or None)}
+        athlete_count=len(set(g["tesserato_id"] for g in groups))
+        sample="; ".join(g["athlete_name"]+": "+g["filename"] for g in groups[:6])
+        if tool=="find_duplicate_documents":
+            return {"text":f"Ho trovato {len(remove_ids)} record duplicati certi in {len(groups)} gruppi su {athlete_count} tesserati. "+sample,"mode":"agent_tool","links":_links_for(scope_tid or None)}
+        aid=_set_pending_action(conn,"archive_duplicate_documents",{
+            "remove_ids":remove_ids,
+            "groups":groups,
+            "scope_tesserato_id":scope_tid or None,
+        })
+        return {
+            "text":f"Ho trovato {len(remove_ids)} record documentali duplicati certi in {len(groups)} gruppi su {athlete_count} tesserati. Manterrò una copia per gruppo e nasconderò solo i record duplicati; non cancellerò i file fisici. Esempi: {sample}. Confermi?",
+            "mode":"confirm","action_id":aid,"links":_links_for(scope_tid or None)
+        }
+
+    if tool=="list_pending_documents":
+        cnt=_pending_count(conn)
+        return {"text":f"Ci sono {cnt} documenti che richiedono verifica.","mode":"agent_tool","links":[{"label":"Apri Da verificare","href":"/documenti/da-verificare"}]}
+
+    if tool=="list_payments":
+        if athlete:
+            snap=_athlete_snapshot(conn,athlete)
+            total=sum(float(p["importo"] or 0) for p in snap["payments"])
+            return {"text":f"Per {snap['name']} trovo {len(snap['payments'])} pagamenti, totale € {total:.2f}.","mode":"agent_tool","links":_links_for(snap["tid"])}
+        count=int(conn.execute("SELECT COUNT(*) FROM pagamenti").fetchone()[0]) if _table(conn,"pagamenti") else 0
+        return {"text":f"Nel gestionale risultano {count} pagamenti.","mode":"agent_tool","links":[{"label":"Quote & Incassi","href":"/quote-incassi"}]}
+
+    if tool=="set_quota":
+        if not athlete: return {"text":"Dimmi il tesserato per cui vuoi modificare la quota.","mode":"clarify"}
+        try: amount=float(args.get("amount"))
+        except Exception: return {"text":"Mi serve l'importo della nuova quota.","mode":"clarify"}
+        note=str(args.get("note") or "").strip()
+        aid=_set_pending_action(conn,"set_quota",{"tesserato_id":int(athlete["id"]),"amount":amount,"note":note})
+        return {"text":f"Ho preparato la quota di {_athlete_name(athlete)} a € {amount:.2f}. Confermi?","mode":"confirm","action_id":aid,"links":_links_for(int(athlete["id"]))}
+
+    if tool=="register_payment":
+        if not athlete: return {"text":"Dimmi il tesserato del pagamento.","mode":"clarify"}
+        try:
+            month=int(args.get("month")); year=int(args.get("year") or datetime.now().year); amount=float(args.get("amount"))
+        except Exception:
+            return {"text":"Per registrare il pagamento mi servono mese, importo e metodo.","mode":"clarify"}
+        method=str(args.get("method") or "").strip()
+        if not method: return {"text":"Mi serve anche il metodo di pagamento.","mode":"clarify"}
+        aid=_set_pending_action(conn,"register_payment",{"tesserato_id":int(athlete["id"]),"month":month,"year":year,"amount":amount,"method":method,"reference":"","note":str(args.get("note") or "Registrato tramite Operatore BodyMind")})
+        return {"text":f"Ho preparato l’incasso per {_athlete_name(athlete)}: € {amount:.2f}, {month:02d}/{year}, metodo {method}. Confermi?","mode":"confirm","action_id":aid,"links":_links_for(int(athlete["id"]))}
+
+    if tool=="navigate":
+        section=_norm(args.get("section") or "")
+        nav={"tesserati":"/tesserati","documenti":"/documenti","quote incassi":"/quote-incassi","quote":"/quote-incassi","incassi":"/quote-incassi","ricevute":"/ricevute","operatore":"/operatore-bodymind"}
+        href=nav.get(section)
+        if href:
+            return {"text":"Apro "+section+".","mode":"navigation","links":[{"label":"Apri "+section.title(),"href":href}]}
+        return {"text":"Non riconosco quella sezione.","mode":"clarify"}
+    return None
 
 
 def _inbound_for(conn, tid: int):
@@ -524,6 +748,27 @@ def _execute_pending(conn):
             "mode":"action","links":links
         }
 
+    if kind=="archive_duplicate_documents":
+        if current_role()!="admin":
+            return {"text":"Per rimuovere duplicati documentali serve un account amministratore. Non ho modificato nulla.","mode":"warning"}
+        ids=[int(x) for x in (payload.get("remove_ids") or []) if str(x).isdigit()]
+        if not ids:
+            session.pop("bodymind_operator_pending_action",None)
+            return {"text":"Non ci sono record duplicati da rimuovere.","mode":"action"}
+        cols=_cols(conn,"documenti")
+        if "visibile" not in cols:
+            return {"text":"Il dossier non supporta l’archiviazione sicura dei duplicati. Non ho modificato nulla.","mode":"warning"}
+        placeholders=",".join("?" for _ in ids)
+        existing=[int(r[0]) for r in conn.execute("SELECT id FROM documenti WHERE id IN ("+placeholders+") AND coalesce(visibile,1)=1",tuple(ids)).fetchall()]
+        if not existing:
+            session.pop("bodymind_operator_pending_action",None)
+            return {"text":"I duplicati proposti non risultano più visibili. Non ho modificato nulla.","mode":"action"}
+        placeholders=",".join("?" for _ in existing)
+        conn.execute("UPDATE documenti SET visibile=0 WHERE id IN ("+placeholders+")",tuple(existing))
+        conn.execute("UPDATE bodymind_operator_actions SET status='executed',confirmed_by=?,executed_at=? WHERE id=?",(_identity(),datetime.now().isoformat(timespec="seconds"),aid))
+        conn.commit(); session.pop("bodymind_operator_pending_action",None)
+        return {"text":f"Fatto. Ho nascosto {len(existing)} record documentali duplicati, mantenendo una copia per gruppo. I file fisici non sono stati cancellati.","mode":"action","links":[{"label":"Apri Documenti","href":"/documenti"}]}
+
     if kind=="set_quota":
         tid=int(payload["tesserato_id"])
         amount=float(payload["amount"])
@@ -726,6 +971,14 @@ def _answer(conn, text: str):
         names=", ".join(_athlete_name(x) for x in ambiguous[:5])
         return {"text":"Ho trovato più possibili tesserati: "+names+". Dimmi nome e cognome completi.","mode":"clarify"}
 
+    # BODYMIND_R40_AGENT_TOOLS
+    if ("document" in n or "dossier" in n) and any(x in n for x in ("duplicat","doppion")):
+        want_cleanup=any(x in n for x in ("elimina","eliminare","rimuovi","rimuovere","cancella","cancellare","pulisci","pulire"))
+        plan={"tool":"cleanup_duplicate_documents" if want_cleanup else "find_duplicate_documents","args":{}}
+        if athlete: plan["args"]["athlete_name"]=_athlete_name(athlete)
+        out=_execute_agent_tool(conn,plan,raw)
+        if out: return out
+
     if any(x in n for x in ("controlla bodymind","controlla tutto","situazione generale","come siamo messi","stato gestionale","cosa c e da fare","cosa c'è da fare")):
         g=_global_check(conn)
         pieces=[f"Ho controllato BodyMind: {g['athletes']} tesserati e {g['pending_docs']} documenti richiedono verifica."]
@@ -910,7 +1163,7 @@ def _answer(conn, text: str):
 
     if any(x in n for x in ("cosa sai fare","aiutami","help","comandi")):
         return {
-            "text":"Posso parlare con te, riconoscerti per questa sessione, cercare tesserati, verificare Modulo Unico e dossier, controllare certificati e tutela minori, leggere quote e incassi, preparare modifiche di quota chiedendoti conferma, fare un controllo generale BodyMind e ricevere file/cartelle da passare all’Autopilot.",
+            "text":"Posso usare strumenti reali del gestionale: cercare e controllare tesserati, dossier e documenti, trovare e pulire duplicati con conferma, verificare Modulo Unico, certificati e tutela minori, leggere quote e incassi, preparare quote e pagamenti, controllare BodyMind e ricevere file/cartelle per l’Autopilot. Le azioni distruttive richiedono sempre conferma.",
             "mode":"help",
             "links":[{"label":"Da verificare","href":"/documenti/da-verificare"},{"label":"Quote & Incassi","href":"/quote-incassi"}]
         }
