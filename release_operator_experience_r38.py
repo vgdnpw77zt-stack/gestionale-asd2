@@ -48,7 +48,7 @@ operator_text=operator.read_text(encoding='utf-8',errors='replace')
 bridge_text=bridge.read_text(encoding='utf-8',errors='replace')
 checks={
     'home_200':home.status_code==200,
-    'operator_r38':('OPERATORE IA · R40.0-agent-tools' in body) or ('OPERATOR_VERSION = "R40.0-agent-tools"' in operator_text),
+    'operator_r38':('OPERATORE IA · R40.0-agent-tools' in body) or ('OPERATOR_VERSION = "R45.0-cloud-full-agent"' in operator_text) or ('OPERATOR_VERSION = "R40.0-agent-tools"' in operator_text),
     'mobile_compact':'BODYMIND_R38_MOBILE' in body and '.bmo-status .bmo-pill{display:none;}' in body,
     'mobile_layout_fix':'BODYMIND_R39_IPHONE_LAYOUT_V2' in body and 'BODYMIND_R39_IPHONE_FILE_PICKER_DYNAMIC' in body and 'id="bmoMobileFiles"' not in body and "document.createElement('input')" in body and 'width:100vw' not in body and 'font-size:16px' in body and 'bottom:calc(76px + env(safe-area-inset-bottom))' in body,
     'operator_entry_no_overlap':mobile_home.status_code==200 and 'BODYMIND_R39_IPHONE_ENTRY_V2' in mobile_body and 'bottom:calc(86px + env(safe-area-inset-bottom))' in mobile_body and 'width:46px' in mobile_body,
@@ -80,8 +80,11 @@ checks={
     'local_tool_planner_r40':'BODYMIND_R40_LOCAL_TOOL_PLANNER' in bridge_text and 'bridge_plan_tool' in bridge_text and 'Non fingere mai di aver eseguito azioni' in bridge_text,
     'agent_chat_planner_r40':'bridge_plan_tool' in operator_text and 'planner_used=False' in operator_text and 'agent_plan' in operator_text and 'cleanup_duplicate_documents' in operator_text,
     'dedupe_safety_r43':'BODYMIND_R43_NO_AUTODELETE_DOCUMENTS' in operator_text and "status='blocked_safety'" in operator_text and "conn.execute(\"UPDATE documenti SET visibile=0 WHERE id IN (\"+placeholders+\"),tuple(existing))" not in operator_text,
-    'cloud_readonly_agent_r45':'BODYMIND_R45_CLOUD_READONLY_AGENT' in operator_text and '_cloud_plan_tool' in operator_text and '_execute_cloud_readonly_plan' in operator_text and '_CLOUD_READONLY_TOOLS' in operator_text and 'cloud_readonly' in operator_text,
-    'cloud_no_write_tools_r45':'set_quota' not in operator_text[operator_text.find('_CLOUD_READONLY_TOOLS'):operator_text.find('def _cloud_readonly_catalog')] and 'register_payment' not in operator_text[operator_text.find('_CLOUD_READONLY_TOOLS'):operator_text.find('def _cloud_readonly_catalog')],
+    'cloud_full_agent_r45':'BODYMIND_R45_CLOUD_FULL_AGENT' in operator_text and '_cloud_plan_tool' in operator_text and '_execute_full_agent_plan' in operator_text and '_full_agent_tool_catalog' in operator_text,
+    'cloud_total_knowledge_r45':'_bodymind_route_manifest' in operator_text and '_bodymind_function_manifest' in operator_text and '_bodymind_db_manifest' in operator_text and '_capability_search' in operator_text and '_BODYMIND_GLOSSARY' in operator_text,
+    'cloud_write_planning_r45':'propose_route_action' in operator_text and 'generic_route_action' in operator_text and '_propose_generic_route_action' in operator_text and '_resolve_route_action' in operator_text,
+    'cloud_write_confirmation_r45':'_set_pending_action(conn,"generic_route_action"' in operator_text and 'bodymind_operator_pending_action' in operator_text and 'backup_file=backup_dir/' in operator_text,
+    'cloud_generic_safety_r45':'_GENERIC_DESTRUCTIVE_HINTS' in operator_text and 'send_mail' in operator_text and 'stripe' in operator_text and 'shutil.rmtree' in operator_text and 'blocked_safety' in operator_text,
 }
 
 conn=sqlite3.connect(str(DB),timeout=20)
