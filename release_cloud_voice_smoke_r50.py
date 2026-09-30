@@ -5,12 +5,12 @@ from io import BytesIO
 import json, os, re, sys
 
 APP=Path('/data/top2_app')
-MARKER=APP/'.BODYMIND_CLOUD_VOICE_SMOKE_R50'
+MARKER=APP/'.BODYMIND_CLOUD_VOICE_SMOKE_R50B'
 if not APP.joinpath('.TOP2_OFFICIAL').exists():
     raise SystemExit('TOP2_OFFICIAL marker missing')
 
 if MARKER.exists():
-    print('[cloud-voice-r50-smoke] already attempted '+MARKER.read_text(encoding='utf-8',errors='replace')[:1800],flush=True)
+    print('[cloud-voice-r50b-smoke] already attempted '+MARKER.read_text(encoding='utf-8',errors='replace')[:1800],flush=True)
 else:
     outcome={
         'ok':False,
@@ -26,6 +26,7 @@ else:
         if str(APP) not in sys.path:
             sys.path.insert(0,str(APP))
         from asd_app.core import app
+        import asd_app.routes_operator_bodymind  # register operator cloud voice routes
         with app.test_client() as client:
             with client.session_transaction() as s:
                 s['logged']=True
