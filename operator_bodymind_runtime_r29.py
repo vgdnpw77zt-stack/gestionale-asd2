@@ -2367,6 +2367,15 @@ def bodymind_operator_home():
       const voiceStatus=document.getElementById('bmoVoiceStatus');
       const voiceRecover=document.getElementById('bmoVoiceRecover');
       const attach=document.getElementById('bmoAttach');
+      const voiceStage=document.getElementById('bmoVoiceStage');
+      const voiceStageClose=document.getElementById('bmoVoiceStageClose');
+      const voiceOrb=document.getElementById('bmoVoiceOrb');
+      const voiceStageState=document.getElementById('bmoVoiceStageState');
+      const voiceStageText=document.getElementById('bmoVoiceStageText');
+      const voiceStageHint=document.getElementById('bmoVoiceStageHint');
+      const smtpModal=document.getElementById('bmoSmtpModal');
+      const smtpStatus=document.getElementById('bmoSmtpStatus');
+      let voiceStageOpen=false;
       let listening=false, recognition=null, recognitionWatchdog=null, micStream=null, audioContext=null, analyser=null, meterRAF=null;
       let ttsPrimed=false, ttsUtterance=null, ttsRetryTimer=null, ttsSequence=0, lastSpeechText='';
       let ttsVoice=null, ttsVoices=[];
@@ -2377,6 +2386,77 @@ def bodymind_operator_home():
       // BODYMIND_R39_IOS_WEBKIT27_V5
       // BODYMIND_R39_IOS_VOICE_STABLE_V6
       // BODYMIND_R39_IOS_MIC_PRIME_V7
+      function setVoiceStage(state,text,hint=''){{
+        if(voiceStageState)voiceStageState.textContent=String(state||'Segretario BodyMind');
+        if(voiceStageText && text!==undefined)voiceStageText.textContent=String(text||'');
+        if(voiceStageHint && hint)voiceStageHint.textContent=String(hint);
+      }}
+      function openVoiceStage(){{
+        voiceStageOpen=true;
+        if(voiceStage)voiceStage.hidden=false;
+        document.documentElement.style.overflow='hidden';
+        setVoiceStage('Segretario BodyMind','Tocca e parlami.','La conversazione viene trascritta anche nella chat.');
+      }}
+      function closeVoiceStage(){{
+        voiceStageOpen=false;
+        if(voiceStage)voiceStage.hidden=true;
+        document.documentElement.style.overflow='';
+      }}
+      async function openSmtpSetup(){{
+        if(!smtpModal)return;
+        smtpModal.hidden=false;
+        if(smtpStatus)smtpStatus.textContent='Carico configurazione…';
+        try{{
+          const r=await fetch('/operatore-bodymind/secure/smtp',{{headers:{{'Cache-Control':'no-cache'}}}});
+          const d=await r.json();
+          const s=d.smtp||{{}};
+          document.getElementById('bmoSmtpProvider').value=s.provider||'gmail';
+          document.getElementById('bmoSmtpHost').value=s.host||'smtp.gmail.com';
+          document.getElementById('bmoSmtpPort').value=String(s.port||587);
+          document.getElementById('bmoSmtpSecurity').value=s.security||'starttls';
+          document.getElementById('bmoSmtpFromName').value=s.from_name||'BodyMind Aerial Studio';
+          if(smtpStatus)smtpStatus.textContent=s.configured
+            ?('Configurato per '+(s.username||'utente')+(s.last_test_ok?' · test riuscito':' · da ritestare'))
+            :'Non ancora configurato.';
+        }}catch(e){{if(smtpStatus)smtpStatus.textContent='Non riesco a leggere lo stato SMTP.'}}
+      }}
+      function closeSmtpSetup(){{if(smtpModal)smtpModal.hidden=true}}
+      voiceStageClose?.addEventListener('click',closeVoiceStage);
+      document.getElementById('bmoSmtpCancel')?.addEventListener('click',closeSmtpSetup);
+      document.getElementById('bmoSmtpProvider')?.addEventListener('change',ev=>{{
+        if(ev.target.value==='gmail'){{
+          document.getElementById('bmoSmtpHost').value='smtp.gmail.com';
+          document.getElementById('bmoSmtpPort').value='587';
+          document.getElementById('bmoSmtpSecurity').value='starttls';
+        }}
+      }});
+      document.getElementById('bmoSmtpSave')?.addEventListener('click',async()=>{{
+        const btn=document.getElementById('bmoSmtpSave');if(btn)btn.disabled=true;
+        if(smtpStatus)smtpStatus.textContent='Salvo cifrato e provo la connessione…';
+        try{{
+          const payload={{
+            provider:document.getElementById('bmoSmtpProvider').value,
+            host:document.getElementById('bmoSmtpHost').value,
+            port:Number(document.getElementById('bmoSmtpPort').value||0),
+            security:document.getElementById('bmoSmtpSecurity').value,
+            from_name:document.getElementById('bmoSmtpFromName').value,
+            username:document.getElementById('bmoSmtpUser').value,
+            password:document.getElementById('bmoSmtpPassword').value
+          }};
+          const r=await fetch('/operatore-bodymind/secure/smtp',{{
+            method:'POST',headers:{{'Content-Type':'application/json','X-CSRFToken':csrf}},body:JSON.stringify(payload)
+          }});
+          const d=await r.json();
+          if(smtpStatus)smtpStatus.textContent=d.text||'Operazione completata.';
+          if(r.ok){{
+            document.getElementById('bmoSmtpPassword').value='';
+            addMsg('SMTP configurato e verificato.','bot',d);
+            setTimeout(closeSmtpSetup,900);
+          }}
+        }}catch(e){{if(smtpStatus)smtpStatus.textContent='Errore durante la configurazione SMTP.'}}
+        finally{{if(btn)btn.disabled=false}}
+      }});
+
       function voiceDiag(stage,extra={{}}){{
         try{{
           fetch('/operatore-bodymind/voice-diag',{{
