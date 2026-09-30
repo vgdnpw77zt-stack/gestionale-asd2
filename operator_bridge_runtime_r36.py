@@ -211,7 +211,7 @@ def bodymind_ai_bridge_setup():
     finally:
         conn.close()
     base=request.url_root.rstrip('/')
-    command=f"rm -f /tmp/bodymind-ai-r39.sh; curl -fSL -H 'X-BodyMind-Pair: {code}' {base}/bodymind-ai-bridge/install.sh -o /tmp/bodymind-ai-r39.sh && chmod 700 /tmp/bodymind-ai-r39.sh && /bin/bash /tmp/bodymind-ai-r39.sh"
+    command=f"""rm -f /tmp/bodymind-ai-r39.sh; curl -fSL -H 'X-BodyMind-Pair: {code}' {base}/bodymind-ai-bridge/install.sh -o /tmp/bodymind-ai-r39.sh; RC=$?; if [ "$RC" -ne 0 ]; then echo "ERRORE download installer ($RC)"; exit "$RC"; fi; TOKEN=$(sed -n 's/^TOKEN="\\(.*\\)"/\\1/p' /tmp/bodymind-ai-r39.sh | head -1); if [ -n "$TOKEN" ]; then curl -fsS -H "Authorization: Bearer $TOKEN" '{base}/bodymind-ai-bridge/diag?stage=downloaded' >/dev/null 2>&1 || true; fi; chmod 700 /tmp/bodymind-ai-r39.sh; /bin/bash /tmp/bodymind-ai-r39.sh; RC=$?; if [ "$RC" -ne 0 ] && [ -n "$TOKEN" ]; then curl -fsS -H "Authorization: Bearer $TOKEN" "{base}/bodymind-ai-bridge/diag?stage=bash_failed_$RC" >/dev/null 2>&1 || true; fi; exit "$RC""""
     html=f"""
     <main style="max-width:900px;margin:0 auto;padding:24px">
       <h1>BodyMind AI · iMac</h1>
@@ -392,6 +392,7 @@ def bodymind_ai_bridge_install_script():
 # BODYMIND_R39_BRIDGE_GET_ONLY_MACHINE_API
 # BODYMIND_R39_BRIDGE_DIAGNOSTIC_CHECKPOINTS
 # BODYMIND_R39_EXPLICIT_INSTALL_FILE
+# BODYMIND_R39_OUTER_BOOTSTRAP_DIAG
 set -u
 
 TOKEN="__TOKEN__"
