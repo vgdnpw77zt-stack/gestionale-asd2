@@ -58,6 +58,7 @@ checks={
     'bridge_diag_checkpoints':'BODYMIND_R39_BRIDGE_DIAGNOSTIC_CHECKPOINTS' in install_text,
     'explicit_installer_file':'BODYMIND_R39_EXPLICIT_INSTALL_FILE' in install_text and '/tmp/bodymind-ai-r39.sh' in bridge_text and '/bin/bash /tmp/bodymind-ai-r39.sh' in bridge_text and '| bash' not in bridge_text,
     'custom_token_header':'BODYMIND_R39_CUSTOM_TOKEN_HEADER' in install_text and 'X-BodyMind-Token' in install_text and 'https://app.bodymindaerialstudio.life' in bridge_text,
+    'curl_remote_transport':'BODYMIND_R39_CURL_REMOTE_TRANSPORT' in install_text and '/usr/bin/curl' in install_text,
 }
 
 conn=sqlite3.connect(str(DB),timeout=20)
