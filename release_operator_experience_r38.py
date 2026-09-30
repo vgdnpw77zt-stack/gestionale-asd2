@@ -43,7 +43,7 @@ operator_text=operator.read_text(encoding='utf-8',errors='replace')
 app_text=(APP/'app.py').read_text(encoding='utf-8',errors='replace')
 checks={
     'home_200':home.status_code==200,
-    'operator_r38':('OPERATOR_VERSION = "R48.1-secretary-ops"' in operator_text) or ('OPERATOR_VERSION = "R47.0-cloud-native-secretary"' in operator_text),
+    'operator_r38':('OPERATOR_VERSION = "R49.0-chat-secretary"' in operator_text) or ('OPERATOR_VERSION = "R48.1-secretary-ops"' in operator_text),
     'mobile_compact':'BODYMIND_R38_MOBILE' in body and '.bmo-status .bmo-pill{display:none;}' in body,
     'mobile_layout_fix':'BODYMIND_R39_IPHONE_LAYOUT_V2' in body and 'BODYMIND_R39_IPHONE_FILE_PICKER_DYNAMIC' in body and 'id="bmoMobileFiles"' not in body and "document.createElement('input')" in body and 'width:100vw' not in body and 'font-size:16px' in body and 'bottom:calc(76px + env(safe-area-inset-bottom))' in body,
     'operator_entry_no_overlap':mobile_home.status_code==200 and 'BODYMIND_R39_IPHONE_ENTRY_V2' in mobile_body and 'bottom:calc(86px + env(safe-area-inset-bottom))' in mobile_body and 'width:46px' in mobile_body,
@@ -57,6 +57,9 @@ checks={
     'ios_sr_recreate_v4':'BODYMIND_R39_IOS_SR_RECREATE_V4' in body and 'recognition=buildRecognition()' in body and "localStorage.getItem(TTS_KEY)==='1')ttsPrimed=true" not in body,
     'family_logo_bodymind':family.status_code==200 and 'https://bodymindaerialstudio.life/seed-media/logo?v=9' in family_body and '/bodymind-media/logo' not in family_body,
     'cloud_native_ui_r46':'IA Cloud ·' in body and 'IA iMac:' not in body and 'BODYMIND_R46_CLOUD_NATIVE_VOICE' in body,
+    'chat_secretary_ui_r49':'BODYMIND_R49_CHATGPT_STYLE_SECRETARY' in operator_text and 'Segreteria BodyMind' in body and '/bodymind-media/logo' in body and 'Messaggio a Segreteria BodyMind' in body,
+    'chat_history_r49':'initialHistory' in operator_text and 'bodymind_operator_messages' in operator_text and "speaker IN ('user','assistant')" in operator_text,
+    'new_chat_r49':'/operatore-bodymind/new-chat' in operator_text and 'bmoNewChat' in body and 'bodymind_operator_conversation' in operator_text,
     'agent_tools_r40':'BODYMIND_R40_AGENT_TOOLS' in operator_text and '_agent_tool_catalog' in operator_text and '_execute_agent_tool' in operator_text and 'archive_duplicate_documents' in operator_text and '_duplicate_document_groups' in operator_text,
     'agent_chat_planner_r40':'BODYMIND_R46_CLOUD_NATIVE_SECRETARY' in operator_text and 'bridge_plan_tool' not in operator_text and '_cloud_plan_tool' in operator_text and 'cleanup_duplicate_documents' in operator_text,
     'dedupe_safety_r43':'BODYMIND_R43_NO_AUTODELETE_DOCUMENTS' in operator_text and "status='blocked_safety'" in operator_text and "conn.execute(\"UPDATE documenti SET visibile=0 WHERE id IN (\"+placeholders+\"),tuple(existing))" not in operator_text,
@@ -107,4 +110,4 @@ print('[operator-experience-r38] checks='+repr(checks),flush=True)
 print('[operator-experience-r38] counts_before='+repr(before)+' counts_after='+repr(after),flush=True)
 if failed:
     raise RuntimeError('R38 operator experience QA failed '+repr(failed))
-print('[operator-experience-r38-selftest] PASS R48 operational-secretary cloud-native data-safe db-ok',flush=True)
+print('[operator-experience-r38-selftest] PASS R49 chat-secretary cloud-native data-safe db-ok',flush=True)
