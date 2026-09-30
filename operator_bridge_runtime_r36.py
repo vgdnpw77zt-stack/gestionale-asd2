@@ -256,7 +256,7 @@ def bodymind_ai_bridge_pair():
             """INSERT INTO bodymind_ai_bridge_devices
                (device_id,device_name,token_hash,active,paired_at,last_seen_at)
                VALUES(?,?,?,?,?,?)""",
-            (device_id,device_name,_hash(token),1,now,now)
+            (device_id,device_name,_hash(token),1,now,None)
         )
         conn.commit()
         return jsonify({'ok':True,'device_id':device_id,'token':token,'version':BRIDGE_VERSION})
@@ -362,9 +362,24 @@ CODE="$1"
 BASE="$HOME/BodyMindAI"
 mkdir -p "$BASE/logs" "$HOME/Library/LaunchAgents"
 
-echo "[1/5] Verifico llama-server locale..."
+echo "[1/5] Abbino questo Mac a BodyMind..."
+PAIR_JSON="$(curl -sS -X POST "__BASE__/bodymind-ai-bridge/pair" \
+  -H "Content-Type: application/json" \
+  -d "{\"code\":\"$CODE\",\"device_name\":\"iMac BodyMind\"}" || true)"
+TOKEN="$(printf '%s' "$PAIR_JSON" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')"
+if [ -z "$TOKEN" ]; then
+  echo "ERRORE: abbinamento non riuscito."
+  echo "$PAIR_JSON"
+  echo "Genera un nuovo codice dalla pagina IA iMac e riprova."
+  exit 1
+fi
+printf '%s' "$TOKEN" > "$BASE/bridge_token"
+chmod 600 "$BASE/bridge_token"
+echo "[1/5] Abbinamento Railway completato."
+
+echo "[2/5] Verifico llama-server locale..."
 if ! curl -fsS "http://127.0.0.1:8088/health" >/tmp/bodymind_ai_health.$$ 2>&1; then
-  echo "ERRORE: llama-server non risponde su 127.0.0.1:8088."
+  echo "ERRORE: abbinamento riuscito, ma llama-server non risponde su 127.0.0.1:8088."
   rm -f /tmp/bodymind_ai_health.$$
   exit 1
 fi
@@ -376,23 +391,10 @@ if [ -z "$PYBIN" ]; then
   PYBIN="$(command -v python 2>/dev/null || true)"
 fi
 if [ -z "$PYBIN" ]; then
-  echo "ERRORE: Python non trovato. Su macOS High Sierra va bene anche /usr/bin/python 2.7."
+  echo "ERRORE: abbinamento riuscito, ma Python non è stato trovato."
   exit 1
 fi
-echo "[2/5] Python: $PYBIN"
-
-PAIR_PAYLOAD="$(printf '%s' "$CODE" | "$PYBIN" -c 'import json,sys; code=sys.stdin.read().strip(); sys.stdout.write(json.dumps({"code":code,"device_name":"iMac BodyMind"}))')"
-PAIR_JSON="$(curl -sS -X POST "__BASE__/bodymind-ai-bridge/pair" -H "Content-Type: application/json" -d "$PAIR_PAYLOAD")"
-TOKEN="$(printf '%s' "$PAIR_JSON" | "$PYBIN" -c 'import json,sys; d=json.load(sys.stdin); sys.stdout.write(d.get("token","") or "")' 2>/dev/null || true)"
-if [ -z "$TOKEN" ]; then
-  echo "ERRORE: abbinamento non riuscito."
-  echo "$PAIR_JSON"
-  echo "Genera un nuovo codice dalla pagina IA iMac e riprova."
-  exit 1
-fi
-printf '%s' "$TOKEN" > "$BASE/bridge_token"
-chmod 600 "$BASE/bridge_token"
-echo "[3/5] Abbinamento Railway completato."
+echo "[3/5] Python: $PYBIN"
 
 cat > "$BASE/bodymind-bridge.py" <<'PY'
 from __future__ import print_function
