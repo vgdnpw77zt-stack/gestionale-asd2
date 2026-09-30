@@ -1067,13 +1067,14 @@ def bodymind_operator_home():
       .bmo-link{{padding:7px 8px;border-radius:10px;font-size:10px;}}
       .bmo-compose{{position:fixed;left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));bottom:calc(76px + env(safe-area-inset-bottom));z-index:999;display:grid;grid-template-columns:42px 36px minmax(0,1fr) 42px;gap:5px;align-items:center;width:auto;max-width:none;box-sizing:border-box;overflow:hidden;padding:7px;border:1px solid rgba(148,163,184,.16);border-radius:18px;background:rgba(5,12,23,.985);box-shadow:0 12px 32px rgba(0,0,0,.34);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);}}
       .bmo-compose>*{{min-width:0;box-sizing:border-box;}}
-      .bmo-compose #bmoMobileFiles,.bmo-compose #bmoMobileFiles[hidden]{{display:none!important;position:absolute!important;width:0!important;height:0!important;overflow:hidden!important;pointer-events:none!important;}}
+      .bmo-compose>button,.bmo-compose>textarea{{margin:0!important;}}
+      /* BODYMIND_R39_IPHONE_FILE_PICKER_DYNAMIC */
       .bmo-mic{{min-width:42px;width:42px;height:42px;border-radius:50%;font-size:20px;background:linear-gradient(145deg,#8d285e,#d43a7d);box-shadow:none;touch-action:manipulation;}}
       .bmo-mic.on{{box-shadow:0 0 0 4px rgba(244,90,157,.12);}}
       .bmo-attach{{display:block;min-width:36px;width:36px;height:36px;align-self:center;border-radius:11px;font-size:16px;padding:0;touch-action:manipulation;}}
       .bmo-compose textarea{{width:100%;min-width:0;max-width:100%;min-height:42px;height:42px;max-height:84px;resize:none;padding:10px 10px;align-self:center;border-radius:12px;font-size:16px;line-height:20px;box-sizing:border-box;overflow-y:auto;}}
-      .bmo-send{{min-width:42px;width:42px;height:42px;padding:0;align-self:center;font-size:0;border-radius:12px;touch-action:manipulation;}}
-      .bmo-send::after{{content:"➤";font-size:17px;line-height:1;}}
+      .bmo-send{{min-width:42px!important;width:42px!important;max-width:42px!important;height:42px!important;padding:0!important;align-self:center;font-size:17px!important;line-height:1!important;border-radius:12px;touch-action:manipulation;white-space:nowrap!important;overflow:hidden!important;}}
+      .bmo-send::before,.bmo-send::after{{content:none!important;display:none!important;}}
     }}
     </style>
 
@@ -1108,9 +1109,8 @@ def bodymind_operator_home():
           <div class="bmo-compose">
             <button class="bmo-mic" id="bmoMic" type="button" title="Parla" aria-label="Parla con Operatore BodyMind">🎙️</button>
             <button class="bmo-attach" id="bmoAttach" type="button" title="Allega documento" aria-label="Allega documento">📎</button>
-            <input id="bmoMobileFiles" type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.docx" hidden>
-            <textarea id="bmoInput" placeholder="Scrivi oppure tocca il microfono e parla…" autocomplete="off"></textarea>
-            <button class="bmo-send" id="bmoSend" type="button">Invia</button>
+            <textarea id="bmoInput" placeholder="Scrivi…" autocomplete="off"></textarea>
+            <button class="bmo-send" id="bmoSend" type="button" aria-label="Invia" title="Invia">➤</button>
           </div>
         </div>
 
@@ -1150,7 +1150,6 @@ def bodymind_operator_home():
       const voice=document.getElementById('bmoVoice');
       const voiceStatus=document.getElementById('bmoVoiceStatus');
       const attach=document.getElementById('bmoAttach');
-      const mobileFiles=document.getElementById('bmoMobileFiles');
       let listening=false, recognition=null, micStream=null, audioContext=null, analyser=null, meterRAF=null;
       let ttsPrimed=false, ttsUtterance=null, ttsRetryTimer=null;
       const TTS_KEY='bodymind_tts_enabled_v2';
@@ -1308,14 +1307,30 @@ def bodymind_operator_home():
         }});
       }}
 
-      attach?.addEventListener('click',()=>mobileFiles?.click());
-      mobileFiles?.addEventListener('change',async()=>{{
-        const files=[...(mobileFiles.files||[])];if(!files.length)return;
-        const fd=new FormData();files.forEach(f=>fd.append('files',f,f.name));
-        addMsg('Ho ricevuto '+files.length+' file. Li passo all’Autopilot.','bot');
-        try{{const r=await fetch('/operatore-bodymind/upload',{{method:'POST',headers:{{'X-CSRFToken':csrf}},body:fd}});const data=await r.json();addMsg(data.text||'Analisi completata.','bot',data);speak(data.text||'Analisi completata.')}}
-        catch(e){{addMsg('Il caricamento non è riuscito. Non ho modificato file esistenti.','bot')}}
-        mobileFiles.value='';
+      attach?.addEventListener('click',()=>{{
+        const picker=document.createElement('input');
+        picker.type='file';
+        picker.multiple=true;
+        picker.accept='.pdf,.png,.jpg,.jpeg,.webp,.docx';
+        picker.setAttribute('aria-hidden','true');
+        picker.tabIndex=-1;
+        picker.style.setProperty('display','none','important');
+        document.body.appendChild(picker);
+        picker.addEventListener('change',async()=>{{
+          const files=[...(picker.files||[])];
+          try{{
+            if(!files.length)return;
+            const fd=new FormData();files.forEach(f=>fd.append('files',f,f.name));
+            addMsg('Ho ricevuto '+files.length+' file. Li passo all’Autopilot.','bot');
+            const r=await fetch('/operatore-bodymind/upload',{{method:'POST',headers:{{'X-CSRFToken':csrf}},body:fd}});
+            const data=await r.json();addMsg(data.text||'Analisi completata.','bot',data);speak(data.text||'Analisi completata.');
+          }}catch(e){{
+            addMsg('Il caricamento non è riuscito. Non ho modificato file esistenti.','bot');
+          }}finally{{
+            try{{picker.remove()}}catch(e){{}}
+          }}
+        }},{{once:true}});
+        picker.click();
       }});
 
       document.getElementById('bmoUploadForm').addEventListener('submit',async ev=>{{
