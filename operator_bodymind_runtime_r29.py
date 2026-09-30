@@ -2062,6 +2062,36 @@ def bodymind_operator_home():
     @keyframes bmoTalk{{to{{height:23px;transform:scaleY(.96)}}}}
     .bmo-voice-status{{min-height:18px;margin-top:2px;font-size:11px;color:#a8bbcf;text-align:center}}
     .bmo-attach{{display:none;min-width:48px;height:48px;border-radius:15px;border:1px solid rgba(255,255,255,.12);background:#172b40;color:#fff;font-size:18px;cursor:pointer}}
+    /* BODYMIND_R48_SECRETARY_VOICE_STAGE */
+    .bmo-avatar{{cursor:pointer}}
+    .bmo-voice-stage{{position:fixed;inset:0;z-index:5000;background:radial-gradient(circle at 50% 38%,rgba(175,42,105,.28),transparent 30%),linear-gradient(180deg,#07111f 0%,#100b16 100%);display:grid;place-items:center;padding:24px;box-sizing:border-box}}
+    .bmo-voice-stage[hidden]{{display:none!important}}
+    .bmo-voice-stage-inner{{width:min(760px,96vw);min-height:min(760px,88dvh);display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;text-align:center}}
+    .bmo-voice-close{{position:absolute;right:0;top:0;width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);color:#fff;font-size:22px;cursor:pointer}}
+    .bmo-voice-orb{{width:clamp(190px,38vw,330px);height:clamp(190px,38vw,330px);border-radius:50%;display:grid;place-items:center;position:relative;background:radial-gradient(circle at 45% 40%,rgba(244,90,157,.34),rgba(15,24,40,.92) 58%,#07111f 76%);box-shadow:0 0 0 1px rgba(255,255,255,.08),0 0 95px rgba(244,90,157,.22);cursor:pointer;transition:.2s}}
+    .bmo-voice-orb:before,.bmo-voice-orb:after{{content:"";position:absolute;border-radius:50%;inset:-18px;border:1px solid rgba(244,90,157,.22);opacity:.55}}
+    .bmo-voice-orb:after{{inset:-38px;border-color:rgba(56,189,248,.16)}}
+    .bmo-voice-orb.listening:before,.bmo-voice-orb.speaking:before{{animation:bmoVoiceRing 1.15s infinite}}
+    .bmo-voice-orb.listening:after,.bmo-voice-orb.speaking:after{{animation:bmoVoiceRing 1.15s .35s infinite}}
+    .bmo-voice-orb img{{width:58%;height:58%;object-fit:contain;filter:drop-shadow(0 18px 28px rgba(0,0,0,.42))}}
+    @keyframes bmoVoiceRing{{50%{{transform:scale(1.055);opacity:.18}}}}
+    .bmo-voice-stage-state{{margin-top:52px;font-size:14px;text-transform:uppercase;letter-spacing:.13em;font-weight:900;color:#f4a9ca}}
+    .bmo-voice-stage-text{{margin-top:15px;max-width:680px;min-height:74px;font-size:clamp(22px,4vw,38px);line-height:1.18;font-weight:750;color:#fff}}
+    .bmo-voice-stage-hint{{margin-top:18px;color:#9db0c5;font-size:13px}}
+    .bmo-voice-bars{{display:flex;gap:6px;height:36px;align-items:center;margin-top:18px;opacity:.45}}
+    .bmo-voice-bars i{{display:block;width:5px;height:8px;border-radius:10px;background:#f05b9d}}
+    .bmo-voice-orb.listening~.bmo-voice-bars,.bmo-voice-orb.speaking~.bmo-voice-bars{{opacity:1}}
+    .bmo-voice-orb.listening~.bmo-voice-bars i,.bmo-voice-orb.speaking~.bmo-voice-bars i{{animation:bmoTalk .55s ease-in-out infinite alternate}}
+    .bmo-voice-bars i:nth-child(2){{animation-delay:.08s}}.bmo-voice-bars i:nth-child(3){{animation-delay:.16s}}.bmo-voice-bars i:nth-child(4){{animation-delay:.24s}}.bmo-voice-bars i:nth-child(5){{animation-delay:.12s}}
+    .bmo-secure-modal{{position:fixed;inset:0;z-index:5100;background:rgba(2,8,18,.82);display:grid;place-items:center;padding:18px}}
+    .bmo-secure-modal[hidden]{{display:none!important}}
+    .bmo-secure-card{{width:min(560px,96vw);background:#081729;border:1px solid rgba(125,211,252,.20);border-radius:24px;padding:22px;box-shadow:0 28px 90px rgba(0,0,0,.55)}}
+    .bmo-secure-card h2{{margin:0 0 7px}}.bmo-secure-card p{{color:#9fb1c8;font-size:12px;line-height:1.5}}
+    .bmo-secure-grid{{display:grid;grid-template-columns:1fr 1fr;gap:10px}}.bmo-secure-grid label{{font-size:11px;color:#b8c7d9;display:grid;gap:5px}}
+    .bmo-secure-grid input,.bmo-secure-grid select{{width:100%;box-sizing:border-box;border-radius:12px;border:1px solid rgba(125,211,252,.18);background:#06111f;color:#fff;padding:11px}}
+    .bmo-secure-wide{{grid-column:1/-1}}.bmo-secure-actions{{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}}
+    @media(max-width:640px){{.bmo-secure-grid{{grid-template-columns:1fr}}.bmo-secure-wide{{grid-column:auto}}.bmo-voice-stage{{padding:12px}}.bmo-voice-stage-inner{{min-height:88dvh}}}}
+
     /* BODYMIND_R38_MOBILE: compact, chat-first, no dashboard-card clutter on iPhone */
     /* BODYMIND_R39_IPHONE_LAYOUT_V2 */
     @media(max-width:800px){{
