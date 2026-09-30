@@ -39,6 +39,7 @@ COPY release_operator_dedupe_rollback_r43.py /opt/bodymind/release_operator_dedu
 COPY release_document_conflict_audit_r44.py /opt/bodymind/release_document_conflict_audit_r44.py
 COPY release_cloud_native_r47.py /opt/bodymind/release_cloud_native_r47.py
 COPY release_secretary_capability_audit_r48.py /opt/bodymind/release_secretary_capability_audit_r48.py
+COPY release_cloud_credit_smoke_r47.py /opt/bodymind/release_cloud_credit_smoke_r47.py
 COPY release_operator_experience_r38.py /opt/bodymind/release_operator_experience_r38.py
 COPY release_operator_qa_r32.py /opt/bodymind/release_operator_qa_r32.py
 COPY release_operator_logic_qa_r34.py /opt/bodymind/release_operator_logic_qa_r34.py
