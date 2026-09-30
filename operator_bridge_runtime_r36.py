@@ -85,7 +85,7 @@ def _latest_device(conn):
         "SELECT * FROM bodymind_ai_bridge_devices WHERE active=1 ORDER BY coalesce(last_seen_at,paired_at) DESC,id DESC LIMIT 1"
     ).fetchone()
 
-def _auth_device(conn):
+def _auth_device(conn,touch=True):
     _schema(conn)
     auth=str(request.headers.get('Authorization') or '')
     if not auth.lower().startswith('bearer '):
@@ -97,7 +97,7 @@ def _auth_device(conn):
         "SELECT * FROM bodymind_ai_bridge_devices WHERE token_hash=? AND active=1 LIMIT 1",
         (_hash(token),)
     ).fetchone()
-    if row:
+    if row and touch:
         conn.execute("UPDATE bodymind_ai_bridge_devices SET last_seen_at=? WHERE id=?",(_iso(),int(row['id'])))
         conn.commit()
         row=conn.execute("SELECT * FROM bodymind_ai_bridge_devices WHERE id=?",(int(row['id']),)).fetchone()
@@ -282,6 +282,19 @@ def bodymind_ai_bridge_pair():
         return jsonify({'ok':False,'error':error}), (400 if error=='pair code missing' else 403)
     return jsonify({'ok':True,'device_id':device_id,'token':token,'version':BRIDGE_VERSION})
 
+@app.get('/bodymind-ai-bridge/diag')
+def bodymind_ai_bridge_diag():
+    stage=str(request.args.get('stage') or '').strip()[:80]
+    conn=db()
+    try:
+        device=_auth_device(conn,touch=False)
+        if not device:
+            return jsonify({'ok':False}),401
+        print('[bridge-diag] device='+str(device['device_id'])+' stage='+stage,flush=True)
+        return jsonify({'ok':True,'stage':stage})
+    finally:
+        conn.close()
+
 @app.get('/bodymind-ai-bridge/heartbeat')
 def bodymind_ai_bridge_heartbeat():
     conn=db()
@@ -377,6 +390,7 @@ def bodymind_ai_bridge_install_script():
 # BodyMind AI Bridge R39 - macOS High Sierra compatible
 # BODYMIND_R39_BRIDGE_CSRF_SAFE_GET_PAIRING
 # BODYMIND_R39_BRIDGE_GET_ONLY_MACHINE_API
+# BODYMIND_R39_BRIDGE_DIAGNOSTIC_CHECKPOINTS
 set -u
 
 TOKEN="__TOKEN__"
@@ -390,25 +404,50 @@ BASE="$HOME/BodyMindAI"
 mkdir -p "$BASE/logs" "$HOME/Library/LaunchAgents"
 printf '%s' "$TOKEN" > "$BASE/bridge_token"
 chmod 600 "$BASE/bridge_token"
+diag() {
+  curl -fsS -H "Authorization: Bearer $TOKEN" "__BASE__/bodymind-ai-bridge/diag?stage=$1" >/dev/null 2>&1 || true
+}
+diag paired
 echo "[1/5] Abbinamento Railway completato."
 
 echo "[2/5] Verifico llama-server locale..."
-if ! curl -fsS "http://127.0.0.1:8088/health" >/tmp/bodymind_ai_health.$$ 2>&1; then
+if ! curl -fsS "http://127.0.0.1:8088/health" >/tmp/bodymind_ai_health.$ 2>&1; then
+  echo "llama-server non risponde: provo a riavviare BodyMind AI..."
+  AI_PLIST="$HOME/Library/LaunchAgents/com.bodymind.ai.plist"
+  if [ -f "$AI_PLIST" ]; then
+    launchctl load "$AI_PLIST" >/dev/null 2>&1 || true
+    launchctl start com.bodymind.ai >/dev/null 2>&1 || true
+    i=0
+    while [ "$i" -lt 12 ]; do
+      sleep 1
+      if curl -fsS "http://127.0.0.1:8088/health" >/tmp/bodymind_ai_health.$ 2>&1; then
+        break
+      fi
+      i=$((i+1))
+    done
+  fi
+fi
+if ! curl -fsS "http://127.0.0.1:8088/health" >/tmp/bodymind_ai_health.$ 2>&1; then
+  diag llama_failed
   echo "ERRORE: abbinamento riuscito, ma llama-server non risponde su 127.0.0.1:8088."
-  rm -f /tmp/bodymind_ai_health.$$
+  echo "Controlla il servizio BodyMind AI locale sul Mac."
+  rm -f /tmp/bodymind_ai_health.$
   exit 1
 fi
-cat /tmp/bodymind_ai_health.$$
-rm -f /tmp/bodymind_ai_health.$$
+diag llama_ok
+cat /tmp/bodymind_ai_health.$
+rm -f /tmp/bodymind_ai_health.$
 
 PYBIN="$(command -v python3 2>/dev/null || true)"
 if [ -z "$PYBIN" ]; then
   PYBIN="$(command -v python 2>/dev/null || true)"
 fi
 if [ -z "$PYBIN" ]; then
+  diag python_failed
   echo "ERRORE: abbinamento riuscito, ma Python non è stato trovato."
   exit 1
 fi
+diag python_ok
 echo "[3/5] Python: $PYBIN"
 
 cat > "$BASE/bodymind-bridge.py" <<'PY'
@@ -512,15 +551,18 @@ EOF
 echo "[4/5] Avvio bridge..."
 launchctl unload "$HOME/Library/LaunchAgents/com.bodymind.ai.bridge.plist" 2>/dev/null || true
 if ! launchctl load "$HOME/Library/LaunchAgents/com.bodymind.ai.bridge.plist"; then
+  diag launchctl_failed
   echo "ERRORE: launchctl non ha caricato com.bodymind.ai.bridge."
   exit 1
 fi
+diag launchctl_ok
 sleep 2
 
 HEARTBEAT="$(curl -sS -H "Authorization: Bearer $TOKEN" "__BASE__/bodymind-ai-bridge/heartbeat" || true)"
 case "$HEARTBEAT" in
-  *'"ok":true'*) ;;
+  *'"ok":true'*) diag heartbeat_ok ;;
   *)
+    diag heartbeat_failed
     echo "ERRORE: il bridge è installato ma Railway non accetta il token."
     echo "$HEARTBEAT"
     exit 1
