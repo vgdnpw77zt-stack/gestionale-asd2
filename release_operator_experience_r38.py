@@ -85,6 +85,7 @@ checks={
     'cloud_write_planning_r45':'propose_route_action' in operator_text and 'generic_route_action' in operator_text and '_propose_generic_route_action' in operator_text and '_resolve_route_action' in operator_text,
     'cloud_write_confirmation_r45':'_set_pending_action(conn,"generic_route_action"' in operator_text and 'bodymind_operator_pending_action' in operator_text and 'backup_file=backup_dir/' in operator_text,
     'cloud_generic_safety_r45':'_GENERIC_DESTRUCTIVE_HINTS' in operator_text and 'send_mail' in operator_text and 'stripe' in operator_text and 'shutil.rmtree' in operator_text and 'blocked_safety' in operator_text,
+    'cloud_agent_loop_r45':'for agent_step in range(3)' in operator_text and '_compact_agent_observation' in operator_text and 'Risultati strumenti già usati in questa richiesta' in operator_text,
 }
 
 conn=sqlite3.connect(str(DB),timeout=20)
