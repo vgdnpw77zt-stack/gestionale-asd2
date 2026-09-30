@@ -80,6 +80,8 @@ checks={
     'local_tool_planner_r40':'BODYMIND_R40_LOCAL_TOOL_PLANNER' in bridge_text and 'bridge_plan_tool' in bridge_text and 'Non fingere mai di aver eseguito azioni' in bridge_text,
     'agent_chat_planner_r40':'bridge_plan_tool' in operator_text and 'planner_used=False' in operator_text and 'agent_plan' in operator_text and 'cleanup_duplicate_documents' in operator_text,
     'dedupe_safety_r43':'BODYMIND_R43_NO_AUTODELETE_DOCUMENTS' in operator_text and "status='blocked_safety'" in operator_text and "conn.execute(\"UPDATE documenti SET visibile=0 WHERE id IN (\"+placeholders+\"),tuple(existing))" not in operator_text,
+    'cloud_readonly_agent_r45':'BODYMIND_R45_CLOUD_READONLY_AGENT' in operator_text and '_cloud_plan_tool' in operator_text and '_execute_cloud_readonly_plan' in operator_text and '_CLOUD_READONLY_TOOLS' in operator_text and 'cloud_readonly' in operator_text,
+    'cloud_no_write_tools_r45':'set_quota' not in operator_text[operator_text.find('_CLOUD_READONLY_TOOLS'):operator_text.find('def _cloud_readonly_catalog')] and 'register_payment' not in operator_text[operator_text.find('_CLOUD_READONLY_TOOLS'):operator_text.find('def _cloud_readonly_catalog')],
 }
 
 conn=sqlite3.connect(str(DB),timeout=20)
