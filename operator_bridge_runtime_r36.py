@@ -211,7 +211,7 @@ def bodymind_ai_bridge_setup():
     finally:
         conn.close()
     base=request.url_root.rstrip('/')
-    command=f"curl -fsSL -X POST -H 'X-BodyMind-Pair: {code}' {base}/bodymind-ai-bridge/install.sh | bash"
+    command=f"curl -fsSL -H 'X-BodyMind-Pair: {code}' {base}/bodymind-ai-bridge/install.sh | bash"
     html=f"""
     <main style="max-width:900px;margin:0 auto;padding:24px">
       <h1>BodyMind AI · iMac</h1>
@@ -229,6 +229,15 @@ def bodymind_ai_bridge_setup():
     </main>
     """
     return layout(html)
+
+def _csrf_exempt(view):
+    try:
+        ext=app.extensions.get('csrf') if hasattr(app,'extensions') else None
+        if ext is not None and hasattr(ext,'exempt'):
+            return ext.exempt(view)
+    except Exception:
+        pass
+    return view
 
 def _consume_pair_code(code, device_name='iMac BodyMind'):
     code=str(code or '').strip().upper()
@@ -262,6 +271,7 @@ def _consume_pair_code(code, device_name='iMac BodyMind'):
         conn.close()
 
 @app.post('/bodymind-ai-bridge/pair')
+@_csrf_exempt
 def bodymind_ai_bridge_pair():
     payload=request.get_json(silent=True) or {}
     device_id,token,error=_consume_pair_code(
@@ -272,7 +282,8 @@ def bodymind_ai_bridge_pair():
         return jsonify({'ok':False,'error':error}), (400 if error=='pair code missing' else 403)
     return jsonify({'ok':True,'device_id':device_id,'token':token,'version':BRIDGE_VERSION})
 
-@app.post('/bodymind-ai-bridge/heartbeat')
+@app.route('/bodymind-ai-bridge/heartbeat',methods=['GET','POST'])
+@_csrf_exempt
 def bodymind_ai_bridge_heartbeat():
     conn=db()
     try:
@@ -323,6 +334,7 @@ def bodymind_ai_bridge_poll():
         conn.close()
 
 @app.post('/bodymind-ai-bridge/result')
+@_csrf_exempt
 def bodymind_ai_bridge_result():
     payload=request.get_json(silent=True) or {}
     job_id=int(payload.get('job_id') or 0)
@@ -359,13 +371,14 @@ def bodymind_ai_bridge_result():
 def bodymind_ai_bridge_install_script():
     base=request.url_root.rstrip('/')
     token=''
-    if request.method=='POST':
-        code=str(request.headers.get('X-BodyMind-Pair') or '').strip().upper()
+    code=str(request.headers.get('X-BodyMind-Pair') or '').strip().upper()
+    if code:
         device_id,token,error=_consume_pair_code(code,'iMac BodyMind')
         if error:
-            return Response('ERRORE: '+error+'\n',status=(400 if error=='pair code missing' else 403),mimetype='text/plain')
+            return Response('ERRORE: '+error+'\n',status=403,mimetype='text/plain')
     script=r'''#!/bin/bash
 # BodyMind AI Bridge R39 - macOS High Sierra compatible
+# BODYMIND_R39_BRIDGE_CSRF_SAFE_GET_PAIRING
 set -u
 
 TOKEN="__TOKEN__"
