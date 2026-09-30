@@ -875,16 +875,82 @@ def _recent_operator_context(conn, limit: int = 8):
     except Exception:
         return []
 
-# BODYMIND_R45_CLOUD_READONLY_AGENT
-_CLOUD_READONLY_TOOLS={
-    "global_status","search_tesserato","inspect_tesserato","list_documents",
-    "find_duplicate_documents","cleanup_duplicate_documents",
-    "list_pending_documents","list_payments","navigate"
+# BODYMIND_R45_CLOUD_FULL_AGENT
+_BODYMIND_GLOSSARY={
+    "tesserato":["iscritto","atleta","allievo","socio","persona"],
+    "certificato_medico":["cm","certificato","certificato medico"],
+    "modulo_unico_tesseramento":["mu","modulo unico","modulo iscrizione","domanda iscrizione"],
+    "documenti":["dossier","archivio atleta","archivio documentale"],
+    "pagamenti":["incassi","quote pagate","mensilita","mensilità"],
+    "ricevute":["quietanze","ricevuta"],
 }
 
-def _cloud_readonly_catalog(conn):
-    return [x for x in _agent_tool_catalog(conn)
-            if not bool(x.get("write")) and str(x.get("name") or "") in _CLOUD_READONLY_TOOLS]
+def _bodymind_route_manifest():
+    """Runtime inventory of the real Flask application. No hard-coded route count."""
+    out=[]
+    try:
+        for rule in sorted(app.url_map.iter_rules(),key=lambda r:(str(r.rule),str(r.endpoint))):
+            methods=sorted(m for m in (rule.methods or set()) if m not in ("HEAD","OPTIONS"))
+            endpoint=str(rule.endpoint or "")
+            fn=app.view_functions.get(endpoint)
+            module=str(getattr(fn,"__module__","") or "") if fn else ""
+            name=str(getattr(fn,"__name__","") or "") if fn else ""
+            doc=(str(getattr(fn,"__doc__","") or "").strip().replace("\n"," "))[:400] if fn else ""
+            out.append({"route":str(rule.rule),"methods":methods,"endpoint":endpoint,"module":module,"function":name,"doc":doc})
+    except Exception:
+        pass
+    return out
+
+def _bodymind_db_manifest(conn):
+    """Detailed SQLite schema inventory, read-only."""
+    out=[]
+    try:
+        tables=[str(r[0]) for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").fetchall()]
+        for table in tables:
+            columns=[]
+            for r in conn.execute("PRAGMA table_info("+table+")").fetchall():
+                columns.append({"name":str(r[1]),"type":str(r[2] or ""),"notnull":bool(r[3]),"pk":bool(r[5])})
+            try: count=int(conn.execute("SELECT COUNT(*) FROM "+table).fetchone()[0])
+            except Exception: count=None
+            out.append({"table":table,"count":count,"columns":columns})
+    except Exception:
+        pass
+    return out
+
+def _capability_search(conn, query):
+    q=_norm(query)
+    tokens=[x for x in re.split(r"[^a-z0-9à-ÿ_]+",q) if len(x)>=2]
+    expanded=set(tokens)
+    for canonical,aliases in _BODYMIND_GLOSSARY.items():
+        values=[canonical]+aliases
+        if any(_norm(v) in q for v in values):
+            expanded.add(canonical)
+            for v in aliases:
+                expanded.update(x for x in re.split(r"[^a-z0-9à-ÿ_]+",_norm(v)) if len(x)>=2)
+    scored=[]
+    for row in _bodymind_route_manifest():
+        hay=_norm(" ".join([row["route"],row["endpoint"],row["module"],row["function"],row["doc"]]))
+        score=sum(3 if t in hay else 0 for t in expanded)
+        if score:
+            scored.append((score,row))
+    scored.sort(key=lambda x:(-x[0],x[1]["route"]))
+    tables=[]
+    for row in _bodymind_db_manifest(conn):
+        hay=_norm(row["table"]+" "+" ".join(c["name"] for c in row["columns"]))
+        score=sum(2 if t in hay else 0 for t in expanded)
+        if score:
+            tables.append((score,row))
+    tables.sort(key=lambda x:(-x[0],x[1]["table"]))
+    return {"routes":[x[1] for x in scored[:30]],"tables":[x[1] for x in tables[:15]],"terms":sorted(expanded)}
+
+def _full_agent_tool_catalog(conn):
+    base=list(_agent_tool_catalog(conn))
+    base.extend([
+        {"name":"discover_capabilities","description":"Cerca in tutte le route, funzioni Flask e tabelle del gestionale per capire dove vive una funzione o concetto. Conosce sinonimi BodyMind.","write":False},
+        {"name":"inspect_system_map","description":"Legge la mappa completa del gestionale: numero route, moduli, tabelle e aree funzionali.","write":False},
+        {"name":"inspect_db_schema","description":"Legge schema, colonne e conteggi delle tabelle del database BodyMind.","write":False},
+    ])
+    return base
 
 def _parse_cloud_plan(text):
     raw=str(text or "").strip()
@@ -906,7 +972,7 @@ def _parse_cloud_plan(text):
             return None
 
 def _cloud_plan_tool(conn, question: str):
-    """High-capability cloud planner. Strictly read-only in R45."""
+    """Cloud-first planner with full BodyMind knowledge and server-enforced action safety."""
     key=str(os.environ.get("OPENAI_API_KEY") or "").strip()
     if not key:
         return None
@@ -915,25 +981,33 @@ def _cloud_plan_tool(conn, question: str):
     try:
         from openai import OpenAI
         model=str(os.environ.get("BODYMIND_AI_MODEL") or "gpt-6-luna").strip()
-        catalog=_cloud_readonly_catalog(conn)
-        compact=[{"name":x["name"],"description":x["description"]} for x in catalog]
-        recent=_recent_operator_context(conn,4)
+        catalog=_full_agent_tool_catalog(conn)
+        compact=[{"name":x["name"],"description":x["description"],"write":bool(x.get("write"))} for x in catalog]
+        manifest=_bodymind_route_manifest()
+        dbm=_bodymind_db_manifest(conn)
+        overview={
+            "routes":len(manifest),
+            "modules":sorted(set(x["module"] for x in manifest if x["module"]))[:120],
+            "tables":[{"name":x["table"],"count":x["count"]} for x in dbm],
+            "glossary":_BODYMIND_GLOSSARY,
+        }
+        recent=_recent_operator_context(conn,6)
         prompt=(
-            "Sei il planner dell'Operatore BodyMind. Devi capire il linguaggio naturale italiano e scegliere, se utile, "
-            "UNO strumento READ-ONLY realmente disponibile. Non simulare operazioni e non inventare dati. "
-            "Vocabolario BodyMind: tesserato, iscritto, atleta, allievo e socio possono indicare la stessa persona nel gestionale; "
-            "CM significa certificato medico; MU significa Modulo Unico / modulo unico tesseramento; "
-            "dossier e archivio atleta indicano i documenti del tesserato; incassi e pagamenti sono concetti collegati. "
-            "Una richiesta di cancellare, modificare, registrare o correggere NON può essere eseguita in R45: "
-            "puoi scegliere soltanto uno strumento di analisi/lettura che aiuti a capire cosa andrebbe fatto. "
-            "Per presunti duplicati devi considerarli candidati, mai equivalenti solo per nome/path/hash: tipi documentali diversi "
-            "(es. CM e MU) sono documenti diversi e richiedono lettura/verifica umana. "
-            "Restituisci SOLO JSON valido nella forma "
-            "{\"tool\":\"nome_o_none\",\"args\":{},\"answer\":\"\"}. "
-            "Se nessun tool serve, usa tool=none e scrivi una risposta naturale breve in answer. "
-            "Strumenti disponibili: "+json.dumps(compact,ensure_ascii=False)+
+            "Sei il cervello operativo dell'Operatore BodyMind. Devi capire italiano naturale, sinonimi, abbreviazioni e contesto. "
+            "Tesserato/iscritto/atleta/allievo/socio possono riferirsi alla stessa anagrafica; CM=certificato medico; "
+            "MU=Modulo Unico; dossier=archivio documentale del tesserato. "
+            "Conosci la struttura reale del gestionale attraverso la mappa runtime allegata. "
+            "Scegli UNO strumento reale. Se una richiesta richiede prima di scoprire dove si trova una funzione, usa discover_capabilities. "
+            "Puoi scegliere strumenti write quando la richiesta lo richiede, ma NON dichiarare mai eseguita una modifica: "
+            "il server presenterà anteprima/conferma e applicherà permessi, validazioni e audit. "
+            "Per cancellazioni, fusioni, duplicati o operazioni distruttive devi essere conservativo: documenti di tipo diverso "
+            "(es. certificato medico e Modulo Unico) non sono duplicati; se c'è ambiguità scegli analisi/revisione, non cancellazione. "
+            "Restituisci SOLO JSON valido: {\"tool\":\"nome_o_none\",\"args\":{},\"answer\":\"\"}. "
+            "Tool=none solo se è pura conversazione o se nessuno strumento disponibile copre ancora l'azione. "
+            "Catalogo strumenti: "+json.dumps(compact,ensure_ascii=False)+
+            "\nMappa sistema: "+json.dumps(overview,ensure_ascii=False)[:18000]+
             "\nContesto recente: "+json.dumps(recent,ensure_ascii=False)+
-            "\nRichiesta utente: "+str(question or "")[:6000]
+            "\nRichiesta utente: "+str(question or "")[:7000]
         )
         client=OpenAI(api_key=key)
         resp=client.responses.create(model=model,input=prompt)
@@ -943,7 +1017,7 @@ def _cloud_plan_tool(conn, question: str):
         tool=str(plan.get("tool") or "").strip()
         allowed={x["name"] for x in catalog}
         if tool not in allowed and tool not in ("none","unknown",""):
-            return {"tool":"none","args":{},"answer":"Quella richiesta richiede un'azione che in modalità test non posso ancora eseguire. Posso però analizzare i dati e preparare una proposta."}
+            return {"tool":"discover_capabilities","args":{"query":str(question or "")},"answer":""}
         if not isinstance(plan.get("args"),dict):
             plan["args"]={}
         return plan
@@ -954,24 +1028,33 @@ def _cloud_plan_tool(conn, question: str):
             pass
         return None
 
-def _execute_cloud_readonly_plan(conn, plan, raw_message=""):
+def _execute_full_agent_plan(conn, plan, raw_message=""):
     if not isinstance(plan,dict):
         return None
     tool=str(plan.get("tool") or "").strip()
+    args=plan.get("args") if isinstance(plan.get("args"),dict) else {}
     if tool in ("","none","unknown"):
         return None
-    if tool not in _CLOUD_READONLY_TOOLS:
-        return {"text":"Modalità cloud test: questa azione non è autorizzata. Non ho modificato nulla.","mode":"warning"}
-    catalog={x["name"]:x for x in _cloud_readonly_catalog(conn)}
-    if tool not in catalog or bool(catalog[tool].get("write")):
-        return {"text":"Modalità cloud test: il server ha bloccato un'azione non read-only. Non ho modificato nulla.","mode":"warning"}
+    if tool=="discover_capabilities":
+        q=str(args.get("query") or raw_message or "")
+        found=_capability_search(conn,q)
+        routes=found["routes"]
+        tables=found["tables"]
+        rtxt="; ".join((x["methods"][0] if x["methods"] else "GET")+" "+x["route"]+" → "+x["function"] for x in routes[:10])
+        ttxt=", ".join(x["table"] for x in tables[:10])
+        return {"text":"Ho cercato nel gestionale reale. Route pertinenti: "+(rtxt or "nessuna corrispondenza forte")+". Tabelle pertinenti: "+(ttxt or "nessuna")+".","mode":"cloud_tool","cloud_ai":True,"agent_plan":tool,"capabilities":found}
+    if tool=="inspect_system_map":
+        routes=_bodymind_route_manifest(); dbm=_bodymind_db_manifest(conn)
+        mods=sorted(set(x["module"] for x in routes if x["module"]))
+        return {"text":f"Mappa BodyMind: {len(routes)} route runtime, {len(mods)} moduli Flask e {len(dbm)} tabelle dati. Posso cercare una funzione specifica e collegarla agli strumenti operativi.","mode":"cloud_tool","cloud_ai":True,"agent_plan":tool}
+    if tool=="inspect_db_schema":
+        dbm=_bodymind_db_manifest(conn)
+        return {"text":f"Schema BodyMind letto: {len(dbm)} tabelle. Posso cercare campi e relazioni per nome o funzione.","mode":"cloud_tool","cloud_ai":True,"agent_plan":tool,"schema":dbm[:40]}
     result=_execute_agent_tool(conn,plan,raw_message)
     if result:
         result["cloud_ai"]=True
-        result["cloud_readonly"]=True
         result["agent_plan"]=tool
-        if result.get("mode")=="confirm":
-            return {"text":"Modalità cloud test: ho analizzato la richiesta ma non preparo né eseguo modifiche. Non ho cambiato nulla.","mode":"warning","cloud_ai":True,"cloud_readonly":True}
+        # _execute_agent_tool only prepares writes; actual execution remains in the existing confirmed-action path.
     return result
 
 
@@ -2022,13 +2105,13 @@ def bodymind_operator_chat():
         _log(conn,"user",message)
         result=_answer(conn,message)
         planner_used=False
-        # R45: cloud intelligence gets first shot on free-form requests, but only with READ-ONLY tools.
+        # R45: cloud intelligence gets first shot on free-form requests and selects real BodyMind tools.
         if str(result.get("mode") or "")=="fallback":
             try:
                 plan=_cloud_plan_tool(conn,message)
                 if plan:
                     planner_used=True
-                    tool_result=_execute_cloud_readonly_plan(conn,plan,message)
+                    tool_result=_execute_full_agent_plan(conn,plan,message)
                     if tool_result:
                         result=tool_result
                     elif str(plan.get("tool") or "") in ("none","unknown","") and str(plan.get("answer") or "").strip():
@@ -2037,7 +2120,7 @@ def bodymind_operator_chat():
                             "mode":"cloud_ai",
                             "allow_device_ai":False,
                             "cloud_ai":True,
-                            "cloud_readonly":True,
+                            
                             "agent_plan":"none",
                         }
             except Exception as cloud_planner_exc:
@@ -2046,7 +2129,7 @@ def bodymind_operator_chat():
                 except Exception:
                     pass
 
-        # Local Mac/Qwen is now fallback only, never the primary planner when cloud succeeds.
+        # Local Mac/Qwen remains fallback only when cloud planning is unavailable.
         if not planner_used and str(result.get("mode") or "")=="fallback":
             try:
                 from .routes_operator_bridge import bridge_plan_tool
@@ -2055,10 +2138,10 @@ def bodymind_operator_chat():
                 if plan:
                     planner_used=True
                     tool=str(plan.get("tool") or "")
-                    if tool and tool not in _CLOUD_READONLY_TOOLS and tool not in ("none","unknown"):
+                    if tool and tool not in {x["name"] for x in _full_agent_tool_catalog(conn)} and tool not in ("none","unknown"):
                         result={"text":"Il fallback locale ha proposto un'azione non autorizzata. Non ho modificato nulla.","mode":"warning"}
                     else:
-                        tool_result=_execute_cloud_readonly_plan(conn,plan,message)
+                        tool_result=_execute_full_agent_plan(conn,plan,message)
                         if tool_result:
                             result=tool_result
                             result["local_ai"]=True
@@ -2080,7 +2163,7 @@ def bodymind_operator_chat():
         if not planner_used and str(result.get("mode") or "")=="fallback":
             cloud=_cloud_operator_answer(conn,message,athlete=None)
             if cloud:
-                result={"text":cloud,"mode":"cloud_ai","allow_device_ai":False,"cloud_ai":True,"cloud_readonly":True}
+                result={"text":cloud,"mode":"cloud_ai","allow_device_ai":False,"cloud_ai":True,}
 
         if not planner_used and str(result.get("mode") or "")=="fallback":
             try:
