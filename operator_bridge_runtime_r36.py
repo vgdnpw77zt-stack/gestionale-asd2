@@ -282,8 +282,7 @@ def bodymind_ai_bridge_pair():
         return jsonify({'ok':False,'error':error}), (400 if error=='pair code missing' else 403)
     return jsonify({'ok':True,'device_id':device_id,'token':token,'version':BRIDGE_VERSION})
 
-@app.route('/bodymind-ai-bridge/heartbeat',methods=['GET','POST'])
-@_csrf_exempt
+@app.get('/bodymind-ai-bridge/heartbeat')
 def bodymind_ai_bridge_heartbeat():
     conn=db()
     try:
@@ -333,13 +332,11 @@ def bodymind_ai_bridge_poll():
     finally:
         conn.close()
 
-@app.post('/bodymind-ai-bridge/result')
-@_csrf_exempt
+@app.get('/bodymind-ai-bridge/result')
 def bodymind_ai_bridge_result():
-    payload=request.get_json(silent=True) or {}
-    job_id=int(payload.get('job_id') or 0)
-    text=str(payload.get('text') or '').strip()
-    error=str(payload.get('error') or '').strip()
+    job_id=int(request.args.get('job_id') or 0)
+    text=str(request.args.get('text') or '').strip()
+    error=str(request.args.get('error') or '').strip()
     conn=db()
     try:
         device=_auth_device(conn)
@@ -379,6 +376,7 @@ def bodymind_ai_bridge_install_script():
     script=r'''#!/bin/bash
 # BodyMind AI Bridge R39 - macOS High Sierra compatible
 # BODYMIND_R39_BRIDGE_CSRF_SAFE_GET_PAIRING
+# BODYMIND_R39_BRIDGE_GET_ONLY_MACHINE_API
 set -u
 
 TOKEN="__TOKEN__"
@@ -421,8 +419,10 @@ import os
 import time
 try:
     from urllib.request import Request, urlopen
+    from urllib.parse import urlencode
 except ImportError:
     from urllib2 import Request, urlopen
+    from urllib import urlencode
 
 BASE_URL="__BASE__"
 ROOT=os.path.expanduser("~/BodyMindAI")
@@ -471,10 +471,12 @@ while True:
             text=((ans.get("choices") or [{}])[0].get("message") or {}).get("content","").strip()
             if not text:
                 raise RuntimeError("llama-server non ha restituito testo")
-            req(BASE_URL+"/bodymind-ai-bridge/result","POST",{"job_id":jid,"text":text},timeout=30)
+            qs=urlencode({"job_id":jid,"text":text})
+            req(BASE_URL+"/bodymind-ai-bridge/result?"+qs,"GET",timeout=30)
         except Exception as exc:
             try:
-                req(BASE_URL+"/bodymind-ai-bridge/result","POST",{"job_id":jid,"error":repr(exc)},timeout=30)
+                qs=urlencode({"job_id":jid,"error":repr(exc)[:1000]})
+                req(BASE_URL+"/bodymind-ai-bridge/result?"+qs,"GET",timeout=30)
             except Exception:
                 pass
             time.sleep(3)
