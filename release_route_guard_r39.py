@@ -23,13 +23,10 @@ required = {
     ("/operatore-bodymind", "GET"),
     ("/operatore-bodymind/chat", "POST"),
     ("/operatore-bodymind/upload", "POST"),
-    ("/operatore-bodymind/bridge/status", "GET"),
-    ("/operatore-bodymind/bridge/setup", "GET"),
-    ("/bodymind-ai-bridge/pair", "POST"),
-    ("/bodymind-ai-bridge/heartbeat", "GET"),
-    ("/bodymind-ai-bridge/poll", "GET"),
-    ("/bodymind-ai-bridge/result", "GET"),
-    ("/bodymind-ai-bridge/install.sh", "GET"),
+    ("/operatore-bodymind/cloud/status", "GET"),
+    ("/operatore-bodymind/voice/transcribe", "POST"),
+    ("/operatore-bodymind/voice/speak", "POST"),
+    ("/operatore-bodymind/cloud/usage/tts", "POST"),
 }
 
 pairs = {}
