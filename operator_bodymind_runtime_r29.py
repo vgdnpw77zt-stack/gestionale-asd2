@@ -3034,6 +3034,93 @@ def bodymind_cloud_tts_usage():
     return jsonify({"ok":True,"budget":budget})
 
 
+def _internal_post_route(path, data=None):
+    token=str(session.get("_csrf_token") or csrf_token() or "")
+    snap={k:session.get(k) for k in session.keys()}
+    send=dict(data or {})
+    send.setdefault("csrf_token",token)
+    with app.test_client() as client:
+        with client.session_transaction() as s2:
+            for k,v in snap.items():
+                s2[k]=v
+        resp=client.post(path,data=send,headers={"X-CSRFToken":token},follow_redirects=False)
+    return int(resp.status_code or 0)
+
+def _latest_inbound_after(conn,before_id,name):
+    if not _table(conn,"inbound_documents"):
+        return None
+    cols=_cols(conn,"inbound_documents")
+    filename_col="original_filename" if "original_filename" in cols else ("filename" if "filename" in cols else "")
+    if filename_col:
+        row=conn.execute(
+            "SELECT * FROM inbound_documents WHERE id>? AND "+filename_col+"=? ORDER BY id DESC LIMIT 1",
+            (int(before_id or 0),str(name))
+        ).fetchone()
+        if row:
+            return row
+    return conn.execute("SELECT * FROM inbound_documents WHERE id>? ORDER BY id DESC LIMIT 1",(int(before_id or 0),)).fetchone()
+
+def _verify_document_production(conn,inbound_id):
+    row=conn.execute("SELECT * FROM inbound_documents WHERE id=?",(int(inbound_id),)).fetchone() if _table(conn,"inbound_documents") else None
+    if not row:
+        return False,{"reason":"inbound_missing"}
+    tid=int(row["tesserato_id"] or 0) if "tesserato_id" in row.keys() else 0
+    status=str(row["status"] or "") if "status" in row.keys() else ""
+    dtype=str(row["document_type"] or "") if "document_type" in row.keys() else ""
+    doc=None
+    if tid>0 and _table(conn,"documenti"):
+        dc=_cols(conn,"documenti")
+        if "inbound_id" in dc:
+            doc=conn.execute("SELECT * FROM documenti WHERE inbound_id=? ORDER BY id DESC LIMIT 1",(int(inbound_id),)).fetchone()
+        if not doc and "filename" in dc and "saved_path" in row.keys():
+            doc=conn.execute("SELECT * FROM documenti WHERE tesserato_id=? AND filename=? ORDER BY id DESC LIMIT 1",(tid,str(row["saved_path"] or ""))).fetchone()
+    verified=bool(tid>0 and status=="associato" and doc)
+    details={"tesserato_id":tid,"status":status,"document_type":dtype,"document_id":int(doc["id"]) if doc else None}
+    if verified and dtype=="modulo_unico_tesseramento":
+        t=conn.execute("SELECT * FROM tesserati WHERE id=?",(tid,)).fetchone()
+        if t:
+            details["onboarding_flags"]={
+                k:int(t[k] or 0) for k in (
+                    "iscrizione_firmata","documenti_onboarding_ok","privacy_ok","liberatoria_ok","regolamento_ok"
+                ) if k in t.keys()
+            }
+    return verified,details
+
+def _productionize_inbound(inbound_id, type_hint=""):
+    hint=str(type_hint or "").strip()
+    if hint:
+        code=_internal_post_route(f"/documenti/da-verificare/{int(inbound_id)}/tipo",{"document_type":hint})
+        if code<200 or code>=400:
+            return False,{"reason":"type_route_failed","http":code}
+    conn=db()
+    try:
+        row=conn.execute("SELECT * FROM inbound_documents WHERE id=?",(int(inbound_id),)).fetchone()
+        if not row:
+            return False,{"reason":"inbound_missing"}
+        tid=int(row["tesserato_id"] or 0)
+        dtype=str(row["document_type"] or "")
+        match=int(row["match_score"] or 0) if "match_score" in row.keys() else 0
+        conf=int(row["document_confidence"] or 0) if "document_confidence" in row.keys() else 0
+        if tid<=0:
+            return False,{"reason":"athlete_not_certain","match_score":match}
+        if dtype in ("","altro"):
+            return False,{"reason":"document_type_uncertain","document_confidence":conf}
+        if match<95:
+            return False,{"reason":"athlete_match_below_95","match_score":match}
+        if not hint and conf<90:
+            return False,{"reason":"document_confidence_below_90","document_confidence":conf}
+    finally:
+        conn.close()
+    code=_internal_post_route(f"/documenti/da-verificare/{int(inbound_id)}/ok",{})
+    if code<200 or code>=400:
+        return False,{"reason":"final_ok_route_failed","http":code}
+    conn=db()
+    try:
+        return _verify_document_production(conn,inbound_id)
+    finally:
+        conn.close()
+
+
 @app.get("/operatore-bodymind/secure/smtp")
 @login_required
 def bodymind_operator_smtp_status():
