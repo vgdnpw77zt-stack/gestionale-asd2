@@ -58,7 +58,7 @@ def _schema(conn):
         question TEXT NOT NULL,
         base_text TEXT,
         messages_json TEXT NOT NULL,
-        max_tokens INTEGER NOT NULL DEFAULT 80,
+        max_tokens INTEGER NOT NULL DEFAULT 140,
         status TEXT NOT NULL DEFAULT 'pending',
         device_id TEXT,
         created_at TEXT NOT NULL,
@@ -105,6 +105,37 @@ def _auth_device(conn,touch=True):
         row=conn.execute("SELECT * FROM bodymind_ai_bridge_devices WHERE id=?",(int(row['id']),)).fetchone()
     return row
 
+def _bridge_recent_context(conn, conversation_id, limit=6):
+    try:
+        rows=conn.execute(
+            """SELECT speaker,message FROM bodymind_operator_messages
+               WHERE conversation_id=? ORDER BY id DESC LIMIT ?""",
+            (str(conversation_id or ''),int(limit))
+        ).fetchall()
+        out=[]
+        for r in reversed(rows):
+            speaker=str(r['speaker'] or '')
+            msg=str(r['message'] or '').strip()
+            if not msg:
+                continue
+            if speaker not in ('user','assistant'):
+                continue
+            out.append({'role':'user' if speaker=='user' else 'assistant','content':msg[:900]})
+        return out
+    except Exception:
+        return []
+
+def _bridge_token_budget(message, base):
+    text=(str(message or '')+' '+str(base or '')).lower()
+    if len(str(message or '')) > 700 or any(k in text for k in (
+        'spiega','analizza','perche','perché','come posso','cosa posso','confronta',
+        'riassumi','dettaglio','completo','situazione','strategie','consigli'
+    )):
+        return 220
+    if len(str(base or '')) > 900:
+        return 180
+    return 140
+
 def bridge_enhance_result(conn, message, result, conversation_id='', identity=''):
     """Use the paired local iMac only for responses that otherwise need AI.
     Deterministic write/confirmation paths remain authoritative.
@@ -126,27 +157,33 @@ def bridge_enhance_result(conn, message, result, conversation_id='', identity=''
             return result
 
         base=str(result.get('text') or '')
+        token_budget=_bridge_token_budget(message,base)
         system=(
-            "Sei Operatore BodyMind, assistente intelligente di una ASD italiana di danza aerea. "
-            "Rispondi in italiano naturale, conciso e competente. "
-            "I dati riportati come RISPOSTA VERIFICATA BODYMIND sono il solo riferimento per i dati interni: "
-            "non modificarli, non inventare nomi, quote, documenti, consensi, pagamenti o stati. "
-            "Se i dati non bastano, chiedi una precisazione. "
+            "Sei Operatore BodyMind, un assistente locale rapido e concreto per una ASD italiana di danza aerea. "
+            "Devi capire il senso della richiesta, usare il contesto recente e rispondere come una persona competente, non come un template. "
+            "Quando la richiesta riguarda dati interni BodyMind, RISPOSTA VERIFICATA BODYMIND è la fonte di verità: non cambiare numeri, nomi, quote, documenti, consensi, pagamenti o stati. "
+            "Quando la richiesta è generale o organizzativa, puoi ragionare e proporre spiegazioni pratiche usando conoscenza generale, senza inventare fatti interni. "
+            "Non essere telegrafico: completa il ragionamento essenziale, ma evita ripetizioni e premesse inutili. "
+            "Se manca un dato indispensabile, fai una sola domanda precisa. "
             "Non dichiarare di aver eseguito modifiche: le azioni sul gestionale passano solo dal motore deterministico con conferma."
         )
+        verified=base[:6000] if base else "(nessun fatto interno aggiuntivo)"
         user=(
             "INTERLOCUTORE: "+str(identity or 'Operatore')+"\n"
-            "RICHIESTA: "+str(message or '')[:6000]+"\n"
-            "RISPOSTA VERIFICATA BODYMIND: "+base[:7000]+"\n"
-            "Rispondi alla richiesta in modo più naturale e utile, restando fedele ai dati verificati."
+            "RICHIESTA ATTUALE: "+str(message or '')[:5000]+"\n"
+            "RISPOSTA VERIFICATA BODYMIND: "+verified+"\n"
+            "Rispondi direttamente alla richiesta attuale. Se la risposta verificata contiene già il dato, usalo e spiegalo bene; non limitarti a parafrasarlo."
         )
-        messages=[{'role':'system','content':system},{'role':'user','content':user}]
+        recent=_bridge_recent_context(conn,conversation_id,6)
+        messages=[{'role':'system','content':system}]
+        messages.extend(recent)
+        messages.append({'role':'user','content':user})
         cur=conn.execute(
             """INSERT INTO bodymind_ai_jobs
                (conversation_id,identity_name,question,base_text,messages_json,max_tokens,status,created_at)
                VALUES(?,?,?,?,?,?,?,?)""",
             (str(conversation_id or ''),str(identity or ''),str(message or '')[:8000],base[:8000],
-             json.dumps(messages,ensure_ascii=False),80,'pending',_iso())
+             json.dumps(messages,ensure_ascii=False),token_budget,'pending',_iso())
         )
         job_id=int(cur.lastrowid)
         conn.commit()
@@ -341,7 +378,7 @@ def bodymind_ai_bridge_poll():
             'job':{
                 'id':job_id,
                 'messages':json.loads(str(row['messages_json'] or '[]')),
-                'max_tokens':int(row['max_tokens'] or 80),
+                'max_tokens':int(row['max_tokens'] or 140),
             }
         })
     finally:
@@ -474,7 +511,8 @@ TOKEN=io.open(os.path.join(ROOT,"bridge_token"),"r",encoding="utf-8").read().str
 LOCAL="http://127.0.0.1:8088/v1/chat/completions"
 
 def req(url, method="GET", payload=None, auth=True, timeout=180):
-    # BODYMIND_R39_CURL_REMOTE_TRANSPORT:
+    # BODYMIND_R39_CURL_REMOTE_TRANSPORT
+# BODYMIND_R39_LOCAL_AI_QUALITY_V2:
     # macOS High Sierra + python.org SSL stores can reject modern HTTPS even
     # when the system curl works. Use /usr/bin/curl for Railway, urllib only locally.
     if url.startswith(BASE_URL):
@@ -511,8 +549,10 @@ def local_chat(messages,max_tokens):
     payload={
         "model":"bodymind",
         "messages":messages,
-        "temperature":0.45,
-        "max_tokens":int(max_tokens or 80),
+        "temperature":0.35,
+        "top_p":0.9,
+        "repeat_penalty":1.08,
+        "max_tokens":int(max_tokens or 140),
     }
     return req(LOCAL,"POST",payload,auth=False,timeout=240)
 
@@ -525,7 +565,7 @@ while True:
             continue
         jid=int(job["id"])
         try:
-            ans=local_chat(job.get("messages") or [],job.get("max_tokens") or 80)
+            ans=local_chat(job.get("messages") or [],job.get("max_tokens") or 140)
             text=((ans.get("choices") or [{}])[0].get("message") or {}).get("content","").strip()
             if not text:
                 raise RuntimeError("llama-server non ha restituito testo")
