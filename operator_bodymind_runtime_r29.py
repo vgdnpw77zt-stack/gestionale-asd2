@@ -1151,8 +1151,62 @@ def bodymind_operator_home():
       const voiceStatus=document.getElementById('bmoVoiceStatus');
       const attach=document.getElementById('bmoAttach');
       let listening=false, recognition=null, micStream=null, audioContext=null, analyser=null, meterRAF=null;
-      let ttsPrimed=false, ttsUtterance=null, ttsRetryTimer=null;
+      let ttsPrimed=false, ttsUtterance=null, ttsRetryTimer=null, ttsSequence=0;
+      let ttsVoice=null, ttsVoices=[];
       const TTS_KEY='bodymind_tts_enabled_v2';
+      // BODYMIND_R39_NATURAL_VOICE_V2
+      function refreshTTSVoices(){{
+        try{{
+          ttsVoices=speechSynthesis.getVoices()||[];
+          const italian=ttsVoices.filter(v=>String(v.lang||'').toLowerCase().startsWith('it'));
+          const score=v=>{{
+            const n=String(v.name||'').toLowerCase();
+            let s=0;
+            if(n.includes('premium'))s+=120;
+            if(n.includes('enhanced'))s+=110;
+            if(n.includes('siri'))s+=100;
+            if(n.includes('alice'))s+=90;
+            if(n.includes('federica'))s+=85;
+            if(n.includes('elsa'))s+=80;
+            if(n.includes('paola'))s+=78;
+            if(n.includes('cosimo'))s+=72;
+            if(n.includes('luca'))s+=68;
+            if(v.localService)s+=18;
+            if(n.includes('compact'))s-=35;
+            return s;
+          }};
+          ttsVoice=italian.sort((a,b)=>score(b)-score(a))[0]||null;
+        }}catch(e){{ttsVoice=null}}
+      }}
+      try{{refreshTTSVoices();speechSynthesis.addEventListener?.('voiceschanged',refreshTTSVoices)}}catch(e){{}}
+      function cleanSpeechText(text){{
+        return String(text||'')
+          .replace(/https?:\/\/\S+/g,'')
+          .replace(/[•▪◦]+/g,'. ')
+          .replace(/[*_#~]/g,'')
+          .replace(/€\s*/g,' euro ')
+          .replace(/\s*%/g,' per cento')
+          .replace(/\s+/g,' ')
+          .trim();
+      }}
+      function speechChunks(text){{
+        const clean=cleanSpeechText(text);
+        if(!clean)return [];
+        const raw=clean.match(/[^.!?;:]+[.!?;:]?|[^.!?;:]+$/g)||[clean];
+        const out=[];
+        raw.forEach(part=>{{
+          let s=part.trim();if(!s)return;
+          while(s.length>190){{
+            let cut=s.lastIndexOf(',',190);
+            if(cut<70)cut=s.lastIndexOf(' ',190);
+            if(cut<70)cut=190;
+            out.push(s.slice(0,cut+1).trim());
+            s=s.slice(cut+1).trim();
+          }}
+          if(s)out.push(s);
+        }});
+        return out;
+      }}
       function primeTTS(){{
         if(ttsPrimed || !('speechSynthesis' in window))return;
         try{{
@@ -1200,38 +1254,61 @@ def bodymind_operator_home():
 
       function speak(text){{
         if(!voice || !voice.checked || !('speechSynthesis' in window) || !text)return;
-        const doSpeak=()=>{{
+        const chunks=speechChunks(text);
+        if(!chunks.length)return;
+        const seq=++ttsSequence;
+        const begin=()=>{{
           try{{
             if(ttsRetryTimer){{clearTimeout(ttsRetryTimer);ttsRetryTimer=null}}
             speechSynthesis.cancel();
             speechSynthesis.resume();
-            const u=new SpeechSynthesisUtterance(String(text).replace(/\s+/g,' ').trim());
-            ttsUtterance=u;
-            u.lang='it-IT';u.rate=.96;u.pitch=.94;u.volume=1;
-            const voices=speechSynthesis.getVoices()||[];
-            const italian=voices.filter(v=>String(v.lang||'').toLowerCase().startsWith('it'));
-            const preferred=['premium','enhanced','alice','federica','elsa','cosimo','luca','it-it'];
-            let it=null;
-            for(const key of preferred){{
-              it=italian.find(v=>String(v.name||'').toLowerCase().includes(key));
-              if(it)break;
-            }}
-            if(!it)it=italian[0]||null;
-            if(it)u.voice=it;
-            let started=false;
-            u.onstart=()=>{{started=true;ttsPrimed=true;try{{localStorage.setItem(TTS_KEY,'1')}}catch(e){{}};avatar.classList.add('speaking');if(voiceStatus)voiceStatus.textContent='Ti sto rispondendo…'}};
-            u.onend=()=>{{ttsUtterance=null;avatar.classList.remove('speaking');if(voiceStatus)voiceStatus.textContent='Tocca il microfono e parlami'}};
-            u.onerror=()=>{{ttsUtterance=null;avatar.classList.remove('speaking');if(voiceStatus)voiceStatus.textContent='Voce non partita: tocca una volta lo schermo e riprova'}};
-            speechSynthesis.speak(u);
-            ttsRetryTimer=setTimeout(()=>{{
-              if(!started && ttsUtterance===u){{
-                try{{speechSynthesis.resume();speechSynthesis.speak(u)}}catch(e){{}}
+            refreshTTSVoices();
+            let index=0;
+            const next=()=>{{
+              if(seq!==ttsSequence||index>=chunks.length){{
+                ttsUtterance=null;
+                avatar.classList.remove('speaking');
+                if(voiceStatus)voiceStatus.textContent='Tocca il microfono e parlami';
+                return;
               }}
-            }},350);
+              const phrase=chunks[index++];
+              const u=new SpeechSynthesisUtterance(phrase);
+              ttsUtterance=u;
+              u.lang='it-IT';
+              u.rate=(phrase.length<55 ? .94 : .91);
+              u.pitch=1.0;
+              u.volume=1;
+              if(ttsVoice)u.voice=ttsVoice;
+              let started=false;
+              u.onstart=()=>{{
+                started=true;ttsPrimed=true;
+                try{{localStorage.setItem(TTS_KEY,'1')}}catch(e){{}}
+                avatar.classList.add('speaking');
+                if(voiceStatus)voiceStatus.textContent='Ti sto rispondendo…';
+              }};
+              u.onend=()=>{{if(seq===ttsSequence)setTimeout(next,phrase.endsWith('.')?115:70)}};
+              u.onerror=()=>{{
+                if(seq!==ttsSequence)return;
+                if(index<chunks.length)setTimeout(next,80);
+                else{{
+                  ttsUtterance=null;avatar.classList.remove('speaking');
+                  if(voiceStatus)voiceStatus.textContent='Voce non partita: tocca una volta lo schermo e riprova';
+                }}
+              }};
+              speechSynthesis.speak(u);
+              if(index===1){{
+                ttsRetryTimer=setTimeout(()=>{{
+                  if(!started&&seq===ttsSequence&&ttsUtterance===u){{
+                    try{{speechSynthesis.cancel();speechSynthesis.resume();speechSynthesis.speak(u)}}catch(e){{}}
+                  }}
+                }},550);
+              }}
+            }};
+            next();
           }}catch(e){{if(voiceStatus)voiceStatus.textContent='Voce non disponibile su questo dispositivo'}}
         }};
         if(!ttsPrimed)primeTTS();
-        setTimeout(doSpeak,ttsPrimed?20:180);
+        setTimeout(begin,ttsPrimed?30:220);
       }}
 
       // R38: local intelligence is only the paired iMac bridge; offline uses deterministic server logic.
