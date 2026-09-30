@@ -459,6 +459,7 @@ from __future__ import print_function
 import io
 import json
 import os
+import subprocess
 import time
 try:
     from urllib.request import Request, urlopen
@@ -473,10 +474,24 @@ TOKEN=io.open(os.path.join(ROOT,"bridge_token"),"r",encoding="utf-8").read().str
 LOCAL="http://127.0.0.1:8088/v1/chat/completions"
 
 def req(url, method="GET", payload=None, auth=True, timeout=180):
+    # BODYMIND_R39_CURL_REMOTE_TRANSPORT:
+    # macOS High Sierra + python.org SSL stores can reject modern HTTPS even
+    # when the system curl works. Use /usr/bin/curl for Railway, urllib only locally.
+    if url.startswith(BASE_URL):
+        cmd=["/usr/bin/curl","-fsS","--max-time",str(int(timeout))]
+        if auth:
+            cmd += ["-H","X-BodyMind-Token: "+TOKEN]
+        if method != "GET":
+            cmd += ["-X",method]
+        if payload is not None:
+            cmd += ["-H","Content-Type: application/json","--data-binary",json.dumps(payload)]
+        cmd.append(url)
+        raw=subprocess.check_output(cmd)
+        if not isinstance(raw,str):
+            raw=raw.decode("utf-8")
+        return json.loads(raw) if raw else {}
     data=None if payload is None else json.dumps(payload).encode("utf-8")
     headers={"Content-Type":"application/json"}
-    if auth:
-        headers["X-BodyMind-Token"]=TOKEN
     r=Request(url,data=data,headers=headers)
     if method not in ("GET","POST"):
         r.get_method=lambda: method
