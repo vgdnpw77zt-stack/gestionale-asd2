@@ -1065,6 +1065,11 @@ def bodymind_operator_home():
       .bmo-links{{gap:6px;}}
       .bmo-link{{padding:7px 8px;border-radius:10px;font-size:10px;}}
       .bmo-compose{{position:fixed;left:0;right:0;bottom:0;z-index:999;grid-template-columns:48px 40px minmax(0,1fr) 46px;gap:6px;align-items:center;padding:8px 10px calc(8px + env(safe-area-inset-bottom));background:rgba(5,12,23,.97);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);}}
+      /* BODYMIND_R39_MOBILE_LAYOUT_FIX */
+      .bmo-compose{{width:100vw;max-width:100vw;box-sizing:border-box;overflow:hidden;}}
+      .bmo-compose>*{{min-width:0;box-sizing:border-box;}}
+      .bmo-compose #bmoMobileFiles,.bmo-compose #bmoMobileFiles[hidden]{{display:none!important;position:absolute!important;width:0!important;height:0!important;overflow:hidden!important;pointer-events:none!important;}}
+      .bmo-compose textarea{{width:100%;min-width:0;max-width:100%;box-sizing:border-box;}}
       .bmo-mic{{min-width:48px;width:48px;height:48px;border-radius:50%;font-size:22px;background:linear-gradient(145deg,#8d285e,#d43a7d);box-shadow:0 8px 20px rgba(212,58,125,.24);}}
       .bmo-mic.on{{box-shadow:0 0 0 6px rgba(244,90,157,.12),0 8px 24px rgba(212,58,125,.34);}}
       .bmo-attach{{display:block;min-width:40px;width:40px;height:40px;align-self:center;border-radius:12px;font-size:17px;}}
@@ -1424,10 +1429,23 @@ def bodymind_operator_mobile_entry(resp):
             return resp
         if "text/html" not in str(resp.headers.get("Content-Type","")).lower():
             return resp
+        if request.path.startswith("/operatore-bodymind"):
+            return resp
         html=resp.get_data(as_text=True)
         if "bmo-mobile-entry" in html:
             return resp
         button="""
+        <style id="bmo-mobile-entry-style">
+          @media(max-width:800px){
+            #bmo-mobile-entry{
+              right:10px!important;
+              bottom:calc(104px + env(safe-area-inset-bottom))!important;
+              padding:9px 12px!important;
+              font-size:11px!important;
+              max-width:150px!important;
+            }
+          }
+        </style>
         <a id="bmo-mobile-entry" href="/operatore-bodymind" aria-label="Apri Operatore BodyMind"
            style="position:fixed;right:14px;bottom:calc(18px + env(safe-area-inset-bottom));z-index:9999;
            display:flex;align-items:center;gap:8px;padding:11px 14px;border-radius:999px;
