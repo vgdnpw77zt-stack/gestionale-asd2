@@ -70,13 +70,12 @@ finally:
 
 checks['business_counts_unchanged']=before==after
 checks['db_integrity']=integrity.lower()=='ok' and fk==0
-# Machine API requests without a browser CSRF token must reach their own auth/validation handlers.
-pair_probe=client.post('/bodymind-ai-bridge/pair',json={})
-heartbeat_probe=client.post('/bodymind-ai-bridge/heartbeat',headers={'Authorization':'Bearer invalid-qa-token'})
-result_probe=client.post('/bodymind-ai-bridge/result',json={'job_id':0},headers={'Authorization':'Bearer invalid-qa-token'})
-checks['pair_not_csrf_blocked']=pair_probe.status_code==400 and 'application/json' in str(pair_probe.content_type)
-checks['heartbeat_not_csrf_blocked']=heartbeat_probe.status_code==401 and 'application/json' in str(heartbeat_probe.content_type)
-checks['result_not_csrf_blocked']=result_probe.status_code==401 and 'application/json' in str(result_probe.content_type)
+# Machine API uses safe GET routes and must reach its own auth logic without browser CSRF.
+heartbeat_probe=client.get('/bodymind-ai-bridge/heartbeat',headers={'Authorization':'Bearer invalid-qa-token'})
+result_probe=client.get('/bodymind-ai-bridge/result?job_id=0',headers={'Authorization':'Bearer invalid-qa-token'})
+checks['heartbeat_get_auth_handler']=heartbeat_probe.status_code==401 and 'application/json' in str(heartbeat_probe.content_type)
+checks['result_get_auth_handler']=result_probe.status_code==401 and 'application/json' in str(result_probe.content_type)
+checks['bridge_get_only_machine_api']='BODYMIND_R39_BRIDGE_GET_ONLY_MACHINE_API' in install_text
 failed=[k for k,v in checks.items() if not v]
 print('[operator-experience-r38] checks='+repr(checks),flush=True)
 print('[operator-experience-r38] counts_before='+repr(before)+' counts_after='+repr(after),flush=True)
