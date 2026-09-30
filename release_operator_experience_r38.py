@@ -40,6 +40,8 @@ home=client.get('/operatore-bodymind')
 body=home.get_data(as_text=True)
 mobile_home=client.get('/mobile')
 mobile_body=mobile_home.get_data(as_text=True)
+family=client.get('/area-famiglie')
+family_body=family.get_data(as_text=True)
 installer=client.get('/bodymind-ai-bridge/install.sh')
 install_text=installer.get_data(as_text=True)
 bridge_text=bridge.read_text(encoding='utf-8',errors='replace')
@@ -52,6 +54,8 @@ checks={
     'ios_tts_unlock':'BODYMIND_R39_IOS_TTS_UNLOCK' in body and "speechSynthesis.resume()" in body,
     'ios_tts_persistent':'BODYMIND_R39_IOS_TTS_PERSISTENT_FIX' in body and 'ttsUtterance' in body and 'bodymind_tts_enabled_v2' in body and 'Voce non partita' in body,
     'ios_natural_voice':'BODYMIND_R39_NATURAL_VOICE_V2' in body and 'refreshTTSVoices' in body and 'speechChunks' in body and "includes('premium')" in body and "includes('enhanced')" in body,
+    'ios_mic_direct':'BODYMIND_R39_IOS_MIC_DIRECT_RECOGNITION' in body and "await ensureMic();recognition.start()" not in body and "stopMicStream();if(voiceStatus)voiceStatus.textContent='Ti ascolto…';recognition.start()" in body,
+    'family_logo_bodymind':family.status_code==200 and 'https://bodymindaerialstudio.life/seed-media/logo?v=9' in family_body and '/bodymind-media/logo' not in family_body,
     'mobile_imac_only':'IA iMac:' in body and 'LanguageModel' not in body and 'window.ai' not in body,
     'installer_200':installer.status_code==200,
     'high_sierra_python_fallback':'command -v python3' in install_text and 'command -v python ' in install_text,
@@ -64,7 +68,8 @@ checks={
     'custom_token_header':'BODYMIND_R39_CUSTOM_TOKEN_HEADER' in install_text and 'X-BodyMind-Token' in install_text and 'https://app.bodymindaerialstudio.life' in bridge_text,
     'curl_remote_transport':'BODYMIND_R39_CURL_REMOTE_TRANSPORT' in install_text and '/usr/bin/curl' in install_text,
     'local_ai_quality_v2':'BODYMIND_R39_LOCAL_AI_QUALITY_V2' in install_text and '_bridge_recent_context' in bridge_text and '_bridge_token_budget' in bridge_text and 'temperature":0.35' in install_text,
-    'local_ai_fast_split':'BODYMIND_R39_LOCAL_AI_FAST_SPLIT' in install_text and "allowed_read_modes={'fallback'}" in bridge_text and 'return 110' in bridge_text and 'return 140' in bridge_text and 'DEFAULT 80' not in bridge_text,
+    'local_ai_fast_split':'BODYMIND_R39_LOCAL_AI_FAST_SPLIT' in install_text and "allowed_read_modes={'fallback'}" in bridge_text and 'DEFAULT 80' not in bridge_text,
+    'local_ai_latency_v3':'BODYMIND_R39_LOCAL_AI_LATENCY_V3' in install_text and 'return 70' in bridge_text and 'return 100' in bridge_text and 'limit=3' in bridge_text and "'42'" in bridge_text,
 }
 
 conn=sqlite3.connect(str(DB),timeout=20)
