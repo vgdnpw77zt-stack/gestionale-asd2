@@ -55,6 +55,7 @@ checks={
     'heartbeat_verification':'/bodymind-ai-bridge/heartbeat' in install_text,
     'bridge_csrf_safe_get_pairing':'BODYMIND_R39_BRIDGE_CSRF_SAFE_GET_PAIRING' in install_text,
     'bridge_diag_checkpoints':'BODYMIND_R39_BRIDGE_DIAGNOSTIC_CHECKPOINTS' in install_text,
+    'explicit_installer_file':'BODYMIND_R39_EXPLICIT_INSTALL_FILE' in install_text and '/tmp/bodymind-ai-r39.sh' in setup_text and '/bin/bash /tmp/bodymind-ai-r39.sh' in setup_text and '| bash' not in setup_text,
 }
 
 conn=sqlite3.connect(str(DB),timeout=20)
