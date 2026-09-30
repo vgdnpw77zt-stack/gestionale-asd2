@@ -1372,9 +1372,10 @@ def bodymind_operator_home():
         recognition.onend=()=>{{listening=false;mic.classList.remove('on');avatar.classList.remove('listening');avatar.style.transform='';stopMicStream();if(voiceStatus&&voiceStatus.textContent.startsWith('Ti ascolto'))voiceStatus.textContent='Tocca il microfono e parlami'}};
         recognition.onerror=ev=>{{listening=false;mic.classList.remove('on');avatar.classList.remove('listening');avatar.style.transform='';stopMicStream();const t=humanMicError(ev.error);if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot')}};
         recognition.onresult=ev=>{{let txt='';let final=false;for(let i=ev.resultIndex;i<ev.results.length;i++){{txt+=ev.results[i][0].transcript;if(ev.results[i].isFinal)final=true}}input.value=txt.trim();if(final&&input.value){{if(voiceStatus)voiceStatus.textContent='Ho capito. Un attimo…';setTimeout(()=>ask(input.value),120)}}}};
+        // BODYMIND_R39_IOS_MIC_DIRECT_RECOGNITION
         mic.addEventListener('click',async()=>{{
           if(listening){{try{{recognition.stop()}}catch(e){{}};return}}
-          try{{speechSynthesis?.cancel();if(voiceStatus)voiceStatus.textContent='Attivo il microfono…';await ensureMic();recognition.start()}}
+          try{{speechSynthesis?.cancel();stopMicStream();if(voiceStatus)voiceStatus.textContent='Ti ascolto…';recognition.start()}}
           catch(err){{stopMicStream();avatar.style.transform='';const t=(err?.name==='NotAllowedError'||err?.name==='SecurityError')?'Accesso al microfono negato. Consenti il microfono a BodyMind nelle impostazioni di Safari e riprova.':('Microfono non disponibile: '+(err?.message||err));if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot')}}
         }});
       }}else{{
@@ -1534,6 +1535,26 @@ def bodymind_operator_upload():
         "links":[{"label":"Apri Da verificare","href":"/documenti/da-verificare"},{"label":"Apri Documenti","href":"/documenti"}]
     })
 
+
+@app.after_request
+def bodymind_family_logo_override(resp):
+    """Keep the public family landing branded BodyMind, never the legacy ASD Pro logo."""
+    try:
+        if request.path != "/area-famiglie" or request.method != "GET" or int(resp.status_code or 200) != 200:
+            return resp
+        if "text/html" not in str(resp.headers.get("Content-Type","")).lower():
+            return resp
+        html=resp.get_data(as_text=True)
+        if "/bodymind-media/logo" in html:
+            html=html.replace("/bodymind-media/logo","https://bodymindaerialstudio.life/seed-media/logo?v=9")
+            resp.set_data(html)
+            resp.headers.pop("Content-Length",None)
+        resp.headers["X-BodyMind-Family-Logo"]="bodymind-public-logo-v1"
+    except Exception:
+        pass
+    return resp
+
+# BODYMIND_R39_FAMILY_LOGO_BODYMIND
 
 @app.after_request
 def bodymind_operator_microphone_policy(resp):
