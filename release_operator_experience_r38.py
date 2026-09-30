@@ -57,7 +57,7 @@ checks={
     'bridge_csrf_safe_get_pairing':'BODYMIND_R39_BRIDGE_CSRF_SAFE_GET_PAIRING' in install_text,
     'bridge_diag_checkpoints':'BODYMIND_R39_BRIDGE_DIAGNOSTIC_CHECKPOINTS' in install_text,
     'explicit_installer_file':'BODYMIND_R39_EXPLICIT_INSTALL_FILE' in install_text and '/tmp/bodymind-ai-r39.sh' in bridge_text and '/bin/bash /tmp/bodymind-ai-r39.sh' in bridge_text and '| bash' not in bridge_text,
-    'outer_bootstrap_diag':'BODYMIND_R39_OUTER_BOOTSTRAP_DIAG' in install_text and 'stage=downloaded' in bridge_text and 'stage=bash_failed_$RC' in bridge_text,
+    'custom_token_header':'BODYMIND_R39_CUSTOM_TOKEN_HEADER' in install_text and 'X-BodyMind-Token' in install_text and 'https://app.bodymindaerialstudio.life' in bridge_text,
 }
 
 conn=sqlite3.connect(str(DB),timeout=20)
@@ -75,9 +75,9 @@ finally:
 checks['business_counts_unchanged']=before==after
 checks['db_integrity']=integrity.lower()=='ok' and fk==0
 # Machine API uses safe GET routes and must reach its own auth logic without browser CSRF.
-heartbeat_probe=client.get('/bodymind-ai-bridge/heartbeat',headers={'Authorization':'Bearer invalid-qa-token'})
-result_probe=client.get('/bodymind-ai-bridge/result?job_id=0',headers={'Authorization':'Bearer invalid-qa-token'})
-diag_probe=client.get('/bodymind-ai-bridge/diag?stage=qa',headers={'Authorization':'Bearer invalid-qa-token'})
+heartbeat_probe=client.get('/bodymind-ai-bridge/heartbeat',headers={'X-BodyMind-Token':'invalid-qa-token'})
+result_probe=client.get('/bodymind-ai-bridge/result?job_id=0',headers={'X-BodyMind-Token':'invalid-qa-token'})
+diag_probe=client.get('/bodymind-ai-bridge/diag?stage=qa',headers={'X-BodyMind-Token':'invalid-qa-token'})
 checks['heartbeat_get_auth_handler']=heartbeat_probe.status_code==401 and 'application/json' in str(heartbeat_probe.content_type)
 checks['result_get_auth_handler']=result_probe.status_code==401 and 'application/json' in str(result_probe.content_type)
 checks['diag_get_auth_handler']=diag_probe.status_code==401 and 'application/json' in str(diag_probe.content_type)
