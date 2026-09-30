@@ -1139,7 +1139,7 @@ def _capability_search(conn, query):
     }
 
 _GENERIC_ROUTE_BLOCK_PREFIXES=(
-    "/bodymind-ai-bridge","/health","/static","/favicon","/login","/logout",
+    "/health","/static","/favicon","/login","/logout",
 )
 _GENERIC_DESTRUCTIVE_HINTS=(
     "delete from","drop table","truncate ",".unlink(","os.remove(","shutil.rmtree",
@@ -2128,7 +2128,7 @@ def bodymind_operator_home():
         speak(lastSpeechText||'Voce attiva.',true);
       }});
 
-      // R38: local intelligence is only the paired iMac bridge; offline uses deterministic server logic.
+      // R47: cloud-native intelligence only.
 
       async function ask(q){{
         q=String(q||'').trim();if(!q)return;
@@ -2584,14 +2584,14 @@ def bodymind_operator_chat():
                 except Exception:
                     pass
 
-        # R46 cloud-native: no Mac/Qwen fallback in the user request path.
+        # R47 cloud-native: no local AI fallback in the user request path.
         if not planner_used and str(result.get("mode") or "")=="fallback":
             err=str(_CLOUD_LAST_ERROR or "")
             low=err.lower()
             if "credit_balance_exhausted" in low or "insufficient_quota" in low or "no credits remaining" in low:
-                msg="L’IA cloud è configurata ma il credito API è esaurito. Non uso più il Mac/Qwen come ripiego, quindi non ti faccio aspettare inutilmente."
+                msg="L’IA cloud è configurata ma il credito API è esaurito. Ricarica il credito per continuare."
             elif err:
-                msg="L’IA cloud non è disponibile in questo momento. Non ho eseguito modifiche e non uso il Mac/Qwen come ripiego."
+                msg="L’IA cloud non è disponibile in questo momento. Non ho eseguito modifiche."
             else:
                 msg="Questa richiesta richiede l’IA cloud. Non ho eseguito modifiche."
             result={"text":msg,"mode":"cloud_unavailable","allow_device_ai":False,"cloud_ai":False}
@@ -3014,7 +3014,7 @@ def bodymind_operator_legacy_entrypoints():
         speak(lastSpeechText||'Voce attiva.',true);
       }});
 
-      // R38: local intelligence is only the paired iMac bridge; offline uses deterministic server logic.
+      // R47: cloud-native intelligence only.
 
       async function ask(q){{
         q=String(q||'').trim();if(!q)return;
@@ -3458,14 +3458,14 @@ def bodymind_operator_chat():
                 except Exception:
                     pass
 
-        # R46 cloud-native: no Mac/Qwen fallback in the user request path.
+        # R47 cloud-native: no local AI fallback in the user request path.
         if not planner_used and str(result.get("mode") or "")=="fallback":
             err=str(_CLOUD_LAST_ERROR or "")
             low=err.lower()
             if "credit_balance_exhausted" in low or "insufficient_quota" in low or "no credits remaining" in low:
-                msg="L’IA cloud è configurata ma il credito API è esaurito. Non uso più il Mac/Qwen come ripiego, quindi non ti faccio aspettare inutilmente."
+                msg="L’IA cloud è configurata ma il credito API è esaurito. Ricarica il credito per continuare."
             elif err:
-                msg="L’IA cloud non è disponibile in questo momento. Non ho eseguito modifiche e non uso il Mac/Qwen come ripiego."
+                msg="L’IA cloud non è disponibile in questo momento. Non ho eseguito modifiche."
             else:
                 msg="Questa richiesta richiede l’IA cloud. Non ho eseguito modifiche."
             result={"text":msg,"mode":"cloud_unavailable","allow_device_ai":False,"cloud_ai":False}
@@ -3895,7 +3895,7 @@ def bodymind_operator_legacy_entrypoints():
         speak(lastSpeechText||'Voce attiva.',true);
       }});
 
-      // R38: local intelligence is only the paired iMac bridge; offline uses deterministic server logic.
+      // R47: cloud-native intelligence only.
 
       async function ask(q){{
         q=String(q||'').trim();if(!q)return;
@@ -4339,14 +4339,14 @@ def bodymind_operator_chat():
                 except Exception:
                     pass
 
-        # R46 cloud-native: no Mac/Qwen fallback in the user request path.
+        # R47 cloud-native: no local AI fallback in the user request path.
         if not planner_used and str(result.get("mode") or "")=="fallback":
             err=str(_CLOUD_LAST_ERROR or "")
             low=err.lower()
             if "credit_balance_exhausted" in low or "insufficient_quota" in low or "no credits remaining" in low:
-                msg="L’IA cloud è configurata ma il credito API è esaurito. Non uso più il Mac/Qwen come ripiego, quindi non ti faccio aspettare inutilmente."
+                msg="L’IA cloud è configurata ma il credito API è esaurito. Ricarica il credito per continuare."
             elif err:
-                msg="L’IA cloud non è disponibile in questo momento. Non ho eseguito modifiche e non uso il Mac/Qwen come ripiego."
+                msg="L’IA cloud non è disponibile in questo momento. Non ho eseguito modifiche."
             else:
                 msg="Questa richiesta richiede l’IA cloud. Non ho eseguito modifiche."
             result={"text":msg,"mode":"cloud_unavailable","allow_device_ai":False,"cloud_ai":False}
@@ -4769,7 +4769,7 @@ def bodymind_operator_legacy_entrypoints():
         speak(lastSpeechText||'Voce attiva.',true);
       }});
 
-      // R38: local intelligence is only the paired iMac bridge; offline uses deterministic server logic.
+      // R47: cloud-native intelligence only.
 
       async function ask(q){{
         q=String(q||'').trim();if(!q)return;
@@ -5213,14 +5213,14 @@ def bodymind_operator_chat():
                 except Exception:
                     pass
 
-        # R46 cloud-native: no Mac/Qwen fallback in the user request path.
+        # R47 cloud-native: no local AI fallback in the user request path.
         if not planner_used and str(result.get("mode") or "")=="fallback":
             err=str(_CLOUD_LAST_ERROR or "")
             low=err.lower()
             if "credit_balance_exhausted" in low or "insufficient_quota" in low or "no credits remaining" in low:
-                msg="L’IA cloud è configurata ma il credito API è esaurito. Non uso più il Mac/Qwen come ripiego, quindi non ti faccio aspettare inutilmente."
+                msg="L’IA cloud è configurata ma il credito API è esaurito. Ricarica il credito per continuare."
             elif err:
-                msg="L’IA cloud non è disponibile in questo momento. Non ho eseguito modifiche e non uso il Mac/Qwen come ripiego."
+                msg="L’IA cloud non è disponibile in questo momento. Non ho eseguito modifiche."
             else:
                 msg="Questa richiesta richiede l’IA cloud. Non ho eseguito modifiche."
             result={"text":msg,"mode":"cloud_unavailable","allow_device_ai":False,"cloud_ai":False}
@@ -5651,7 +5651,7 @@ def bodymind_operator_legacy_entrypoints():
         speak(lastSpeechText||'Voce attiva.',true);
       }});
 
-      // R38: local intelligence is only the paired iMac bridge; offline uses deterministic server logic.
+      // R47: cloud-native intelligence only.
 
       async function ask(q){{
         q=String(q||'').trim();if(!q)return;
@@ -6095,14 +6095,14 @@ def bodymind_operator_chat():
                 except Exception:
                     pass
 
-        # R46 cloud-native: no Mac/Qwen fallback in the user request path.
+        # R47 cloud-native: no local AI fallback in the user request path.
         if not planner_used and str(result.get("mode") or "")=="fallback":
             err=str(_CLOUD_LAST_ERROR or "")
             low=err.lower()
             if "credit_balance_exhausted" in low or "insufficient_quota" in low or "no credits remaining" in low:
-                msg="L’IA cloud è configurata ma il credito API è esaurito. Non uso più il Mac/Qwen come ripiego, quindi non ti faccio aspettare inutilmente."
+                msg="L’IA cloud è configurata ma il credito API è esaurito. Ricarica il credito per continuare."
             elif err:
-                msg="L’IA cloud non è disponibile in questo momento. Non ho eseguito modifiche e non uso il Mac/Qwen come ripiego."
+                msg="L’IA cloud non è disponibile in questo momento. Non ho eseguito modifiche."
             else:
                 msg="Questa richiesta richiede l’IA cloud. Non ho eseguito modifiche."
             result={"text":msg,"mode":"cloud_unavailable","allow_device_ai":False,"cloud_ai":False}
