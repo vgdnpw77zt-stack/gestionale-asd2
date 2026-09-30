@@ -211,7 +211,7 @@ def bodymind_ai_bridge_setup():
     finally:
         conn.close()
     base=request.url_root.rstrip('/')
-    command=f"curl -fsSL {base}/bodymind-ai-bridge/install.sh | bash -s -- {code}"
+    command=f"curl -fsSL -X POST -H 'X-BodyMind-Pair: {code}' {base}/bodymind-ai-bridge/install.sh | bash"
     html=f"""
     <main style="max-width:900px;margin:0 auto;padding:24px">
       <h1>BodyMind AI · iMac</h1>
@@ -230,13 +230,11 @@ def bodymind_ai_bridge_setup():
     """
     return layout(html)
 
-@app.post('/bodymind-ai-bridge/pair')
-def bodymind_ai_bridge_pair():
-    payload=request.get_json(silent=True) or {}
-    code=str(payload.get('code') or '').strip().upper()
-    device_name=str(payload.get('device_name') or 'iMac BodyMind').strip()[:120]
+def _consume_pair_code(code, device_name='iMac BodyMind'):
+    code=str(code or '').strip().upper()
+    device_name=str(device_name or 'iMac BodyMind').strip()[:120]
     if not code:
-        return jsonify({'ok':False,'error':'pair code missing'}),400
+        return None,None,'pair code missing'
     conn=db()
     try:
         _schema(conn)
@@ -248,7 +246,7 @@ def bodymind_ai_bridge_pair():
             (_hash(code),now)
         ).fetchone()
         if not row:
-            return jsonify({'ok':False,'error':'pair code invalid or expired'}),403
+            return None,None,'pair code invalid or expired'
         token=secrets.token_urlsafe(40)
         device_id=secrets.token_hex(12)
         conn.execute("UPDATE bodymind_ai_pair_codes SET used_at=? WHERE id=?",(now,int(row['id'])))
@@ -259,9 +257,20 @@ def bodymind_ai_bridge_pair():
             (device_id,device_name,_hash(token),1,now,None)
         )
         conn.commit()
-        return jsonify({'ok':True,'device_id':device_id,'token':token,'version':BRIDGE_VERSION})
+        return device_id,token,None
     finally:
         conn.close()
+
+@app.post('/bodymind-ai-bridge/pair')
+def bodymind_ai_bridge_pair():
+    payload=request.get_json(silent=True) or {}
+    device_id,token,error=_consume_pair_code(
+        payload.get('code'),
+        payload.get('device_name') or 'iMac BodyMind'
+    )
+    if error:
+        return jsonify({'ok':False,'error':error}), (400 if error=='pair code missing' else 403)
+    return jsonify({'ok':True,'device_id':device_id,'token':token,'version':BRIDGE_VERSION})
 
 @app.post('/bodymind-ai-bridge/heartbeat')
 def bodymind_ai_bridge_heartbeat():
@@ -346,33 +355,28 @@ def bodymind_ai_bridge_result():
     finally:
         conn.close()
 
-@app.get('/bodymind-ai-bridge/install.sh')
+@app.route('/bodymind-ai-bridge/install.sh',methods=['GET','POST'])
 def bodymind_ai_bridge_install_script():
     base=request.url_root.rstrip('/')
+    token=''
+    if request.method=='POST':
+        code=str(request.headers.get('X-BodyMind-Pair') or '').strip().upper()
+        device_id,token,error=_consume_pair_code(code,'iMac BodyMind')
+        if error:
+            return Response('ERRORE: '+error+'\n',status=(400 if error=='pair code missing' else 403),mimetype='text/plain')
     script=r'''#!/bin/bash
-# BodyMind AI Bridge R38 - macOS High Sierra compatible
-if [ "$#" -lt 1 ]; then
-  echo "ERRORE: manca il codice di abbinamento."
-  echo "Apri Operatore BodyMind > IA iMac e copia il comando completo."
-  exit 1
-fi
+# BodyMind AI Bridge R39 - macOS High Sierra compatible
 set -u
 
-CODE="$1"
-BASE="$HOME/BodyMindAI"
-mkdir -p "$BASE/logs" "$HOME/Library/LaunchAgents"
-
-echo "[1/5] Abbino questo Mac a BodyMind..."
-PAIR_JSON="$(curl -sS -X POST "__BASE__/bodymind-ai-bridge/pair" \
-  -H "Content-Type: application/json" \
-  -d "{\"code\":\"$CODE\",\"device_name\":\"iMac BodyMind\"}" || true)"
-TOKEN="$(printf '%s' "$PAIR_JSON" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')"
+TOKEN="__TOKEN__"
 if [ -z "$TOKEN" ]; then
-  echo "ERRORE: abbinamento non riuscito."
-  echo "$PAIR_JSON"
-  echo "Genera un nuovo codice dalla pagina IA iMac e riprova."
+  echo "ERRORE: installer non abbinato."
+  echo "Apri Operatore BodyMind > IA iMac e usa il comando completo appena generato."
   exit 1
 fi
+
+BASE="$HOME/BodyMindAI"
+mkdir -p "$BASE/logs" "$HOME/Library/LaunchAgents"
 printf '%s' "$TOKEN" > "$BASE/bridge_token"
 chmod 600 "$BASE/bridge_token"
 echo "[1/5] Abbinamento Railway completato."
@@ -511,5 +515,5 @@ esac
 echo "[5/5] BodyMind AI Bridge ONLINE."
 echo "Controllo: launchctl list | grep bodymind"
 '''
-    script=script.replace('__BASE__',base)
+    script=script.replace('__BASE__',base).replace('__TOKEN__',token)
     return Response(script,mimetype='text/plain; charset=utf-8')
