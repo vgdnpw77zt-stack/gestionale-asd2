@@ -58,7 +58,7 @@ def _schema(conn):
         question TEXT NOT NULL,
         base_text TEXT,
         messages_json TEXT NOT NULL,
-        max_tokens INTEGER NOT NULL DEFAULT 140,
+        max_tokens INTEGER NOT NULL DEFAULT 110,
         status TEXT NOT NULL DEFAULT 'pending',
         device_id TEXT,
         created_at TEXT NOT NULL,
@@ -127,14 +127,12 @@ def _bridge_recent_context(conn, conversation_id, limit=6):
 
 def _bridge_token_budget(message, base):
     text=(str(message or '')+' '+str(base or '')).lower()
-    if len(str(message or '')) > 700 or any(k in text for k in (
+    if len(str(message or '')) > 500 or any(k in text for k in (
         'spiega','analizza','perche','perché','come posso','cosa posso','confronta',
-        'riassumi','dettaglio','completo','situazione','strategie','consigli'
+        'riassumi','dettaglio','completo','strategie','consigli'
     )):
-        return 220
-    if len(str(base or '')) > 900:
-        return 180
-    return 140
+        return 140
+    return 110
 
 def bridge_enhance_result(conn, message, result, conversation_id='', identity=''):
     """Use the paired local iMac only for responses that otherwise need AI.
@@ -144,8 +142,9 @@ def bridge_enhance_result(conn, message, result, conversation_id='', identity=''
         if not isinstance(result,dict):
             return result
         mode=str(result.get('mode') or '')
-        # R36: the iMac may naturalize all read-only answers, but never write/confirm/navigation paths.
-        allowed_read_modes={'fallback','help','local','audit'}
+        # R39 quality/latency: deterministic BodyMind reads return immediately.
+        # The local model is reserved for genuine conversational/general fallback.
+        allowed_read_modes={'fallback'}
         if not (result.get('allow_device_ai') or mode in allowed_read_modes):
             return result
         low=str(message or '').strip().lower()
@@ -167,12 +166,13 @@ def bridge_enhance_result(conn, message, result, conversation_id='', identity=''
             "Se manca un dato indispensabile, fai una sola domanda precisa. "
             "Non dichiarare di aver eseguito modifiche: le azioni sul gestionale passano solo dal motore deterministico con conferma."
         )
-        verified=base[:6000] if base else "(nessun fatto interno aggiuntivo)"
+        verified=("(nessun fatto interno: domanda generale/conversazionale)" if mode=='fallback' else (base[:6000] if base else "(nessun fatto interno aggiuntivo)"))
         user=(
             "INTERLOCUTORE: "+str(identity or 'Operatore')+"\n"
             "RICHIESTA ATTUALE: "+str(message or '')[:5000]+"\n"
-            "RISPOSTA VERIFICATA BODYMIND: "+verified+"\n"
-            "Rispondi direttamente alla richiesta attuale. Se la risposta verificata contiene già il dato, usalo e spiegalo bene; non limitarti a parafrasarlo."
+            "DATI INTERNI VERIFICATI: "+verified+"\n"
+            "Rispondi direttamente e completa il punto essenziale. Se è una domanda generale, rispondi davvero usando conoscenza generale. "
+            "Se invece sono presenti dati interni verificati, rispettali alla lettera."
         )
         recent=_bridge_recent_context(conn,conversation_id,6)
         messages=[{'role':'system','content':system}]
@@ -378,7 +378,7 @@ def bodymind_ai_bridge_poll():
             'job':{
                 'id':job_id,
                 'messages':json.loads(str(row['messages_json'] or '[]')),
-                'max_tokens':int(row['max_tokens'] or 140),
+                'max_tokens':int(row['max_tokens'] or 110),
             }
         })
     finally:
@@ -512,7 +512,8 @@ LOCAL="http://127.0.0.1:8088/v1/chat/completions"
 
 def req(url, method="GET", payload=None, auth=True, timeout=180):
     # BODYMIND_R39_CURL_REMOTE_TRANSPORT
-# BODYMIND_R39_LOCAL_AI_QUALITY_V2:
+# BODYMIND_R39_LOCAL_AI_QUALITY_V2
+# BODYMIND_R39_LOCAL_AI_FAST_SPLIT:
     # macOS High Sierra + python.org SSL stores can reject modern HTTPS even
     # when the system curl works. Use /usr/bin/curl for Railway, urllib only locally.
     if url.startswith(BASE_URL):
@@ -552,7 +553,7 @@ def local_chat(messages,max_tokens):
         "temperature":0.35,
         "top_p":0.9,
         "repeat_penalty":1.08,
-        "max_tokens":int(max_tokens or 140),
+        "max_tokens":int(max_tokens or 110),
     }
     return req(LOCAL,"POST",payload,auth=False,timeout=240)
 
@@ -565,7 +566,7 @@ while True:
             continue
         jid=int(job["id"])
         try:
-            ans=local_chat(job.get("messages") or [],job.get("max_tokens") or 140)
+            ans=local_chat(job.get("messages") or [],job.get("max_tokens") or 110)
             text=((ans.get("choices") or [{}])[0].get("message") or {}).get("content","").strip()
             if not text:
                 raise RuntimeError("llama-server non ha restituito testo")
