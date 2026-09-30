@@ -20,11 +20,15 @@ from .core import (
     app, db, layout, login_required, csrf_token, current_username, current_role, e
 )
 
-OPERATOR_VERSION = "R45.0-cloud-full-agent"
+OPERATOR_VERSION = "R46.0-cloud-native-secretary"
 PENDING_STATUSES = (
     "needs_manual_match","associato_tipo_da_verificare","richiede_conferma",
     "needs_review","da_verificare","pending",
 )
+
+# BODYMIND_R46_CLOUD_NATIVE_SECRETARY
+_CLOUD_LAST_ERROR=""
+_CLOUD_LAST_OK_AT=""
 
 
 def _norm(value: str) -> str:
@@ -1214,10 +1218,14 @@ def _cloud_plan_tool(conn, question: str, tool_trace=None):
             "Se serve un altro passaggio, scegli il prossimo strumento. "
             "\nRichiesta utente: "+str(question or "")[:7000]
         )
-        client=OpenAI(api_key=key)
+        client=OpenAI(api_key=key,timeout=18.0,max_retries=0)
         resp=client.responses.create(model=model,input=prompt)
+        global _CLOUD_LAST_ERROR,_CLOUD_LAST_OK_AT
+        _CLOUD_LAST_ERROR=""
+        _CLOUD_LAST_OK_AT=datetime.now().isoformat(timespec="seconds")
         plan=_parse_cloud_plan(getattr(resp,"output_text",""))
         if not plan:
+            _CLOUD_LAST_ERROR="empty_plan"
             return None
         tool=str(plan.get("tool") or "").strip()
         allowed={x["name"] for x in catalog}
@@ -1227,12 +1235,14 @@ def _cloud_plan_tool(conn, question: str, tool_trace=None):
             plan["args"]={}
         return plan
     except Exception as exc:
+        global _CLOUD_LAST_ERROR
+        _CLOUD_LAST_ERROR=repr(exc)[:1200]
         try:
-            _log(conn,"system","R45 cloud planner unavailable: "+repr(exc))
+            _log(conn,"system","R46 cloud planner unavailable: "+_CLOUD_LAST_ERROR)
         except Exception:
             pass
         try:
-            print("[cloud-agent-r45] planner_error="+repr(exc),flush=True)
+            print("[cloud-agent-r46] planner_error="+_CLOUD_LAST_ERROR,flush=True)
         except Exception:
             pass
         return None
@@ -1324,7 +1334,7 @@ def _cloud_operator_answer(conn, question: str, athlete=None):
             "\nContesto conversazione: "+json.dumps(recent,ensure_ascii=False)+
             "\nRichiesta: "+str(question or "")[:6000]
         )
-        client=OpenAI(api_key=key)
+        client=OpenAI(api_key=key,timeout=18.0,max_retries=0)
         resp=client.responses.create(model=model,input=prompt)
         out=str(getattr(resp,"output_text","") or "").strip()
         return out[:7000] if out else None
@@ -1748,9 +1758,8 @@ def bodymind_operator_home():
             <span class="bmo-pill">{len(g['minor_issues'])} tutele da rivedere</span>
             <span class="bmo-pill">{len(g['expiring_cert'])} certificati urgenti</span>
             <span class="bmo-pill">{len(g['mu_review'])} MU da ricontrollare</span>
-            <a class="bmo-pill" id="bmoAiPill" href="/operatore-bodymind/bridge/setup" style="text-decoration:none;color:inherit">IA iMac: verifica…</a>
-            <button class="bmo-pill" id="bmoVoiceRecover" type="button" hidden style="cursor:pointer;color:inherit">🔊 Attiva voce</button>
-            <span class="bmo-pill">IA cloud: {"pronta" if (os.environ.get("BODYMIND_AI_CLOUD") and os.environ.get("OPENAI_API_KEY")) else "non configurata"}</span>
+            <span class="bmo-pill" id="bmoAiPill">IA Cloud · {"configurata" if (os.environ.get("BODYMIND_AI_CLOUD") and os.environ.get("OPENAI_API_KEY")) else "non configurata"}</span>
+            <button class="bmo-pill" id="bmoVoiceRecover" type="button" hidden style="cursor:pointer;color:inherit">🔊 Ascolta risposta</button>
           </div>
         </div>
       </section>
@@ -1906,11 +1915,11 @@ def bodymind_operator_home():
       (async()=>{{
         const p=document.getElementById('bmoAiPill'); if(!p)return;
         try{{
-          const r=await fetch('/operatore-bodymind/bridge/status',{{headers:{{'Cache-Control':'no-cache'}}}});
+          const r=await fetch('/operatore-bodymind/cloud/status',{{headers:{{'Cache-Control':'no-cache'}}}});
           const d=await r.json();
-          p.textContent=d.online?'IA iMac: ONLINE':'IA iMac: collega/configura';
-          p.title=d.last_seen_at?('Ultimo contatto: '+d.last_seen_at):'Apri la configurazione del bridge locale';
-        }}catch(e){{p.textContent='IA iMac: stato non disponibile'}}
+          p.textContent=d.ready?'IA Cloud · pronta':'IA Cloud · credito/configurazione';
+          p.title='Modello: '+(d.model||'')+(d.last_ok_at?(' · ultimo successo '+d.last_ok_at):'');
+        }}catch(e){{p.textContent='IA Cloud · stato non disponibile'}}
       }})();
 
       function esc(s){{const d=document.createElement('div');d.textContent=String(s??'');return d.innerHTML}}
@@ -2239,6 +2248,109 @@ def bodymind_operator_home():
         }});
       }}
 
+      // BODYMIND_R46_CLOUD_NATIVE_VOICE
+      // Cloud STT + neural TTS. Legacy WebSpeech remains inert and is not the primary path.
+      let cloudRecorder=null,cloudChunks=[],cloudRecording=false,cloudAudio=null,cloudMaxTimer=null;
+
+      speak=async function(text,fromUserGesture=false){{
+        if(!voice || !voice.checked || !text)return;
+        lastSpeechText=String(text);
+        try{{
+          if(voiceStatus)voiceStatus.textContent='Genero la voce…';
+          const r=await fetch('/operatore-bodymind/voice/speak',{{
+            method:'POST',
+            headers:{{'Content-Type':'application/json','X-CSRFToken':csrf}},
+            body:JSON.stringify({{text:String(text)}})
+          }});
+          if(!r.ok){{
+            let d={{}};try{{d=await r.json()}}catch(e){{}}
+            throw new Error(d.text||('TTS HTTP '+r.status));
+          }}
+          const blob=await r.blob();
+          const url=URL.createObjectURL(blob);
+          try{{if(cloudAudio){{cloudAudio.pause();if(cloudAudio.src)URL.revokeObjectURL(cloudAudio.src)}}}}catch(e){{}}
+          cloudAudio=new Audio(url);
+          cloudAudio.preload='auto';
+          cloudAudio.onplay=()=>{{avatar?.classList.add('speaking');if(voiceStatus)voiceStatus.textContent='Ti sto rispondendo…';if(voiceRecover)voiceRecover.hidden=true;}};
+          cloudAudio.onended=()=>{{avatar?.classList.remove('speaking');if(voiceStatus)voiceStatus.textContent='Tocca il microfono e parlami';try{{URL.revokeObjectURL(url)}}catch(e){{}}}};
+          try{{
+            await cloudAudio.play();
+          }}catch(e){{
+            if(voiceRecover){{voiceRecover.hidden=false;voiceRecover.textContent='🔊 Ascolta risposta'}}
+            if(voiceStatus)voiceStatus.textContent='Risposta pronta: tocca 🔊 per ascoltarla';
+          }}
+        }}catch(e){{
+          if(voiceStatus)voiceStatus.textContent='Voce cloud non disponibile';
+          voiceDiag('cloud_tts_error',{{error:String(e?.message||e)}});
+        }}
+      }};
+
+      if(voiceRecover){{
+        voiceRecover.onclick=async(ev)=>{{
+          ev.preventDefault();ev.stopImmediatePropagation();
+          if(cloudAudio){{try{{await cloudAudio.play();voiceRecover.hidden=true}}catch(e){{}}}}
+          else if(lastSpeechText){{speak(lastSpeechText,true)}}
+        }};
+      }}
+
+      async function cloudStopAndTranscribe(){{
+        if(!cloudRecording||!cloudRecorder)return;
+        cloudRecording=false;
+        if(cloudMaxTimer){{clearTimeout(cloudMaxTimer);cloudMaxTimer=null}}
+        if(voiceStatus)voiceStatus.textContent='Trascrivo…';
+        try{{cloudRecorder.stop()}}catch(e){{}}
+      }}
+
+      async function cloudStartMic(ev){{
+        if(ev){{ev.preventDefault();ev.stopImmediatePropagation()}}
+        if(cloudRecording){{await cloudStopAndTranscribe();return}}
+        if(!window.MediaRecorder || !navigator.mediaDevices?.getUserMedia){{
+          const t='Questo browser non supporta la registrazione cloud. Usa un browser aggiornato oppure scrivi la richiesta.';
+          if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');return;
+        }}
+        try{{
+          const stream=await navigator.mediaDevices.getUserMedia({{audio:{{echoCancellation:true,noiseSuppression:true,autoGainControl:true}},video:false}});
+          let mime='';
+          for(const m of ['audio/mp4','audio/webm;codecs=opus','audio/webm']){{if(MediaRecorder.isTypeSupported?.(m)){{mime=m;break}}}}
+          cloudChunks=[];
+          cloudRecorder=new MediaRecorder(stream,mime?{{mimeType:mime}}:undefined);
+          cloudRecorder.ondataavailable=e=>{{if(e.data&&e.data.size)cloudChunks.push(e.data)}};
+          cloudRecorder.onerror=e=>{{voiceDiag('cloud_recorder_error',{{error:String(e?.error?.message||e?.message||e)}})}};
+          cloudRecorder.onstop=async()=>{{
+            mic.classList.remove('on');avatar.classList.remove('listening');
+            try{{stream.getTracks().forEach(t=>t.stop())}}catch(e){{}}
+            const blob=new Blob(cloudChunks,{{type:cloudRecorder?.mimeType||mime||'audio/webm'}});
+            if(blob.size<1000){{if(voiceStatus)voiceStatus.textContent='Non ho rilevato audio. Riprova.';return}}
+            const ext=(blob.type||'').includes('mp4')?'m4a':'webm';
+            const fd=new FormData();fd.append('audio',blob,'voce.'+ext);
+            try{{
+              const r=await fetch('/operatore-bodymind/voice/transcribe',{{method:'POST',headers:{{'X-CSRFToken':csrf}},body:fd}});
+              const d=await r.json();
+              if(!r.ok)throw new Error(d.text||('STT HTTP '+r.status));
+              input.value=String(d.text||'').trim();
+              if(!input.value)throw new Error('Trascrizione vuota');
+              if(voiceStatus)voiceStatus.textContent='Ho capito. Elaboro…';
+              await ask(input.value);
+            }}catch(e){{
+              const t=String(e?.message||e||'Trascrizione cloud non disponibile');
+              if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+            }}
+          }};
+          cloudRecorder.start(250);
+          cloudRecording=true;
+          mic.classList.add('on');avatar.classList.add('listening');
+          if(voiceStatus)voiceStatus.textContent='Ti ascolto… tocca di nuovo per inviare';
+          cloudMaxTimer=setTimeout(()=>{{if(cloudRecording)cloudStopAndTranscribe()}},18000);
+        }}catch(e){{
+          cloudRecording=false;mic.classList.remove('on');avatar.classList.remove('listening');
+          const t=(e?.name==='NotAllowedError'||e?.name==='SecurityError')
+            ?'Microfono non autorizzato. Consenti il microfono a BodyMind e riprova.'
+            :'Non riesco ad aprire il microfono.';
+          if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+        }}
+      }}
+      mic.addEventListener('click',cloudStartMic,true);
+
       attach?.addEventListener('click',()=>{{
         const picker=document.createElement('input');
         picker.type='file';
@@ -2365,51 +2477,18 @@ def bodymind_operator_chat():
                 except Exception:
                     pass
 
-        # Local Mac/Qwen remains fallback only when cloud planning is unavailable.
+        # R46 cloud-native: no Mac/Qwen fallback in the user request path.
         if not planner_used and str(result.get("mode") or "")=="fallback":
-            try:
-                from .routes_operator_bridge import bridge_plan_tool
-                local_catalog=[x for x in _agent_tool_catalog(conn) if not bool(x.get("write"))]
-                plan=bridge_plan_tool(conn,message,local_catalog,_conv_id(),_identity())
-                if plan:
-                    planner_used=True
-                    tool=str(plan.get("tool") or "")
-                    if tool and tool not in {x["name"] for x in _full_agent_tool_catalog(conn)} and tool not in ("none","unknown"):
-                        result={"text":"Il fallback locale ha proposto un'azione non autorizzata. Non ho modificato nulla.","mode":"warning"}
-                    else:
-                        tool_result=_execute_full_agent_plan(conn,plan,message)
-                        if tool_result:
-                            result=tool_result
-                            result["local_ai"]=True
-                            result["cloud_ai"]=False
-                        elif tool in ("none","unknown","") and str(plan.get("answer") or "").strip():
-                            result={
-                                "text":str(plan.get("answer") or "").strip(),
-                                "mode":"local_ai",
-                                "allow_device_ai":False,
-                                "local_ai":True,
-                                "agent_plan":"none",
-                            }
-            except Exception as planner_exc:
-                try:
-                    _log(conn,"system","R45 local fallback planner unavailable: "+repr(planner_exc))
-                except Exception:
-                    pass
+            err=str(_CLOUD_LAST_ERROR or "")
+            low=err.lower()
+            if "credit_balance_exhausted" in low or "insufficient_quota" in low or "no credits remaining" in low:
+                msg="L’IA cloud è configurata ma il credito API è esaurito. Non uso più il Mac/Qwen come ripiego, quindi non ti faccio aspettare inutilmente."
+            elif err:
+                msg="L’IA cloud non è disponibile in questo momento. Non ho eseguito modifiche e non uso il Mac/Qwen come ripiego."
+            else:
+                msg="Questa richiesta richiede l’IA cloud. Non ho eseguito modifiche."
+            result={"text":msg,"mode":"cloud_unavailable","allow_device_ai":False,"cloud_ai":False}
 
-        if not planner_used and str(result.get("mode") or "")=="fallback":
-            cloud=_cloud_operator_answer(conn,message,athlete=None)
-            if cloud:
-                result={"text":cloud,"mode":"cloud_ai","allow_device_ai":False,"cloud_ai":True,}
-
-        if not planner_used and str(result.get("mode") or "")=="fallback":
-            try:
-                from .routes_operator_bridge import bridge_enhance_result
-                result=bridge_enhance_result(conn,message,result,_conv_id(),_identity())
-            except Exception as bridge_exc:
-                try:
-                    _log(conn,"system","Local AI bridge unavailable: "+repr(bridge_exc))
-                except Exception:
-                    pass
         _log(conn,"assistant",result.get("text",""),result)
         return jsonify(result)
     except Exception as exc:
@@ -2420,6 +2499,101 @@ def bodymind_operator_chat():
         return jsonify({"text":"Ho incontrato un errore interno mentre controllavo i dati. Non ho eseguito modifiche.","mode":"error"}),500
     finally:
         conn.close()
+
+
+def _cloud_user_error(exc):
+    s=repr(exc)
+    low=s.lower()
+    if "credit_balance_exhausted" in low or "insufficient_quota" in low or "no credits remaining" in low:
+        return "Credito API OpenAI esaurito.",402
+    if "rate_limit" in low or "429" in low:
+        return "Limite temporaneo API raggiunto. Riprova tra poco.",429
+    return "Servizio IA cloud temporaneamente non disponibile.",503
+
+@app.get("/operatore-bodymind/cloud/status")
+@login_required
+def bodymind_cloud_status():
+    err=str(_CLOUD_LAST_ERROR or "")
+    blocked=any(x in err.lower() for x in ("credit_balance_exhausted","insufficient_quota","no credits remaining"))
+    configured=bool(str(os.environ.get("OPENAI_API_KEY") or "").strip()) and str(os.environ.get("BODYMIND_AI_CLOUD","1")).lower() in ("1","true","yes","on")
+    return jsonify({
+        "configured":configured,
+        "ready":configured and not blocked,
+        "model":str(os.environ.get("BODYMIND_AI_MODEL") or "gpt-6-luna"),
+        "voice_model":str(os.environ.get("BODYMIND_TTS_MODEL") or "gpt-4o-mini-tts"),
+        "transcribe_model":str(os.environ.get("BODYMIND_STT_MODEL") or "gpt-transcribe"),
+        "last_ok_at":_CLOUD_LAST_OK_AT,
+        "local_ai_used":False,
+    })
+
+@app.post("/operatore-bodymind/voice/transcribe")
+@login_required
+def bodymind_cloud_transcribe():
+    if current_role() not in ("admin","manager"):
+        return jsonify({"text":"Permessi insufficienti."}),403
+    f=request.files.get("audio")
+    if not f:
+        return jsonify({"text":"Audio mancante."}),400
+    data=f.read()
+    if not data:
+        return jsonify({"text":"Audio vuoto."}),400
+    if len(data)>20*1024*1024:
+        return jsonify({"text":"Registrazione troppo grande."}),413
+    key=str(os.environ.get("OPENAI_API_KEY") or "").strip()
+    if not key:
+        return jsonify({"text":"IA cloud non configurata."}),503
+    try:
+        from openai import OpenAI
+        client=OpenAI(api_key=key,timeout=35.0,max_retries=0)
+        model=str(os.environ.get("BODYMIND_STT_MODEL") or "gpt-transcribe").strip()
+        filename=str(f.filename or "voce.webm")
+        mimetype=str(f.mimetype or "audio/webm")
+        tr=client.audio.transcriptions.create(model=model,file=(filename,data,mimetype),language="it")
+        text_out=str(getattr(tr,"text","") or "").strip()
+        if not text_out:
+            return jsonify({"text":"Non ho riconosciuto una frase."}),422
+        return jsonify({"ok":True,"text":text_out,"model":model})
+    except Exception as exc:
+        msg,status=_cloud_user_error(exc)
+        try: print("[cloud-voice-r46] stt_error="+repr(exc)[:900],flush=True)
+        except Exception: pass
+        return jsonify({"text":msg}),status
+
+@app.post("/operatore-bodymind/voice/speak")
+@login_required
+def bodymind_cloud_speak():
+    payload=request.get_json(silent=True) or {}
+    text_in=str(payload.get("text") or "").strip()[:5000]
+    if not text_in:
+        return jsonify({"text":"Testo mancante."}),400
+    key=str(os.environ.get("OPENAI_API_KEY") or "").strip()
+    if not key:
+        return jsonify({"text":"IA cloud non configurata."}),503
+    try:
+        from openai import OpenAI
+        client=OpenAI(api_key=key,timeout=35.0,max_retries=0)
+        model=str(os.environ.get("BODYMIND_TTS_MODEL") or "gpt-4o-mini-tts").strip()
+        voice_name=str(os.environ.get("BODYMIND_TTS_VOICE") or "coral").strip()
+        speech=client.audio.speech.create(
+            model=model,voice=voice_name,input=text_in,
+            instructions="Parla in italiano naturale, caldo e professionale. Sei una segretaria virtuale esperta di BodyMind. Ritmo conversazionale, niente tono robotico."
+        )
+        data=getattr(speech,"content",None)
+        if data is None and hasattr(speech,"read"):
+            data=speech.read()
+        if data is None and hasattr(speech,"response"):
+            data=getattr(speech.response,"content",None)
+        if not data:
+            raise RuntimeError("TTS returned no audio bytes")
+        resp=Response(data,mimetype="audio/mpeg")
+        resp.headers["Cache-Control"]="no-store"
+        resp.headers["X-BodyMind-Voice"]="cloud-r46"
+        return resp
+    except Exception as exc:
+        msg,status=_cloud_user_error(exc)
+        try: print("[cloud-voice-r46] tts_error="+repr(exc)[:900],flush=True)
+        except Exception: pass
+        return jsonify({"text":msg}),status
 
 
 @app.post("/operatore-bodymind/upload")
