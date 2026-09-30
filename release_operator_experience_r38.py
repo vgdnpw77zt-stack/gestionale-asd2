@@ -79,6 +79,7 @@ checks={
     'agent_tools_r40':'BODYMIND_R40_AGENT_TOOLS' in operator_text and '_agent_tool_catalog' in operator_text and '_execute_agent_tool' in operator_text and 'archive_duplicate_documents' in operator_text and '_duplicate_document_groups' in operator_text,
     'local_tool_planner_r40':'BODYMIND_R40_LOCAL_TOOL_PLANNER' in bridge_text and 'bridge_plan_tool' in bridge_text and 'Non fingere mai di aver eseguito azioni' in bridge_text,
     'agent_chat_planner_r40':'bridge_plan_tool' in operator_text and 'planner_used=False' in operator_text and 'agent_plan' in operator_text and 'cleanup_duplicate_documents' in operator_text,
+    'dedupe_safety_r43':'BODYMIND_R43_NO_AUTODELETE_DOCUMENTS' in operator_text and "status='blocked_safety'" in operator_text and "conn.execute(\"UPDATE documenti SET visibile=0 WHERE id IN (\"+placeholders+\"),tuple(existing))" not in operator_text,
 }
 
 conn=sqlite3.connect(str(DB),timeout=20)
