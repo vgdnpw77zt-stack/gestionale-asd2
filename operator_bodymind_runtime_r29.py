@@ -24,7 +24,7 @@ from .core import (
     app, db, layout, login_required, csrf_token, current_username, current_role, e
 )
 
-OPERATOR_VERSION = "R48.1-secretary-ops"
+OPERATOR_VERSION = "R49.0-chat-secretary"
 PENDING_STATUSES = (
     "needs_manual_match","associato_tipo_da_verificare","richiede_conferma",
     "needs_review","da_verificare","pending",
@@ -1663,7 +1663,8 @@ def _cloud_plan_tool(conn, question: str, tool_trace=None):
             "tables":relevant.get("tables",[])[:12],
         }
         prompt=(
-            "Sei il cervello operativo dell'Operatore BodyMind. Devi capire italiano naturale, sinonimi, abbreviazioni e contesto. "
+            "Sei la Segreteria BodyMind: un assistente operativo cloud con qualità conversazionale paragonabile a un ottimo assistente generale, ma specializzato completamente nel gestionale BodyMind. "
+            "Parla in italiano naturale, chiaro e sintetico; non mostrare route, nomi tecnici o ragionamenti interni se non richiesti. Devi capire italiano naturale, sinonimi, abbreviazioni e contesto. "
             "Tesserato/iscritto/atleta/allievo/socio possono riferirsi alla stessa anagrafica; CM=certificato medico; "
             "MU=Modulo Unico; dossier=archivio documentale del tesserato. "
             "Conosci la struttura reale del gestionale attraverso la mappa runtime allegata. "
@@ -2112,13 +2113,35 @@ def bodymind_operator_logo():
 @login_required
 def bodymind_operator_home():
     conn=db()
+    history=[]
     try:
         _schema(conn)
         g=_global_check(conn)
+        rows=conn.execute(
+            """SELECT speaker,message,payload_json,created_at
+               FROM bodymind_operator_messages
+               WHERE conversation_id=? AND speaker IN ('user','assistant')
+               ORDER BY id DESC LIMIT 60""",
+            (_conv_id(),)
+        ).fetchall()
+        for r in reversed(rows):
+            payload={}
+            try:
+                payload=json.loads(str(r["payload_json"] or "{}"))
+                if not isinstance(payload,dict): payload={}
+            except Exception:
+                payload={}
+            history.append({
+                "speaker":str(r["speaker"] or ""),
+                "message":str(r["message"] or ""),
+                "payload":payload,
+                "created_at":str(r["created_at"] or ""),
+            })
     finally:
         conn.close()
     csrf=csrf_token()
     ident=e(_identity())
+    history_json=json.dumps(history,ensure_ascii=False).replace("</","<\\/")
     html=f"""
     <style id="bodymind-operator-r29">
     .bmo{{max-width:1180px;margin:0 auto;padding:10px 0 42px}}
@@ -2235,74 +2258,135 @@ def bodymind_operator_home():
       .bmo-send{{min-width:42px!important;width:42px!important;max-width:42px!important;height:42px!important;padding:0!important;align-self:center;font-size:17px!important;line-height:1!important;border-radius:12px;touch-action:manipulation;white-space:nowrap!important;overflow:hidden!important;}}
       .bmo-send::before,.bmo-send::after{{content:none!important;display:none!important;}}
     }}
+    /* BODYMIND_R49_CHATGPT_STYLE_SECRETARY */
+    .bmo{{max-width:100%;width:100%;min-height:calc(100dvh - 82px);padding:0!important;margin:0!important;display:flex;flex-direction:column;background:#0b0f14}}
+    .bmo-hero{{position:sticky!important;top:0;z-index:100!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;padding:10px 16px!important;margin:0!important;border:0!important;border-bottom:1px solid rgba(255,255,255,.08)!important;border-radius:0!important;background:rgba(11,15,20,.94)!important;box-shadow:none!important;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}}
+    .bmo-brand{{display:flex;align-items:center;gap:10px;min-width:0}}
+    .bmo-avatar-wrap{{display:block!important}}
+    .bmo-avatar{{width:38px!important;height:38px!important;margin:0!important;background:transparent!important;box-shadow:none!important;border:0!important;border-radius:12px!important}}
+    .bmo-avatar:after{{display:none!important}}
+    .bmo-avatar img{{width:36px!important;height:36px!important;object-fit:contain!important;filter:none!important}}
+    .bmo-brand-copy{{display:grid;gap:1px;min-width:0}}
+    .bmo-brand-title{{font-size:15px;font-weight:750;line-height:1.2;color:#f8fafc;white-space:nowrap}}
+    .bmo-brand-sub{{display:flex;align-items:center;gap:6px;font-size:11px;color:#8f9bab;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+    #bmoAiPill{{padding:0!important;border:0!important;background:transparent!important;color:#8f9bab!important;font-size:11px!important}}
+    .bmo-top-actions{{display:flex;align-items:center;gap:7px}}
+    .bmo-top-btn{{height:34px;border:1px solid rgba(255,255,255,.10);border-radius:10px;background:#151b23;color:#e5e7eb;padding:0 10px;font-size:12px;font-weight:700;cursor:pointer}}
+    .bmo-top-btn.icon{{width:34px;padding:0;font-size:16px}}
+    #bmoVoiceRecover{{height:34px!important;padding:0 9px!important;border-radius:10px!important}}
+    .bmo-kicker,.bmo-hero h1,.bmo-hero p,.bmo-status>.bmo-pill:not(#bmoAiPill):not(#bmoVoiceRecover),.bmo-audio-bars,.bmo-voice-status{{display:none!important}}
+    .bmo-grid{{display:block!important;flex:1!important;margin:0!important}}
+    .bmo-chat{{width:100%!important;min-height:calc(100dvh - 136px)!important;border:0!important;border-radius:0!important;background:#0b0f14!important;display:flex!important;flex-direction:column!important;overflow:visible!important}}
+    .bmo-side{{display:none!important}}
+    .bmo-messages{{width:min(820px,100%)!important;margin:0 auto!important;padding:26px 18px 190px!important;box-sizing:border-box!important;display:flex!important;flex-direction:column!important;gap:24px!important;flex:1!important;max-height:none!important;height:auto!important;overflow:visible!important}}
+    .bmo-empty{{min-height:52dvh;display:grid;place-items:center;text-align:center;padding:40px 18px;color:#e5e7eb}}
+    .bmo-empty[hidden]{{display:none!important}}
+    .bmo-empty-inner{{max-width:560px}}
+    .bmo-empty-logo{{width:76px;height:76px;object-fit:contain;margin-bottom:18px}}
+    .bmo-empty h1{{font-size:clamp(25px,4vw,34px);margin:0 0 10px;letter-spacing:-.025em}}
+    .bmo-empty p{{margin:0;color:#9ca3af;line-height:1.55;font-size:14px}}
+    .bmo-starters{{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:20px}}
+    .bmo-starters button{{border:1px solid rgba(255,255,255,.10);background:#151b23;color:#dbe3ee;border-radius:999px;padding:9px 12px;font-size:12px;cursor:pointer}}
+    .bmo-msg-row{{display:flex;align-items:flex-start;gap:11px;width:100%;box-sizing:border-box}}
+    .bmo-msg-row.me{{justify-content:flex-end}}
+    .bmo-msg-avatar{{width:28px;height:28px;border-radius:8px;object-fit:contain;flex:0 0 28px;margin-top:2px}}
+    .bmo-msg{{max-width:min(78%,690px)!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;color:#e8edf3!important;line-height:1.65!important;font-size:14.5px!important;white-space:pre-wrap;overflow-wrap:anywhere}}
+    .bmo-msg.me{{padding:10px 14px!important;border-radius:18px!important;background:#262d36!important;color:#fff!important}}
+    .bmo-msg.bot{{padding-top:2px!important}}
+    .bmo-cards,.bmo-links{{margin-top:11px!important}}
+    .bmo-card{{background:#151b23!important;border-color:rgba(255,255,255,.09)!important}}
+    .bmo-compose-shell{{position:fixed;left:0;right:0;bottom:0;z-index:999;padding:16px 14px calc(18px + env(safe-area-inset-bottom));background:linear-gradient(180deg,rgba(11,15,20,0),#0b0f14 24%,#0b0f14)}}
+    .bmo-compose{{width:min(820px,calc(100% - 12px))!important;margin:0 auto!important;position:relative!important;left:auto!important;right:auto!important;bottom:auto!important;display:grid!important;grid-template-columns:38px minmax(0,1fr) 38px 38px!important;gap:6px!important;align-items:end!important;padding:8px!important;border:1px solid rgba(255,255,255,.12)!important;border-radius:24px!important;background:#171c23!important;box-shadow:0 12px 36px rgba(0,0,0,.30)!important}}
+    .bmo-compose textarea{{width:100%!important;min-height:40px!important;height:40px!important;max-height:150px!important;resize:none!important;padding:9px 8px!important;background:transparent!important;border:0!important;outline:0!important;color:#f8fafc!important;font-size:15px!important;line-height:22px!important}}
+    .bmo-compose textarea::placeholder{{color:#7f8996}}
+    .bmo-mic,.bmo-send,.bmo-attach{{display:grid!important;place-items:center;min-width:38px!important;width:38px!important;height:38px!important;padding:0!important;border-radius:50%!important;border:0!important;background:transparent!important;color:#d6dde6!important;font-size:18px!important;box-shadow:none!important}}
+    .bmo-attach:hover,.bmo-mic:hover{{background:#242b34!important}}
+    .bmo-mic.on{{background:#7f1d4e!important;color:#fff!important}}
+    .bmo-send{{background:#f3f4f6!important;color:#111827!important;font-size:16px!important}}
+    .bmo-send:disabled{{opacity:.45}}
+    .bmo-compose-note{{width:min(820px,calc(100% - 24px));margin:7px auto 0;text-align:center;color:#6f7a87;font-size:10px}}
+    .bmo-hidden-tools{{display:none!important}}
+    @media(max-width:800px){{
+      .bmo{{padding:0!important;min-height:calc(100dvh - 70px)!important}}
+      .bmo-hero{{padding:8px 10px!important}}
+      .bmo-brand-title{{font-size:14px}}
+      .bmo-top-btn span{{display:none}}
+      .bmo-top-btn{{width:34px;padding:0;font-size:16px}}
+      .bmo-chat{{min-height:calc(100dvh - 118px)!important}}
+      .bmo-messages{{padding:20px 12px 172px!important;gap:20px!important}}
+      .bmo-msg{{max-width:88%!important;font-size:14px!important}}
+      .bmo-msg-row.bot .bmo-msg{{max-width:calc(100% - 40px)!important}}
+      .bmo-compose-shell{{padding:10px 7px calc(10px + env(safe-area-inset-bottom))!important}}
+      .bmo-compose{{width:100%!important;grid-template-columns:38px minmax(0,1fr) 38px 38px!important;border-radius:22px!important}}
+      .bmo-empty{{min-height:48dvh;padding:24px 10px}}
+      .bmo-starters{{display:grid;grid-template-columns:1fr 1fr}}
+      .bmo-starters button{{text-align:left;border-radius:14px}}
+    }}
     </style>
 
     <main class="bmo">
-      <section class="bmo-hero">
-        <div class="bmo-avatar-wrap">
-          <div class="bmo-avatar" id="bmoAvatar"><img src="/bodymind-media/logo" alt="BodyMind"></div>
-          <div class="bmo-audio-bars" id="bmoAudioBars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
-          <div class="bmo-voice-status" id="bmoVoiceStatus">Tocca il microfono e parlami</div>
-        </div>
-        <div>
-          <div class="bmo-kicker">BODYMIND · OPERATORE IA · {OPERATOR_VERSION}</div>
-          <h1>Ciao, {ident}.</h1>
-          <p>Parlami come parleresti a una persona in segreteria. Posso cercare nel gestionale, controllare documenti e tesserati, verificare cosa manca, leggere quote e incassi e preparare operazioni chiedendoti conferma quando serve.</p>
-          <div class="bmo-status">
-            <span class="bmo-pill">{g['athletes']} tesserati</span>
-            <span class="bmo-pill">{g['pending_docs']} documenti da verificare</span>
-            <span class="bmo-pill">{len(g['minor_issues'])} tutele da rivedere</span>
-            <span class="bmo-pill">{len(g['expiring_cert'])} certificati urgenti</span>
-            <span class="bmo-pill">{len(g['mu_review'])} MU da ricontrollare</span>
-            <span class="bmo-pill" id="bmoAiPill">IA Cloud · {"configurata" if (os.environ.get("BODYMIND_AI_CLOUD") and os.environ.get("OPENAI_API_KEY")) else "non configurata"}</span>
-            <button class="bmo-pill" id="bmoVoiceRecover" type="button" hidden style="cursor:pointer;color:inherit">🔊 Ascolta risposta</button>
+      <header class="bmo-hero">
+        <div class="bmo-brand">
+          <div class="bmo-avatar-wrap">
+            <div class="bmo-avatar" id="bmoAvatar" title="Parla con Segreteria BodyMind"><img src="/bodymind-media/logo" alt="BodyMind"></div>
+          </div>
+          <div class="bmo-brand-copy">
+            <div class="bmo-brand-title">Segreteria BodyMind</div>
+            <div class="bmo-brand-sub">
+              <span id="bmoAiPill">IA Cloud · {"configurata" if (os.environ.get("BODYMIND_AI_CLOUD") and os.environ.get("OPENAI_API_KEY")) else "non configurata"}</span>
+              <button class="bmo-pill" id="bmoVoiceRecover" type="button" hidden>🔊 Ascolta</button>
+            </div>
           </div>
         </div>
-      </section>
+        <div class="bmo-top-actions">
+          <button class="bmo-top-btn" id="bmoNewChat" type="button" title="Nuova conversazione">＋ <span>Nuova chat</span></button>
+          <button class="bmo-top-btn icon" id="bmoSettings" type="button" title="Impostazioni segreteria" aria-label="Impostazioni">⚙</button>
+        </div>
+      </header>
 
       <section class="bmo-grid">
         <div class="bmo-chat">
           <div class="bmo-messages" id="bmoMessages">
-            <div class="bmo-msg bot">Sono pronto. Scrivimi o parlami: posso cercare tesserati, documenti, certificati, tutela minori, quote e incassi.</div>
+            <div class="bmo-empty" id="bmoEmpty">
+              <div class="bmo-empty-inner">
+                <img class="bmo-empty-logo" src="/bodymind-media/logo" alt="BodyMind">
+                <h1>Ciao, {ident}. Come posso aiutarti?</h1>
+                <p>Sono la Segreteria BodyMind. Conosco il gestionale e posso cercare, controllare, preparare documenti e operazioni, lavorare con tesserati e collaboratori e usare gli strumenti reali quando serve.</p>
+                <div class="bmo-starters">
+                  <button data-q="Controlla BodyMind e dimmi cosa richiede attenzione">Controlla BodyMind</button>
+                  <button data-q="Quali documenti sono da verificare?">Documenti da verificare</button>
+                  <button data-q="Chi non ha il certificato medico valido?">Certificati medici</button>
+                  <button data-q="Fammi un riepilogo operativo della segreteria">Riepilogo segreteria</button>
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="bmo-compose">
-            <button class="bmo-mic" id="bmoMic" type="button" title="Parla" aria-label="Parla con Operatore BodyMind">🎙️</button>
-            <button class="bmo-attach" id="bmoAttach" type="button" title="Allega documento" aria-label="Allega documento">📎</button>
-            <textarea id="bmoInput" placeholder="Scrivi…" autocomplete="off"></textarea>
-            <button class="bmo-send" id="bmoSend" type="button" aria-label="Invia" title="Invia">➤</button>
+          <div class="bmo-compose-shell">
+            <div class="bmo-compose">
+              <button class="bmo-attach" id="bmoAttach" type="button" title="Allega file" aria-label="Allega file">＋</button>
+              <textarea id="bmoInput" placeholder="Messaggio a Segreteria BodyMind" autocomplete="off"></textarea>
+              <button class="bmo-mic" id="bmoMic" type="button" title="Parla" aria-label="Parla con Segreteria BodyMind">🎙</button>
+              <button class="bmo-send" id="bmoSend" type="button" aria-label="Invia" title="Invia">↑</button>
+            </div>
+            <div class="bmo-compose-note">Le operazioni che modificano dati richiedono conferma quando necessario.</div>
           </div>
         </div>
 
-        <aside class="bmo-side">
-          <h3>Scrivania</h3>
-          <div class="bmo-quick">
-            <button data-q="Controlla BodyMind">Controlla BodyMind</button>
-            <button data-q="Quali documenti sono da verificare?">Documenti da verificare</button>
-            <button data-q="Chi non ha il certificato medico?">Certificati</button>
-            <button data-q="Ci sono tutele minori incomplete?">Tutela minori</button>
-            <button data-q="Quanti pagamenti e ricevute risultano?">Pagamenti e ricevute</button>
-          </div>
-          <div class="bmo-upload">
-            <b>Affidami documenti</b>
-            <div class="small-muted" style="margin:5px 0 7px">PDF, immagini e DOCX: riconosco documenti ASD, tesserati, certificati e Moduli Unici. Su PC puoi affidarmi anche una cartella.</div>
-            <form id="bmoUploadForm" enctype="multipart/form-data">
-              <input type="file" name="files" id="bmoFiles" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.docx">
-              <input type="file" name="folder" id="bmoFolder" multiple webkitdirectory directory>
-              <label class="small-muted" style="display:grid;gap:4px;margin-top:8px">Tipo dichiarato
-                <select id="bmoUploadType" style="padding:8px;border-radius:10px;background:#081729;color:#fff;border:1px solid rgba(125,211,252,.18)">
-                  <option value="">Riconosci automaticamente</option>
-                  <option value="modulo_unico_tesseramento">Modulo Unico / iscrizione</option>
-                  <option value="certificato_medico">Certificato medico</option>
-                  <option value="documento_identita">Documento identità</option>
-                </select>
-              </label>
-              <label class="small-muted" style="display:flex;gap:7px;align-items:center;margin-top:8px"><input type="checkbox" id="bmoProductionMode" checked> porta in produzione i documenti certi</label>
-              <button class="bmo-send" type="submit">Analizza, sistema e produci</button>
-            </form>
-          </div>
-          <div class="bmo-voice-row">
-            <label><input type="checkbox" id="bmoVoice" checked> risposta vocale</label>
-          </div>
+        <aside class="bmo-side bmo-hidden-tools" aria-hidden="true">
+          <form id="bmoUploadForm" enctype="multipart/form-data">
+            <input type="file" name="files" id="bmoFiles" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.docx">
+            <input type="file" name="folder" id="bmoFolder" multiple webkitdirectory directory>
+            <select id="bmoUploadType">
+              <option value="">Riconosci automaticamente</option>
+              <option value="modulo_unico_tesseramento">Modulo Unico / iscrizione</option>
+              <option value="certificato_medico">Certificato medico</option>
+              <option value="documento_identita">Documento identità</option>
+            </select>
+            <input type="checkbox" id="bmoProductionMode" checked>
+            <button type="submit">Analizza</button>
+          </form>
+          <input type="checkbox" id="bmoVoice" checked>
+          <div id="bmoVoiceStatus">Pronto</div>
         </aside>
       </section>
     </main>
@@ -2358,7 +2442,11 @@ def bodymind_operator_home():
     <script>
     (()=>{{
       const csrf={json.dumps(csrf)};
+      const initialHistory={history_json};
       const messages=document.getElementById('bmoMessages');
+      const emptyState=document.getElementById('bmoEmpty');
+      const newChat=document.getElementById('bmoNewChat');
+      const settings=document.getElementById('bmoSettings');
       const input=document.getElementById('bmoInput');
       const send=document.getElementById('bmoSend');
       const mic=document.getElementById('bmoMic');
@@ -2423,6 +2511,17 @@ def bodymind_operator_home():
       function closeSmtpSetup(){{if(smtpModal)smtpModal.hidden=true}}
       voiceStageClose?.addEventListener('click',closeVoiceStage);
       document.getElementById('bmoSmtpCancel')?.addEventListener('click',closeSmtpSetup);
+      settings?.addEventListener('click',openSmtpSetup);
+      newChat?.addEventListener('click',async()=>{{
+        try{{
+          const r=await fetch('/operatore-bodymind/new-chat',{{method:'POST',headers:{{'X-CSRFToken':csrf}}}});
+          const d=await r.json();
+          if(!r.ok||!d.ok)throw new Error(d.text||'Errore');
+          messages.querySelectorAll('.bmo-msg-row').forEach(n=>n.remove());
+          if(emptyState)emptyState.hidden=false;
+          input.value='';input.focus();
+        }}catch(e){{addMsg('Non riesco ad aprire una nuova conversazione in questo momento.','bot')}}
+      }});
       try{{
         const qs=new URLSearchParams(window.location.search);
         if(qs.get('smtp_setup')==='1')setTimeout(openSmtpSetup,120);
@@ -2581,6 +2680,11 @@ def bodymind_operator_home():
 
       function esc(s){{const d=document.createElement('div');d.textContent=String(s??'');return d.innerHTML}}
       function addMsg(text,who='bot',data={{}}){{
+        if(emptyState)emptyState.hidden=true;
+        const row=document.createElement('div');row.className='bmo-msg-row '+(who==='me'?'me':'bot');
+        if(who!=='me'){{
+          const av=document.createElement('img');av.className='bmo-msg-avatar';av.src='/bodymind-media/logo';av.alt='BodyMind';row.appendChild(av);
+        }}
         const box=document.createElement('div');box.className='bmo-msg '+(who==='me'?'me':'bot');
         box.innerHTML=esc(text);
         if(data.cards?.length){{
@@ -2593,7 +2697,12 @@ def bodymind_operator_home():
           data.links.forEach(l=>{{const a=document.createElement('a');a.className='bmo-link';a.href=l.href;a.textContent=l.label;w.appendChild(a)}});
           box.appendChild(w);
         }}
-        messages.appendChild(box);messages.scrollTop=messages.scrollHeight;
+        row.appendChild(box);messages.appendChild(row);window.scrollTo(0,document.body.scrollHeight);
+      }}
+      if(Array.isArray(initialHistory)&&initialHistory.length){{
+        initialHistory.forEach(m=>addMsg(m.message,m.speaker==='user'?'me':'bot',m.payload||{{}}));
+      }}else if(emptyState){{
+        emptyState.hidden=false;
       }}
 
       function stopRecognitionForTTS(){{
@@ -3063,7 +3172,7 @@ def bodymind_operator_home():
         picker.click();
       }});
 
-      document.getElementById('bmoUploadForm').addEventListener('submit',async ev=>{{
+      document.getElementById('bmoUploadForm')?.addEventListener('submit',async ev=>{{
         ev.preventDefault();
         const fd=new FormData();
         const files=[...document.getElementById('bmoFiles').files,...document.getElementById('bmoFolder').files];
@@ -3084,6 +3193,15 @@ def bodymind_operator_home():
     </script>
     """
     return layout(html)
+
+
+@app.post("/operatore-bodymind/new-chat")
+@login_required
+def bodymind_operator_new_chat():
+    session["bodymind_operator_conversation"]=uuid.uuid4().hex
+    session.pop("bodymind_operator_last_tesserato",None)
+    session.pop("bodymind_operator_pending_action",None)
+    return jsonify({"ok":True,"conversation_id":session["bodymind_operator_conversation"]})
 
 
 @app.post("/operatore-bodymind/voice-diag")
