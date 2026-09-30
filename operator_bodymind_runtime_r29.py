@@ -643,6 +643,8 @@ def _agent_tool_catalog(conn):
         {"name":"secretary_audit","description":"Audit completo da segreteria: controlla tutti i tesserati attivi, Modulo Unico, documenti medici, scadenze certificati, tutela minori, documenti da verificare, pagamenti e ricevute. Usalo per richieste tipo controlla tutto/cosa manca/sistema la segreteria.","write":False},
         {"name":"scan_document_storage","description":"Controlla fisicamente l'archivio documenti sul volume BodyMind e segnala file non indicizzati nel database. Non cancella né sposta nulla.","write":False},
         {"name":"audit_alerts","description":"Controlla tabelle e storico relativi ad alert, notifiche, email, reminder e scadenze, senza esporre segreti.","write":False},
+        {"name":"smtp_status","description":"Controlla se il servizio SMTP è configurato e se l'ultimo test di connessione è riuscito. Non legge né espone password.","write":False},
+        {"name":"open_smtp_setup","description":"Apre nel gestionale il pannello sicuro per configurare SMTP/Gmail. Le credenziali non vengono inviate al modello.","write":False},
         {"name":"search_tesserato","description":"Cerca un tesserato per nome o cognome.","write":False},
         {"name":"inspect_tesserato","description":"Legge dossier, documenti, certificato, tutela, quota e pagamenti di un tesserato.","write":False},
         {"name":"list_documents","description":"Elenca i documenti visibili di un tesserato.","write":False},
@@ -710,6 +712,22 @@ def _execute_agent_tool(conn, plan, raw_message=""):
             return {"text":"Non trovo uno storico strutturato di alert/notifiche/email nel database. Posso cercare le funzioni di invio nel gestionale e verificare come vengono tracciate.","mode":"agent_tool","alert_audit":a}
         summary="; ".join(x["table"]+": "+str(x["count"])+" record" for x in a["tables"][:10])
         return {"text":"Storico comunicazioni/alert trovato: "+summary+". Posso approfondire l'ultimo invio o una specifica categoria.","mode":"agent_tool","alert_audit":a}
+
+    if tool=="smtp_status":
+        st=_smtp_public_status(conn)
+        if not st["configured"]:
+            return {"text":"SMTP non è ancora configurato. Posso aprire la configurazione sicura e preimpostare Gmail oppure un altro provider.","mode":"agent_tool","smtp_status":st,"ui_action":"smtp_setup"}
+        msg=f"SMTP configurato su {st['host']}:{st['port']} ({st['security']}) per {st['username']}."
+        if st["last_test_ok"]:
+            msg+=" L'ultimo test di accesso è riuscito."
+        elif st["last_test_at"]:
+            msg+=" L'ultimo test non è riuscito: "+(st["last_test_error"] or "errore non specificato")+"."
+        else:
+            msg+=" Non risulta ancora un test di connessione."
+        return {"text":msg,"mode":"agent_tool","smtp_status":st}
+
+    if tool=="open_smtp_setup":
+        return {"text":"Apro la configurazione SMTP sicura. Le credenziali restano nel backend cifrate e non vengono inviate all’IA.","mode":"agent_tool","ui_action":"smtp_setup","smtp_status":_smtp_public_status(conn)}
 
     if tool=="search_tesserato":
         q=athlete_name or str(args.get("query") or raw_message or "").strip()
