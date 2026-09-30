@@ -10,6 +10,9 @@ import inspect
 import shutil
 import unicodedata
 import uuid
+import base64
+import smtplib
+import ssl
 from datetime import date, datetime, timedelta
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -104,6 +107,15 @@ def _schema(conn) -> None:
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_bodymind_ai_usage_created ON bodymind_ai_usage(created_at)")
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_bodymind_ai_usage_request ON bodymind_ai_usage(request_id) WHERE request_id IS NOT NULL")
+    conn.execute("""
+      CREATE TABLE IF NOT EXISTS bodymind_secure_settings(
+        setting_key TEXT PRIMARY KEY,
+        value_enc TEXT NOT NULL,
+        meta_json TEXT,
+        updated_at TEXT NOT NULL,
+        updated_by TEXT
+      )
+    """)
     conn.commit()
 
 
