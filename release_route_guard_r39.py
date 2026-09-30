@@ -27,6 +27,9 @@ required = {
     ("/operatore-bodymind/voice/transcribe", "POST"),
     ("/operatore-bodymind/voice/speak", "POST"),
     ("/operatore-bodymind/cloud/usage/tts", "POST"),
+    ("/operatore-bodymind/smtp/setup", "GET"),
+    ("/operatore-bodymind/secure/smtp", "GET"),
+    ("/operatore-bodymind/secure/smtp", "POST"),
 }
 
 pairs = {}
