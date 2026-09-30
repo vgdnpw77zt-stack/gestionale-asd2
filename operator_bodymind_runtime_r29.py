@@ -1052,6 +1052,9 @@ _GENERIC_DESTRUCTIVE_HINTS=(
     "delete from","drop table","truncate ",".unlink(","os.remove(","shutil.rmtree",
     "visibile=0","status='deleted'","status=\"deleted\"","rimuovi","elimina","cancella",
     "delete","purge","reset","wipe","truncate",
+    "send_mail","send_email","smtp","webhook","requests.post","httpx.post",
+    "stripe","sumup","paypal","charge","refund","bonifico","pagamento esterno",
+    "request.files","save_uploaded","upload","send_file",
 )
 
 def _resolve_route_action(path, method):
