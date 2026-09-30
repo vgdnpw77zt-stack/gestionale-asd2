@@ -69,7 +69,7 @@ checks={
     'cloud_write_confirmation_r45':'_set_pending_action(conn,"generic_route_action"' in operator_text and 'bodymind_operator_pending_action' in operator_text and 'backup_file=backup_dir/' in operator_text,
     'cloud_generic_safety_r45':'_GENERIC_DESTRUCTIVE_HINTS' in operator_text and 'send_mail' in operator_text and 'stripe' in operator_text and 'shutil.rmtree' in operator_text and 'blocked_safety' in operator_text,
     'cloud_agent_loop_r45':'for agent_step in range(3)' in operator_text and '_compact_agent_observation' in operator_text and 'Risultati strumenti già usati in questa richiesta' in operator_text,
-    'cloud_native_secretary_r48':'BODYMIND_R46_CLOUD_NATIVE_SECRETARY' in operator_text and 'R48.1-secretary-ops' in operator_text,
+    'cloud_native_secretary_r49':'BODYMIND_R46_CLOUD_NATIVE_SECRETARY' in operator_text and ('R49.0-chat-secretary' in operator_text or 'R48.1-secretary-ops' in operator_text),
     'cloud_no_local_fallback_r46':'bridge_plan_tool' not in operator_text and 'bridge_enhance_result' not in operator_text and 'Mac/Qwen' not in operator_text and 'IA iMac' not in operator_text,
     'cloud_bridge_removed_r47':'/bodymind-ai-bridge' not in body and 'IA iMac:' not in body and 'routes_operator_bridge' not in app_text and not (APP/'asd_app/routes_operator_bridge.py').exists(),
     'cloud_voice_backend_r46':'/operatore-bodymind/voice/transcribe' in operator_text and '/operatore-bodymind/voice/speak' in operator_text and 'gpt-transcribe' in operator_text and 'gpt-4o-mini-tts' in operator_text,
