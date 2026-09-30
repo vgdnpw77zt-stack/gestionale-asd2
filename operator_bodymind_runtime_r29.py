@@ -20,7 +20,7 @@ from .core import (
     app, db, layout, login_required, csrf_token, current_username, current_role, e
 )
 
-OPERATOR_VERSION = "R47.0-cloud-native-secretary"
+OPERATOR_VERSION = "R48.0-secretary"
 PENDING_STATUSES = (
     "needs_manual_match","associato_tipo_da_verificare","richiede_conferma",
     "needs_review","da_verificare","pending",
@@ -424,9 +424,123 @@ def _prepare_duplicate_cleanup(conn, tid=None):
     return groups,remove_ids
 
 
+# BODYMIND_R48_SECRETARY_CORE
+def _secretary_audit(conn):
+    g=_global_check(conn)
+    missing_mu=[]
+    no_medical_doc=[]
+    incomplete=[]
+    active=[]
+    for a in _athletes(conn):
+        if "attivo" in a.keys() and int(a["attivo"] or 0)==0:
+            continue
+        active.append(a)
+        try:
+            snap=_athlete_snapshot(conn,a)
+        except Exception:
+            continue
+        name=snap.get("name") or _athlete_name(a)
+        issues=[]
+        if not snap.get("mu"):
+            missing_mu.append(name); issues.append("Modulo Unico")
+        if not snap.get("medical_docs"):
+            no_medical_doc.append(name); issues.append("documento medico")
+        if not snap.get("cert_expiry"):
+            issues.append("scadenza certificato")
+        if name in set(g.get("minor_issues") or []):
+            issues.append("tutela minore")
+        if issues:
+            incomplete.append({"id":int(a["id"]),"name":name,"issues":issues})
+    return {
+        "active":len(active),
+        "pending_docs":int(g.get("pending_docs") or 0),
+        "missing_mu":missing_mu,
+        "no_medical_doc":no_medical_doc,
+        "missing_cert_expiry":list(g.get("missing_cert") or []),
+        "expiring_cert":list(g.get("expiring_cert") or []),
+        "minor_issues":list(g.get("minor_issues") or []),
+        "mu_review":list(g.get("mu_review") or []),
+        "incomplete":incomplete,
+        "payments":int(g.get("payments") or 0),
+        "receipts":int(g.get("receipts") or 0),
+    }
+
+def _storage_audit(conn):
+    root=Path("/data/tenants/default/media")
+    files=[]
+    if root.exists():
+        for p in root.rglob("*"):
+            try:
+                if p.is_file() and not p.name.startswith("."):
+                    files.append(p.resolve())
+            except Exception:
+                continue
+    referenced=set()
+    referenced_basenames={}
+    for table in ("documenti","inbound_documents"):
+        if not _table(conn,table):
+            continue
+        cols=_cols(conn,table)
+        path_cols=[x for x in cols if "path" in x.lower() or x.lower() in ("filename","file","nome_file")]
+        if not path_cols:
+            continue
+        rows=conn.execute("SELECT * FROM "+table).fetchall()
+        for r in rows:
+            for col in path_cols:
+                try: raw=str(r[col] or "").strip()
+                except Exception: raw=""
+                if not raw: continue
+                p=Path(raw)
+                if not p.is_absolute():
+                    p=root/p
+                try: rp=p.resolve()
+                except Exception: rp=p
+                referenced.add(str(rp))
+                referenced_basenames.setdefault(Path(raw).name,0)
+                referenced_basenames[Path(raw).name]+=1
+    unindexed=[]
+    for p in files:
+        if str(p) in referenced:
+            continue
+        if referenced_basenames.get(p.name,0)==1:
+            continue
+        unindexed.append(str(p))
+    return {
+        "root":str(root),
+        "files_total":len(files),
+        "referenced_paths":len(referenced),
+        "unindexed_count":len(unindexed),
+        "unindexed":unindexed[:120],
+    }
+
+def _alert_audit(conn):
+    names=[str(r[0]) for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").fetchall()]
+    candidates=[n for n in names if any(k in n.lower() for k in ("alert","notific","email","mail","reminder","scadenz"))]
+    latest=[]
+    for table in candidates[:20]:
+        try:
+            cols=_cols(conn,table)
+            count=int(conn.execute("SELECT COUNT(*) FROM "+table).fetchone()[0])
+            row=conn.execute("SELECT * FROM "+table+" ORDER BY rowid DESC LIMIT 1").fetchone() if count else None
+            safe={}
+            if row:
+                for k in row.keys():
+                    kl=k.lower()
+                    if any(secret in kl for secret in ("password","secret","token","key")):
+                        continue
+                    v=str(row[k] or "")
+                    safe[k]=v[:180]
+            latest.append({"table":table,"count":count,"latest":safe})
+        except Exception:
+            continue
+    return {"tables":latest,"candidate_count":len(candidates)}
+
 def _agent_tool_catalog(conn):
     return [
         {"name":"global_status","description":"Controlla stato generale BodyMind: tesserati, documenti da verificare, certificati, tutele, pagamenti e ricevute.","write":False},
+        {"name":"secretary_audit","description":"Audit completo da segreteria: controlla tutti i tesserati attivi, Modulo Unico, documenti medici, scadenze certificati, tutela minori, documenti da verificare, pagamenti e ricevute. Usalo per richieste tipo controlla tutto/cosa manca/sistema la segreteria.","write":False},
+        {"name":"scan_document_storage","description":"Controlla fisicamente l'archivio documenti sul volume BodyMind e segnala file non indicizzati nel database. Non cancella né sposta nulla.","write":False},
+        {"name":"audit_alerts","description":"Controlla tabelle e storico relativi ad alert, notifiche, email, reminder e scadenze, senza esporre segreti.","write":False},
         {"name":"search_tesserato","description":"Cerca un tesserato per nome o cognome.","write":False},
         {"name":"inspect_tesserato","description":"Legge dossier, documenti, certificato, tutela, quota e pagamenti di un tesserato.","write":False},
         {"name":"list_documents","description":"Elenca i documenti visibili di un tesserato.","write":False},
@@ -461,6 +575,39 @@ def _execute_agent_tool(conn, plan, raw_message=""):
     if tool=="global_status":
         g=_global_check(conn)
         return {"text":f"BodyMind: {g['athletes']} tesserati, {g['pending_docs']} documenti da verificare, {len(g['missing_cert'])} certificati senza scadenza, {len(g['minor_issues'])} tutele da ricontrollare, {g['payments']} pagamenti e {g['receipts']} ricevute.","mode":"agent_tool"}
+
+    if tool=="secretary_audit":
+        a=_secretary_audit(conn)
+        parts=[
+            f"{a['active']} tesserati attivi",
+            f"{len(a['missing_mu'])} senza Modulo Unico riconosciuto",
+            f"{len(a['no_medical_doc'])} senza documento medico riconosciuto",
+            f"{len(a['missing_cert_expiry'])} senza scadenza certificato",
+            f"{len(a['expiring_cert'])} certificati scaduti/in scadenza",
+            f"{len(a['minor_issues'])} tutele minori da rivedere",
+            f"{a['pending_docs']} documenti in verifica",
+        ]
+        sample=[]
+        for item in a["incomplete"][:10]:
+            sample.append(item["name"]+" ("+", ".join(item["issues"])+")")
+        text_out="Audit segreteria: "+", ".join(parts)+"."
+        if sample:
+            text_out+=" Priorità: "+"; ".join(sample)+"."
+        return {"text":text_out,"mode":"agent_tool","secretary_audit":a,"links":[{"label":"Tesserati","href":"/tesserati"},{"label":"Documenti da verificare","href":"/documenti/da-verificare"}]}
+
+    if tool=="scan_document_storage":
+        a=_storage_audit(conn)
+        text_out=f"Archivio fisico: {a['files_total']} file trovati; {a['unindexed_count']} file non risultano collegati in modo certo al database."
+        if a["unindexed"]:
+            text_out+=" Primi file da verificare: "+"; ".join(Path(x).name for x in a["unindexed"][:12])+"."
+        return {"text":text_out,"mode":"agent_tool","storage_audit":a,"links":[{"label":"Documenti","href":"/documenti"},{"label":"Autopilot","href":"/documenti/da-verificare"}]}
+
+    if tool=="audit_alerts":
+        a=_alert_audit(conn)
+        if not a["tables"]:
+            return {"text":"Non trovo uno storico strutturato di alert/notifiche/email nel database. Posso cercare le funzioni di invio nel gestionale e verificare come vengono tracciate.","mode":"agent_tool","alert_audit":a}
+        summary="; ".join(x["table"]+": "+str(x["count"])+" record" for x in a["tables"][:10])
+        return {"text":"Storico comunicazioni/alert trovato: "+summary+". Posso approfondire l'ultimo invio o una specifica categoria.","mode":"agent_tool","alert_audit":a}
 
     if tool=="search_tesserato":
         q=athlete_name or str(args.get("query") or raw_message or "").strip()
