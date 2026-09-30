@@ -13,6 +13,7 @@ import uuid
 import base64
 import smtplib
 import ssl
+from email.message import EmailMessage
 from datetime import date, datetime, timedelta
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -23,7 +24,7 @@ from .core import (
     app, db, layout, login_required, csrf_token, current_username, current_role, e
 )
 
-OPERATOR_VERSION = "R48.0-secretary"
+OPERATOR_VERSION = "R48.1-secretary-ops"
 PENDING_STATUSES = (
     "needs_manual_match","associato_tipo_da_verificare","richiede_conferma",
     "needs_review","da_verificare","pending",
@@ -197,9 +198,12 @@ def _usage_summary(conn):
 
 def _secret_box():
     from cryptography.fernet import Fernet
+    direct=str(os.environ.get("BODYMIND_VAULT_KEY") or "").strip()
+    if direct:
+        return Fernet(direct.encode("ascii"))
     root=str(os.environ.get("ASD_SECRET_KEY") or "").strip()
     if not root:
-        raise RuntimeError("ASD_SECRET_KEY non configurata")
+        raise RuntimeError("BODYMIND_VAULT_KEY/ASD_SECRET_KEY non configurata")
     key=base64.urlsafe_b64encode(hashlib.sha256(root.encode("utf-8")).digest())
     return Fernet(key)
 
