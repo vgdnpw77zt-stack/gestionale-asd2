@@ -54,6 +54,7 @@ checks={
     'local_llama_health':'127.0.0.1:8088/health' in install_text,
     'heartbeat_verification':'/bodymind-ai-bridge/heartbeat' in install_text,
     'bridge_csrf_safe_get_pairing':'BODYMIND_R39_BRIDGE_CSRF_SAFE_GET_PAIRING' in install_text,
+    'bridge_diag_checkpoints':'BODYMIND_R39_BRIDGE_DIAGNOSTIC_CHECKPOINTS' in install_text,
 }
 
 conn=sqlite3.connect(str(DB),timeout=20)
@@ -73,8 +74,10 @@ checks['db_integrity']=integrity.lower()=='ok' and fk==0
 # Machine API uses safe GET routes and must reach its own auth logic without browser CSRF.
 heartbeat_probe=client.get('/bodymind-ai-bridge/heartbeat',headers={'Authorization':'Bearer invalid-qa-token'})
 result_probe=client.get('/bodymind-ai-bridge/result?job_id=0',headers={'Authorization':'Bearer invalid-qa-token'})
+diag_probe=client.get('/bodymind-ai-bridge/diag?stage=qa',headers={'Authorization':'Bearer invalid-qa-token'})
 checks['heartbeat_get_auth_handler']=heartbeat_probe.status_code==401 and 'application/json' in str(heartbeat_probe.content_type)
 checks['result_get_auth_handler']=result_probe.status_code==401 and 'application/json' in str(result_probe.content_type)
+checks['diag_get_auth_handler']=diag_probe.status_code==401 and 'application/json' in str(diag_probe.content_type)
 checks['bridge_get_only_machine_api']='BODYMIND_R39_BRIDGE_GET_ONLY_MACHINE_API' in install_text
 failed=[k for k,v in checks.items() if not v]
 print('[operator-experience-r38] checks='+repr(checks),flush=True)
