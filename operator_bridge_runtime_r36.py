@@ -222,7 +222,7 @@ def bodymind_ai_bridge_setup():
       </div>
       <p>Per collegare questo iMac al gestionale, copia nel Terminale del Mac il comando seguente entro {PAIR_TTL_MINUTES} minuti:</p>
       <pre style="white-space:pre-wrap;word-break:break-all;padding:16px;border-radius:12px;background:#111;color:#eee">{e(command)}</pre>
-      <button type="button" onclick="var t=this.previousElementSibling;var r=document.createRange();r.selectNodeContents(t);var s=window.getSelection();s.removeAllRanges();s.addRange(r);try{document.execCommand('copy');this.textContent='Copiato';}catch(e){this.textContent='Seleziona e copia';}" style="margin:8px 0 4px;padding:10px 14px;border-radius:10px;border:0;font-weight:800;cursor:pointer">Copia comando</button>
+      <button type="button" onclick="var t=this.previousElementSibling;var r=document.createRange();r.selectNodeContents(t);var s=window.getSelection();s.removeAllRanges();s.addRange(r);try{{document.execCommand('copy');this.textContent='Copiato';}}catch(e){{this.textContent='Seleziona e copia';}}" style="margin:8px 0 4px;padding:10px 14px;border-radius:10px;border:0;font-weight:800;cursor:pointer">Copia comando</button>
       <p style="font-size:13px;opacity:.8">Compatibile con macOS High Sierra: usa Python 3 se presente, altrimenti il Python di sistema.</p>
       <p>Il codice è monouso. La chiave definitiva viene salvata solo sul Mac e non compare in questa pagina.</p>
       <p><a href="/operatore-bodymind">← Torna all'Operatore</a></p>
