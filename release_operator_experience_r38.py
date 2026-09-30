@@ -51,6 +51,7 @@ checks={
     'operator_entry_no_overlap':mobile_home.status_code==200 and 'BODYMIND_R39_IPHONE_ENTRY_V2' in mobile_body and 'bottom:calc(86px + env(safe-area-inset-bottom))' in mobile_body and 'width:46px' in mobile_body,
     'ios_tts_unlock':'BODYMIND_R39_IOS_TTS_UNLOCK' in body and "speechSynthesis.resume()" in body,
     'ios_tts_persistent':'BODYMIND_R39_IOS_TTS_PERSISTENT_FIX' in body and 'ttsUtterance' in body and 'bodymind_tts_enabled_v2' in body and 'Voce non partita' in body,
+    'ios_natural_voice':'BODYMIND_R39_NATURAL_VOICE_V2' in body and 'refreshTTSVoices' in body and 'speechChunks' in body and "includes('premium')" in body and "includes('enhanced')" in body,
     'mobile_imac_only':'IA iMac:' in body and 'LanguageModel' not in body and 'window.ai' not in body,
     'installer_200':installer.status_code==200,
     'high_sierra_python_fallback':'command -v python3' in install_text and 'command -v python ' in install_text,
