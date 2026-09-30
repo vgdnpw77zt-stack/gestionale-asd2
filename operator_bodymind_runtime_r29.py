@@ -2691,6 +2691,7 @@ def bodymind_operator_home():
       async function ask(q){{
         q=String(q||'').trim();if(!q)return;
         addMsg(q,'me');input.value='';send.disabled=true;
+        if(voiceStageOpen)setVoiceStage('Sto lavorando',q,'Controllo il gestionale e gli strumenti necessari.');
         try{{
           const r=await fetch('/operatore-bodymind/chat',{{
             method:'POST',headers:{{'Content-Type':'application/json','X-CSRFToken':csrf}},
@@ -2698,9 +2699,14 @@ def bodymind_operator_home():
           }});
           const data=await r.json();
           let text=data.text||'Non ho ricevuto una risposta.';
-          addMsg(text,'bot',data);speak(text);refreshCloudStatus(true);
+          addMsg(text,'bot',data);
+          if(voiceStageOpen)setVoiceStage('Ti rispondo',text,'Puoi continuare a parlarmi senza uscire dalla conversazione.');
+          if(data.ui_action==='smtp_setup')openSmtpSetup();
+          speak(text);refreshCloudStatus(true);
         }}catch(err){{
-          addMsg('Non riesco a contattare il motore dell’Operatore in questo momento. Non ho modificato nulla.','bot');
+          const t='Non riesco a contattare il motore dell’Operatore in questo momento. Non ho modificato nulla.';
+          addMsg(t,'bot');
+          if(voiceStageOpen)setVoiceStage('Connessione non disponibile',t);
         }}finally{{send.disabled=false;input.focus()}}
       }}
 
