@@ -75,6 +75,9 @@ checks={
     'local_ai_quality_v2':'BODYMIND_R39_LOCAL_AI_QUALITY_V2' in install_text and '_bridge_recent_context' in bridge_text and '_bridge_token_budget' in bridge_text and 'temperature":0.35' in install_text,
     'local_ai_fast_split':'BODYMIND_R39_LOCAL_AI_FAST_SPLIT' in install_text and "allowed_read_modes={'fallback'}" in bridge_text and 'DEFAULT 80' not in bridge_text,
     'local_ai_latency_v3':'BODYMIND_R39_LOCAL_AI_LATENCY_V3' in install_text and 'return 70' in bridge_text and 'return 100' in bridge_text and 'limit=3' in bridge_text and "'42'" in bridge_text,
+    'agent_tools_r40':'BODYMIND_R40_AGENT_TOOLS' in body and '_agent_tool_catalog' in body and '_execute_agent_tool' in body and 'archive_duplicate_documents' in body and '_duplicate_document_groups' in body,
+    'local_tool_planner_r40':'BODYMIND_R40_LOCAL_TOOL_PLANNER' in bridge_text and 'bridge_plan_tool' in bridge_text and 'Non fingere mai di aver eseguito azioni' in install_text,
+    'agent_chat_planner_r40':'bridge_plan_tool' in body and 'planner_used=False' in body and 'agent_plan' in body and 'cleanup_duplicate_documents' in body,
 }
 
 conn=sqlite3.connect(str(DB),timeout=20)
