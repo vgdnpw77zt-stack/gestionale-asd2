@@ -47,7 +47,7 @@ checks={
     'home_200':home.status_code==200,
     'operator_r38':'OPERATORE IA · R38.0' in body,
     'mobile_compact':'BODYMIND_R38_MOBILE' in body and '.bmo-status .bmo-pill{display:none;}' in body,
-    'mobile_layout_fix':'BODYMIND_R39_IPHONE_LAYOUT_V2' in body and '#bmoMobileFiles[hidden]' in body and 'width:100vw' not in body and 'font-size:16px' in body and 'bottom:calc(76px + env(safe-area-inset-bottom))' in body,
+    'mobile_layout_fix':'BODYMIND_R39_IPHONE_LAYOUT_V2' in body and 'BODYMIND_R39_IPHONE_FILE_PICKER_DYNAMIC' in body and 'id="bmoMobileFiles"' not in body and "document.createElement('input')" in body and 'width:100vw' not in body and 'font-size:16px' in body and 'bottom:calc(76px + env(safe-area-inset-bottom))' in body,
     'operator_entry_no_overlap':mobile_home.status_code==200 and 'BODYMIND_R39_IPHONE_ENTRY_V2' in mobile_body and 'bottom:calc(86px + env(safe-area-inset-bottom))' in mobile_body and 'width:46px' in mobile_body,
     'ios_tts_unlock':'BODYMIND_R39_IOS_TTS_UNLOCK' in body and "speechSynthesis.resume()" in body,
     'ios_tts_persistent':'BODYMIND_R39_IOS_TTS_PERSISTENT_FIX' in body and 'ttsUtterance' in body and 'bodymind_tts_enabled_v2' in body and 'Voce non partita' in body,
