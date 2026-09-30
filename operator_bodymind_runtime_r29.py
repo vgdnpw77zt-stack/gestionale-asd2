@@ -2464,16 +2464,7 @@ def bodymind_operator_home():
       const smtpModal=document.getElementById('bmoSmtpModal');
       const smtpStatus=document.getElementById('bmoSmtpStatus');
       let voiceStageOpen=false;
-      let listening=false, recognition=null, recognitionWatchdog=null, micStream=null, audioContext=null, analyser=null, meterRAF=null;
-      let ttsPrimed=false, ttsUtterance=null, ttsRetryTimer=null, ttsSequence=0, lastSpeechText='';
-      let ttsVoice=null, ttsVoices=[];
-      const TTS_KEY='bodymind_tts_enabled_v2';
-      // BODYMIND_R39_NATURAL_VOICE_V2
-      // BODYMIND_R39_IOS_VOICE_DIAGNOSTICS_V3
-      // BODYMIND_R39_IOS_VOICE_RECOVERY_V4
-      // BODYMIND_R39_IOS_WEBKIT27_V5
-      // BODYMIND_R39_IOS_VOICE_STABLE_V6
-      // BODYMIND_R39_IOS_MIC_PRIME_V7
+      let lastSpeechText='';
       function setVoiceStage(state,text,hint=''){{
         if(voiceStageState)voiceStageState.textContent=String(state||'Segretario BodyMind');
         if(voiceStageText && text!==undefined)voiceStageText.textContent=String(text||'');
@@ -2567,87 +2558,13 @@ def bodymind_operator_home():
             headers:{{'Content-Type':'application/json','X-CSRFToken':csrf}},
             body:JSON.stringify(Object.assign({{
               stage:String(stage||''),
-              sr:!!(window.SpeechRecognition||window.webkitSpeechRecognition),
-              synth:!!window.speechSynthesis,
-              voices:(window.speechSynthesis?.getVoices?.()||[]).length,
+              cloud:true,
               ua:String(navigator.userAgent||'').slice(0,220)
             }},extra)),
             keepalive:true
           }}).catch(()=>{{}});
         }}catch(e){{}}
       }}
-      function refreshTTSVoices(){{
-        try{{
-          ttsVoices=speechSynthesis.getVoices()||[];
-          const italian=ttsVoices.filter(v=>String(v.lang||'').toLowerCase().startsWith('it'));
-          const score=v=>{{
-            const n=String(v.name||'').toLowerCase();
-            let s=0;
-            if(n.includes('premium'))s+=300;
-            if(n.includes('enhanced'))s+=260;
-            if(n.includes('siri'))s+=240;
-            if(v.default)s+=80;
-            if(v.localService)s+=20;
-            if(n.includes('compact'))s-=300;
-            return s;
-          }};
-          const ranked=italian.slice().sort((a,b)=>score(b)-score(a));
-          const best=ranked[0]||null;
-          // Never force an old compact/basic Italian voice. If no high-quality voice is exposed,
-          // leave voice=null and let iOS choose its current system Italian voice.
-          ttsVoice=(best && score(best)>=200)?best:null;
-        }}catch(e){{ttsVoice=null}}
-      }}
-      try{{refreshTTSVoices();speechSynthesis.addEventListener?.('voiceschanged',refreshTTSVoices)}}catch(e){{}}
-      function cleanSpeechText(text){{
-        return String(text||'')
-          .replace(/https?:\/\/\S+/g,'')
-          .replace(/[•▪◦]+/g,'. ')
-          .replace(/[*_#~]/g,'')
-          .replace(/€\s*/g,' euro ')
-          .replace(/\s*%/g,' per cento')
-          .replace(/\s+/g,' ')
-          .trim();
-      }}
-      function speechChunks(text){{
-        const clean=cleanSpeechText(text);
-        if(!clean)return [];
-        const raw=clean.match(/[^.!?;:]+[.!?;:]?|[^.!?;:]+$/g)||[clean];
-        const out=[];
-        raw.forEach(part=>{{
-          let s=part.trim();if(!s)return;
-          while(s.length>190){{
-            let cut=s.lastIndexOf(',',190);
-            if(cut<70)cut=s.lastIndexOf(' ',190);
-            if(cut<70)cut=190;
-            out.push(s.slice(0,cut+1).trim());
-            s=s.slice(cut+1).trim();
-          }}
-          if(s)out.push(s);
-        }});
-        return out;
-      }}
-      function primeTTS(){{
-        if(ttsPrimed || !('speechSynthesis' in window))return;
-        try{{
-          speechSynthesis.resume();
-          const warm=new SpeechSynthesisUtterance(' ');
-          warm.lang='it-IT';warm.volume=.01;warm.rate=1;
-          if(ttsVoice)warm.voice=ttsVoice;
-          warm.onstart=()=>{{ttsPrimed=true;voiceDiag('tts_unlock_start');try{{localStorage.setItem(TTS_KEY,'1')}}catch(e){{}}}};
-          warm.onend=()=>{{ttsPrimed=true;ttsUtterance=null;voiceDiag('tts_unlock_end');}};
-          warm.onerror=e=>{{voiceDiag('tts_unlock_error',{{error:String(e?.error||e?.message||'unknown')}});}};
-          ttsUtterance=warm;
-          speechSynthesis.speak(warm);
-        }}catch(e){{voiceDiag('tts_unlock_throw',{{error:String(e?.message||e)}})}}
-      }}
-      // Safari/iOS 27: never synthesize on an unrelated first tap.
-      // TTS is unlocked only by the explicit voice button, otherwise it can poison the next SpeechRecognition cycle.
-      try{{if(localStorage.getItem(TTS_KEY)==='1' && voice)voice.checked=true}}catch(e){{}}
-      if(voiceRecover){{voiceRecover.hidden=false;voiceRecover.textContent='🔊 Attiva voce'}}
-
-      // BODYMIND_R39_IOS_TTS_UNLOCK
-      // BODYMIND_R39_IOS_TTS_PERSISTENT_FIX
       async function refreshCloudStatus(showAlert=false){{
         const p=document.getElementById('bmoAiPill'); if(!p)return null;
         try{{
@@ -2705,101 +2622,7 @@ def bodymind_operator_home():
         emptyState.hidden=false;
       }}
 
-      function stopRecognitionForTTS(){{
-        clearRecognitionWatchdog();
-        if(recognition){{
-          const oldRecognition=recognition;
-          recognition=null;
-          try{{oldRecognition.abort()}}catch(e){{}}
-        }}
-        listening=false;
-        mic?.classList.remove('on');avatar?.classList.remove('listening');
-        stopMicStream();
-        voiceDiag('sr_aborted_for_tts');
-      }}
-      function speak(text,fromUserGesture=false){{
-        if(!voice || !voice.checked || !('speechSynthesis' in window) || !text)return;
-        lastSpeechText=String(text);
-        const chunks=speechChunks(text);
-        if(!chunks.length)return;
-        if(!fromUserGesture && !ttsPrimed){{
-          if(voiceRecover){{voiceRecover.hidden=false;voiceRecover.textContent='🔊 Ascolta risposta'}}
-          if(voiceStatus)voiceStatus.textContent='Tocca 🔊 Ascolta risposta';
-          voiceDiag('tts_waiting_user_gesture');
-          return;
-        }}
-        stopRecognitionForTTS();
-        const seq=++ttsSequence;
-        const begin=()=>{{
-          try{{
-            if(ttsRetryTimer){{clearTimeout(ttsRetryTimer);ttsRetryTimer=null}}
-            speechSynthesis.cancel();
-            speechSynthesis.resume();
-            refreshTTSVoices();
-            voiceDiag('tts_begin',{{gesture:!!fromUserGesture,voice:ttsVoice?.name||'',chunks:chunks.length}});
-            let index=0;
-            const next=()=>{{
-              if(seq!==ttsSequence||index>=chunks.length){{
-                ttsUtterance=null;avatar.classList.remove('speaking');
-                if(voiceStatus)voiceStatus.textContent='Tocca il microfono e parlami';
-                if(voiceRecover)voiceRecover.hidden=true;
-                voiceDiag('tts_complete');
-                return;
-              }}
-              const phrase=chunks[index++];
-              const u=new SpeechSynthesisUtterance(phrase);ttsUtterance=u;
-              u.lang='it-IT';u.rate=(phrase.length<55?1.0:.98);u.pitch=1.02;u.volume=1;
-              if(ttsVoice)u.voice=ttsVoice;
-              let started=false;
-              u.onstart=()=>{{
-                started=true;ttsPrimed=true;
-                try{{localStorage.setItem(TTS_KEY,'1')}}catch(e){{}}
-                avatar.classList.add('speaking');if(voiceRecover)voiceRecover.hidden=true;
-                if(voiceStatus)voiceStatus.textContent='Ti sto rispondendo…';
-                voiceDiag('tts_onstart',{{voice:u.voice?.name||'',index:index}});
-              }};
-              u.onend=()=>{{voiceDiag('tts_onend',{{index:index}});if(seq===ttsSequence)setTimeout(next,phrase.endsWith('.')?55:30)}};
-              u.onerror=e=>{{
-                voiceDiag('tts_onerror',{{error:String(e?.error||e?.message||'unknown'),index:index}});
-                ttsUtterance=null;avatar.classList.remove('speaking');
-                if(voiceRecover)voiceRecover.hidden=false;
-                if(voiceStatus)voiceStatus.textContent='Safari ha bloccato la voce: tocca 🔊 Attiva voce';
-              }};
-              speechSynthesis.speak(u);
-              if(index===1){{
-                ttsRetryTimer=setTimeout(()=>{{
-                  if(!started&&seq===ttsSequence&&ttsUtterance===u){{
-                    voiceDiag('tts_watchdog');
-                    try{{speechSynthesis.cancel();speechSynthesis.resume()}}catch(e){{}}
-                    if(voiceRecover)voiceRecover.hidden=false;
-                    if(voiceStatus)voiceStatus.textContent='Tocca 🔊 Attiva voce per riprodurre la risposta';
-                  }}
-                }},900);
-              }}
-            }};
-            next();
-          }}catch(e){{
-            voiceDiag('tts_throw',{{error:String(e?.message||e)}});
-            if(voiceRecover)voiceRecover.hidden=false;
-            if(voiceStatus)voiceStatus.textContent='Tocca 🔊 Attiva voce per riprodurre la risposta';
-          }}
-        }};
-        if(fromUserGesture){{
-          ttsPrimed=true;
-          try{{localStorage.setItem(TTS_KEY,'1')}}catch(e){{}}
-          begin();
-        }}else{{
-          setTimeout(begin,30);
-        }}
-      }}
-      voiceRecover?.addEventListener('click',()=>{{
-        voiceDiag('tts_recover_tap');
-        ttsPrimed=true;
-        try{{localStorage.setItem(TTS_KEY,'1')}}catch(e){{}}
-        speak(lastSpeechText||'Voce attiva.',true);
-      }});
-
-      // R47: cloud-native intelligence only.
+      // R49: cloud-native intelligence and voice only.
 
       async function ask(q){{
         q=String(q||'').trim();if(!q)return;
@@ -2828,203 +2651,11 @@ def bodymind_operator_home():
       document.querySelectorAll('[data-q]').forEach(b=>b.addEventListener('click',()=>ask(b.dataset.q)));
 
 
-      function stopMicStream(){{
-        if(meterRAF){{cancelAnimationFrame(meterRAF);meterRAF=null}}
-        try{{audioContext?.close()}}catch(e){{}}
-        audioContext=null;analyser=null;
-        if(micStream){{micStream.getTracks().forEach(t=>t.stop());micStream=null}}
-      }}
-      function startMeter(stream){{
-        try{{
-          const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;
-          audioContext=new AC();const source=audioContext.createMediaStreamSource(stream);
-          analyser=audioContext.createAnalyser();analyser.fftSize=256;source.connect(analyser);
-          const data=new Uint8Array(analyser.frequencyBinCount);
-          const tick=()=>{{if(!analyser)return;analyser.getByteFrequencyData(data);let sum=0;for(let i=0;i<data.length;i++)sum+=data[i];const level=Math.min(1,(sum/data.length)/90);avatar.style.transform='scale('+(1+level*.045)+')';meterRAF=requestAnimationFrame(tick)}};tick();
-        }}catch(e){{}}
-      }}
-      async function ensureMic(){{
-        if(!window.isSecureContext)throw new Error('Il microfono richiede HTTPS.');
-        if(!navigator.mediaDevices?.getUserMedia)throw new Error('Questo browser non espone il microfono.');
-        if(micStream)return micStream;
-        micStream=await navigator.mediaDevices.getUserMedia({{audio:{{echoCancellation:true,noiseSuppression:true,autoGainControl:true}}}});
-        startMeter(micStream);return micStream;
-      }}
-      async function primeMicForRecognition(){{
-        if(!window.isSecureContext)throw new Error('Il microfono richiede HTTPS.');
-        if(!navigator.mediaDevices?.getUserMedia)throw new Error('Questo browser non espone il microfono.');
-        let stream=null,ctx=null,source=null,an=null;
-        try{{
-          voiceDiag('mic_prime_request');
-          stream=await navigator.mediaDevices.getUserMedia({{audio:{{echoCancellation:true,noiseSuppression:true,autoGainControl:true}},video:false}});
-          const track=(stream.getAudioTracks&&stream.getAudioTracks()[0])||null;
-          voiceDiag('mic_prime_granted',{{muted:!!track?.muted,enabled:track?track.enabled:null,readyState:track?.readyState||''}});
-          const AC=window.AudioContext||window.webkitAudioContext;
-          if(!AC)return {{ok:true,signal:null}};
-          ctx=new AC();
-          try{{await ctx.resume()}}catch(e){{}}
-          source=ctx.createMediaStreamSource(stream);
-          an=ctx.createAnalyser();an.fftSize=512;source.connect(an);
-          const data=new Uint8Array(an.fftSize);
-          let peak=0;
-          const until=performance.now()+700;
-          while(performance.now()<until){{
-            an.getByteTimeDomainData(data);
-            let sum=0;
-            for(let i=0;i<data.length;i++){{const d=(data[i]-128)/128;sum+=d*d}}
-            peak=Math.max(peak,Math.sqrt(sum/data.length));
-            await new Promise(res=>setTimeout(res,55));
-          }}
-          const level=Math.round(peak*1000);
-          voiceDiag('mic_prime_signal',{{level:level}});
-          return {{ok:true,signal:peak}};
-        }}catch(e){{
-          voiceDiag('mic_prime_error',{{error:String(e?.name||''),message:String(e?.message||e)}});
-          return {{ok:false,error:e}};
-        }}finally{{
-          try{{source?.disconnect()}}catch(e){{}}
-          try{{an?.disconnect()}}catch(e){{}}
-          try{{stream?.getTracks().forEach(t=>t.stop())}}catch(e){{}}
-          try{{await ctx?.close()}}catch(e){{}}
-        }}
-      }}
-      function humanMicError(code){{
-        const c=String(code||'');
-        if(c==='not-allowed'||c==='service-not-allowed')return 'Accesso al microfono negato. Consenti il microfono a BodyMind nelle impostazioni di Safari e riprova.';
-        if(c==='audio-capture')return 'Non riesco ad accedere al microfono del dispositivo.';
-        if(c==='aborted')return 'Il riconoscimento è stato interrotto.';
-        if(c==='no-speech')return 'Non ho sentito una frase. Tocca di nuovo il microfono e parla normalmente.';
-        if(c==='network')return 'Il riconoscimento vocale del browser non è riuscito a collegarsi. Riprova.';
-        return 'Il riconoscimento vocale non è partito correttamente ('+c+'). Riprova.';
-      }}
-
-      const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-      function clearRecognitionWatchdog(){{if(recognitionWatchdog){{clearTimeout(recognitionWatchdog);recognitionWatchdog=null}}}}
-      function resetRecognitionUI(){{
-        listening=false;clearRecognitionWatchdog();mic.classList.remove('on');avatar.classList.remove('listening');avatar.style.transform='';stopMicStream();
-      }}
-      function buildRecognition(){{
-        if(!SR)return null;
-        const r=new SR();
-        r.lang='it-IT';r.interimResults=true;r.continuous=false;r.maxAlternatives=1;
-        let submitted=false;
-        r.onstart=()=>{{
-          if(recognition!==r)return;
-          clearRecognitionWatchdog();listening=true;mic.classList.add('on');avatar.classList.add('listening');
-          if(voiceStatus)voiceStatus.textContent='Ti ascolto… parla normalmente';
-          voiceDiag('sr_onstart');
-        }};
-        r.onaudiostart=()=>voiceDiag('sr_onaudiostart');
-        r.onspeechstart=()=>voiceDiag('sr_onspeechstart');
-        r.onspeechend=()=>voiceDiag('sr_onspeechend');
-        r.onresult=ev=>{{
-          if(recognition!==r)return;
-          let txt='';let final=false;
-          for(let i=ev.resultIndex;i<ev.results.length;i++){{txt+=ev.results[i][0].transcript;if(ev.results[i].isFinal)final=true}}
-          input.value=txt.trim();voiceDiag('sr_onresult',{{final:final,len:input.value.length}});
-          if(final&&input.value&&!submitted){{submitted=true;if(voiceStatus)voiceStatus.textContent='Ho capito. Un attimo…';setTimeout(()=>ask(input.value),100)}}
-        }};
-        r.onerror=ev=>{{
-          const err=String(ev?.error||'unknown');
-          if(recognition!==r){{voiceDiag('sr_stale_error_ignored',{{error:err}});return}}
-          if(err==='aborted'){{recognition=null;resetRecognitionUI();voiceDiag('sr_aborted_ignored');return}}
-          voiceDiag('sr_onerror',{{error:err,message:String(ev?.message||'')}});
-          recognition=null;resetRecognitionUI();
-          const t=humanMicError(err);if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
-        }};
-        r.onend=()=>{{
-          if(recognition===r)recognition=null;
-          voiceDiag('sr_onend',{{submitted:submitted}});resetRecognitionUI();
-          if(voiceStatus&&voiceStatus.textContent.startsWith('Ti ascolto'))voiceStatus.textContent='Tocca il microfono e parlami';
-        }};
-        return r;
-      }}
-      function waitSpeechIdle(done,tries=0){{
-        let busy=false;
-        try{{busy=!!(speechSynthesis?.speaking||speechSynthesis?.pending)}}catch(e){{}}
-        if(!busy||tries>=8){{setTimeout(done,220);return}}
-        try{{speechSynthesis.cancel()}}catch(e){{}}
-        setTimeout(()=>waitSpeechIdle(done,tries+1),120);
-      }}
-      async function startFreshRecognition(attempt=0){{
-        try{{
-          clearRecognitionWatchdog();
-          if(recognition){{const oldRecognition=recognition;recognition=null;try{{oldRecognition.abort()}}catch(e){{}}}}
-          resetRecognitionUI();
-          try{{ttsSequence++;speechSynthesis?.cancel()}}catch(e){{}}
-          voiceDiag(attempt?'sr_retry_prepare':'sr_prepare',{{attempt:attempt}});
-          const primed=await primeMicForRecognition();
-          if(!primed.ok){{
-            const err=primed.error||{{}};
-            resetRecognitionUI();
-            const t=(err.name==='NotAllowedError'||err.name==='SecurityError')
-              ?'Microfono non autorizzato. Consenti il microfono per BodyMind e riprova.'
-              :'Non riesco ad aprire il microfono del dispositivo.';
-            if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
-            return;
-          }}
-          if(primed.signal!==null && primed.signal<0.002){{
-            voiceDiag('mic_prime_no_signal',{{level:Math.round(primed.signal*1000)}});
-            if(voiceStatus)voiceStatus.textContent='Microfono aperto ma non rilevo audio. Parla vicino al microfono e riprova.';
-          }}else{{
-            if(voiceStatus)voiceStatus.textContent='Microfono OK. Avvio riconoscimento…';
-          }}
-          await new Promise(res=>setTimeout(res,320));
-          waitSpeechIdle(()=>{{
-            try{{
-              recognition=buildRecognition();
-              if(!recognition)throw new Error('SpeechRecognition non disponibile');
-              voiceDiag(attempt?'sr_retry_call':'sr_start_call',{{attempt:attempt}});
-              recognition.start();
-              recognitionWatchdog=setTimeout(()=>{{
-                if(!listening&&recognition){{
-                  voiceDiag('sr_start_timeout',{{attempt:attempt}});
-                  const oldRecognition=recognition;
-                  recognition=null;
-                  resetRecognitionUI();
-                  try{{oldRecognition.abort()}}catch(e){{}}
-                  if(attempt<1){{
-                    if(voiceStatus)voiceStatus.textContent='Riprovo il microfono…';
-                    setTimeout(()=>{{startFreshRecognition(1).catch(()=>{{}})}},700);
-                  }}else{{
-                    const t='Safari non ha avviato il riconoscimento. Puoi riprovare il microfono; se iOS continua a bloccarlo, usa temporaneamente la dettatura della tastiera.';
-                    if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
-                  }}
-                }}
-              }},7000);
-            }}catch(err){{
-              resetRecognitionUI();voiceDiag('sr_start_throw',{{error:String(err?.name||'')+':'+String(err?.message||err),attempt:attempt}});
-              if(attempt<1)setTimeout(()=>{{startFreshRecognition(1).catch(()=>{{}})}},500);
-              else{{
-                const t=(err?.name==='NotAllowedError'||err?.name==='SecurityError')?'Accesso al microfono negato. Consenti microfono e riconoscimento vocale a Safari e riprova.':('Microfono non disponibile: '+(err?.message||err));
-                if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
-              }}
-            }}
-          }});
-        }}catch(err){{
-          resetRecognitionUI();voiceDiag('sr_prepare_throw',{{error:String(err?.message||err)}});
-        }}
-      }}
-      if(SR){{
-        // BODYMIND_R39_IOS_SR_RECREATE_V4
-        // BODYMIND_R39_IOS_SR_WEBKIT27_STATE_MACHINE_V5
-        mic.addEventListener('click',()=>{{
-          if(listening&&recognition){{try{{voiceDiag('sr_manual_stop');recognition.stop()}}catch(e){{}};return}}
-          startFreshRecognition(0).catch(err=>{{voiceDiag('sr_async_throw',{{error:String(err?.message||err)}})}});
-        }});
-      }}else{{
-        voiceDiag('sr_unavailable');
-        mic.addEventListener('click',()=>{{
-          const t='Su questo browser il riconoscimento vocale web non è disponibile.';
-          if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
-        }});
-      }}
-
-      // BODYMIND_R46_CLOUD_NATIVE_VOICE
-      // Cloud STT + neural TTS. Legacy WebSpeech remains inert and is not the primary path.
+      // BODYMIND_R49_CLOUD_NATIVE_VOICE_ONLY
+      // Browser captures audio only; transcription and speech synthesis are cloud services.
       let cloudRecorder=null,cloudChunks=[],cloudRecording=false,cloudAudio=null,cloudMaxTimer=null,cloudRecordingStartedAt=0;
 
-      speak=async function(text,fromUserGesture=false){{
+      async function speak(text,fromUserGesture=false){{
         if(!voice || !voice.checked || !text)return;
         lastSpeechText=String(text);
         try{{
@@ -3065,7 +2696,7 @@ def bodymind_operator_home():
           if(voiceStatus)voiceStatus.textContent='Voce cloud non disponibile';
           voiceDiag('cloud_tts_error',{{error:String(e?.message||e)}});
         }}
-      }};
+      }}
 
       if(voiceRecover){{
         voiceRecover.onclick=async(ev)=>{{
