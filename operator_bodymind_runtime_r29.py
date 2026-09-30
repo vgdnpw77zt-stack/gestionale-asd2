@@ -1161,6 +1161,7 @@ def bodymind_operator_home():
       // BODYMIND_R39_IOS_VOICE_DIAGNOSTICS_V3
       // BODYMIND_R39_IOS_VOICE_RECOVERY_V4
       // BODYMIND_R39_IOS_WEBKIT27_V5
+      // BODYMIND_R39_IOS_VOICE_STABLE_V6
       function voiceDiag(stage,extra={{}}){{
         try{{
           fetch('/operatore-bodymind/voice-diag',{{
@@ -1184,20 +1185,19 @@ def bodymind_operator_home():
           const score=v=>{{
             const n=String(v.name||'').toLowerCase();
             let s=0;
-            if(n.includes('premium'))s+=120;
-            if(n.includes('enhanced'))s+=110;
-            if(n.includes('siri'))s+=100;
-            if(n.includes('alice'))s+=90;
-            if(n.includes('federica'))s+=85;
-            if(n.includes('elsa'))s+=80;
-            if(n.includes('paola'))s+=78;
-            if(n.includes('cosimo'))s+=72;
-            if(n.includes('luca'))s+=68;
-            if(v.localService)s+=18;
-            if(n.includes('compact'))s-=35;
+            if(n.includes('premium'))s+=300;
+            if(n.includes('enhanced'))s+=260;
+            if(n.includes('siri'))s+=240;
+            if(v.default)s+=80;
+            if(v.localService)s+=20;
+            if(n.includes('compact'))s-=300;
             return s;
           }};
-          ttsVoice=italian.sort((a,b)=>score(b)-score(a))[0]||null;
+          const ranked=italian.slice().sort((a,b)=>score(b)-score(a));
+          const best=ranked[0]||null;
+          // Never force an old compact/basic Italian voice. If no high-quality voice is exposed,
+          // leave voice=null and let iOS choose its current system Italian voice.
+          ttsVoice=(best && score(best)>=200)?best:null;
         }}catch(e){{ttsVoice=null}}
       }}
       try{{refreshTTSVoices();speechSynthesis.addEventListener?.('voiceschanged',refreshTTSVoices)}}catch(e){{}}
@@ -1280,8 +1280,9 @@ def bodymind_operator_home():
       function stopRecognitionForTTS(){{
         clearRecognitionWatchdog();
         if(recognition){{
-          try{{recognition.abort()}}catch(e){{}}
+          const oldRecognition=recognition;
           recognition=null;
+          try{{oldRecognition.abort()}}catch(e){{}}
         }}
         listening=false;
         mic?.classList.remove('on');avatar?.classList.remove('listening');
@@ -1319,7 +1320,7 @@ def bodymind_operator_home():
               }}
               const phrase=chunks[index++];
               const u=new SpeechSynthesisUtterance(phrase);ttsUtterance=u;
-              u.lang='it-IT';u.rate=(phrase.length<55?.95:.92);u.pitch=1;u.volume=1;
+              u.lang='it-IT';u.rate=(phrase.length<55?1.0:.98);u.pitch=1.02;u.volume=1;
               if(ttsVoice)u.voice=ttsVoice;
               let started=false;
               u.onstart=()=>{{
@@ -1329,7 +1330,7 @@ def bodymind_operator_home():
                 if(voiceStatus)voiceStatus.textContent='Ti sto rispondendo…';
                 voiceDiag('tts_onstart',{{voice:u.voice?.name||'',index:index}});
               }};
-              u.onend=()=>{{voiceDiag('tts_onend',{{index:index}});if(seq===ttsSequence)setTimeout(next,phrase.endsWith('.')?100:55)}};
+              u.onend=()=>{{voiceDiag('tts_onend',{{index:index}});if(seq===ttsSequence)setTimeout(next,phrase.endsWith('.')?55:30)}};
               u.onerror=e=>{{
                 voiceDiag('tts_onerror',{{error:String(e?.error||e?.message||'unknown'),index:index}});
                 ttsUtterance=null;avatar.classList.remove('speaking');
@@ -1419,6 +1420,7 @@ def bodymind_operator_home():
         const c=String(code||'');
         if(c==='not-allowed'||c==='service-not-allowed')return 'Accesso al microfono negato. Consenti il microfono a BodyMind nelle impostazioni di Safari e riprova.';
         if(c==='audio-capture')return 'Non riesco ad accedere al microfono del dispositivo.';
+        if(c==='aborted')return 'Il riconoscimento è stato interrotto.';
         if(c==='no-speech')return 'Non ho sentito una frase. Tocca di nuovo il microfono e parla normalmente.';
         if(c==='network')return 'Il riconoscimento vocale del browser non è riuscito a collegarsi. Riprova.';
         return 'Il riconoscimento vocale non è partito correttamente ('+c+'). Riprova.';
@@ -1451,10 +1453,12 @@ def bodymind_operator_home():
           if(final&&input.value&&!submitted){{submitted=true;if(voiceStatus)voiceStatus.textContent='Ho capito. Un attimo…';setTimeout(()=>ask(input.value),100)}}
         }};
         r.onerror=ev=>{{
-          if(recognition!==r)return;
-          voiceDiag('sr_onerror',{{error:String(ev?.error||'unknown'),message:String(ev?.message||'')}});
+          const err=String(ev?.error||'unknown');
+          if(recognition!==r){{voiceDiag('sr_stale_error_ignored',{{error:err}});return}}
+          if(err==='aborted'){{recognition=null;resetRecognitionUI();voiceDiag('sr_aborted_ignored');return}}
+          voiceDiag('sr_onerror',{{error:err,message:String(ev?.message||'')}});
           recognition=null;resetRecognitionUI();
-          const t=humanMicError(ev.error);if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+          const t=humanMicError(err);if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
         }};
         r.onend=()=>{{
           if(recognition===r)recognition=null;
@@ -1473,7 +1477,7 @@ def bodymind_operator_home():
       function startFreshRecognition(attempt=0){{
         try{{
           clearRecognitionWatchdog();
-          if(recognition){{try{{recognition.abort()}}catch(e){{}};recognition=null}}
+          if(recognition){{const oldRecognition=recognition;recognition=null;try{{oldRecognition.abort()}}catch(e){{}}}}
           resetRecognitionUI();
           try{{ttsSequence++;speechSynthesis?.cancel()}}catch(e){{}}
           voiceDiag(attempt?'sr_retry_prepare':'sr_prepare',{{attempt:attempt}});
@@ -1486,16 +1490,19 @@ def bodymind_operator_home():
               recognitionWatchdog=setTimeout(()=>{{
                 if(!listening&&recognition){{
                   voiceDiag('sr_start_timeout',{{attempt:attempt}});
-                  try{{recognition.abort()}}catch(e){{}}
-                  recognition=null;resetRecognitionUI();
+                  const oldRecognition=recognition;
+                  recognition=null;
+                  resetRecognitionUI();
+                  try{{oldRecognition.abort()}}catch(e){{}}
                   if(attempt<1){{
-                    setTimeout(()=>startFreshRecognition(1),500);
+                    if(voiceStatus)voiceStatus.textContent='Riprovo il microfono…';
+                    setTimeout(()=>startFreshRecognition(1),700);
                   }}else{{
-                    const t='Safari non ha avviato il riconoscimento vocale. Chiudi e riapri questa pagina oppure usa la dettatura della tastiera iPhone.';
+                    const t='Safari non ha avviato il riconoscimento. Puoi riprovare il microfono; se iOS continua a bloccarlo, usa temporaneamente la dettatura della tastiera.';
                     if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
                   }}
                 }}
-              }},2200);
+              }},7000);
             }}catch(err){{
               resetRecognitionUI();voiceDiag('sr_start_throw',{{error:String(err?.name||'')+':'+String(err?.message||err),attempt:attempt}});
               if(attempt<1)setTimeout(()=>startFreshRecognition(1),500);
