@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import ast
 import py_compile
-import re
 from pathlib import Path
 
 ROOT = Path("/opt/bodymind")
@@ -18,11 +17,30 @@ for path in PY_FILES:
 
 launcher = ROOT / "runtime_launcher.py"
 if launcher.exists():
-    text = launcher.read_text(encoding="utf-8", errors="replace")
-    refs = re.findall(r'runpy\\.run_path\\("(/opt/bodymind/[^"]+)"', text)
-    for ref in refs:
-        if not Path(ref).exists():
-            errors.append(f"missing-launcher-target:{ref}")
+    try:
+        launcher_text = launcher.read_text(encoding="utf-8", errors="replace")
+        launcher_tree = ast.parse(launcher_text)
+        refs = []
+        for node in ast.walk(launcher_tree):
+            if not isinstance(node, ast.Call):
+                continue
+            fn = node.func
+            if not (
+                isinstance(fn, ast.Attribute)
+                and fn.attr == "run_path"
+                and isinstance(fn.value, ast.Name)
+                and fn.value.id == "runpy"
+            ):
+                continue
+            if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+                refs.append(node.args[0].value)
+        for ref in refs:
+            if ref.startswith("/opt/bodymind/") and not Path(ref).exists():
+                errors.append(f"missing-launcher-target:{ref}")
+    except Exception as exc:
+        errors.append(f"launcher-scan:{exc}")
+else:
+    errors.append("missing-launcher:runtime_launcher.py")
 
 def route_entries(path: Path):
     tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
