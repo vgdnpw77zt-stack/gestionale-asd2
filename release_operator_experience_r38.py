@@ -40,6 +40,7 @@ mobile_body=mobile_home.get_data(as_text=True)
 family=client.get('/area-famiglie')
 family_body=family.get_data(as_text=True)
 operator_text=operator.read_text(encoding='utf-8',errors='replace')
+app_text=(APP/'app.py').read_text(encoding='utf-8',errors='replace')
 checks={
     'home_200':home.status_code==200,
     'operator_r38':('OPERATOR_VERSION = "R46.0-cloud-native-secretary"' in operator_text) or ('OPERATOR_VERSION = "R45.0-cloud-full-agent"' in operator_text) or ('OPERATOR_VERSION = "R40.0-agent-tools"' in operator_text),
@@ -66,10 +67,13 @@ checks={
     'cloud_generic_safety_r45':'_GENERIC_DESTRUCTIVE_HINTS' in operator_text and 'send_mail' in operator_text and 'stripe' in operator_text and 'shutil.rmtree' in operator_text and 'blocked_safety' in operator_text,
     'cloud_agent_loop_r45':'for agent_step in range(3)' in operator_text and '_compact_agent_observation' in operator_text and 'Risultati strumenti già usati in questa richiesta' in operator_text,
     'cloud_native_secretary_r46':'BODYMIND_R46_CLOUD_NATIVE_SECRETARY' in operator_text and 'R46.0-cloud-native-secretary' in operator_text,
-    'cloud_no_local_fallback_r46':'bridge_plan_tool' not in operator_text and 'bridge_enhance_result' not in operator_text and 'Non uso più il Mac/Qwen' in operator_text,
-    'cloud_bridge_removed_r47':'/bodymind-ai-bridge' not in body and 'IA iMac:' not in body and 'routes_operator_bridge' not in app_module.__file__,
+    'cloud_no_local_fallback_r46':'bridge_plan_tool' not in operator_text and 'bridge_enhance_result' not in operator_text and 'Mac/Qwen' not in operator_text and 'IA iMac' not in operator_text,
+    'cloud_bridge_removed_r47':'/bodymind-ai-bridge' not in body and 'IA iMac:' not in body and 'routes_operator_bridge' not in app_text and not (APP/'asd_app/routes_operator_bridge.py').exists(),
     'cloud_voice_backend_r46':'/operatore-bodymind/voice/transcribe' in operator_text and '/operatore-bodymind/voice/speak' in operator_text and 'gpt-transcribe' in operator_text and 'gpt-4o-mini-tts' in operator_text,
     'cloud_voice_frontend_r46':'BODYMIND_R46_CLOUD_NATIVE_VOICE' in operator_text and 'MediaRecorder' in operator_text and 'cloudStopAndTranscribe' in operator_text,
+    'cloud_budget_meter_r47':'BODYMIND_R47_AI_BUDGET_METER' in operator_text and 'bodymind_ai_usage' in operator_text and '_usage_summary' in operator_text and 'BODYMIND_AI_BUDGET_USD' in operator_text,
+    'cloud_budget_alerts_r47':"b.level==='critical'||b.level==='high'||b.level==='warning'" in operator_text and 'CREDITO ESAURITO' in operator_text and 'Budget IA: uso stimato' in operator_text,
+    'cloud_tts_usage_r47':'/operatore-bodymind/cloud/usage/tts' in operator_text and 'X-BodyMind-Usage-Id' in operator_text and '_TTS_EST_USD_PER_MIN' in operator_text,
 }
 
 conn=sqlite3.connect(str(DB),timeout=20)
