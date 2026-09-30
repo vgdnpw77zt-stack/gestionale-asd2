@@ -3187,6 +3187,14 @@ def bodymind_operator_upload():
     files=request.files.getlist("files")
     if not files:
         return jsonify({"text":"Non ho ricevuto file.","mode":"warning"}),400
+    production_mode=str(request.form.get("production_mode") or "1").strip().lower() not in ("0","false","no","off")
+    type_hint=str(request.form.get("document_type_hint") or "").strip()
+    allowed_hints={
+        "","modulo_unico_tesseramento","certificato_medico","documento_identita",
+        "trasporto_minori","documenti_gara","documenti_saggio"
+    }
+    if type_hint not in allowed_hints:
+        return jsonify({"text":"Tipo documento indicato non valido.","mode":"warning"}),400
     from .routes_email_documents import process_inbound_attachment, ALLOWED_INBOUND_DOCS, extract_attachment_text, find_tesserato_for_text
     from .routes_documenti import _save_uploaded_asd_document
     results=[]; errors=[]
@@ -3208,7 +3216,7 @@ def bodymind_operator_upload():
             try: athlete_match=find_tesserato_for_text((name+" "+extracted).strip(),current_username())
             except Exception: athlete_match=None
             asd_kind=_classify_asd_document(name,extracted) if not athlete_match else None
-            if asd_kind:
+            if asd_kind and not type_hint:
                 try:
                     f.stream.seek(0)
                     _,saved_name=_save_uploaded_asd_document(f,asd_kind["folder"])
@@ -3216,37 +3224,64 @@ def bodymind_operator_upload():
                         "name":name,"status":"archiviato_asd","tesserato_id":None,
                         "type":"documento_asd","confidence":asd_kind["confidence"],
                         "folder":asd_kind["folder"],"reason":asd_kind["reason"],"saved_name":saved_name,
+                        "production":False,"production_reason":"documento_asd"
                     })
                     continue
                 except Exception as exc:
                     errors.append(name+" · archivio ASD: "+str(exc)[:160])
                     continue
+            conn0=db()
+            try:
+                before_id=int(conn0.execute("SELECT COALESCE(MAX(id),0) FROM inbound_documents").fetchone()[0]) if _table(conn0,"inbound_documents") else 0
+            finally:
+                conn0.close()
             res=process_inbound_attachment(
                 name,data,subject="Operatore BodyMind",
-                sender=current_username(),body_text="Caricato dalla scrivania Operatore BodyMind",
+                sender=current_username(),body_text="Caricato dalla segreteria Operatore BodyMind",
                 source="operatore_bodymind"
             )
-            results.append({
+            conn1=db()
+            try:
+                inbound=_latest_inbound_after(conn1,before_id,name)
+                inbound_id=int(inbound["id"]) if inbound else 0
+            finally:
+                conn1.close()
+            produced=False; production_details={}
+            if production_mode and inbound_id:
+                produced,production_details=_productionize_inbound(inbound_id,type_hint=type_hint)
+            result={
                 "name":name,
                 "status":res.get("status"),
                 "tesserato_id":res.get("tesserato_id"),
-                "type":(res.get("classification") or {}).get("type"),
-                "confidence":(res.get("classification") or {}).get("confidence"),
+                "type":type_hint or (res.get("classification") or {}).get("type"),
+                "confidence":100 if type_hint else (res.get("classification") or {}).get("confidence"),
                 "folder":"Dossier/Autopilot",
-            })
+                "inbound_id":inbound_id or None,
+                "production":bool(produced),
+                "production_details":production_details,
+            }
+            if produced:
+                result["status"]="produzione"
+                result["tesserato_id"]=production_details.get("tesserato_id") or result.get("tesserato_id")
+                result["document_id"]=production_details.get("document_id")
+            results.append(result)
         except Exception as exc:
             errors.append((f.filename or "file")+" · "+str(exc)[:180])
-    auto=sum(1 for r in results if r.get("tesserato_id") and r.get("status") in ("associato","archived_to_tesserato"))
+    produced=sum(1 for r in results if r.get("production"))
+    auto=sum(1 for r in results if r.get("tesserato_id") and not r.get("production") and r.get("status") in ("associato","archived_to_tesserato"))
     asd=sum(1 for r in results if r.get("status")=="archiviato_asd")
-    review=sum(1 for r in results if r.get("status") in PENDING_STATUSES or (not r.get("tesserato_id") and r.get("status")!="archiviato_asd"))
-    text=f"Ho analizzato {len(results)} file: {auto} associati a tesserati, {asd} archiviati come documenti ASD e {review} richiedono verifica."
+    review=sum(1 for r in results if not r.get("production") and (r.get("status") in PENDING_STATUSES or (not r.get("tesserato_id") and r.get("status")!="archiviato_asd")))
+    text=f"Ho elaborato {len(results)} file: {produced} messi in produzione e verificati, {auto} associati, {asd} archiviati come documenti ASD e {review} richiedono verifica."
     if errors:
         text+=f" {len(errors)} file non sono stati elaborati."
+    if produced:
+        text+=" Per quelli in produzione ho ricontrollato l'esistenza del documento nel dossier dopo l'OK finale."
     return jsonify({
         "text":text,"mode":"upload","results":results,"errors":errors,
+        "production_mode":production_mode,"document_type_hint":type_hint,
+        "produced":produced,"review":review,
         "links":[{"label":"Apri Da verificare","href":"/documenti/da-verificare"},{"label":"Apri Documenti","href":"/documenti"}]
     })
-
 
 @app.after_request
 def bodymind_family_logo_override(resp):
