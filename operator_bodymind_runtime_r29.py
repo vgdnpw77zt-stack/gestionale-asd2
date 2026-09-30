@@ -1231,6 +1231,10 @@ def _cloud_plan_tool(conn, question: str, tool_trace=None):
             _log(conn,"system","R45 cloud planner unavailable: "+repr(exc))
         except Exception:
             pass
+        try:
+            print("[cloud-agent-r45] planner_error="+repr(exc),flush=True)
+        except Exception:
+            pass
         return None
 
 def _execute_full_agent_plan(conn, plan, raw_message=""):
