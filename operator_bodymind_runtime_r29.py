@@ -1042,40 +1042,38 @@ def bodymind_operator_home():
     .bmo-voice-status{{min-height:18px;margin-top:2px;font-size:11px;color:#a8bbcf;text-align:center}}
     .bmo-attach{{display:none;min-width:48px;height:48px;border-radius:15px;border:1px solid rgba(255,255,255,.12);background:#172b40;color:#fff;font-size:18px;cursor:pointer}}
     /* BODYMIND_R38_MOBILE: compact, chat-first, no dashboard-card clutter on iPhone */
+    /* BODYMIND_R39_IPHONE_LAYOUT_V2 */
     @media(max-width:800px){{
-      .bmo{{max-width:none;padding:0 0 calc(72px + env(safe-area-inset-bottom));}}
-      .bmo-hero{{position:sticky;top:0;z-index:18;display:grid;grid-template-columns:54px minmax(0,1fr);gap:10px;align-items:center;text-align:left;padding:9px 11px;border-radius:15px;box-shadow:none;background:rgba(7,16,31,.94);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);}}
+      .bmo{{max-width:none;width:100%;margin:0;padding:0 8px calc(158px + env(safe-area-inset-bottom));box-sizing:border-box;overflow-x:hidden;}}
+      .bmo-hero{{position:sticky;top:0;z-index:18;display:grid;grid-template-columns:46px minmax(0,1fr);gap:9px;align-items:center;text-align:left;padding:8px 9px;margin:0 -2px;border-radius:14px;box-shadow:none;background:rgba(7,16,31,.96);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);}}
       .bmo-avatar-wrap{{display:block;min-width:0;}}
-      .bmo-avatar{{width:50px;height:50px;margin:0;}}
-      .bmo-avatar img{{width:38px;height:38px;}}
+      .bmo-avatar{{width:44px;height:44px;margin:0;}}
+      .bmo-avatar img{{width:32px;height:32px;}}
       .bmo-audio-bars,.bmo-voice-status,.bmo-kicker,.bmo-hero p{{display:none!important;}}
       .bmo-hero>div:last-child{{display:block;min-width:0;}}
-      .bmo-hero h1{{font-size:18px;line-height:1.15;margin:0 0 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}}
-      .bmo-status{{display:flex;gap:0;margin:0;}}
+      .bmo-hero h1{{font-size:17px;line-height:1.1;margin:0 0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}}
+      .bmo-status{{display:flex;gap:0;margin:0;min-width:0;}}
       .bmo-status .bmo-pill{{display:none;}}
-      .bmo-status #bmoAiPill{{display:inline-flex;align-items:center;max-width:100%;font-size:10px;padding:5px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-color:rgba(244,90,157,.25);background:rgba(244,90,157,.09);}}
-      .bmo-grid{{display:block;margin-top:7px;}}
+      .bmo-status #bmoAiPill{{display:inline-flex;align-items:center;max-width:100%;font-size:10px;padding:4px 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-color:rgba(244,90,157,.25);background:rgba(244,90,157,.09);}}
+      .bmo-grid{{display:block;margin-top:6px;}}
       .bmo-side{{display:none!important;}}
-      .bmo-chat{{min-height:calc(100vh - 150px);min-height:calc(100dvh - 150px);border-radius:15px;border-left:0;border-right:0;}}
-      .bmo-messages{{height:calc(100vh - 226px);height:calc(100dvh - 226px);max-height:none;padding:12px 10px 18px;gap:9px;}}
-      .bmo-msg{{max-width:92%;padding:10px 12px;border-radius:16px;font-size:14px;line-height:1.42;}}
+      .bmo-chat{{min-height:calc(100vh - 145px);min-height:calc(100dvh - 145px);border-radius:15px;border:1px solid rgba(148,163,184,.12);overflow:visible;background:rgba(7,16,31,.88);}}
+      .bmo-messages{{height:calc(100vh - 292px);height:calc(100dvh - 292px);min-height:260px;max-height:none;padding:11px 7px 16px;gap:9px;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}}
+      .bmo-msg{{max-width:94%;padding:10px 11px;border-radius:15px;font-size:14px;line-height:1.4;overflow-wrap:anywhere;}}
       .bmo-cards{{display:grid;grid-template-columns:1fr 1fr;gap:6px;}}
-      .bmo-card{{min-width:0;padding:8px 9px;border-radius:11px;}}
+      .bmo-card{{min-width:0;padding:8px 9px;border-radius:11px;overflow:hidden;}}
       .bmo-card strong{{font-size:18px;}}
       .bmo-links{{gap:6px;}}
       .bmo-link{{padding:7px 8px;border-radius:10px;font-size:10px;}}
-      .bmo-compose{{position:fixed;left:0;right:0;bottom:0;z-index:999;grid-template-columns:48px 40px minmax(0,1fr) 46px;gap:6px;align-items:center;padding:8px 10px calc(8px + env(safe-area-inset-bottom));background:rgba(5,12,23,.97);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);}}
-      /* BODYMIND_R39_MOBILE_LAYOUT_FIX */
-      .bmo-compose{{width:100vw;max-width:100vw;box-sizing:border-box;overflow:hidden;}}
+      .bmo-compose{{position:fixed;left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));bottom:calc(76px + env(safe-area-inset-bottom));z-index:999;display:grid;grid-template-columns:42px 36px minmax(0,1fr) 42px;gap:5px;align-items:center;width:auto;max-width:none;box-sizing:border-box;overflow:hidden;padding:7px;border:1px solid rgba(148,163,184,.16);border-radius:18px;background:rgba(5,12,23,.985);box-shadow:0 12px 32px rgba(0,0,0,.34);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);}}
       .bmo-compose>*{{min-width:0;box-sizing:border-box;}}
       .bmo-compose #bmoMobileFiles,.bmo-compose #bmoMobileFiles[hidden]{{display:none!important;position:absolute!important;width:0!important;height:0!important;overflow:hidden!important;pointer-events:none!important;}}
-      .bmo-compose textarea{{width:100%;min-width:0;max-width:100%;box-sizing:border-box;}}
-      .bmo-mic{{min-width:48px;width:48px;height:48px;border-radius:50%;font-size:22px;background:linear-gradient(145deg,#8d285e,#d43a7d);box-shadow:0 8px 20px rgba(212,58,125,.24);}}
-      .bmo-mic.on{{box-shadow:0 0 0 6px rgba(244,90,157,.12),0 8px 24px rgba(212,58,125,.34);}}
-      .bmo-attach{{display:block;min-width:40px;width:40px;height:40px;align-self:center;border-radius:12px;font-size:17px;}}
-      .bmo-compose textarea{{min-height:44px;height:44px;max-height:96px;resize:none;padding:10px 11px;align-self:center;border-radius:13px;}}
-      .bmo-send{{min-width:46px;width:46px;height:44px;padding:0;align-self:center;font-size:0;border-radius:13px;}}
-      .bmo-send::after{{content:"➤";font-size:18px;}}
+      .bmo-mic{{min-width:42px;width:42px;height:42px;border-radius:50%;font-size:20px;background:linear-gradient(145deg,#8d285e,#d43a7d);box-shadow:none;touch-action:manipulation;}}
+      .bmo-mic.on{{box-shadow:0 0 0 4px rgba(244,90,157,.12);}}
+      .bmo-attach{{display:block;min-width:36px;width:36px;height:36px;align-self:center;border-radius:11px;font-size:16px;padding:0;touch-action:manipulation;}}
+      .bmo-compose textarea{{width:100%;min-width:0;max-width:100%;min-height:42px;height:42px;max-height:84px;resize:none;padding:10px 10px;align-self:center;border-radius:12px;font-size:16px;line-height:20px;box-sizing:border-box;overflow-y:auto;}}
+      .bmo-send{{min-width:42px;width:42px;height:42px;padding:0;align-self:center;font-size:0;border-radius:12px;touch-action:manipulation;}}
+      .bmo-send::after{{content:"➤";font-size:17px;line-height:1;}}
     }}
     </style>
 
@@ -1470,25 +1468,31 @@ def bodymind_operator_mobile_entry(resp):
             return resp
         button="""
         <style id="bmo-mobile-entry-style">
+          /* BODYMIND_R39_IPHONE_ENTRY_V2 */
           @media(max-width:800px){
             #bmo-mobile-entry{
-              right:10px!important;
-              bottom:calc(104px + env(safe-area-inset-bottom))!important;
-              padding:9px 12px!important;
-              font-size:11px!important;
-              max-width:150px!important;
+              right:12px!important;
+              bottom:calc(86px + env(safe-area-inset-bottom))!important;
+              width:46px!important;
+              height:46px!important;
+              min-width:46px!important;
+              max-width:46px!important;
+              padding:0!important;
+              display:grid!important;
+              place-items:center!important;
+              border-radius:50%!important;
+              font-size:20px!important;
+              line-height:1!important;
+              overflow:hidden!important;
             }
           }
         </style>
-        <a id="bmo-mobile-entry" href="/operatore-bodymind" aria-label="Apri Operatore BodyMind"
-           style="position:fixed;right:14px;bottom:calc(18px + env(safe-area-inset-bottom));z-index:9999;
-           display:flex;align-items:center;gap:8px;padding:11px 14px;border-radius:999px;
-           background:rgba(18,10,22,.88);border:1px solid rgba(244,90,157,.38);color:#fff;
-           text-decoration:none;font-weight:900;font-size:12px;box-shadow:0 15px 38px rgba(0,0,0,.30);
-           backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)">
-           <span style="width:25px;height:25px;border-radius:50%;display:grid;place-items:center;background:rgba(244,90,157,.20)">✦</span>
-           Operatore
-        </a>
+        <a id="bmo-mobile-entry" href="/operatore-bodymind" aria-label="Apri Operatore BodyMind" title="Operatore BodyMind"
+           style="position:fixed;right:14px;bottom:calc(86px + env(safe-area-inset-bottom));z-index:9999;
+           width:46px;height:46px;display:grid;place-items:center;border-radius:50%;
+           background:rgba(18,10,22,.94);border:1px solid rgba(244,90,157,.42);color:#fff;
+           text-decoration:none;font-weight:900;font-size:20px;box-shadow:0 10px 26px rgba(0,0,0,.30);
+           backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)">✦</a>
         """
         html=html.replace("</body>",button+"</body>") if "</body>" in html else html+button
         resp.set_data(html)
