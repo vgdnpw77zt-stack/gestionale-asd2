@@ -7,3 +7,4 @@ ngrok
 pypdf>=5.0,<7.0
 pytesseract>=0.3.13,<1.0
 gunicorn>=22,<24
+cryptography>=43,<47
