@@ -48,7 +48,7 @@ operator_text=operator.read_text(encoding='utf-8',errors='replace')
 bridge_text=bridge.read_text(encoding='utf-8',errors='replace')
 checks={
     'home_200':home.status_code==200,
-    'operator_r38':('OPERATORE IA · R40.0-agent-tools' in body) or ('OPERATOR_VERSION = "R45.0-cloud-full-agent"' in operator_text) or ('OPERATOR_VERSION = "R40.0-agent-tools"' in operator_text),
+    'operator_r38':('OPERATOR_VERSION = "R46.0-cloud-native-secretary"' in operator_text) or ('OPERATOR_VERSION = "R45.0-cloud-full-agent"' in operator_text) or ('OPERATOR_VERSION = "R40.0-agent-tools"' in operator_text),
     'mobile_compact':'BODYMIND_R38_MOBILE' in body and '.bmo-status .bmo-pill{display:none;}' in body,
     'mobile_layout_fix':'BODYMIND_R39_IPHONE_LAYOUT_V2' in body and 'BODYMIND_R39_IPHONE_FILE_PICKER_DYNAMIC' in body and 'id="bmoMobileFiles"' not in body and "document.createElement('input')" in body and 'width:100vw' not in body and 'font-size:16px' in body and 'bottom:calc(76px + env(safe-area-inset-bottom))' in body,
     'operator_entry_no_overlap':mobile_home.status_code==200 and 'BODYMIND_R39_IPHONE_ENTRY_V2' in mobile_body and 'bottom:calc(86px + env(safe-area-inset-bottom))' in mobile_body and 'width:46px' in mobile_body,
@@ -62,7 +62,7 @@ checks={
     'ios_voice_recovery_v4':'BODYMIND_R39_IOS_VOICE_RECOVERY_V4' in body and 'bmoVoiceRecover' in body and 'buildRecognition' in body and 'sr_start_timeout' in body and 'sr_retry_call' in body,
     'ios_sr_recreate_v4':'BODYMIND_R39_IOS_SR_RECREATE_V4' in body and 'recognition=buildRecognition()' in body and "localStorage.getItem(TTS_KEY)==='1')ttsPrimed=true" not in body,
     'family_logo_bodymind':family.status_code==200 and 'https://bodymindaerialstudio.life/seed-media/logo?v=9' in family_body and '/bodymind-media/logo' not in family_body,
-    'mobile_imac_only':'IA iMac:' in body and 'LanguageModel' not in body and 'window.ai' not in body,
+    'cloud_native_ui_r46':'IA Cloud ·' in body and 'IA iMac:' not in body and 'BODYMIND_R46_CLOUD_NATIVE_VOICE' in body,
     'installer_200':installer.status_code==200,
     'high_sierra_python_fallback':'command -v python3' in install_text and 'command -v python ' in install_text,
     'python27_bridge_compat':'from urllib2 import Request, urlopen' in install_text,
@@ -86,6 +86,10 @@ checks={
     'cloud_write_confirmation_r45':'_set_pending_action(conn,"generic_route_action"' in operator_text and 'bodymind_operator_pending_action' in operator_text and 'backup_file=backup_dir/' in operator_text,
     'cloud_generic_safety_r45':'_GENERIC_DESTRUCTIVE_HINTS' in operator_text and 'send_mail' in operator_text and 'stripe' in operator_text and 'shutil.rmtree' in operator_text and 'blocked_safety' in operator_text,
     'cloud_agent_loop_r45':'for agent_step in range(3)' in operator_text and '_compact_agent_observation' in operator_text and 'Risultati strumenti già usati in questa richiesta' in operator_text,
+    'cloud_native_secretary_r46':'BODYMIND_R46_CLOUD_NATIVE_SECRETARY' in operator_text and 'R46.0-cloud-native-secretary' in operator_text,
+    'cloud_no_local_fallback_r46':'bridge_plan_tool' not in operator_text and 'bridge_enhance_result' not in operator_text and 'Non uso più il Mac/Qwen' in operator_text,
+    'cloud_voice_backend_r46':'/operatore-bodymind/voice/transcribe' in operator_text and '/operatore-bodymind/voice/speak' in operator_text and 'gpt-transcribe' in operator_text and 'gpt-4o-mini-tts' in operator_text,
+    'cloud_voice_frontend_r46':'BODYMIND_R46_CLOUD_NATIVE_VOICE' in operator_text and 'MediaRecorder' in operator_text and 'cloudStopAndTranscribe' in operator_text,
 }
 
 conn=sqlite3.connect(str(DB),timeout=20)
