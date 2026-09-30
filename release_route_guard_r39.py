@@ -22,6 +22,7 @@ required = {
     ("/health", "GET"),
     ("/operatore-bodymind", "GET"),
     ("/operatore-bodymind/chat", "POST"),
+    ("/operatore-bodymind/new-chat", "POST"),
     ("/operatore-bodymind/upload", "POST"),
     ("/operatore-bodymind/cloud/status", "GET"),
     ("/operatore-bodymind/voice/transcribe", "POST"),
