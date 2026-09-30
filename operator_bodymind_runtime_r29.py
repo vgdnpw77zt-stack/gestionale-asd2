@@ -1154,6 +1154,22 @@ def bodymind_operator_home():
       const attach=document.getElementById('bmoAttach');
       const mobileFiles=document.getElementById('bmoMobileFiles');
       let listening=false, recognition=null, micStream=null, audioContext=null, analyser=null, meterRAF=null;
+      let ttsPrimed=false;
+      function primeTTS(){{
+        if(ttsPrimed || !('speechSynthesis' in window))return;
+        try{{
+          speechSynthesis.cancel();
+          speechSynthesis.resume();
+          const warm=new SpeechSynthesisUtterance('\u00a0');
+          warm.lang='it-IT';warm.volume=.01;warm.rate=2;
+          speechSynthesis.speak(warm);
+          setTimeout(()=>{{try{{speechSynthesis.cancel();speechSynthesis.resume()}}catch(e){{}};ttsPrimed=true}},80);
+        }}catch(e){{}}
+      }}
+      document.addEventListener('pointerdown',primeTTS,{{capture:true,once:true}});
+      document.addEventListener('touchend',primeTTS,{{capture:true,once:true}});
+      document.addEventListener('click',primeTTS,{{capture:true,once:true}});
+      // BODYMIND_R39_IOS_TTS_UNLOCK
       (async()=>{{
         const p=document.getElementById('bmoAiPill'); if(!p)return;
         try{{
@@ -1183,6 +1199,7 @@ def bodymind_operator_home():
 
       function speak(text){{
         if(!voice.checked || !('speechSynthesis' in window) || !text)return;
+        try{{speechSynthesis.resume()}}catch(e){{}}
         speechSynthesis.cancel();
         const u=new SpeechSynthesisUtterance(text);
         u.lang='it-IT';u.rate=.98;u.pitch=1;
@@ -1200,6 +1217,7 @@ def bodymind_operator_home():
         u.onstart=()=>{{avatar.classList.add('speaking');if(voiceStatus)voiceStatus.textContent='Ti sto rispondendo…'}};
         u.onend=()=>{{avatar.classList.remove('speaking');if(voiceStatus)voiceStatus.textContent='Tocca il microfono e parlami'}};
         u.onerror=()=>{{avatar.classList.remove('speaking');if(voiceStatus)voiceStatus.textContent='Tocca il microfono e parlami'}};
+        try{{speechSynthesis.resume()}}catch(e){{}}
         speechSynthesis.speak(u);
       }}
 
