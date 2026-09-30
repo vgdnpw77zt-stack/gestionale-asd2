@@ -1,8 +1,9 @@
-import os, json, secrets, urllib.request, re, hashlib, hmac, base64, sqlite3
+import os, json, secrets, urllib.request, re, hashlib, hmac, base64, sqlite3, csv, io
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from functools import wraps
 from copy import deepcopy
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlparse
 from flask import Flask, render_template, request, redirect, url_for, session, flash, send_from_directory, Response, abort
 from werkzeug.utils import secure_filename
 
@@ -157,6 +158,201 @@ def _is_obvious_bot():
         return True
     markers = ("bot","crawler","spider","slurp","preview","facebookexternalhit","whatsapp","telegrambot","curl","wget","monitor","uptime")
     return any(marker in ua for marker in markers)
+
+
+ANALYTICS_EVENT_NAMES = {
+    "section_view","cta_click","instagram_click","reel_click","map_click",
+    "family_click","whatsapp_click","phone_click","email_click","session_end"
+}
+
+def _analytics_conn():
+    ensure_data()
+    conn = sqlite3.connect(str(METRICS_DB), timeout=5)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("""CREATE TABLE IF NOT EXISTS site_analytics_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ts TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        visitor_hash TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        event TEXT NOT NULL,
+        label TEXT NOT NULL DEFAULT '',
+        path TEXT NOT NULL DEFAULT '/',
+        referrer TEXT NOT NULL DEFAULT '',
+        source TEXT NOT NULL DEFAULT '',
+        medium TEXT NOT NULL DEFAULT '',
+        campaign TEXT NOT NULL DEFAULT '',
+        device TEXT NOT NULL DEFAULT '',
+        browser TEXT NOT NULL DEFAULT '',
+        lang TEXT NOT NULL DEFAULT '',
+        duration_ms INTEGER NOT NULL DEFAULT 0,
+        scroll_pct INTEGER NOT NULL DEFAULT 0,
+        meta_json TEXT NOT NULL DEFAULT ''
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_site_analytics_ts ON site_analytics_events(ts)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_site_analytics_session ON site_analytics_events(session_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_site_analytics_event ON site_analytics_events(event)")
+    return conn
+
+def _analytics_visitor_hash():
+    ip = _client_ip()
+    if not ip:
+        return ""
+    key = str(app.secret_key or "").encode("utf-8")
+    ua = (request.headers.get("User-Agent") or "")[:240]
+    # Pseudonymous only: raw IP and raw UA are never persisted.
+    return hmac.new(key, (ip+"|"+ua).encode("utf-8"), hashlib.sha256).hexdigest()
+
+def _analytics_device_browser(ua):
+    low=(ua or "").lower()
+    if "ipad" in low or "tablet" in low:
+        device="Tablet"
+    elif "iphone" in low or "mobile" in low or ("android" in low and "mobile" in low):
+        device="Mobile"
+    else:
+        device="Desktop"
+    if "edg/" in low:
+        browser="Edge"
+    elif "firefox/" in low:
+        browser="Firefox"
+    elif "crios/" in low or ("chrome/" in low and "edg/" not in low):
+        browser="Chrome"
+    elif "safari/" in low:
+        browser="Safari"
+    else:
+        browser="Altro"
+    return device,browser
+
+def _analytics_source(referrer, utm_source=""):
+    src=(utm_source or "").strip()[:120]
+    if src:
+        return src
+    raw=(referrer or "").strip()
+    if not raw:
+        return "Diretto"
+    try:
+        host=(urlparse(raw).hostname or "").lower()
+    except Exception:
+        host=""
+    if not host or host.endswith("bodymindaerialstudio.life"):
+        return "Diretto"
+    return host.replace("www.","",1)[:120]
+
+def _analytics_start_session():
+    if _is_obvious_bot():
+        return ""
+    visitor=_analytics_visitor_hash()
+    if not visitor:
+        return ""
+    sid=secrets.token_urlsafe(12)
+    ua=(request.headers.get("User-Agent") or "")[:400]
+    device,browser=_analytics_device_browser(ua)
+    ref=(request.referrer or "")[:500]
+    source=_analytics_source(ref, request.args.get("utm_source",""))
+    medium=(request.args.get("utm_medium","") or "")[:120]
+    campaign=(request.args.get("utm_campaign","") or "")[:160]
+    lang=(request.headers.get("Accept-Language") or "").split(",",1)[0][:32]
+    conn=_analytics_conn()
+    try:
+        conn.execute(
+            """INSERT INTO site_analytics_events
+               (visitor_hash,session_id,event,label,path,referrer,source,medium,campaign,device,browser,lang)
+               VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (visitor,sid,"pageview","home",request.path[:200],ref,source,medium,campaign,device,browser,lang)
+        )
+        # Keep detailed event data for 400 days; lifetime unique counter remains separate.
+        conn.execute("DELETE FROM site_analytics_events WHERE ts < datetime('now','-400 days')")
+        conn.commit()
+    finally:
+        conn.close()
+    return sid
+
+def _analytics_report(days=30):
+    days=max(1,min(int(days or 30),365))
+    modifier=f"-{days} days"
+    conn=_analytics_conn()
+    try:
+        pageviews=int(conn.execute("SELECT COUNT(*) FROM site_analytics_events WHERE event='pageview' AND ts>=datetime('now',?)",(modifier,)).fetchone()[0] or 0)
+        visitors=int(conn.execute("SELECT COUNT(DISTINCT visitor_hash) FROM site_analytics_events WHERE event='pageview' AND ts>=datetime('now',?)",(modifier,)).fetchone()[0] or 0)
+        sessions=int(conn.execute("SELECT COUNT(DISTINCT session_id) FROM site_analytics_events WHERE event='pageview' AND ts>=datetime('now',?)",(modifier,)).fetchone()[0] or 0)
+        returning=int(conn.execute("""SELECT COUNT(*) FROM (
+            SELECT visitor_hash FROM site_analytics_events
+            WHERE event='pageview' AND ts>=datetime('now',?)
+            GROUP BY visitor_hash HAVING COUNT(DISTINCT session_id)>1
+        )""",(modifier,)).fetchone()[0] or 0)
+
+        session_rows=conn.execute("""SELECT session_id,
+            MAX(duration_ms) duration_ms,
+            MAX(scroll_pct) scroll_pct,
+            SUM(CASE WHEN event='section_view' THEN 1 ELSE 0 END) sections,
+            SUM(CASE WHEN event LIKE '%_click' THEN 1 ELSE 0 END) clicks
+            FROM site_analytics_events
+            WHERE ts>=datetime('now',?)
+            GROUP BY session_id""",(modifier,)).fetchall()
+        engaged=0; durations=[]; scrolls=[]
+        for r in session_rows:
+            dur=int(r["duration_ms"] or 0); scr=int(r["scroll_pct"] or 0)
+            sec=int(r["sections"] or 0); clk=int(r["clicks"] or 0)
+            if dur>=10000 or scr>=25 or sec>=2 or clk>0:
+                engaged+=1
+            if dur>0: durations.append(dur)
+            scrolls.append(scr)
+        bounce=round((1-(engaged/max(1,sessions)))*100,1) if sessions else 0.0
+        avg_duration=round((sum(durations)/len(durations))/1000,1) if durations else 0.0
+        avg_scroll=round(sum(scrolls)/len(scrolls),1) if scrolls else 0.0
+        conversions=int(conn.execute("""SELECT COUNT(*) FROM site_analytics_events
+            WHERE ts>=datetime('now',?) AND event IN
+            ('cta_click','instagram_click','reel_click','map_click','family_click','whatsapp_click','phone_click','email_click')""",(modifier,)).fetchone()[0] or 0)
+
+        def rows(sql, params=(modifier,)):
+            return [dict(x) for x in conn.execute(sql,params).fetchall()]
+
+        daily=rows("""SELECT substr(ts,1,10) day,
+            SUM(CASE WHEN event='pageview' THEN 1 ELSE 0 END) pageviews,
+            COUNT(DISTINCT CASE WHEN event='pageview' THEN visitor_hash END) visitors
+            FROM site_analytics_events WHERE ts>=datetime('now',?)
+            GROUP BY substr(ts,1,10) ORDER BY day DESC LIMIT 31""")
+        sources=rows("""SELECT COALESCE(NULLIF(source,''),'Diretto') name, COUNT(*) value
+            FROM site_analytics_events WHERE event='pageview' AND ts>=datetime('now',?)
+            GROUP BY name ORDER BY value DESC LIMIT 15""")
+        devices=rows("""SELECT COALESCE(NULLIF(device,''),'Altro') name, COUNT(*) value
+            FROM site_analytics_events WHERE event='pageview' AND ts>=datetime('now',?)
+            GROUP BY name ORDER BY value DESC""")
+        browsers=rows("""SELECT COALESCE(NULLIF(browser,''),'Altro') name, COUNT(*) value
+            FROM site_analytics_events WHERE event='pageview' AND ts>=datetime('now',?)
+            GROUP BY name ORDER BY value DESC""")
+        languages=rows("""SELECT COALESCE(NULLIF(lang,''),'—') name, COUNT(*) value
+            FROM site_analytics_events WHERE event='pageview' AND ts>=datetime('now',?)
+            GROUP BY name ORDER BY value DESC LIMIT 10""")
+        campaigns=rows("""SELECT campaign name, COUNT(*) value
+            FROM site_analytics_events WHERE event='pageview' AND campaign<>'' AND ts>=datetime('now',?)
+            GROUP BY campaign ORDER BY value DESC LIMIT 15""")
+        actions=rows("""SELECT event name, COUNT(*) value
+            FROM site_analytics_events WHERE event LIKE '%_click' AND ts>=datetime('now',?)
+            GROUP BY event ORDER BY value DESC""")
+        sections=rows("""SELECT label name, COUNT(*) value
+            FROM site_analytics_events WHERE event='section_view' AND ts>=datetime('now',?)
+            GROUP BY label ORDER BY value DESC""")
+        recent=rows("""SELECT p.ts, p.source, p.device, p.browser, p.lang,
+            COALESCE(MAX(e.duration_ms),0) duration_ms,
+            COALESCE(MAX(e.scroll_pct),0) scroll_pct,
+            SUM(CASE WHEN e.event LIKE '%_click' THEN 1 ELSE 0 END) clicks
+            FROM site_analytics_events p
+            LEFT JOIN site_analytics_events e ON e.session_id=p.session_id
+            WHERE p.event='pageview' AND p.ts>=datetime('now',?)
+            GROUP BY p.session_id ORDER BY p.ts DESC LIMIT 30""")
+
+        return {
+            "days":days,"pageviews":pageviews,"visitors":visitors,"sessions":sessions,
+            "returning":returning,"engaged":engaged,"bounce":bounce,
+            "avg_duration":avg_duration,"avg_scroll":avg_scroll,"conversions":conversions,
+            "daily":daily,"sources":sources,"devices":devices,"browsers":browsers,
+            "languages":languages,"campaigns":campaigns,"actions":actions,
+            "sections":sections,"recent":recent,
+            "lifetime_unique":_site_visit_count(increment=False),
+        }
+    finally:
+        conn.close()
 
 def merge_defaults(defaults, value):
     if isinstance(defaults, dict):
@@ -366,13 +562,47 @@ def security_headers(resp):
         resp.headers["X-Robots-Tag"] = "noindex, nofollow"
     else:
         resp.headers.setdefault("Cache-Control","no-store")
-    resp.headers["X-BodyMind-Site"] = "v28-desktop-glass"
+    resp.headers["X-BodyMind-Site"] = "v29-private-analytics"
     return resp
 
 @app.get("/")
 def home():
-    visits = _site_visit_count(increment=not _is_obvious_bot())
-    return render_template("index.html", c=load_content(), visits=visits)
+    is_bot=_is_obvious_bot()
+    visits = _site_visit_count(increment=not is_bot)
+    analytics_session = "" if is_bot else _analytics_start_session()
+    return render_template("index.html", c=load_content(), visits=visits, analytics_session=analytics_session)
+
+@app.post("/analytics/event")
+def analytics_event():
+    if _is_obvious_bot():
+        return ("",204)
+    data=request.get_json(silent=True) or {}
+    sid=str(data.get("session_id") or "")[:80]
+    event=str(data.get("event") or "")[:40]
+    if len(sid)<8 or event not in ANALYTICS_EVENT_NAMES:
+        return ("",204)
+    visitor=_analytics_visitor_hash()
+    if not visitor:
+        return ("",204)
+    label=str(data.get("label") or "")[:160]
+    duration=max(0,min(int(data.get("duration_ms") or 0),24*60*60*1000))
+    scroll=max(0,min(int(data.get("scroll_pct") or 0),100))
+    meta=data.get("meta") if isinstance(data.get("meta"),dict) else {}
+    conn=_analytics_conn()
+    try:
+        valid=conn.execute("""SELECT 1 FROM site_analytics_events
+            WHERE session_id=? AND visitor_hash=? AND event='pageview'
+            AND ts>=datetime('now','-12 hours') LIMIT 1""",(sid,visitor)).fetchone()
+        if not valid:
+            return ("",204)
+        conn.execute("""INSERT INTO site_analytics_events
+            (visitor_hash,session_id,event,label,path,duration_ms,scroll_pct,meta_json)
+            VALUES(?,?,?,?,?,?,?,?)""",
+            (visitor,sid,event,label,request.path[:200],duration,scroll,json.dumps(meta,ensure_ascii=False)[:2000]))
+        conn.commit()
+    finally:
+        conn.close()
+    return ("",204)
 
 @app.get("/seed-media/<slot>")
 def seed_media(slot):
@@ -541,12 +771,42 @@ def admin():
         c.setdefault("videos",[]).append({"title":"","subtitle":"","url":""})
     return render_template("admin.html", c=c)
 
+@app.get("/studio-admin/analytics")
+@admin_required
+def admin_analytics():
+    try:
+        days=int(request.args.get("days","30") or 30)
+    except Exception:
+        days=30
+    report=_analytics_report(days)
+    return render_template("analytics.html", report=report)
+
+@app.get("/studio-admin/analytics.csv")
+@admin_required
+def admin_analytics_csv():
+    try:
+        days=max(1,min(int(request.args.get("days","30") or 30),365))
+    except Exception:
+        days=30
+    conn=_analytics_conn()
+    try:
+        rows=conn.execute("""SELECT ts,event,label,source,medium,campaign,device,browser,lang,duration_ms,scroll_pct
+            FROM site_analytics_events WHERE ts>=datetime('now',?) ORDER BY ts DESC""",(f"-{days} days",)).fetchall()
+        out=io.StringIO()
+        w=csv.writer(out)
+        w.writerow(["timestamp","evento","etichetta","sorgente","medium","campagna","dispositivo","browser","lingua","durata_ms","scroll_pct"])
+        for r in rows:
+            w.writerow([r[k] for k in r.keys()])
+        return Response(out.getvalue(),mimetype="text/csv",headers={"Content-Disposition":f"attachment; filename=bodymind-analytics-{days}g.csv"})
+    finally:
+        conn.close()
+
 @app.get("/healthz")
 def healthz():
     ensure_data()
     seeded = sum(1 for k in SEED_SOURCES if _seed_paths(k)[0].exists())
     visits = _site_visit_count(increment=False)
-    return {"ok":True,"service":"bodymind-public-site","design":"v28-desktop-glass","seeded_assets":seeded,"persistent_data":str(DATA),"visits":visits}, 200
+    return {"ok":True,"service":"bodymind-public-site","design":"v29-private-analytics","seeded_assets":seeded,"persistent_data":str(DATA),"visits":visits}, 200
 
 if __name__ == "__main__":
     ensure_data()
