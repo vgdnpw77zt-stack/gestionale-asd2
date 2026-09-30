@@ -54,6 +54,7 @@ checks={
     'ios_tts_unlock':'BODYMIND_R39_IOS_TTS_UNLOCK' in body and "speechSynthesis.resume()" in body,
     'ios_tts_persistent':'BODYMIND_R39_IOS_TTS_PERSISTENT_FIX' in body and 'ttsUtterance' in body and 'bodymind_tts_enabled_v2' in body and 'bmoVoiceRecover' in body,
     'ios_natural_voice':'BODYMIND_R39_NATURAL_VOICE_V2' in body and 'refreshTTSVoices' in body and 'speechChunks' in body and "includes('premium')" in body and "includes('enhanced')" in body,
+    'ios_webkit27_voice_v5':'BODYMIND_R39_IOS_WEBKIT27_V5' in body and 'BODYMIND_R39_IOS_SR_WEBKIT27_STATE_MACHINE_V5' in body and 'waitSpeechIdle' in body and 'startFreshRecognition' in body and "document.addEventListener('pointerdown',unlockOnce" not in body and "speak(lastSpeechText||'Voce attiva.',true)" in body,
     'ios_mic_direct':'BODYMIND_R39_IOS_SR_RECREATE_V4' in body and "await ensureMic();recognition.start()" not in body and 'buildRecognition' in body,
     'ios_voice_recovery_v4':'BODYMIND_R39_IOS_VOICE_RECOVERY_V4' in body and 'bmoVoiceRecover' in body and 'buildRecognition' in body and 'sr_start_timeout' in body and 'sr_retry_call' in body,
     'ios_sr_recreate_v4':'BODYMIND_R39_IOS_SR_RECREATE_V4' in body and 'recognition=buildRecognition()' in body and "localStorage.getItem(TTS_KEY)==='1')ttsPrimed=true" not in body,
