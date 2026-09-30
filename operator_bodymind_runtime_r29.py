@@ -24,7 +24,7 @@ from .core import (
     app, db, layout, login_required, csrf_token, current_username, current_role, e
 )
 
-OPERATOR_VERSION = "R49.0-chat-secretary"
+OPERATOR_VERSION = "R50.0-cloud-secretary"
 PENDING_STATUSES = (
     "needs_manual_match","associato_tipo_da_verificare","richiede_conferma",
     "needs_review","da_verificare","pending",
@@ -1386,13 +1386,24 @@ def _recent_operator_context(conn, limit: int = 8):
         return []
 
 # BODYMIND_R45_CLOUD_FULL_AGENT
+# BODYMIND_R50_SEMANTIC_GLOSSARY
 _BODYMIND_GLOSSARY={
-    "tesserato":["iscritto","atleta","allievo","socio","persona"],
-    "certificato_medico":["cm","certificato","certificato medico"],
-    "modulo_unico_tesseramento":["mu","modulo unico","modulo iscrizione","domanda iscrizione"],
-    "documenti":["dossier","archivio atleta","archivio documentale"],
-    "pagamenti":["incassi","quote pagate","mensilita","mensilità"],
-    "ricevute":["quietanze","ricevuta"],
+    "tesserato":["iscritto","iscritta","atleta","allievo","allieva","socio","socia","persona","ragazza","ragazzo"],
+    "certificato_medico":["cm","certificato","certificato medico","certificato sportivo","agonistico","non agonistico","scadenza certificato","certificato scaduto"],
+    "modulo_unico_tesseramento":["mu","modulo unico","modulo iscrizione","domanda iscrizione","tesseramento","modulo tesseramento"],
+    "documenti":["dossier","archivio atleta","archivio documentale","documentazione","allegati","file"],
+    "pagamenti":["incassi","quote pagate","mensilita","mensilità","quota","mensile","saldo","pagato","pagamento"],
+    "ricevute":["quietanze","ricevuta","ricevute associative","ricevuta quota"],
+    "collaboratori":["collaboratore","collaboratrice","coach","istruttore","istruttrice","insegnante","trainer","collaboratore sportivo","co.co.co","cococo","lavoratore sportivo"],
+    "corsi_lezioni":["corso","corsi","lezione","lezioni","classe","classi","orario","orari","calendario","turno","sala","planning"],
+    "presenze":["presenza","presenze","assenza","assenze","partecipazione","frequenza"],
+    "lista_attesa":["lista d'attesa","lista attesa","waiting list","attesa","nuova iscrizione"],
+    "attrezzi":["attrezzo","attrezzatura","cerchio","cerchio aereo","tessuti","tessuto","trapezio","aerial hoop"],
+    "tutela_minori":["tutela","minore","minori","genitore","consenso genitoriale","liberatoria","privacy","autorizzazione"],
+    "comunicazioni":["email","mail","messaggio","messaggi","notifica","notifiche","promemoria","avviso","avvisi","chat","bacheca"],
+    "eventi":["evento","eventi","esibizione","spettacolo","manifestazione","saggio","festa"],
+    "registro_sportivo":["rasd","registro attività sportive dilettantistiche","csen","affiliazione","tesseramento ente","registro nazionale"],
+    "collaborazione_sportiva":["compenso","compensi","ore collaboratore","liquidazione","ricevuta collaboratore","lul","lavoro sportivo","contratto collaboratore"],
 }
 
 def _bodymind_route_manifest():
