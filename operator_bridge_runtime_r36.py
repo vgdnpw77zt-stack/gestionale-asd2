@@ -58,7 +58,7 @@ def _schema(conn):
         question TEXT NOT NULL,
         base_text TEXT,
         messages_json TEXT NOT NULL,
-        max_tokens INTEGER NOT NULL DEFAULT 110,
+        max_tokens INTEGER NOT NULL DEFAULT 70,
         status TEXT NOT NULL DEFAULT 'pending',
         device_id TEXT,
         created_at TEXT NOT NULL,
@@ -105,7 +105,7 @@ def _auth_device(conn,touch=True):
         row=conn.execute("SELECT * FROM bodymind_ai_bridge_devices WHERE id=?",(int(row['id']),)).fetchone()
     return row
 
-def _bridge_recent_context(conn, conversation_id, limit=6):
+def _bridge_recent_context(conn, conversation_id, limit=3):
     try:
         rows=conn.execute(
             """SELECT speaker,message FROM bodymind_operator_messages
@@ -120,7 +120,7 @@ def _bridge_recent_context(conn, conversation_id, limit=6):
                 continue
             if speaker not in ('user','assistant'):
                 continue
-            out.append({'role':'user' if speaker=='user' else 'assistant','content':msg[:900]})
+            out.append({'role':'user' if speaker=='user' else 'assistant','content':msg[:420]})
         return out
     except Exception:
         return []
@@ -131,8 +131,8 @@ def _bridge_token_budget(message, base):
         'spiega','analizza','perche','perché','come posso','cosa posso','confronta',
         'riassumi','dettaglio','completo','strategie','consigli'
     )):
-        return 140
-    return 110
+        return 100
+    return 70
 
 def bridge_enhance_result(conn, message, result, conversation_id='', identity=''):
     """Use the paired local iMac only for responses that otherwise need AI.
@@ -158,13 +158,10 @@ def bridge_enhance_result(conn, message, result, conversation_id='', identity=''
         base=str(result.get('text') or '')
         token_budget=_bridge_token_budget(message,base)
         system=(
-            "Sei Operatore BodyMind, un assistente locale rapido e concreto per una ASD italiana di danza aerea. "
-            "Devi capire il senso della richiesta, usare il contesto recente e rispondere come una persona competente, non come un template. "
-            "Quando la richiesta riguarda dati interni BodyMind, RISPOSTA VERIFICATA BODYMIND è la fonte di verità: non cambiare numeri, nomi, quote, documenti, consensi, pagamenti o stati. "
-            "Quando la richiesta è generale o organizzativa, puoi ragionare e proporre spiegazioni pratiche usando conoscenza generale, senza inventare fatti interni. "
-            "Non essere telegrafico: completa il ragionamento essenziale, ma evita ripetizioni e premesse inutili. "
-            "Se manca un dato indispensabile, fai una sola domanda precisa. "
-            "Non dichiarare di aver eseguito modifiche: le azioni sul gestionale passano solo dal motore deterministico con conferma."
+            "Sei Operatore BodyMind. Rispondi in italiano, diretto e utile. "
+            "Usa il contesto recente. Per dati interni usa solo i dati verificati forniti e non inventare. "
+            "Per domande generali puoi ragionare normalmente. Se manca un dato indispensabile, chiedilo. "
+            "Non dichiarare modifiche al gestionale se non sono state confermate dal motore BodyMind."
         )
         verified=("(nessun fatto interno: domanda generale/conversazionale)" if mode=='fallback' else (base[:6000] if base else "(nessun fatto interno aggiuntivo)"))
         user=(
@@ -174,7 +171,7 @@ def bridge_enhance_result(conn, message, result, conversation_id='', identity=''
             "Rispondi direttamente e completa il punto essenziale. Se è una domanda generale, rispondi davvero usando conoscenza generale. "
             "Se invece sono presenti dati interni verificati, rispettali alla lettera."
         )
-        recent=_bridge_recent_context(conn,conversation_id,6)
+        recent=_bridge_recent_context(conn,conversation_id,3)
         messages=[{'role':'system','content':system}]
         messages.extend(recent)
         messages.append({'role':'user','content':user})
@@ -188,7 +185,7 @@ def bridge_enhance_result(conn, message, result, conversation_id='', identity=''
         job_id=int(cur.lastrowid)
         conn.commit()
 
-        wait_seconds=float(os.environ.get('BODYMIND_LOCAL_AI_WAIT_SECONDS','55') or 55)
+        wait_seconds=float(os.environ.get('BODYMIND_LOCAL_AI_WAIT_SECONDS','42') or 42)
         wait_seconds=max(5.0,min(wait_seconds,90.0))
         deadline=time.time()+wait_seconds
         while time.time()<deadline:
@@ -378,7 +375,7 @@ def bodymind_ai_bridge_poll():
             'job':{
                 'id':job_id,
                 'messages':json.loads(str(row['messages_json'] or '[]')),
-                'max_tokens':int(row['max_tokens'] or 110),
+                'max_tokens':int(row['max_tokens'] or 70),
             }
         })
     finally:
@@ -513,7 +510,8 @@ LOCAL="http://127.0.0.1:8088/v1/chat/completions"
 def req(url, method="GET", payload=None, auth=True, timeout=180):
     # BODYMIND_R39_CURL_REMOTE_TRANSPORT
 # BODYMIND_R39_LOCAL_AI_QUALITY_V2
-# BODYMIND_R39_LOCAL_AI_FAST_SPLIT:
+# BODYMIND_R39_LOCAL_AI_FAST_SPLIT
+# BODYMIND_R39_LOCAL_AI_LATENCY_V3:
     # macOS High Sierra + python.org SSL stores can reject modern HTTPS even
     # when the system curl works. Use /usr/bin/curl for Railway, urllib only locally.
     if url.startswith(BASE_URL):
@@ -553,7 +551,7 @@ def local_chat(messages,max_tokens):
         "temperature":0.35,
         "top_p":0.9,
         "repeat_penalty":1.08,
-        "max_tokens":int(max_tokens or 110),
+        "max_tokens":int(max_tokens or 70),
     }
     return req(LOCAL,"POST",payload,auth=False,timeout=240)
 
@@ -566,7 +564,7 @@ while True:
             continue
         jid=int(job["id"])
         try:
-            ans=local_chat(job.get("messages") or [],job.get("max_tokens") or 110)
+            ans=local_chat(job.get("messages") or [],job.get("max_tokens") or 70)
             text=((ans.get("choices") or [{}])[0].get("message") or {}).get("content","").strip()
             if not text:
                 raise RuntimeError("llama-server non ha restituito testo")
