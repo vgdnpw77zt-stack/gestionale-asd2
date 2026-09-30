@@ -252,6 +252,23 @@ def _document_fingerprint(row):
     return "", ""
 
 
+def _canonical_document_kind(row):
+    parts=[]
+    for key in ("doc_type","categoria","titolo","original_filename","filename"):
+        if key in row.keys():
+            parts.append(_norm(row[key]))
+    hay=" ".join(parts)
+    if any(x in hay for x in ("certificato_medico","certificato medico","certificato"," cm ","_cm_","cm.pdf","cm.jpg","cm.jpeg","cm.png")):
+        return "certificato_medico"
+    if any(x in hay for x in ("modulo_unico_tesseramento","modulo unico","modulo_unico","mu-2026","mu 2026","modulo iscrizione","domanda iscrizione","iscrizione manleva")):
+        return "modulo_unico_tesseramento"
+    dtype=_norm(row["doc_type"]) if "doc_type" in row.keys() else ""
+    if dtype:
+        return dtype
+    cat=_norm(row["categoria"]) if "categoria" in row.keys() else ""
+    return cat or "altro"
+
+
 def _duplicate_document_groups(conn, tid=None):
     if not _table(conn,"documenti"):
         return []
@@ -259,7 +276,7 @@ def _duplicate_document_groups(conn, tid=None):
     if "id" not in cols or "tesserato_id" not in cols or "filename" not in cols:
         return []
     wanted=["id","tesserato_id","filename"]
-    for col in ("original_filename","titolo","categoria","visibile","status","confidence","source","data_caricamento"):
+    for col in ("original_filename","titolo","categoria","doc_type","visibile","status","confidence","source","data_caricamento"):
         if col in cols: wanted.append(col)
     where=[]
     vals=[]
@@ -275,10 +292,11 @@ def _duplicate_document_groups(conn, tid=None):
     for row in rows:
         fp,resolved=_document_fingerprint(row)
         if not fp: continue
-        key=(int(row["tesserato_id"] or 0),fp)
+        kind=_canonical_document_kind(row)
+        key=(int(row["tesserato_id"] or 0),fp,kind)
         buckets.setdefault(key,[]).append((row,resolved))
     groups=[]
-    for (athlete_id,fp),items in buckets.items():
+    for (athlete_id,fp,kind),items in buckets.items():
         if len(items)<2: continue
         def rank(item):
             row=item[0]
@@ -294,6 +312,7 @@ def _duplicate_document_groups(conn, tid=None):
             "tesserato_id":athlete_id,
             "athlete_name":name,
             "fingerprint":fp,
+            "document_kind":kind,
             "keep_id":int(keep["id"]),
             "remove_ids":[int(x["id"]) for x in extras],
             "filename":str(keep["original_filename"] or keep["filename"] or "") if "original_filename" in keep.keys() else str(keep["filename"] or ""),
@@ -314,7 +333,7 @@ def _agent_tool_catalog(conn):
         {"name":"inspect_tesserato","description":"Legge dossier, documenti, certificato, tutela, quota e pagamenti di un tesserato.","write":False},
         {"name":"list_documents","description":"Elenca i documenti visibili di un tesserato.","write":False},
         {"name":"find_duplicate_documents","description":"Trova documenti duplicati veri nel dossier di uno o di tutti i tesserati usando hash file o stesso path.","write":False},
-        {"name":"cleanup_duplicate_documents","description":"Prepara la rimozione dei record documentali duplicati mantenendo una copia per gruppo; richiede conferma.","write":True},
+        {"name":"cleanup_duplicate_documents","description":"Analizza candidati duplicati ma NON elimina né nasconde documenti. La rimozione automatica è disabilitata per sicurezza; serve revisione umana del contenuto.","write":False},
         {"name":"list_pending_documents","description":"Conta e riepiloga la coda documenti da verificare.","write":False},
         {"name":"list_payments","description":"Legge pagamenti di un tesserato oppure il conteggio globale.","write":False},
         {"name":"set_quota","description":"Prepara la modifica della quota personalizzata di un tesserato; richiede conferma.","write":True},
@@ -380,15 +399,10 @@ def _execute_agent_tool(conn, plan, raw_message=""):
         athlete_count=len(set(g["tesserato_id"] for g in groups))
         sample="; ".join(g["athlete_name"]+": "+g["filename"] for g in groups[:6])
         if tool=="find_duplicate_documents":
-            return {"text":f"Ho trovato {len(remove_ids)} record duplicati certi in {len(groups)} gruppi su {athlete_count} tesserati. "+sample,"mode":"agent_tool","links":_links_for(scope_tid or None)}
-        aid=_set_pending_action(conn,"archive_duplicate_documents",{
-            "remove_ids":remove_ids,
-            "groups":groups,
-            "scope_tesserato_id":scope_tid or None,
-        })
+            return {"text":f"Ho trovato {len(remove_ids)} candidati duplicati in {len(groups)} gruppi su {athlete_count} tesserati. Li considero solo candidati: prima di qualsiasi rimozione vanno confrontati tipo e contenuto. "+sample,"mode":"agent_tool","links":_links_for(scope_tid or None)}
         return {
-            "text":f"Ho trovato {len(remove_ids)} record documentali duplicati certi in {len(groups)} gruppi su {athlete_count} tesserati. Manterrò una copia per gruppo e nasconderò solo i record duplicati; non cancellerò i file fisici. Esempi: {sample}. Confermi?",
-            "mode":"confirm","action_id":aid,"links":_links_for(scope_tid or None)
+            "text":f"Ho trovato {len(remove_ids)} candidati in {len(groups)} gruppi, ma la rimozione automatica dei documenti è disabilitata per sicurezza. Posso mostrarti i candidati, ma non nascondo né elimino nulla senza una verifica umana del contenuto.",
+            "mode":"warning","links":_links_for(scope_tid or None)
         }
 
     if tool=="list_pending_documents":
@@ -749,25 +763,9 @@ def _execute_pending(conn):
         }
 
     if kind=="archive_duplicate_documents":
-        if current_role()!="admin":
-            return {"text":"Per rimuovere duplicati documentali serve un account amministratore. Non ho modificato nulla.","mode":"warning"}
-        ids=[int(x) for x in (payload.get("remove_ids") or []) if str(x).isdigit()]
-        if not ids:
-            session.pop("bodymind_operator_pending_action",None)
-            return {"text":"Non ci sono record duplicati da rimuovere.","mode":"action"}
-        cols=_cols(conn,"documenti")
-        if "visibile" not in cols:
-            return {"text":"Il dossier non supporta l’archiviazione sicura dei duplicati. Non ho modificato nulla.","mode":"warning"}
-        placeholders=",".join("?" for _ in ids)
-        existing=[int(r[0]) for r in conn.execute("SELECT id FROM documenti WHERE id IN ("+placeholders+") AND coalesce(visibile,1)=1",tuple(ids)).fetchall()]
-        if not existing:
-            session.pop("bodymind_operator_pending_action",None)
-            return {"text":"I duplicati proposti non risultano più visibili. Non ho modificato nulla.","mode":"action"}
-        placeholders=",".join("?" for _ in existing)
-        conn.execute("UPDATE documenti SET visibile=0 WHERE id IN ("+placeholders+")",tuple(existing))
-        conn.execute("UPDATE bodymind_operator_actions SET status='executed',confirmed_by=?,executed_at=? WHERE id=?",(_identity(),datetime.now().isoformat(timespec="seconds"),aid))
+        conn.execute("UPDATE bodymind_operator_actions SET status='blocked_safety' WHERE id=? AND status='proposed'",(aid,))
         conn.commit(); session.pop("bodymind_operator_pending_action",None)
-        return {"text":f"Fatto. Ho nascosto {len(existing)} record documentali duplicati, mantenendo una copia per gruppo. I file fisici non sono stati cancellati.","mode":"action","links":[{"label":"Apri Documenti","href":"/documenti"}]}
+        return {"text":"Operazione bloccata per sicurezza: l’Operatore non può più eliminare o nascondere automaticamente documenti ritenuti duplicati. Posso solo segnalarli per revisione.","mode":"warning","links":[{"label":"Apri Documenti","href":"/documenti"}]}
 
     if kind=="set_quota":
         tid=int(payload["tesserato_id"])
@@ -972,6 +970,7 @@ def _answer(conn, text: str):
         return {"text":"Ho trovato più possibili tesserati: "+names+". Dimmi nome e cognome completi.","mode":"clarify"}
 
     # BODYMIND_R40_AGENT_TOOLS
+    # BODYMIND_R43_NO_AUTODELETE_DOCUMENTS
     if ("document" in n or "dossier" in n) and any(x in n for x in ("duplicat","doppion")):
         want_cleanup=any(x in n for x in ("elimina","eliminare","rimuovi","rimuovere","cancella","cancellare","pulisci","pulire"))
         plan={"tool":"cleanup_duplicate_documents" if want_cleanup else "find_duplicate_documents","args":{}}
