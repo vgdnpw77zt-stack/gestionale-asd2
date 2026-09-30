@@ -1235,7 +1235,6 @@ def _cloud_plan_tool(conn, question: str, tool_trace=None):
             plan["args"]={}
         return plan
     except Exception as exc:
-        global _CLOUD_LAST_ERROR
         _CLOUD_LAST_ERROR=repr(exc)[:1200]
         try:
             _log(conn,"system","R46 cloud planner unavailable: "+_CLOUD_LAST_ERROR)
