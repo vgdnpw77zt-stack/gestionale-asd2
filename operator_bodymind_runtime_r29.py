@@ -195,6 +195,96 @@ def _usage_summary(conn):
     }
 
 
+def _secret_box():
+    from cryptography.fernet import Fernet
+    root=str(os.environ.get("ASD_SECRET_KEY") or "").strip()
+    if not root:
+        raise RuntimeError("ASD_SECRET_KEY non configurata")
+    key=base64.urlsafe_b64encode(hashlib.sha256(root.encode("utf-8")).digest())
+    return Fernet(key)
+
+def _secure_setting_get(conn,key):
+    _schema(conn)
+    row=conn.execute("SELECT value_enc,meta_json,updated_at,updated_by FROM bodymind_secure_settings WHERE setting_key=?",(str(key),)).fetchone()
+    if not row:
+        return None,{}
+    try:
+        raw=_secret_box().decrypt(str(row["value_enc"]).encode("utf-8")).decode("utf-8")
+        value=json.loads(raw)
+    except Exception:
+        return None,{}
+    try:
+        meta=json.loads(str(row["meta_json"] or "{}"))
+    except Exception:
+        meta={}
+    meta["updated_at"]=str(row["updated_at"] or "")
+    meta["updated_by"]=str(row["updated_by"] or "")
+    return value,meta
+
+def _secure_setting_set(conn,key,value,meta=None):
+    _schema(conn)
+    payload=json.dumps(value,ensure_ascii=False,separators=(",",":")).encode("utf-8")
+    token=_secret_box().encrypt(payload).decode("utf-8")
+    now=datetime.now().isoformat(timespec="seconds")
+    conn.execute(
+        """INSERT INTO bodymind_secure_settings(setting_key,value_enc,meta_json,updated_at,updated_by)
+           VALUES(?,?,?,?,?)
+           ON CONFLICT(setting_key) DO UPDATE SET
+             value_enc=excluded.value_enc,meta_json=excluded.meta_json,
+             updated_at=excluded.updated_at,updated_by=excluded.updated_by""",
+        (str(key),token,json.dumps(meta or {},ensure_ascii=False),now,_identity())
+    )
+    conn.commit()
+
+def _smtp_public_status(conn):
+    cfg,meta=_secure_setting_get(conn,"smtp")
+    if not isinstance(cfg,dict):
+        return {"configured":False,"provider":"","host":"","port":0,"username":"","security":"","last_test_ok":False,"last_test_at":""}
+    username=str(cfg.get("username") or "")
+    masked=username
+    if "@" in username:
+        local,domain=username.split("@",1)
+        masked=(local[:2]+"***@"+domain) if local else ("***@"+domain)
+    return {
+        "configured":bool(cfg.get("host") and cfg.get("port") and cfg.get("username") and cfg.get("password")),
+        "provider":str(cfg.get("provider") or ""),
+        "host":str(cfg.get("host") or ""),
+        "port":int(cfg.get("port") or 0),
+        "username":masked,
+        "security":str(cfg.get("security") or ""),
+        "from_name":str(cfg.get("from_name") or ""),
+        "last_test_ok":bool(meta.get("last_test_ok")),
+        "last_test_at":str(meta.get("last_test_at") or ""),
+        "last_test_error":str(meta.get("last_test_error") or "")[:180],
+    }
+
+def _smtp_test_connection(cfg):
+    host=str(cfg.get("host") or "").strip()
+    port=int(cfg.get("port") or 0)
+    username=str(cfg.get("username") or "").strip()
+    password=str(cfg.get("password") or "")
+    security=str(cfg.get("security") or "starttls").strip().lower()
+    if not host or not port or not username or not password:
+        raise RuntimeError("Configurazione SMTP incompleta")
+    if security=="ssl":
+        client=smtplib.SMTP_SSL(host,port,timeout=12,context=ssl.create_default_context())
+    else:
+        client=smtplib.SMTP(host,port,timeout=12)
+    try:
+        client.ehlo()
+        if security=="starttls":
+            client.starttls(context=ssl.create_default_context())
+            client.ehlo()
+        client.login(username,password)
+        try: client.noop()
+        except Exception: pass
+    finally:
+        try: client.quit()
+        except Exception: 
+            try: client.close()
+            except Exception: pass
+    return True
+
 def _conv_id() -> str:
     cid = str(session.get("bodymind_operator_conversation") or "").strip()
     if not cid:
