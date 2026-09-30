@@ -1141,7 +1141,31 @@ def _parse_cloud_plan(text):
         except Exception:
             return None
 
-def _cloud_plan_tool(conn, question: str):
+def _compact_agent_observation(tool, result):
+    if not isinstance(result,dict):
+        return {"tool":str(tool),"text":str(result)[:3000]}
+    out={"tool":str(tool),"text":str(result.get("text") or "")[:4000],"mode":str(result.get("mode") or "")}
+    caps=result.get("capabilities")
+    if isinstance(caps,dict):
+        out["routes"]=(caps.get("routes") or [])[:12]
+        out["functions"]=(caps.get("functions") or [])[:16]
+        out["tables"]=(caps.get("tables") or [])[:10]
+    details=result.get("route_details")
+    if isinstance(details,list):
+        safe=[]
+        for x in details[:5]:
+            if isinstance(x,dict):
+                safe.append({
+                    "route":x.get("route"),"methods":x.get("methods"),"endpoint":x.get("endpoint"),
+                    "module":x.get("module"),"function":x.get("function"),
+                    "form_fields":x.get("form_fields"),"query_fields":x.get("query_fields"),
+                    "json":x.get("json"),"source_excerpt":str(x.get("source_excerpt") or "")[:3500],
+                })
+        out["route_details"]=safe
+    return out
+
+
+def _cloud_plan_tool(conn, question: str, tool_trace=None):
     """Cloud-first planner with full BodyMind knowledge and server-enforced action safety."""
     key=str(os.environ.get("OPENAI_API_KEY") or "").strip()
     if not key:
@@ -1162,6 +1186,7 @@ def _cloud_plan_tool(conn, question: str):
             "glossary":_BODYMIND_GLOSSARY,
         }
         recent=_recent_operator_context(conn,6)
+        trace=tool_trace if isinstance(tool_trace,list) else []
         relevant=_capability_search(conn,question)
         relevant_context={
             "routes":relevant.get("routes",[])[:25],
@@ -1184,6 +1209,9 @@ def _cloud_plan_tool(conn, question: str):
             "\nMappa sistema: "+json.dumps(overview,ensure_ascii=False)[:18000]+
             "\nElementi rilevanti per questa richiesta: "+json.dumps(relevant_context,ensure_ascii=False)[:22000]+
             "\nContesto recente: "+json.dumps(recent,ensure_ascii=False)+
+            "\nRisultati strumenti già usati in questa richiesta: "+json.dumps(trace,ensure_ascii=False)[:18000]+
+            "\nSe i risultati degli strumenti bastano per rispondere, usa tool=none e formula la risposta finale in answer. "
+            "Se serve un altro passaggio, scegli il prossimo strumento. "
             "\nRichiesta utente: "+str(question or "")[:7000]
         )
         client=OpenAI(api_key=key)
@@ -2294,24 +2322,39 @@ def bodymind_operator_chat():
         _log(conn,"user",message)
         result=_answer(conn,message)
         planner_used=False
-        # R45: cloud intelligence gets first shot on free-form requests and selects real BodyMind tools.
+        # R45: cloud intelligence gets first shot. It may inspect the real system before choosing the action.
         if str(result.get("mode") or "")=="fallback":
             try:
-                plan=_cloud_plan_tool(conn,message)
-                if plan:
+                trace=[]
+                discovery_tools={"discover_capabilities","inspect_route","inspect_system_map","inspect_db_schema"}
+                for agent_step in range(3):
+                    plan=_cloud_plan_tool(conn,message,trace)
+                    if not plan:
+                        break
                     planner_used=True
+                    tool=str(plan.get("tool") or "").strip()
+                    if tool in ("none","unknown",""):
+                        answer=str(plan.get("answer") or "").strip()
+                        if answer:
+                            result={
+                                "text":answer,
+                                "mode":"cloud_ai",
+                                "allow_device_ai":False,
+                                "cloud_ai":True,
+                                "agent_plan":"none",
+                                "agent_steps":agent_step+1,
+                            }
+                        break
                     tool_result=_execute_full_agent_plan(conn,plan,message)
-                    if tool_result:
+                    if not tool_result:
+                        break
+                    tool_result["agent_steps"]=agent_step+1
+                    if tool in discovery_tools and agent_step<2:
+                        trace.append(_compact_agent_observation(tool,tool_result))
                         result=tool_result
-                    elif str(plan.get("tool") or "") in ("none","unknown","") and str(plan.get("answer") or "").strip():
-                        result={
-                            "text":str(plan.get("answer") or "").strip(),
-                            "mode":"cloud_ai",
-                            "allow_device_ai":False,
-                            "cloud_ai":True,
-                            
-                            "agent_plan":"none",
-                        }
+                        continue
+                    result=tool_result
+                    break
             except Exception as cloud_planner_exc:
                 try:
                     _log(conn,"system","R45 cloud planner unavailable: "+repr(cloud_planner_exc))
