@@ -1154,22 +1154,26 @@ def bodymind_operator_home():
       const attach=document.getElementById('bmoAttach');
       const mobileFiles=document.getElementById('bmoMobileFiles');
       let listening=false, recognition=null, micStream=null, audioContext=null, analyser=null, meterRAF=null;
-      let ttsPrimed=false;
+      let ttsPrimed=false, ttsUtterance=null, ttsRetryTimer=null;
+      const TTS_KEY='bodymind_tts_enabled_v2';
       function primeTTS(){{
         if(ttsPrimed || !('speechSynthesis' in window))return;
         try{{
           speechSynthesis.cancel();
           speechSynthesis.resume();
-          const warm=new SpeechSynthesisUtterance('\u00a0');
-          warm.lang='it-IT';warm.volume=.01;warm.rate=2;
-          speechSynthesis.speak(warm);
-          setTimeout(()=>{{try{{speechSynthesis.cancel();speechSynthesis.resume()}}catch(e){{}};ttsPrimed=true}},80);
+          ttsUtterance=new SpeechSynthesisUtterance('Voce attiva');
+          ttsUtterance.lang='it-IT';ttsUtterance.volume=.01;ttsUtterance.rate=1.2;
+          ttsUtterance.onstart=()=>{{ttsPrimed=true;try{{localStorage.setItem(TTS_KEY,'1')}}catch(e){{}}}};
+          ttsUtterance.onend=()=>{{ttsPrimed=true;ttsUtterance=null;try{{localStorage.setItem(TTS_KEY,'1')}}catch(e){{}}}};
+          speechSynthesis.speak(ttsUtterance);
         }}catch(e){{}}
       }}
       document.addEventListener('pointerdown',primeTTS,{{capture:true,once:true}});
       document.addEventListener('touchend',primeTTS,{{capture:true,once:true}});
       document.addEventListener('click',primeTTS,{{capture:true,once:true}});
+      try{{if(localStorage.getItem(TTS_KEY)==='1')ttsPrimed=true}}catch(e){{}}
       // BODYMIND_R39_IOS_TTS_UNLOCK
+      // BODYMIND_R39_IOS_TTS_PERSISTENT_FIX
       (async()=>{{
         const p=document.getElementById('bmoAiPill'); if(!p)return;
         try{{
@@ -1198,27 +1202,39 @@ def bodymind_operator_home():
       }}
 
       function speak(text){{
-        if(!voice.checked || !('speechSynthesis' in window) || !text)return;
-        try{{speechSynthesis.resume()}}catch(e){{}}
-        speechSynthesis.cancel();
-        const u=new SpeechSynthesisUtterance(text);
-        u.lang='it-IT';u.rate=.98;u.pitch=1;
-        const voices=speechSynthesis.getVoices();
-        const italian=voices.filter(v=>String(v.lang||'').toLowerCase().startsWith('it'));
-        const preferred=['premium','enhanced','alice','federica','elsa','cosimo','luca','it-it'];
-        let it=null;
-        for(const key of preferred){{
-          it=italian.find(v=>String(v.name||'').toLowerCase().includes(key));
-          if(it)break;
-        }}
-        if(!it)it=italian[0]||null;
-        if(it)u.voice=it;
-        u.rate=.96;u.pitch=.94;
-        u.onstart=()=>{{avatar.classList.add('speaking');if(voiceStatus)voiceStatus.textContent='Ti sto rispondendo…'}};
-        u.onend=()=>{{avatar.classList.remove('speaking');if(voiceStatus)voiceStatus.textContent='Tocca il microfono e parlami'}};
-        u.onerror=()=>{{avatar.classList.remove('speaking');if(voiceStatus)voiceStatus.textContent='Tocca il microfono e parlami'}};
-        try{{speechSynthesis.resume()}}catch(e){{}}
-        speechSynthesis.speak(u);
+        if(!voice || !voice.checked || !('speechSynthesis' in window) || !text)return;
+        const doSpeak=()=>{{
+          try{{
+            if(ttsRetryTimer){{clearTimeout(ttsRetryTimer);ttsRetryTimer=null}}
+            speechSynthesis.cancel();
+            speechSynthesis.resume();
+            const u=new SpeechSynthesisUtterance(String(text).replace(/\s+/g,' ').trim());
+            ttsUtterance=u;
+            u.lang='it-IT';u.rate=.96;u.pitch=.94;u.volume=1;
+            const voices=speechSynthesis.getVoices()||[];
+            const italian=voices.filter(v=>String(v.lang||'').toLowerCase().startsWith('it'));
+            const preferred=['premium','enhanced','alice','federica','elsa','cosimo','luca','it-it'];
+            let it=null;
+            for(const key of preferred){{
+              it=italian.find(v=>String(v.name||'').toLowerCase().includes(key));
+              if(it)break;
+            }}
+            if(!it)it=italian[0]||null;
+            if(it)u.voice=it;
+            let started=false;
+            u.onstart=()=>{{started=true;ttsPrimed=true;try{{localStorage.setItem(TTS_KEY,'1')}}catch(e){{}};avatar.classList.add('speaking');if(voiceStatus)voiceStatus.textContent='Ti sto rispondendo…'}};
+            u.onend=()=>{{ttsUtterance=null;avatar.classList.remove('speaking');if(voiceStatus)voiceStatus.textContent='Tocca il microfono e parlami'}};
+            u.onerror=()=>{{ttsUtterance=null;avatar.classList.remove('speaking');if(voiceStatus)voiceStatus.textContent='Voce non partita: tocca una volta lo schermo e riprova'}};
+            speechSynthesis.speak(u);
+            ttsRetryTimer=setTimeout(()=>{{
+              if(!started && ttsUtterance===u){{
+                try{{speechSynthesis.resume();speechSynthesis.speak(u)}}catch(e){{}}
+              }}
+            }},350);
+          }}catch(e){{if(voiceStatus)voiceStatus.textContent='Voce non disponibile su questo dispositivo'}}
+        }};
+        if(!ttsPrimed)primeTTS();
+        setTimeout(doSpeak,ttsPrimed?20:180);
       }}
 
       // R38: local intelligence is only the paired iMac bridge; offline uses deterministic server logic.
