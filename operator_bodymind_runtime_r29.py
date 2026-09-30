@@ -5,6 +5,9 @@ import os
 import re
 import sqlite3
 import hashlib
+import ast
+import inspect
+import shutil
 import unicodedata
 import uuid
 from datetime import date, datetime, timedelta
@@ -17,7 +20,7 @@ from .core import (
     app, db, layout, login_required, csrf_token, current_username, current_role, e
 )
 
-OPERATOR_VERSION = "R40.0-agent-tools"
+OPERATOR_VERSION = "R45.0-cloud-full-agent"
 PENDING_STATUSES = (
     "needs_manual_match","associato_tipo_da_verificare","richiede_conferma",
     "needs_review","da_verificare","pending",
@@ -767,6 +770,44 @@ def _execute_pending(conn):
         conn.commit(); session.pop("bodymind_operator_pending_action",None)
         return {"text":"Operazione bloccata per sicurezza: l’Operatore non può più eliminare o nascondere automaticamente documenti ritenuti duplicati. Posso solo segnalarli per revisione.","mode":"warning","links":[{"label":"Apri Documenti","href":"/documenti"}]}
 
+    if kind=="generic_route_action":
+        path=str(payload.get("path") or "")
+        method=str(payload.get("method") or "POST").upper()
+        params=payload.get("params") if isinstance(payload.get("params"),dict) else {}
+        target,values,error=_resolve_route_action(path,method)
+        if error:
+            conn.execute("UPDATE bodymind_operator_actions SET status='blocked_safety' WHERE id=?",(aid,))
+            conn.commit(); session.pop("bodymind_operator_pending_action",None)
+            return {"text":"Operazione bloccata al secondo controllo di sicurezza: "+error+" Nessuna modifica eseguita.","mode":"warning"}
+        backup_dir=Path("/data/operator_backups")
+        backup_dir.mkdir(parents=True,exist_ok=True)
+        backup_file=backup_dir/(datetime.now().strftime("%Y%m%d_%H%M%S")+"_action_"+str(aid)+".db")
+        db_path=Path("/data/tenants/default/asd.db")
+        if db_path.exists():
+            shutil.copy2(db_path,backup_file)
+        token=str(session.get("_csrf_token") or csrf_token() or "")
+        send=dict(params)
+        send.setdefault("csrf_token",token)
+        sess_snapshot={k:session.get(k) for k in session.keys()}
+        try:
+            with app.test_client() as client:
+                with client.session_transaction() as s2:
+                    for k,v in sess_snapshot.items():
+                        s2[k]=v
+                resp=client.open(path,method=method,data=send,headers={"X-CSRFToken":token},follow_redirects=False)
+            status=int(resp.status_code or 0)
+        except Exception as exc:
+            conn.execute("UPDATE bodymind_operator_actions SET status='failed',confirmed_by=?,executed_at=? WHERE id=?",(_identity(),datetime.now().isoformat(timespec="seconds"),aid))
+            conn.commit(); session.pop("bodymind_operator_pending_action",None)
+            return {"text":"La route reale ha generato un errore prima di completare l'operazione. Backup conservato in "+str(backup_file)+". Errore: "+str(exc)[:220],"mode":"error"}
+        if status<200 or status>=400:
+            conn.execute("UPDATE bodymind_operator_actions SET status='failed',confirmed_by=?,executed_at=? WHERE id=?",(_identity(),datetime.now().isoformat(timespec="seconds"),aid))
+            conn.commit(); session.pop("bodymind_operator_pending_action",None)
+            return {"text":f"La route {method} {path} ha risposto HTTP {status}. Non considero l'azione completata. Backup: {backup_file}.","mode":"warning"}
+        conn.execute("UPDATE bodymind_operator_actions SET status='executed',confirmed_by=?,executed_at=? WHERE id=?",(_identity(),datetime.now().isoformat(timespec="seconds"),aid))
+        conn.commit(); session.pop("bodymind_operator_pending_action",None)
+        return {"text":f"Operazione eseguita tramite la route reale {method} {path} ({target['function']}). Backup preventivo creato: {backup_file.name}.","mode":"action"}
+
     if kind=="set_quota":
         tid=int(payload["tesserato_id"])
         amount=float(payload["amount"])
@@ -901,6 +942,55 @@ def _bodymind_route_manifest():
         pass
     return out
 
+def _bodymind_function_manifest():
+    """Index every Python function in asd_app so the agent can retrieve implementation context."""
+    out=[]
+    root=Path(__file__).resolve().parent
+    try:
+        for p in sorted(root.glob("*.py")):
+            try:
+                src=p.read_text(encoding="utf-8",errors="replace")
+                tree=ast.parse(src)
+            except Exception:
+                continue
+            for node in ast.walk(tree):
+                if not isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)):
+                    continue
+                doc=(ast.get_docstring(node) or "").replace("\n"," ").strip()[:500]
+                out.append({
+                    "module":"asd_app."+p.stem,
+                    "function":str(node.name),
+                    "line":int(getattr(node,"lineno",0) or 0),
+                    "doc":doc,
+                })
+    except Exception:
+        pass
+    return out
+
+def _route_source_details(target):
+    matches=[]
+    q=_norm(target)
+    for row in _bodymind_route_manifest():
+        if q and q not in _norm(" ".join([row["route"],row["endpoint"],row["function"],row["module"]])):
+            continue
+        fn=app.view_functions.get(row["endpoint"])
+        src=""
+        try: src=inspect.getsource(fn) if fn else ""
+        except Exception: src=""
+        form_fields=sorted(set(re.findall(r"request\.form\.get\([\"']([^\"']+)",src)))
+        arg_fields=sorted(set(re.findall(r"request\.args\.get\([\"']([^\"']+)",src)))
+        json_mode=("get_json" in src)
+        matches.append({
+            **row,
+            "form_fields":form_fields,
+            "query_fields":arg_fields,
+            "json":json_mode,
+            "source_excerpt":src[:6000],
+        })
+        if len(matches)>=12:
+            break
+    return matches
+
 def _bodymind_db_manifest(conn):
     """Detailed SQLite schema inventory, read-only."""
     out=[]
@@ -941,7 +1031,82 @@ def _capability_search(conn, query):
         if score:
             tables.append((score,row))
     tables.sort(key=lambda x:(-x[0],x[1]["table"]))
-    return {"routes":[x[1] for x in scored[:30]],"tables":[x[1] for x in tables[:15]],"terms":sorted(expanded)}
+    funcs=[]
+    for row in _bodymind_function_manifest():
+        hay=_norm(" ".join([row["module"],row["function"],row["doc"]]))
+        score=sum(2 if t in hay else 0 for t in expanded)
+        if score:
+            funcs.append((score,row))
+    funcs.sort(key=lambda x:(-x[0],x[1]["module"],x[1]["function"]))
+    return {
+        "routes":[x[1] for x in scored[:30]],
+        "functions":[x[1] for x in funcs[:40]],
+        "tables":[x[1] for x in tables[:15]],
+        "terms":sorted(expanded)
+    }
+
+_GENERIC_ROUTE_BLOCK_PREFIXES=(
+    "/bodymind-ai-bridge","/health","/static","/favicon","/login","/logout",
+)
+_GENERIC_DESTRUCTIVE_HINTS=(
+    "delete from","drop table","truncate ",".unlink(","os.remove(","shutil.rmtree",
+    "visibile=0","status='deleted'","status=\"deleted\"","rimuovi","elimina","cancella",
+    "delete","purge","reset","wipe","truncate",
+)
+
+def _resolve_route_action(path, method):
+    path=str(path or "").strip()
+    method=str(method or "POST").upper().strip()
+    if not path.startswith("/"):
+        return None,{},"Percorso route non valido."
+    if method in ("GET","HEAD","OPTIONS"):
+        return None,{},"Per una lettura usa gli strumenti di consultazione, non il gateway write."
+    if any(path.startswith(x) for x in _GENERIC_ROUTE_BLOCK_PREFIXES):
+        return None,{},"Route di sistema/autenticazione non utilizzabile dall'agente."
+    try:
+        adapter=app.url_map.bind("localhost")
+        endpoint,values=adapter.match(path,method=method)
+    except Exception:
+        return None,{},"La route/metodo indicati non esistono nel gestionale."
+    fn=app.view_functions.get(endpoint)
+    if not fn:
+        return None,{},"Endpoint non risolto."
+    try: src=inspect.getsource(fn)
+    except Exception: src=""
+    low=src.lower()+" "+path.lower()+" "+str(endpoint).lower()
+    if "request.files" in low:
+        return None,{},"Le route con upload file richiedono uno strumento dedicato."
+    if any(x in low for x in _GENERIC_DESTRUCTIVE_HINTS):
+        return None,{},"La route è potenzialmente distruttiva: serve un adapter dedicato con verifica semantica, non il gateway generico."
+    form_fields=sorted(set(re.findall(r"request\.form\.get\([\"']([^\"']+)",src)))
+    json_fields=[]
+    return {
+        "path":path,"method":method,"endpoint":str(endpoint),"function":str(getattr(fn,"__name__","") or ""),
+        "module":str(getattr(fn,"__module__","") or ""),"form_fields":form_fields,
+        "json":("get_json" in src),"source_excerpt":src[:5000]
+    },values,""
+
+def _propose_generic_route_action(conn,args,raw_message=""):
+    path=str(args.get("path") or "").strip()
+    method=str(args.get("method") or "POST").upper().strip()
+    params=args.get("params") if isinstance(args.get("params"),dict) else {}
+    target,values,error=_resolve_route_action(path,method)
+    if error:
+        return {"text":"Non preparo l'azione: "+error+" Ho lasciato tutto invariato.","mode":"warning"}
+    declared=set(target.get("form_fields") or [])
+    if declared:
+        extras=[k for k in params if k not in declared and k not in ("csrf_token","_csrf_token")]
+        if extras:
+            return {"text":"Non preparo l'azione: i parametri "+", ".join(extras)+" non risultano letti dalla route reale. Nessuna modifica eseguita.","mode":"warning"}
+    aid=_set_pending_action(conn,"generic_route_action",{
+        "path":path,"method":method,"params":params,"endpoint":target["endpoint"],
+        "function":target["function"],"module":target["module"],"url_values":values,
+    })
+    fields=", ".join(sorted(params.keys())) or "nessun campo"
+    return {
+        "text":f"Ho preparato {method} {path} ({target['function']}) con campi: {fields}. Prima dell'esecuzione farò un backup del database e userò la route reale del gestionale. Confermi?",
+        "mode":"confirm","action_id":aid,"cloud_ai":True,"agent_plan":"propose_route_action"
+    }
 
 def _full_agent_tool_catalog(conn):
     base=list(_agent_tool_catalog(conn))
@@ -949,6 +1114,8 @@ def _full_agent_tool_catalog(conn):
         {"name":"discover_capabilities","description":"Cerca in tutte le route, funzioni Flask e tabelle del gestionale per capire dove vive una funzione o concetto. Conosce sinonimi BodyMind.","write":False},
         {"name":"inspect_system_map","description":"Legge la mappa completa del gestionale: numero route, moduli, tabelle e aree funzionali.","write":False},
         {"name":"inspect_db_schema","description":"Legge schema, colonne e conteggi delle tabelle del database BodyMind.","write":False},
+        {"name":"inspect_route","description":"Legge una route/funzione reale del gestionale, inclusi campi form/query e sorgente rilevante.","write":False},
+        {"name":"propose_route_action","description":"Prepara una modifica tramite una route reale non distruttiva del gestionale. Args: path, method, params. Richiede sempre conferma e backup prima dell'esecuzione.","write":True},
     ])
     return base
 
@@ -992,6 +1159,12 @@ def _cloud_plan_tool(conn, question: str):
             "glossary":_BODYMIND_GLOSSARY,
         }
         recent=_recent_operator_context(conn,6)
+        relevant=_capability_search(conn,question)
+        relevant_context={
+            "routes":relevant.get("routes",[])[:25],
+            "functions":relevant.get("functions",[])[:30],
+            "tables":relevant.get("tables",[])[:12],
+        }
         prompt=(
             "Sei il cervello operativo dell'Operatore BodyMind. Devi capire italiano naturale, sinonimi, abbreviazioni e contesto. "
             "Tesserato/iscritto/atleta/allievo/socio possono riferirsi alla stessa anagrafica; CM=certificato medico; "
@@ -1006,6 +1179,7 @@ def _cloud_plan_tool(conn, question: str):
             "Tool=none solo se è pura conversazione o se nessuno strumento disponibile copre ancora l'azione. "
             "Catalogo strumenti: "+json.dumps(compact,ensure_ascii=False)+
             "\nMappa sistema: "+json.dumps(overview,ensure_ascii=False)[:18000]+
+            "\nElementi rilevanti per questa richiesta: "+json.dumps(relevant_context,ensure_ascii=False)[:22000]+
             "\nContesto recente: "+json.dumps(recent,ensure_ascii=False)+
             "\nRichiesta utente: "+str(question or "")[:7000]
         )
@@ -1040,16 +1214,28 @@ def _execute_full_agent_plan(conn, plan, raw_message=""):
         found=_capability_search(conn,q)
         routes=found["routes"]
         tables=found["tables"]
+        funcs=found.get("functions") or []
         rtxt="; ".join((x["methods"][0] if x["methods"] else "GET")+" "+x["route"]+" → "+x["function"] for x in routes[:10])
         ttxt=", ".join(x["table"] for x in tables[:10])
-        return {"text":"Ho cercato nel gestionale reale. Route pertinenti: "+(rtxt or "nessuna corrispondenza forte")+". Tabelle pertinenti: "+(ttxt or "nessuna")+".","mode":"cloud_tool","cloud_ai":True,"agent_plan":tool,"capabilities":found}
+        ftxt=", ".join(x["module"]+"."+x["function"] for x in funcs[:10])
+        return {"text":"Ho cercato nel gestionale reale. Route pertinenti: "+(rtxt or "nessuna corrispondenza forte")+". Funzioni pertinenti: "+(ftxt or "nessuna")+". Tabelle pertinenti: "+(ttxt or "nessuna")+".","mode":"cloud_tool","cloud_ai":True,"agent_plan":tool,"capabilities":found}
     if tool=="inspect_system_map":
         routes=_bodymind_route_manifest(); dbm=_bodymind_db_manifest(conn)
         mods=sorted(set(x["module"] for x in routes if x["module"]))
-        return {"text":f"Mappa BodyMind: {len(routes)} route runtime, {len(mods)} moduli Flask e {len(dbm)} tabelle dati. Posso cercare una funzione specifica e collegarla agli strumenti operativi.","mode":"cloud_tool","cloud_ai":True,"agent_plan":tool}
+        funcs=_bodymind_function_manifest()
+        return {"text":f"Mappa BodyMind: {len(routes)} route runtime, {len(funcs)} funzioni Python indicizzate, {len(mods)} moduli Flask e {len(dbm)} tabelle dati. Posso cercare una funzione specifica e collegarla agli strumenti operativi.","mode":"cloud_tool","cloud_ai":True,"agent_plan":tool}
     if tool=="inspect_db_schema":
         dbm=_bodymind_db_manifest(conn)
         return {"text":f"Schema BodyMind letto: {len(dbm)} tabelle. Posso cercare campi e relazioni per nome o funzione.","mode":"cloud_tool","cloud_ai":True,"agent_plan":tool,"schema":dbm[:40]}
+    if tool=="inspect_route":
+        target=str(args.get("target") or args.get("route") or args.get("endpoint") or raw_message or "")
+        details=_route_source_details(target)
+        if not details:
+            return {"text":"Non trovo una route/funzione corrispondente a quella descrizione.","mode":"cloud_tool","cloud_ai":True,"agent_plan":tool}
+        shown="; ".join((x["methods"][0] if x["methods"] else "GET")+" "+x["route"]+" → "+x["function"] for x in details[:8])
+        return {"text":"Ho letto le route reali: "+shown+".","mode":"cloud_tool","cloud_ai":True,"agent_plan":tool,"route_details":details}
+    if tool=="propose_route_action":
+        return _propose_generic_route_action(conn,args,raw_message)
     result=_execute_agent_tool(conn,plan,raw_message)
     if result:
         result["cloud_ai"]=True
@@ -1345,7 +1531,7 @@ def _answer(conn, text: str):
 
     if any(x in n for x in ("cosa sai fare","aiutami","help","comandi")):
         return {
-            "text":"Posso usare strumenti reali del gestionale: cercare e controllare tesserati, dossier e documenti, trovare e pulire duplicati con conferma, verificare Modulo Unico, certificati e tutela minori, leggere quote e incassi, preparare quote e pagamenti, controllare BodyMind e ricevere file/cartelle per l’Autopilot. Le azioni distruttive richiedono sempre conferma.",
+            "text":"Posso leggere la mappa completa di route, funzioni e database BodyMind, capire sinonimi e abbreviazioni, cercare e controllare tesserati, dossier, documenti, Modulo Unico, certificati, tutela minori, quote, incassi e ricevute. Posso anche preparare azioni sulle route reali del gestionale: ogni modifica richiede conferma e backup; le operazioni distruttive o ambigue vengono bloccate dal gateway generico e richiedono un adapter dedicato.",
             "mode":"help",
             "links":[{"label":"Da verificare","href":"/documenti/da-verificare"},{"label":"Quote & Incassi","href":"/quote-incassi"}]
         }
