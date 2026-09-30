@@ -2423,6 +2423,10 @@ def bodymind_operator_home():
       function closeSmtpSetup(){{if(smtpModal)smtpModal.hidden=true}}
       voiceStageClose?.addEventListener('click',closeVoiceStage);
       document.getElementById('bmoSmtpCancel')?.addEventListener('click',closeSmtpSetup);
+      try{{
+        const qs=new URLSearchParams(window.location.search);
+        if(qs.get('smtp_setup')==='1')setTimeout(openSmtpSetup,120);
+      }}catch(e){{}}
       document.getElementById('bmoSmtpProvider')?.addEventListener('change',ev=>{{
         if(ev.target.value==='gmail'){{
           document.getElementById('bmoSmtpHost').value='smtp.gmail.com';
@@ -3413,6 +3417,14 @@ def _productionize_inbound(inbound_id, type_hint=""):
         return _verify_document_production(conn,inbound_id)
     finally:
         conn.close()
+
+
+@app.get("/operatore-bodymind/smtp/setup")
+@login_required
+def bodymind_operator_smtp_setup():
+    if current_role() not in ("admin","manager"):
+        return redirect("/operatore-bodymind")
+    return redirect("/operatore-bodymind?smtp_setup=1")
 
 
 @app.get("/operatore-bodymind/secure/smtp")
