@@ -211,7 +211,7 @@ def bodymind_ai_bridge_setup():
     finally:
         conn.close()
     base=request.url_root.rstrip('/')
-    command=f"curl -fsSL -H 'X-BodyMind-Pair: {code}' {base}/bodymind-ai-bridge/install.sh | bash"
+    command=f"rm -f /tmp/bodymind-ai-r39.sh; curl -fSL -H 'X-BodyMind-Pair: {code}' {base}/bodymind-ai-bridge/install.sh -o /tmp/bodymind-ai-r39.sh && chmod 700 /tmp/bodymind-ai-r39.sh && /bin/bash /tmp/bodymind-ai-r39.sh"
     html=f"""
     <main style="max-width:900px;margin:0 auto;padding:24px">
       <h1>BodyMind AI · iMac</h1>
@@ -391,6 +391,7 @@ def bodymind_ai_bridge_install_script():
 # BODYMIND_R39_BRIDGE_CSRF_SAFE_GET_PAIRING
 # BODYMIND_R39_BRIDGE_GET_ONLY_MACHINE_API
 # BODYMIND_R39_BRIDGE_DIAGNOSTIC_CHECKPOINTS
+# BODYMIND_R39_EXPLICIT_INSTALL_FILE
 set -u
 
 TOKEN="__TOKEN__"
@@ -411,7 +412,7 @@ diag paired
 echo "[1/5] Abbinamento Railway completato."
 
 echo "[2/5] Verifico llama-server locale..."
-if ! curl -fsS "http://127.0.0.1:8088/health" >/tmp/bodymind_ai_health.$ 2>&1; then
+if ! curl -fsS "http://127.0.0.1:8088/health" >/tmp/bodymind_ai_health.$$ 2>&1; then
   echo "llama-server non risponde: provo a riavviare BodyMind AI..."
   AI_PLIST="$HOME/Library/LaunchAgents/com.bodymind.ai.plist"
   if [ -f "$AI_PLIST" ]; then
@@ -420,23 +421,23 @@ if ! curl -fsS "http://127.0.0.1:8088/health" >/tmp/bodymind_ai_health.$ 2>&1; t
     i=0
     while [ "$i" -lt 12 ]; do
       sleep 1
-      if curl -fsS "http://127.0.0.1:8088/health" >/tmp/bodymind_ai_health.$ 2>&1; then
+      if curl -fsS "http://127.0.0.1:8088/health" >/tmp/bodymind_ai_health.$$ 2>&1; then
         break
       fi
       i=$((i+1))
     done
   fi
 fi
-if ! curl -fsS "http://127.0.0.1:8088/health" >/tmp/bodymind_ai_health.$ 2>&1; then
+if ! curl -fsS "http://127.0.0.1:8088/health" >/tmp/bodymind_ai_health.$$ 2>&1; then
   diag llama_failed
   echo "ERRORE: abbinamento riuscito, ma llama-server non risponde su 127.0.0.1:8088."
   echo "Controlla il servizio BodyMind AI locale sul Mac."
-  rm -f /tmp/bodymind_ai_health.$
+  rm -f /tmp/bodymind_ai_health.$$
   exit 1
 fi
 diag llama_ok
-cat /tmp/bodymind_ai_health.$
-rm -f /tmp/bodymind_ai_health.$
+cat /tmp/bodymind_ai_health.$$
+rm -f /tmp/bodymind_ai_health.$$
 
 PYBIN="$(command -v python3 2>/dev/null || true)"
 if [ -z "$PYBIN" ]; then
