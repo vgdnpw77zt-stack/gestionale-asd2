@@ -41,6 +41,7 @@ runpy.run_path("/opt/bodymind/release_document_coherence_r42.py", run_name="__ma
 runpy.run_path("/opt/bodymind/release_operator_dedupe_rollback_r43.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_document_conflict_audit_r44.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_bridge_r36.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_cloud_agent_smoke_r45.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_experience_r38.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_qa_r32.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_logic_qa_r37.py", run_name="__main__")
