@@ -37,11 +37,10 @@ COPY release_document_coherence_r41.py /opt/bodymind/release_document_coherence_
 COPY release_document_coherence_r42.py /opt/bodymind/release_document_coherence_r42.py
 COPY release_operator_dedupe_rollback_r43.py /opt/bodymind/release_operator_dedupe_rollback_r43.py
 COPY release_document_conflict_audit_r44.py /opt/bodymind/release_document_conflict_audit_r44.py
+COPY release_cloud_native_r47.py /opt/bodymind/release_cloud_native_r47.py
 COPY release_cloud_agent_smoke_r45.py /opt/bodymind/release_cloud_agent_smoke_r45.py
 COPY release_cloud_agent_smoke_r45b.py /opt/bodymind/release_cloud_agent_smoke_r45b.py
 COPY release_cloud_agent_diag_r45c.py /opt/bodymind/release_cloud_agent_diag_r45c.py
-COPY operator_bridge_runtime_r36.py /opt/bodymind/operator_bridge_runtime_r36.py
-COPY release_operator_bridge_r36.py /opt/bodymind/release_operator_bridge_r36.py
 COPY release_operator_experience_r38.py /opt/bodymind/release_operator_experience_r38.py
 COPY release_operator_qa_r32.py /opt/bodymind/release_operator_qa_r32.py
 COPY release_operator_logic_qa_r34.py /opt/bodymind/release_operator_logic_qa_r34.py
