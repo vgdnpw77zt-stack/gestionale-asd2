@@ -1926,14 +1926,39 @@ def bodymind_operator_chat():
         _schema(conn)
         _log(conn,"user",message)
         result=_answer(conn,message)
-        try:
-            from .routes_operator_bridge import bridge_enhance_result
-            result=bridge_enhance_result(conn,message,result,_conv_id(),_identity())
-        except Exception as bridge_exc:
+        planner_used=False
+        if str(result.get("mode") or "")=="fallback":
             try:
-                _log(conn,"system","Local AI bridge unavailable: "+repr(bridge_exc))
-            except Exception:
-                pass
+                from .routes_operator_bridge import bridge_plan_tool
+                plan=bridge_plan_tool(conn,message,_agent_tool_catalog(conn),_conv_id(),_identity())
+                if plan:
+                    planner_used=True
+                    tool_result=_execute_agent_tool(conn,plan,message)
+                    if tool_result:
+                        result=tool_result
+                        result["agent_plan"]=str(plan.get("tool") or "")
+                    elif str(plan.get("tool") or "") in ("none","unknown") and str(plan.get("answer") or "").strip():
+                        result={
+                            "text":str(plan.get("answer") or "").strip(),
+                            "mode":"local_ai",
+                            "allow_device_ai":False,
+                            "local_ai":True,
+                            "agent_plan":"none",
+                        }
+            except Exception as planner_exc:
+                try:
+                    _log(conn,"system","R40 tool planner unavailable: "+repr(planner_exc))
+                except Exception:
+                    pass
+        if not planner_used and str(result.get("mode") or "")=="fallback":
+            try:
+                from .routes_operator_bridge import bridge_enhance_result
+                result=bridge_enhance_result(conn,message,result,_conv_id(),_identity())
+            except Exception as bridge_exc:
+                try:
+                    _log(conn,"system","Local AI bridge unavailable: "+repr(bridge_exc))
+                except Exception:
+                    pass
         if result.get("allow_device_ai"):
             cloud=_cloud_ai(message,result.get("text",""))
             if cloud:
