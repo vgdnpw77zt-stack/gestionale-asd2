@@ -3034,6 +3034,64 @@ def bodymind_cloud_tts_usage():
     return jsonify({"ok":True,"budget":budget})
 
 
+@app.get("/operatore-bodymind/secure/smtp")
+@login_required
+def bodymind_operator_smtp_status():
+    if current_role() not in ("admin","manager"):
+        return jsonify({"text":"Permessi insufficienti."}),403
+    conn=db()
+    try:
+        st=_smtp_public_status(conn)
+    finally:
+        conn.close()
+    return jsonify({"ok":True,"smtp":st})
+
+@app.post("/operatore-bodymind/secure/smtp")
+@login_required
+def bodymind_operator_smtp_save():
+    if current_role()!="admin":
+        return jsonify({"text":"Solo un amministratore può configurare SMTP."}),403
+    payload=request.get_json(silent=True) or {}
+    provider=str(payload.get("provider") or "").strip().lower()
+    host=str(payload.get("host") or "").strip()
+    username=str(payload.get("username") or "").strip()
+    password=str(payload.get("password") or "")
+    from_name=str(payload.get("from_name") or "BodyMind Aerial Studio").strip()
+    security=str(payload.get("security") or "starttls").strip().lower()
+    try: port=int(payload.get("port") or 0)
+    except Exception: port=0
+    if provider=="gmail":
+        host=host or "smtp.gmail.com"
+        port=port or 587
+        security=security if security in ("starttls","ssl") else "starttls"
+    if security not in ("starttls","ssl","plain"):
+        return jsonify({"text":"Tipo di sicurezza SMTP non valido."}),400
+    conn=db()
+    try:
+        old,_meta=_secure_setting_get(conn,"smtp")
+        if not password and isinstance(old,dict):
+            password=str(old.get("password") or "")
+        cfg={
+            "provider":provider or "custom",
+            "host":host,"port":port,"username":username,"password":password,
+            "security":security,"from_name":from_name,
+        }
+        if not host or port<=0 or not username or not password:
+            return jsonify({"text":"Compila host, porta, utente e password/app-password."}),400
+        tested=False; err=""
+        try:
+            _smtp_test_connection(cfg); tested=True
+        except Exception as exc:
+            err=str(exc)[:300]
+        meta={"last_test_ok":tested,"last_test_at":datetime.now().isoformat(timespec="seconds"),"last_test_error":err}
+        _secure_setting_set(conn,"smtp",cfg,meta)
+        st=_smtp_public_status(conn)
+    finally:
+        conn.close()
+    if not tested:
+        return jsonify({"ok":False,"smtp":st,"text":"Configurazione salvata cifrata, ma il test SMTP non è riuscito: "+(err or "errore non specificato")}),422
+    return jsonify({"ok":True,"smtp":st,"text":"SMTP configurato e testato correttamente."})
+
 @app.post("/operatore-bodymind/upload")
 @login_required
 def bodymind_operator_upload():
