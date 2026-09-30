@@ -272,6 +272,7 @@
 <div class="footer-visits" aria-label="Visitatori unici del sito"><span>VISITE UNICHE</span><strong>{{ "{:,}".format(visits|int).replace(",", ".") }}</strong></div>
 </footer>
 
-<script src="{{ url_for('static',filename='site.js') }}?v=v26-editorial"></script>
+<script>window.BODYMIND_ANALYTICS_SESSION={{ analytics_session|tojson }};</script>
+<script src="{{ url_for('static',filename='site.js') }}?v=v29-private-analytics"></script>
 </body>
 </html>
