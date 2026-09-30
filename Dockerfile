@@ -42,6 +42,7 @@ COPY release_cloud_agent_smoke_r45.py /opt/bodymind/release_cloud_agent_smoke_r4
 COPY release_cloud_agent_smoke_r45b.py /opt/bodymind/release_cloud_agent_smoke_r45b.py
 COPY release_cloud_agent_diag_r45c.py /opt/bodymind/release_cloud_agent_diag_r45c.py
 COPY release_cloud_credit_smoke_r47.py /opt/bodymind/release_cloud_credit_smoke_r47.py
+COPY release_secretary_capability_audit_r48.py /opt/bodymind/release_secretary_capability_audit_r48.py
 COPY release_operator_experience_r38.py /opt/bodymind/release_operator_experience_r38.py
 COPY release_operator_qa_r32.py /opt/bodymind/release_operator_qa_r32.py
 COPY release_operator_logic_qa_r34.py /opt/bodymind/release_operator_logic_qa_r34.py
