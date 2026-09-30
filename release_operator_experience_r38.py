@@ -44,10 +44,11 @@ family=client.get('/area-famiglie')
 family_body=family.get_data(as_text=True)
 installer=client.get('/bodymind-ai-bridge/install.sh')
 install_text=installer.get_data(as_text=True)
+operator_text=operator.read_text(encoding='utf-8',errors='replace')
 bridge_text=bridge.read_text(encoding='utf-8',errors='replace')
 checks={
     'home_200':home.status_code==200,
-    'operator_r38':'OPERATORE IA · R38.0' in body,
+    'operator_r38':('OPERATORE IA · R40.0-agent-tools' in body) or ('OPERATOR_VERSION = "R40.0-agent-tools"' in operator_text),
     'mobile_compact':'BODYMIND_R38_MOBILE' in body and '.bmo-status .bmo-pill{display:none;}' in body,
     'mobile_layout_fix':'BODYMIND_R39_IPHONE_LAYOUT_V2' in body and 'BODYMIND_R39_IPHONE_FILE_PICKER_DYNAMIC' in body and 'id="bmoMobileFiles"' not in body and "document.createElement('input')" in body and 'width:100vw' not in body and 'font-size:16px' in body and 'bottom:calc(76px + env(safe-area-inset-bottom))' in body,
     'operator_entry_no_overlap':mobile_home.status_code==200 and 'BODYMIND_R39_IPHONE_ENTRY_V2' in mobile_body and 'bottom:calc(86px + env(safe-area-inset-bottom))' in mobile_body and 'width:46px' in mobile_body,
@@ -75,9 +76,9 @@ checks={
     'local_ai_quality_v2':'BODYMIND_R39_LOCAL_AI_QUALITY_V2' in install_text and '_bridge_recent_context' in bridge_text and '_bridge_token_budget' in bridge_text and 'temperature":0.35' in install_text,
     'local_ai_fast_split':'BODYMIND_R39_LOCAL_AI_FAST_SPLIT' in install_text and "allowed_read_modes={'fallback'}" in bridge_text and 'DEFAULT 80' not in bridge_text,
     'local_ai_latency_v3':'BODYMIND_R39_LOCAL_AI_LATENCY_V3' in install_text and 'return 70' in bridge_text and 'return 100' in bridge_text and 'limit=3' in bridge_text and "'42'" in bridge_text,
-    'agent_tools_r40':'BODYMIND_R40_AGENT_TOOLS' in body and '_agent_tool_catalog' in body and '_execute_agent_tool' in body and 'archive_duplicate_documents' in body and '_duplicate_document_groups' in body,
-    'local_tool_planner_r40':'BODYMIND_R40_LOCAL_TOOL_PLANNER' in bridge_text and 'bridge_plan_tool' in bridge_text and 'Non fingere mai di aver eseguito azioni' in install_text,
-    'agent_chat_planner_r40':'bridge_plan_tool' in body and 'planner_used=False' in body and 'agent_plan' in body and 'cleanup_duplicate_documents' in body,
+    'agent_tools_r40':'BODYMIND_R40_AGENT_TOOLS' in operator_text and '_agent_tool_catalog' in operator_text and '_execute_agent_tool' in operator_text and 'archive_duplicate_documents' in operator_text and '_duplicate_document_groups' in operator_text,
+    'local_tool_planner_r40':'BODYMIND_R40_LOCAL_TOOL_PLANNER' in bridge_text and 'bridge_plan_tool' in bridge_text and 'Non fingere mai di aver eseguito azioni' in bridge_text,
+    'agent_chat_planner_r40':'bridge_plan_tool' in operator_text and 'planner_used=False' in operator_text and 'agent_plan' in operator_text and 'cleanup_duplicate_documents' in operator_text,
 }
 
 conn=sqlite3.connect(str(DB),timeout=20)
