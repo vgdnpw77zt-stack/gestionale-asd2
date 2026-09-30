@@ -48,6 +48,7 @@ checks={
     'mobile_layout_fix':'BODYMIND_R39_MOBILE_LAYOUT_FIX' in body and '#bmoMobileFiles[hidden]' in body,
     'operator_entry_no_overlap':'bottom:calc(104px + env(safe-area-inset-bottom))' in body or 'bmo-mobile-entry' not in body,
     'ios_tts_unlock':'BODYMIND_R39_IOS_TTS_UNLOCK' in body and "speechSynthesis.resume()" in body,
+    'ios_tts_persistent':'BODYMIND_R39_IOS_TTS_PERSISTENT_FIX' in body and 'ttsUtterance' in body and 'bodymind_tts_enabled_v2' in body and 'Voce non partita' in body,
     'mobile_imac_only':'IA iMac:' in body and 'LanguageModel' not in body and 'window.ai' not in body,
     'installer_200':installer.status_code==200,
     'high_sierra_python_fallback':'command -v python3' in install_text and 'command -v python ' in install_text,
