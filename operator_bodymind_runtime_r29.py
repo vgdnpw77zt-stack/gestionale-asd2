@@ -1162,6 +1162,7 @@ def bodymind_operator_home():
       // BODYMIND_R39_IOS_VOICE_RECOVERY_V4
       // BODYMIND_R39_IOS_WEBKIT27_V5
       // BODYMIND_R39_IOS_VOICE_STABLE_V6
+      // BODYMIND_R39_IOS_MIC_PRIME_V7
       function voiceDiag(stage,extra={{}}){{
         try{{
           fetch('/operatore-bodymind/voice-diag',{{
@@ -1416,6 +1417,44 @@ def bodymind_operator_home():
         micStream=await navigator.mediaDevices.getUserMedia({{audio:{{echoCancellation:true,noiseSuppression:true,autoGainControl:true}}}});
         startMeter(micStream);return micStream;
       }}
+      async function primeMicForRecognition(){{
+        if(!window.isSecureContext)throw new Error('Il microfono richiede HTTPS.');
+        if(!navigator.mediaDevices?.getUserMedia)throw new Error('Questo browser non espone il microfono.');
+        let stream=null,ctx=null,source=null,an=null;
+        try{{
+          voiceDiag('mic_prime_request');
+          stream=await navigator.mediaDevices.getUserMedia({{audio:{{echoCancellation:true,noiseSuppression:true,autoGainControl:true}},video:false}});
+          const track=(stream.getAudioTracks&&stream.getAudioTracks()[0])||null;
+          voiceDiag('mic_prime_granted',{{muted:!!track?.muted,enabled:track?track.enabled:null,readyState:track?.readyState||''}});
+          const AC=window.AudioContext||window.webkitAudioContext;
+          if(!AC)return {{ok:true,signal:null}};
+          ctx=new AC();
+          try{{await ctx.resume()}}catch(e){{}}
+          source=ctx.createMediaStreamSource(stream);
+          an=ctx.createAnalyser();an.fftSize=512;source.connect(an);
+          const data=new Uint8Array(an.fftSize);
+          let peak=0;
+          const until=performance.now()+700;
+          while(performance.now()<until){{
+            an.getByteTimeDomainData(data);
+            let sum=0;
+            for(let i=0;i<data.length;i++){{const d=(data[i]-128)/128;sum+=d*d}}
+            peak=Math.max(peak,Math.sqrt(sum/data.length));
+            await new Promise(res=>setTimeout(res,55));
+          }}
+          const level=Math.round(peak*1000);
+          voiceDiag('mic_prime_signal',{{level:level}});
+          return {{ok:true,signal:peak}};
+        }}catch(e){{
+          voiceDiag('mic_prime_error',{{error:String(e?.name||''),message:String(e?.message||e)}});
+          return {{ok:false,error:e}};
+        }}finally{{
+          try{{source?.disconnect()}}catch(e){{}}
+          try{{an?.disconnect()}}catch(e){{}}
+          try{{stream?.getTracks().forEach(t=>t.stop())}}catch(e){{}}
+          try{{await ctx?.close()}}catch(e){{}}
+        }}
+      }}
       function humanMicError(code){{
         const c=String(code||'');
         if(c==='not-allowed'||c==='service-not-allowed')return 'Accesso al microfono negato. Consenti il microfono a BodyMind nelle impostazioni di Safari e riprova.';
@@ -1474,13 +1513,30 @@ def bodymind_operator_home():
         try{{speechSynthesis.cancel()}}catch(e){{}}
         setTimeout(()=>waitSpeechIdle(done,tries+1),120);
       }}
-      function startFreshRecognition(attempt=0){{
+      async function startFreshRecognition(attempt=0){{
         try{{
           clearRecognitionWatchdog();
           if(recognition){{const oldRecognition=recognition;recognition=null;try{{oldRecognition.abort()}}catch(e){{}}}}
           resetRecognitionUI();
           try{{ttsSequence++;speechSynthesis?.cancel()}}catch(e){{}}
           voiceDiag(attempt?'sr_retry_prepare':'sr_prepare',{{attempt:attempt}});
+          const primed=await primeMicForRecognition();
+          if(!primed.ok){{
+            const err=primed.error||{{}};
+            resetRecognitionUI();
+            const t=(err.name==='NotAllowedError'||err.name==='SecurityError')
+              ?'Microfono non autorizzato. Consenti il microfono per BodyMind e riprova.'
+              :'Non riesco ad aprire il microfono del dispositivo.';
+            if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+            return;
+          }}
+          if(primed.signal!==null && primed.signal<0.002){{
+            voiceDiag('mic_prime_no_signal',{{level:Math.round(primed.signal*1000)}});
+            if(voiceStatus)voiceStatus.textContent='Microfono aperto ma non rilevo audio. Parla vicino al microfono e riprova.';
+          }}else{{
+            if(voiceStatus)voiceStatus.textContent='Microfono OK. Avvio riconoscimento…';
+          }}
+          await new Promise(res=>setTimeout(res,320));
           waitSpeechIdle(()=>{{
             try{{
               recognition=buildRecognition();
@@ -1496,7 +1552,7 @@ def bodymind_operator_home():
                   try{{oldRecognition.abort()}}catch(e){{}}
                   if(attempt<1){{
                     if(voiceStatus)voiceStatus.textContent='Riprovo il microfono…';
-                    setTimeout(()=>startFreshRecognition(1),700);
+                    setTimeout(()=>{{startFreshRecognition(1).catch(()=>{{}})}},700);
                   }}else{{
                     const t='Safari non ha avviato il riconoscimento. Puoi riprovare il microfono; se iOS continua a bloccarlo, usa temporaneamente la dettatura della tastiera.';
                     if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
@@ -1505,7 +1561,7 @@ def bodymind_operator_home():
               }},7000);
             }}catch(err){{
               resetRecognitionUI();voiceDiag('sr_start_throw',{{error:String(err?.name||'')+':'+String(err?.message||err),attempt:attempt}});
-              if(attempt<1)setTimeout(()=>startFreshRecognition(1),500);
+              if(attempt<1)setTimeout(()=>{{startFreshRecognition(1).catch(()=>{{}})}},500);
               else{{
                 const t=(err?.name==='NotAllowedError'||err?.name==='SecurityError')?'Accesso al microfono negato. Consenti microfono e riconoscimento vocale a Safari e riprova.':('Microfono non disponibile: '+(err?.message||err));
                 if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
@@ -1521,7 +1577,7 @@ def bodymind_operator_home():
         // BODYMIND_R39_IOS_SR_WEBKIT27_STATE_MACHINE_V5
         mic.addEventListener('click',()=>{{
           if(listening&&recognition){{try{{voiceDiag('sr_manual_stop');recognition.stop()}}catch(e){{}};return}}
-          startFreshRecognition(0);
+          startFreshRecognition(0).catch(err=>{{voiceDiag('sr_async_throw',{{error:String(err?.message||err)}})}});
         }});
       }}else{{
         voiceDiag('sr_unavailable');
@@ -1592,10 +1648,17 @@ def bodymind_operator_voice_diag():
         "gesture":bool(payload.get("gesture")),
         "final":bool(payload.get("final")),
         "len":int(payload.get("len") or 0),
+        "level":int(payload.get("level") or 0),
+        "muted":bool(payload.get("muted")),
+        "enabled":payload.get("enabled"),
+        "readyState":str(payload.get("readyState") or "")[:40],
+        "attempt":int(payload.get("attempt") or 0),
         "ua":str(payload.get("ua") or "")[:220],
     }
     try:
-        app.logger.info("[voice-diag] %s", json.dumps(safe,ensure_ascii=False))
+        line="[voice-diag] "+json.dumps(safe,ensure_ascii=False)
+        app.logger.info("%s", line)
+        print(line, flush=True)
     except Exception:
         pass
     return jsonify({"ok":True}),200
