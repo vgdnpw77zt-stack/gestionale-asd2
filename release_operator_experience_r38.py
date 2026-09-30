@@ -43,7 +43,7 @@ operator_text=operator.read_text(encoding='utf-8',errors='replace')
 app_text=(APP/'app.py').read_text(encoding='utf-8',errors='replace')
 checks={
     'home_200':home.status_code==200,
-    'operator_r38':('OPERATOR_VERSION = "R47.0-cloud-native-secretary"' in operator_text) or ('OPERATOR_VERSION = "R46.0-cloud-native-secretary"' in operator_text),
+    'operator_r38':('OPERATOR_VERSION = "R48.1-secretary-ops"' in operator_text) or ('OPERATOR_VERSION = "R47.0-cloud-native-secretary"' in operator_text),
     'mobile_compact':'BODYMIND_R38_MOBILE' in body and '.bmo-status .bmo-pill{display:none;}' in body,
     'mobile_layout_fix':'BODYMIND_R39_IPHONE_LAYOUT_V2' in body and 'BODYMIND_R39_IPHONE_FILE_PICKER_DYNAMIC' in body and 'id="bmoMobileFiles"' not in body and "document.createElement('input')" in body and 'width:100vw' not in body and 'font-size:16px' in body and 'bottom:calc(76px + env(safe-area-inset-bottom))' in body,
     'operator_entry_no_overlap':mobile_home.status_code==200 and 'BODYMIND_R39_IPHONE_ENTRY_V2' in mobile_body and 'bottom:calc(86px + env(safe-area-inset-bottom))' in mobile_body and 'width:46px' in mobile_body,
@@ -66,7 +66,7 @@ checks={
     'cloud_write_confirmation_r45':'_set_pending_action(conn,"generic_route_action"' in operator_text and 'bodymind_operator_pending_action' in operator_text and 'backup_file=backup_dir/' in operator_text,
     'cloud_generic_safety_r45':'_GENERIC_DESTRUCTIVE_HINTS' in operator_text and 'send_mail' in operator_text and 'stripe' in operator_text and 'shutil.rmtree' in operator_text and 'blocked_safety' in operator_text,
     'cloud_agent_loop_r45':'for agent_step in range(3)' in operator_text and '_compact_agent_observation' in operator_text and 'Risultati strumenti già usati in questa richiesta' in operator_text,
-    'cloud_native_secretary_r47':'BODYMIND_R46_CLOUD_NATIVE_SECRETARY' in operator_text and 'R47.0-cloud-native-secretary' in operator_text,
+    'cloud_native_secretary_r48':'BODYMIND_R46_CLOUD_NATIVE_SECRETARY' in operator_text and 'R48.1-secretary-ops' in operator_text,
     'cloud_no_local_fallback_r46':'bridge_plan_tool' not in operator_text and 'bridge_enhance_result' not in operator_text and 'Mac/Qwen' not in operator_text and 'IA iMac' not in operator_text,
     'cloud_bridge_removed_r47':'/bodymind-ai-bridge' not in body and 'IA iMac:' not in body and 'routes_operator_bridge' not in app_text and not (APP/'asd_app/routes_operator_bridge.py').exists(),
     'cloud_voice_backend_r46':'/operatore-bodymind/voice/transcribe' in operator_text and '/operatore-bodymind/voice/speak' in operator_text and 'gpt-transcribe' in operator_text and 'gpt-4o-mini-tts' in operator_text,
@@ -74,6 +74,13 @@ checks={
     'cloud_budget_meter_r47':'BODYMIND_R47_AI_BUDGET_METER' in operator_text and 'bodymind_ai_usage' in operator_text and '_usage_summary' in operator_text and 'BODYMIND_AI_BUDGET_USD' in operator_text,
     'cloud_budget_alerts_r47':"b.level==='critical'||b.level==='high'||b.level==='warning'" in operator_text and 'CREDITO ESAURITO' in operator_text and 'Budget IA: uso stimato' in operator_text,
     'cloud_tts_usage_r47':'/operatore-bodymind/cloud/usage/tts' in operator_text and 'X-BodyMind-Usage-Id' in operator_text and '_TTS_EST_USD_PER_MIN' in operator_text,
+    'secretary_core_r48':'BODYMIND_R48_SECRETARY_CORE' in operator_text and 'secretary_audit' in operator_text and 'scan_document_storage' in operator_text,
+    'secret_vault_r48':'bodymind_secure_settings' in operator_text and 'BODYMIND_VAULT_KEY' in operator_text and '_secret_box' in operator_text,
+    'smtp_secure_r48':'/operatore-bodymind/secure/smtp' in operator_text and '/operatore-bodymind/smtp/setup' in operator_text and '_smtp_test_connection' in operator_text,
+    'smtp_send_r48':'"name":"send_email"' in operator_text and '_smtp_send_message' in operator_text and 'bodymind_email_log' in operator_text and 'kind=="send_email"' in operator_text,
+    'batch_intent_r48':'"name":"prepare_batch_upload"' in operator_text and 'bodymind_operator_upload_intent' in operator_text and 'document_type_hint' in operator_text,
+    'document_production_r48':'_productionize_inbound' in operator_text and '_verify_document_production' in operator_text and 'produced} messi in produzione e verificati' in operator_text,
+
 }
 
 conn=sqlite3.connect(str(DB),timeout=20)
@@ -100,4 +107,4 @@ print('[operator-experience-r38] checks='+repr(checks),flush=True)
 print('[operator-experience-r38] counts_before='+repr(before)+' counts_after='+repr(after),flush=True)
 if failed:
     raise RuntimeError('R38 operator experience QA failed '+repr(failed))
-print('[operator-experience-r38-selftest] PASS cloud-native-secretary no-local-bridge data-safe db-ok',flush=True)
+print('[operator-experience-r38-selftest] PASS R48 operational-secretary cloud-native data-safe db-ok',flush=True)
