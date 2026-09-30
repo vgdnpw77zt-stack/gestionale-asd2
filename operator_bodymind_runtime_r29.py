@@ -2181,7 +2181,16 @@ def bodymind_operator_home():
             <form id="bmoUploadForm" enctype="multipart/form-data">
               <input type="file" name="files" id="bmoFiles" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.docx">
               <input type="file" name="folder" id="bmoFolder" multiple webkitdirectory directory>
-              <button class="bmo-send" type="submit">Analizza e sistema</button>
+              <label class="small-muted" style="display:grid;gap:4px;margin-top:8px">Tipo dichiarato
+                <select id="bmoUploadType" style="padding:8px;border-radius:10px;background:#081729;color:#fff;border:1px solid rgba(125,211,252,.18)">
+                  <option value="">Riconosci automaticamente</option>
+                  <option value="modulo_unico_tesseramento">Modulo Unico / iscrizione</option>
+                  <option value="certificato_medico">Certificato medico</option>
+                  <option value="documento_identita">Documento identità</option>
+                </select>
+              </label>
+              <label class="small-muted" style="display:flex;gap:7px;align-items:center;margin-top:8px"><input type="checkbox" id="bmoProductionMode" checked> porta in produzione i documenti certi</label>
+              <button class="bmo-send" type="submit">Analizza, sistema e produci</button>
             </form>
           </div>
           <div class="bmo-voice-row">
@@ -2190,6 +2199,54 @@ def bodymind_operator_home():
         </aside>
       </section>
     </main>
+
+    <div class="bmo-voice-stage" id="bmoVoiceStage" hidden>
+      <div class="bmo-voice-stage-inner">
+        <button class="bmo-voice-close" id="bmoVoiceStageClose" type="button" aria-label="Chiudi">×</button>
+        <div class="bmo-voice-orb" id="bmoVoiceOrb" role="button" tabindex="0" aria-label="Parla con il segretario BodyMind">
+          <img src="/bodymind-media/logo" alt="BodyMind">
+        </div>
+        <div class="bmo-voice-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="bmo-voice-stage-state" id="bmoVoiceStageState">Segretario BodyMind</div>
+        <div class="bmo-voice-stage-text" id="bmoVoiceStageText">Tocca e parlami.</div>
+        <div class="bmo-voice-stage-hint" id="bmoVoiceStageHint">La conversazione viene trascritta anche nella chat.</div>
+      </div>
+    </div>
+
+    <div class="bmo-secure-modal" id="bmoSmtpModal" hidden>
+      <div class="bmo-secure-card">
+        <h2>Configura SMTP</h2>
+        <p>Le credenziali vengono cifrate nel backend e non vengono inviate al modello IA. Per Gmail usa normalmente una password per app o le credenziali previste dal tuo account.</p>
+        <div class="bmo-secure-grid">
+          <label>Provider
+            <select id="bmoSmtpProvider"><option value="gmail">Gmail</option><option value="custom">Altro SMTP</option></select>
+          </label>
+          <label>Sicurezza
+            <select id="bmoSmtpSecurity"><option value="starttls">STARTTLS</option><option value="ssl">SSL/TLS</option><option value="plain">Nessuna</option></select>
+          </label>
+          <label class="bmo-secure-wide">Host
+            <input id="bmoSmtpHost" value="smtp.gmail.com" autocomplete="off">
+          </label>
+          <label>Porta
+            <input id="bmoSmtpPort" type="number" value="587" min="1" max="65535">
+          </label>
+          <label>Nome mittente
+            <input id="bmoSmtpFromName" value="BodyMind Aerial Studio" autocomplete="off">
+          </label>
+          <label class="bmo-secure-wide">Utente / email
+            <input id="bmoSmtpUser" type="email" autocomplete="username">
+          </label>
+          <label class="bmo-secure-wide">Password / app-password
+            <input id="bmoSmtpPassword" type="password" autocomplete="new-password" placeholder="Non viene inviata all’IA">
+          </label>
+        </div>
+        <div id="bmoSmtpStatus" class="small-muted" style="margin-top:10px"></div>
+        <div class="bmo-secure-actions">
+          <button class="bmo-pill" id="bmoSmtpCancel" type="button">Annulla</button>
+          <button class="bmo-send" id="bmoSmtpSave" type="button">Salva e testa</button>
+        </div>
+      </div>
+    </div>
 
     <script>
     (()=>{{
