@@ -117,6 +117,17 @@ def _schema(conn) -> None:
         updated_by TEXT
       )
     """)
+    conn.execute("""
+      CREATE TABLE IF NOT EXISTS bodymind_email_log(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        recipient TEXT NOT NULL,
+        subject TEXT,
+        status TEXT NOT NULL,
+        error TEXT,
+        sent_by TEXT,
+        created_at TEXT NOT NULL
+      )
+    """)
     conn.commit()
 
 
@@ -288,6 +299,53 @@ def _smtp_test_connection(cfg):
             try: client.close()
             except Exception: pass
     return True
+
+def _smtp_send_message(conn,recipient,subject,body):
+    cfg,_meta=_secure_setting_get(conn,"smtp")
+    if not isinstance(cfg,dict):
+        raise RuntimeError("SMTP non configurato")
+    host=str(cfg.get("host") or "").strip()
+    port=int(cfg.get("port") or 0)
+    username=str(cfg.get("username") or "").strip()
+    password=str(cfg.get("password") or "")
+    security=str(cfg.get("security") or "starttls").strip().lower()
+    from_name=str(cfg.get("from_name") or "BodyMind Aerial Studio").strip()
+    if not host or not port or not username or not password:
+        raise RuntimeError("Configurazione SMTP incompleta")
+    msg=EmailMessage()
+    msg["From"]=(from_name+" <"+username+">") if from_name else username
+    msg["To"]=str(recipient).strip()
+    msg["Subject"]=str(subject or "").strip()
+    msg.set_content(str(body or ""))
+    client=None
+    try:
+        if security=="ssl":
+            client=smtplib.SMTP_SSL(host,port,timeout=20,context=ssl.create_default_context())
+        else:
+            client=smtplib.SMTP(host,port,timeout=20)
+        client.ehlo()
+        if security=="starttls":
+            client.starttls(context=ssl.create_default_context()); client.ehlo()
+        client.login(username,password)
+        client.send_message(msg)
+        conn.execute("INSERT INTO bodymind_email_log(recipient,subject,status,error,sent_by,created_at) VALUES(?,?,?,?,?,?)",
+                     (str(recipient).strip(),str(subject or "")[:240],"sent","",_identity(),datetime.now().isoformat(timespec="seconds")))
+        conn.commit()
+        return True
+    except Exception as exc:
+        try:
+            conn.execute("INSERT INTO bodymind_email_log(recipient,subject,status,error,sent_by,created_at) VALUES(?,?,?,?,?,?)",
+                         (str(recipient).strip(),str(subject or "")[:240],"failed",repr(exc)[:500],_identity(),datetime.now().isoformat(timespec="seconds")))
+            conn.commit()
+        except Exception:
+            pass
+        raise
+    finally:
+        if client is not None:
+            try: client.quit()
+            except Exception:
+                try: client.close()
+                except Exception: pass
 
 def _conv_id() -> str:
     cid = str(session.get("bodymind_operator_conversation") or "").strip()
@@ -649,6 +707,8 @@ def _agent_tool_catalog(conn):
         {"name":"audit_alerts","description":"Controlla tabelle e storico relativi ad alert, notifiche, email, reminder e scadenze, senza esporre segreti.","write":False},
         {"name":"smtp_status","description":"Controlla se il servizio SMTP è configurato e se l'ultimo test di connessione è riuscito. Non legge né espone password.","write":False},
         {"name":"open_smtp_setup","description":"Apre nel gestionale il pannello sicuro per configurare SMTP/Gmail. Le credenziali non vengono inviate al modello.","write":False},
+        {"name":"send_email","description":"Prepara una email reale da inviare tramite SMTP BodyMind. Args: recipient, subject, body. Richiede conferma prima dell'invio.","write":True},
+        {"name":"prepare_batch_upload","description":"Prepara il prossimo caricamento massivo dichiarando il tipo documento e se va portato in produzione. Args: document_type, production. Usalo solo se l'utente lo chiede esplicitamente.","write":True},
         {"name":"search_tesserato","description":"Cerca un tesserato per nome o cognome.","write":False},
         {"name":"inspect_tesserato","description":"Legge dossier, documenti, certificato, tutela, quota e pagamenti di un tesserato.","write":False},
         {"name":"list_documents","description":"Elenca i documenti visibili di un tesserato.","write":False},
@@ -732,6 +792,35 @@ def _execute_agent_tool(conn, plan, raw_message=""):
 
     if tool=="open_smtp_setup":
         return {"text":"Apro la configurazione SMTP sicura. Le credenziali restano nel backend cifrate e non vengono inviate all’IA.","mode":"agent_tool","ui_action":"smtp_setup","smtp_status":_smtp_public_status(conn)}
+
+    if tool=="send_email":
+        recipient=str(args.get("recipient") or "").strip()
+        subject=str(args.get("subject") or "").strip()
+        body=str(args.get("body") or "").strip()
+        if not recipient or "@" not in recipient:
+            return {"text":"Mi serve un destinatario email valido.","mode":"clarify"}
+        if not subject or not body:
+            return {"text":"Mi servono oggetto e testo della mail.","mode":"clarify"}
+        st=_smtp_public_status(conn)
+        if not st.get("configured"):
+            return {"text":"SMTP non è configurato. Prima apro il pannello sicuro; poi potrò inviare davvero la mail.","mode":"warning","links":[{"label":"Configura SMTP","href":"/operatore-bodymind/smtp/setup"}]}
+        aid=_set_pending_action(conn,"send_email",{"recipient":recipient,"subject":subject,"body":body})
+        return {"text":"Ho preparato l’email a "+recipient+" con oggetto “"+subject+"”. Confermi l’invio reale?","mode":"confirm","action_id":aid}
+
+    if tool=="prepare_batch_upload":
+        dtype=str(args.get("document_type") or "").strip().lower()
+        aliases={"modulo unico":"modulo_unico_tesseramento","modulo_unico":"modulo_unico_tesseramento","iscrizione":"modulo_unico_tesseramento","modulo iscrizione":"modulo_unico_tesseramento"}
+        dtype=aliases.get(dtype,dtype)
+        production=bool(args.get("production"))
+        explicit=any(x in _norm(raw_message) for x in ("produzione","mettili","mandali","implementali","verifica tutti","conferma tutti","carico","caricare"))
+        if production and not explicit:
+            return {"text":"Per il passaggio automatico in produzione dimmelo esplicitamente, per esempio: “i prossimi file sono Moduli Unici, mettili in produzione”.","mode":"clarify"}
+        if dtype not in ("modulo_unico_tesseramento","certificato_medico","documento_identita","trasporto_minori","documenti_gara","documenti_saggio"):
+            return {"text":"Dimmi che tipo di documenti stai per caricare.","mode":"clarify"}
+        if production and current_role()!="admin":
+            return {"text":"La produzione massiva richiede un account amministratore.","mode":"warning"}
+        session["bodymind_operator_upload_intent"]={"document_type":dtype,"production":production,"created_at":datetime.now().isoformat(timespec="seconds")}
+        return {"text":"Modalità batch pronta. I prossimi file saranno trattati come "+dtype.replace("_"," ")+(" e porterò in produzione quelli con tesserato identificato con certezza." if production else ".")+" Gli ambigui resteranno da verificare.","mode":"action"}
 
     if tool=="search_tesserato":
         q=athlete_name or str(args.get("query") or raw_message or "").strip()
@@ -1107,6 +1196,20 @@ def _execute_pending(conn):
     role=current_role()
     if role not in ("admin","manager"):
         return {"text":"Posso preparare l’operazione, ma l’account connesso non ha i permessi per confermarla.","mode":"warning"}
+    if kind=="send_email":
+        recipient=str(payload.get("recipient") or "").strip()
+        subject=str(payload.get("subject") or "").strip()
+        body=str(payload.get("body") or "")
+        try:
+            _smtp_send_message(conn,recipient,subject,body)
+        except Exception as exc:
+            conn.execute("UPDATE bodymind_operator_actions SET status='failed',confirmed_by=?,executed_at=? WHERE id=?",(_identity(),datetime.now().isoformat(timespec="seconds"),aid))
+            conn.commit(); session.pop("bodymind_operator_pending_action",None)
+            return {"text":"Invio non riuscito. Non considero la mail inviata. Errore SMTP: "+str(exc)[:220],"mode":"error","links":[{"label":"Controlla SMTP","href":"/operatore-bodymind/smtp/setup"}]}
+        conn.execute("UPDATE bodymind_operator_actions SET status='executed',confirmed_by=?,executed_at=? WHERE id=?",(_identity(),datetime.now().isoformat(timespec="seconds"),aid))
+        conn.commit(); session.pop("bodymind_operator_pending_action",None)
+        return {"text":"Email inviata realmente a "+recipient+" e registrata nello storico BodyMind.","mode":"action"}
+
     if kind=="register_payment":
         if current_role()!="admin":
             return {"text":"Ho preparato l’incasso, ma per registrarlo serve un account amministratore. Non ho modificato nulla.","mode":"warning"}
