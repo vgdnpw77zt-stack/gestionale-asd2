@@ -36,6 +36,7 @@ COPY release_mu_tutela_r37.py /opt/bodymind/release_mu_tutela_r37.py
 COPY release_document_coherence_r41.py /opt/bodymind/release_document_coherence_r41.py
 COPY release_document_coherence_r42.py /opt/bodymind/release_document_coherence_r42.py
 COPY release_operator_dedupe_rollback_r43.py /opt/bodymind/release_operator_dedupe_rollback_r43.py
+COPY release_document_conflict_audit_r44.py /opt/bodymind/release_document_conflict_audit_r44.py
 COPY operator_bridge_runtime_r36.py /opt/bodymind/operator_bridge_runtime_r36.py
 COPY release_operator_bridge_r36.py /opt/bodymind/release_operator_bridge_r36.py
 COPY release_operator_experience_r38.py /opt/bodymind/release_operator_experience_r38.py
