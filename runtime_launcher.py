@@ -43,6 +43,7 @@ runpy.run_path("/opt/bodymind/release_document_conflict_audit_r44.py", run_name=
 runpy.run_path("/opt/bodymind/release_cloud_native_r47.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_secretary_capability_audit_r48.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_cloud_credit_smoke_r47.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_cloud_voice_smoke_r50.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_experience_r38.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_qa_r32.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_logic_qa_r37.py", run_name="__main__")
