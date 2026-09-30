@@ -134,6 +134,101 @@ def _bridge_token_budget(message, base):
         return 100
     return 70
 
+
+# BODYMIND_R40_LOCAL_TOOL_PLANNER
+def _planner_json(text):
+    raw=str(text or "").strip()
+    if not raw:
+        return None
+    try:
+        value=json.loads(raw)
+        return value if isinstance(value,dict) else None
+    except Exception:
+        pass
+    start=raw.find("{"); end=raw.rfind("}")
+    if start>=0 and end>start:
+        try:
+            value=json.loads(raw[start:end+1])
+            return value if isinstance(value,dict) else None
+        except Exception:
+            return None
+    return None
+
+
+def bridge_plan_tool(conn, message, catalog, conversation_id='', identity=''):
+    """Ask the paired local model to choose a real BodyMind tool, not to simulate an action."""
+    try:
+        _schema(conn)
+        device=_latest_device(conn)
+        if not _device_online(device):
+            return None
+        tools=[]
+        for item in (catalog or []):
+            if not isinstance(item,dict): continue
+            tools.append({
+                "name":str(item.get("name") or "")[:80],
+                "description":str(item.get("description") or "")[:420],
+                "write":bool(item.get("write")),
+            })
+        if not tools:
+            return None
+        system=(
+            "Sei il planner di strumenti dell'Operatore BodyMind. "
+            "Non fingere mai di aver eseguito azioni. Devi scegliere uno strumento reale quando la richiesta riguarda il gestionale. "
+            "Rispondi SOLO con JSON valido senza markdown nel formato "
+            "{\"tool\":\"nome_o_none\",\"args\":{},\"answer\":\"\"}. "
+            "Per modifiche o cancellazioni scegli lo strumento di scrittura corretto: il server chiederà conferma. "
+            "Se la richiesta è solo conversazionale e non richiede uno strumento usa tool=none e metti una risposta breve in answer. "
+            "Non rifiutare una richiesta solo perché è operativa: se esiste uno strumento adatto, selezionalo."
+        )
+        recent=_bridge_recent_context(conn,conversation_id,2)
+        user=(
+            "STRUMENTI DISPONIBILI: "+json.dumps(tools,ensure_ascii=False,separators=(',',':'))+
+            "\nINTERLOCUTORE: "+str(identity or "Operatore")+
+            "\nRICHIESTA: "+str(message or "")[:2200]
+        )
+        messages=[{"role":"system","content":system}]
+        messages.extend(recent)
+        messages.append({"role":"user","content":user})
+        cur=conn.execute(
+            """INSERT INTO bodymind_ai_jobs
+               (conversation_id,identity_name,question,base_text,messages_json,max_tokens,status,created_at)
+               VALUES(?,?,?,?,?,?,?,?)""",
+            (str(conversation_id or ""),str(identity or ""),str(message or "")[:8000],"R40 tool planner",
+             json.dumps(messages,ensure_ascii=False),120,"pending",_iso())
+        )
+        job_id=int(cur.lastrowid); conn.commit()
+        wait_seconds=float(os.environ.get("BODYMIND_LOCAL_PLANNER_WAIT_SECONDS","30") or 30)
+        wait_seconds=max(5.0,min(wait_seconds,60.0))
+        deadline=time.time()+wait_seconds
+        while time.time()<deadline:
+            row=conn.execute("SELECT status,response_text,error_text FROM bodymind_ai_jobs WHERE id=?",(job_id,)).fetchone()
+            if row:
+                status=str(row["status"] or "")
+                if status=="done":
+                    plan=_planner_json(row["response_text"])
+                    if plan:
+                        allowed={x["name"] for x in tools}|{"none","unknown"}
+                        chosen=str(plan.get("tool") or "none")
+                        if chosen not in allowed:
+                            plan["tool"]="none"
+                        if not isinstance(plan.get("args"),dict):
+                            plan["args"]={}
+                        plan["answer"]=str(plan.get("answer") or "")[:1600]
+                        return plan
+                    break
+                if status in ("error","expired"):
+                    break
+            time.sleep(.35)
+        conn.execute(
+            "UPDATE bodymind_ai_jobs SET status='expired',completed_at=? WHERE id=? AND status IN ('pending','leased')",
+            (_iso(),job_id)
+        ); conn.commit()
+        return None
+    except Exception:
+        return None
+
+
 def bridge_enhance_result(conn, message, result, conversation_id='', identity=''):
     """Use the paired local iMac only for responses that otherwise need AI.
     Deterministic write/confirmation paths remain authoritative.
