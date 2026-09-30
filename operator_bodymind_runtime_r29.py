@@ -1055,6 +1055,7 @@ def bodymind_operator_home():
       .bmo-status{{display:flex;gap:0;margin:0;min-width:0;}}
       .bmo-status .bmo-pill{{display:none;}}
       .bmo-status #bmoAiPill{{display:inline-flex;align-items:center;max-width:100%;font-size:10px;padding:4px 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-color:rgba(244,90,157,.25);background:rgba(244,90,157,.09);}}
+      .bmo-status #bmoVoiceRecover:not([hidden]){{display:inline-flex!important;align-items:center;margin-left:5px;font-size:10px;padding:4px 7px;border-color:rgba(56,189,248,.30);background:rgba(56,189,248,.10);}}
       .bmo-grid{{display:block;margin-top:6px;}}
       .bmo-side{{display:none!important;}}
       .bmo-chat{{min-height:calc(100vh - 145px);min-height:calc(100dvh - 145px);border-radius:15px;border:1px solid rgba(148,163,184,.12);overflow:visible;background:rgba(7,16,31,.88);}}
@@ -1096,6 +1097,7 @@ def bodymind_operator_home():
             <span class="bmo-pill">{len(g['expiring_cert'])} certificati urgenti</span>
             <span class="bmo-pill">{len(g['mu_review'])} MU da ricontrollare</span>
             <a class="bmo-pill" id="bmoAiPill" href="/operatore-bodymind/bridge/setup" style="text-decoration:none;color:inherit">IA iMac: verifica…</a>
+            <button class="bmo-pill" id="bmoVoiceRecover" type="button" hidden style="cursor:pointer;color:inherit">🔊 Attiva voce</button>
             <span class="bmo-pill">IA cloud: {"pronta" if (os.environ.get("BODYMIND_AI_CLOUD") and os.environ.get("OPENAI_API_KEY")) else "non configurata"}</span>
           </div>
         </div>
@@ -1149,12 +1151,31 @@ def bodymind_operator_home():
       const avatar=document.getElementById('bmoAvatar');
       const voice=document.getElementById('bmoVoice');
       const voiceStatus=document.getElementById('bmoVoiceStatus');
+      const voiceRecover=document.getElementById('bmoVoiceRecover');
       const attach=document.getElementById('bmoAttach');
-      let listening=false, recognition=null, micStream=null, audioContext=null, analyser=null, meterRAF=null;
-      let ttsPrimed=false, ttsUtterance=null, ttsRetryTimer=null, ttsSequence=0;
+      let listening=false, recognition=null, recognitionWatchdog=null, micStream=null, audioContext=null, analyser=null, meterRAF=null;
+      let ttsPrimed=false, ttsUtterance=null, ttsRetryTimer=null, ttsSequence=0, lastSpeechText='';
       let ttsVoice=null, ttsVoices=[];
       const TTS_KEY='bodymind_tts_enabled_v2';
       // BODYMIND_R39_NATURAL_VOICE_V2
+      // BODYMIND_R39_IOS_VOICE_DIAGNOSTICS_V3
+      // BODYMIND_R39_IOS_VOICE_RECOVERY_V4
+      function voiceDiag(stage,extra={{}}){{
+        try{{
+          fetch('/operatore-bodymind/voice-diag',{{
+            method:'POST',
+            headers:{{'Content-Type':'application/json','X-CSRFToken':csrf}},
+            body:JSON.stringify(Object.assign({{
+              stage:String(stage||''),
+              sr:!!(window.SpeechRecognition||window.webkitSpeechRecognition),
+              synth:!!window.speechSynthesis,
+              voices:(window.speechSynthesis?.getVoices?.()||[]).length,
+              ua:String(navigator.userAgent||'').slice(0,220)
+            }},extra)),
+            keepalive:true
+          }}).catch(()=>{{}});
+        }}catch(e){{}}
+      }}
       function refreshTTSVoices(){{
         try{{
           ttsVoices=speechSynthesis.getVoices()||[];
@@ -1210,19 +1231,24 @@ def bodymind_operator_home():
       function primeTTS(){{
         if(ttsPrimed || !('speechSynthesis' in window))return;
         try{{
-          speechSynthesis.cancel();
           speechSynthesis.resume();
-          ttsUtterance=new SpeechSynthesisUtterance('Voce attiva');
-          ttsUtterance.lang='it-IT';ttsUtterance.volume=.01;ttsUtterance.rate=1.2;
-          ttsUtterance.onstart=()=>{{ttsPrimed=true;try{{localStorage.setItem(TTS_KEY,'1')}}catch(e){{}}}};
-          ttsUtterance.onend=()=>{{ttsPrimed=true;ttsUtterance=null;try{{localStorage.setItem(TTS_KEY,'1')}}catch(e){{}}}};
-          speechSynthesis.speak(ttsUtterance);
-        }}catch(e){{}}
+          const warm=new SpeechSynthesisUtterance(' ');
+          warm.lang='it-IT';warm.volume=.01;warm.rate=1;
+          if(ttsVoice)warm.voice=ttsVoice;
+          warm.onstart=()=>{{ttsPrimed=true;voiceDiag('tts_unlock_start');try{{localStorage.setItem(TTS_KEY,'1')}}catch(e){{}}}};
+          warm.onend=()=>{{ttsPrimed=true;ttsUtterance=null;voiceDiag('tts_unlock_end');}};
+          warm.onerror=e=>{{voiceDiag('tts_unlock_error',{{error:String(e?.error||e?.message||'unknown')}});}};
+          ttsUtterance=warm;
+          speechSynthesis.speak(warm);
+        }}catch(e){{voiceDiag('tts_unlock_throw',{{error:String(e?.message||e)}})}}
       }}
-      document.addEventListener('pointerdown',primeTTS,{{capture:true,once:true}});
-      document.addEventListener('touchend',primeTTS,{{capture:true,once:true}});
-      document.addEventListener('click',primeTTS,{{capture:true,once:true}});
-      try{{if(localStorage.getItem(TTS_KEY)==='1')ttsPrimed=true}}catch(e){{}}
+      const unlockOnce=()=>{{primeTTS()}};
+      document.addEventListener('pointerdown',unlockOnce,{{capture:true,once:true}});
+      document.addEventListener('touchend',unlockOnce,{{capture:true,once:true}});
+      document.addEventListener('click',unlockOnce,{{capture:true,once:true}});
+      // LocalStorage remembers preference only; Safari audio unlock is per page/user gesture.
+      try{{if(localStorage.getItem(TTS_KEY)==='1' && voice)voice.checked=true}}catch(e){{}}
+
       // BODYMIND_R39_IOS_TTS_UNLOCK
       // BODYMIND_R39_IOS_TTS_PERSISTENT_FIX
       (async()=>{{
@@ -1252,8 +1278,9 @@ def bodymind_operator_home():
         messages.appendChild(box);messages.scrollTop=messages.scrollHeight;
       }}
 
-      function speak(text){{
+      function speak(text,fromUserGesture=false){{
         if(!voice || !voice.checked || !('speechSynthesis' in window) || !text)return;
+        lastSpeechText=String(text);
         const chunks=speechChunks(text);
         if(!chunks.length)return;
         const seq=++ttsSequence;
@@ -1263,53 +1290,61 @@ def bodymind_operator_home():
             speechSynthesis.cancel();
             speechSynthesis.resume();
             refreshTTSVoices();
+            voiceDiag('tts_begin',{{gesture:!!fromUserGesture,voice:ttsVoice?.name||'',chunks:chunks.length}});
             let index=0;
             const next=()=>{{
               if(seq!==ttsSequence||index>=chunks.length){{
-                ttsUtterance=null;
-                avatar.classList.remove('speaking');
+                ttsUtterance=null;avatar.classList.remove('speaking');
                 if(voiceStatus)voiceStatus.textContent='Tocca il microfono e parlami';
+                if(voiceRecover)voiceRecover.hidden=true;
+                voiceDiag('tts_complete');
                 return;
               }}
               const phrase=chunks[index++];
-              const u=new SpeechSynthesisUtterance(phrase);
-              ttsUtterance=u;
-              u.lang='it-IT';
-              u.rate=(phrase.length<55 ? .94 : .91);
-              u.pitch=1.0;
-              u.volume=1;
+              const u=new SpeechSynthesisUtterance(phrase);ttsUtterance=u;
+              u.lang='it-IT';u.rate=(phrase.length<55?.95:.92);u.pitch=1;u.volume=1;
               if(ttsVoice)u.voice=ttsVoice;
               let started=false;
               u.onstart=()=>{{
                 started=true;ttsPrimed=true;
                 try{{localStorage.setItem(TTS_KEY,'1')}}catch(e){{}}
-                avatar.classList.add('speaking');
+                avatar.classList.add('speaking');if(voiceRecover)voiceRecover.hidden=true;
                 if(voiceStatus)voiceStatus.textContent='Ti sto rispondendo…';
+                voiceDiag('tts_onstart',{{voice:u.voice?.name||'',index:index}});
               }};
-              u.onend=()=>{{if(seq===ttsSequence)setTimeout(next,phrase.endsWith('.')?115:70)}};
-              u.onerror=()=>{{
-                if(seq!==ttsSequence)return;
-                if(index<chunks.length)setTimeout(next,80);
-                else{{
-                  ttsUtterance=null;avatar.classList.remove('speaking');
-                  if(voiceStatus)voiceStatus.textContent='Voce non partita: tocca una volta lo schermo e riprova';
-                }}
+              u.onend=()=>{{voiceDiag('tts_onend',{{index:index}});if(seq===ttsSequence)setTimeout(next,phrase.endsWith('.')?100:55)}};
+              u.onerror=e=>{{
+                voiceDiag('tts_onerror',{{error:String(e?.error||e?.message||'unknown'),index:index}});
+                ttsUtterance=null;avatar.classList.remove('speaking');
+                if(voiceRecover)voiceRecover.hidden=false;
+                if(voiceStatus)voiceStatus.textContent='Safari ha bloccato la voce: tocca 🔊 Attiva voce';
               }};
               speechSynthesis.speak(u);
               if(index===1){{
                 ttsRetryTimer=setTimeout(()=>{{
                   if(!started&&seq===ttsSequence&&ttsUtterance===u){{
-                    try{{speechSynthesis.cancel();speechSynthesis.resume();speechSynthesis.speak(u)}}catch(e){{}}
+                    voiceDiag('tts_watchdog');
+                    try{{speechSynthesis.cancel();speechSynthesis.resume()}}catch(e){{}}
+                    if(voiceRecover)voiceRecover.hidden=false;
+                    if(voiceStatus)voiceStatus.textContent='Tocca 🔊 Attiva voce per riprodurre la risposta';
                   }}
-                }},550);
+                }},900);
               }}
             }};
             next();
-          }}catch(e){{if(voiceStatus)voiceStatus.textContent='Voce non disponibile su questo dispositivo'}}
+          }}catch(e){{
+            voiceDiag('tts_throw',{{error:String(e?.message||e)}});
+            if(voiceRecover)voiceRecover.hidden=false;
+            if(voiceStatus)voiceStatus.textContent='Tocca 🔊 Attiva voce per riprodurre la risposta';
+          }}
         }};
-        if(!ttsPrimed)primeTTS();
-        setTimeout(begin,ttsPrimed?30:220);
+        if(!ttsPrimed && fromUserGesture)primeTTS();
+        setTimeout(begin,fromUserGesture?15:(ttsPrimed?30:180));
       }}
+      voiceRecover?.addEventListener('click',()=>{{
+        try{{ttsPrimed=false;primeTTS();voiceDiag('tts_recover_tap');}}catch(e){{}}
+        if(lastSpeechText)setTimeout(()=>speak(lastSpeechText,true),80);
+      }});
 
       // R38: local intelligence is only the paired iMac bridge; offline uses deterministic server logic.
 
@@ -1366,22 +1401,70 @@ def bodymind_operator_home():
       }}
 
       const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+      function clearRecognitionWatchdog(){{if(recognitionWatchdog){{clearTimeout(recognitionWatchdog);recognitionWatchdog=null}}}}
+      function resetRecognitionUI(){{
+        listening=false;clearRecognitionWatchdog();mic.classList.remove('on');avatar.classList.remove('listening');avatar.style.transform='';stopMicStream();
+      }}
+      function buildRecognition(){{
+        if(!SR)return null;
+        const r=new SR();
+        r.lang='it-IT';r.interimResults=true;r.continuous=false;r.maxAlternatives=1;
+        let submitted=false;
+        r.onstart=()=>{{
+          clearRecognitionWatchdog();listening=true;mic.classList.add('on');avatar.classList.add('listening');
+          if(voiceStatus)voiceStatus.textContent='Ti ascolto… parla normalmente';
+          voiceDiag('sr_onstart');
+        }};
+        r.onaudiostart=()=>voiceDiag('sr_onaudiostart');
+        r.onspeechstart=()=>voiceDiag('sr_onspeechstart');
+        r.onspeechend=()=>voiceDiag('sr_onspeechend');
+        r.onresult=ev=>{{
+          let txt='';let final=false;
+          for(let i=ev.resultIndex;i<ev.results.length;i++){{txt+=ev.results[i][0].transcript;if(ev.results[i].isFinal)final=true}}
+          input.value=txt.trim();voiceDiag('sr_onresult',{{final:final,len:input.value.length}});
+          if(final&&input.value&&!submitted){{submitted=true;if(voiceStatus)voiceStatus.textContent='Ho capito. Un attimo…';setTimeout(()=>ask(input.value),100)}}
+        }};
+        r.onerror=ev=>{{
+          voiceDiag('sr_onerror',{{error:String(ev?.error||'unknown'),message:String(ev?.message||'')}});
+          resetRecognitionUI();
+          const t=humanMicError(ev.error);if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+        }};
+        r.onend=()=>{{
+          voiceDiag('sr_onend',{{submitted:submitted}});resetRecognitionUI();
+          if(voiceStatus&&voiceStatus.textContent.startsWith('Ti ascolto'))voiceStatus.textContent='Tocca il microfono e parlami';
+        }};
+        return r;
+      }}
       if(SR){{
-        recognition=new SR();recognition.lang='it-IT';recognition.interimResults=true;recognition.continuous=false;recognition.maxAlternatives=1;
-        recognition.onstart=()=>{{listening=true;mic.classList.add('on');avatar.classList.add('listening');if(voiceStatus)voiceStatus.textContent='Ti ascolto… parla normalmente'}};
-        recognition.onend=()=>{{listening=false;mic.classList.remove('on');avatar.classList.remove('listening');avatar.style.transform='';stopMicStream();if(voiceStatus&&voiceStatus.textContent.startsWith('Ti ascolto'))voiceStatus.textContent='Tocca il microfono e parlami'}};
-        recognition.onerror=ev=>{{listening=false;mic.classList.remove('on');avatar.classList.remove('listening');avatar.style.transform='';stopMicStream();const t=humanMicError(ev.error);if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot')}};
-        recognition.onresult=ev=>{{let txt='';let final=false;for(let i=ev.resultIndex;i<ev.results.length;i++){{txt+=ev.results[i][0].transcript;if(ev.results[i].isFinal)final=true}}input.value=txt.trim();if(final&&input.value){{if(voiceStatus)voiceStatus.textContent='Ho capito. Un attimo…';setTimeout(()=>ask(input.value),120)}}}};
-        // BODYMIND_R39_IOS_MIC_DIRECT_RECOGNITION
-        mic.addEventListener('click',async()=>{{
-          if(listening){{try{{recognition.stop()}}catch(e){{}};return}}
-          try{{speechSynthesis?.cancel();stopMicStream();if(voiceStatus)voiceStatus.textContent='Ti ascolto…';recognition.start()}}
-          catch(err){{stopMicStream();avatar.style.transform='';const t=(err?.name==='NotAllowedError'||err?.name==='SecurityError')?'Accesso al microfono negato. Consenti il microfono a BodyMind nelle impostazioni di Safari e riprova.':('Microfono non disponibile: '+(err?.message||err));if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot')}}
+        // BODYMIND_R39_IOS_SR_RECREATE_V4
+        mic.addEventListener('click',()=>{{
+          if(listening&&recognition){{try{{voiceDiag('sr_manual_stop');recognition.stop()}}catch(e){{}};return}}
+          try{{
+            if(speechSynthesis?.speaking){{ttsSequence++;speechSynthesis.cancel()}}
+            resetRecognitionUI();
+            recognition=buildRecognition();
+            if(!recognition)throw new Error('SpeechRecognition non disponibile');
+            voiceDiag('sr_start_call');
+            recognition.start();
+            recognitionWatchdog=setTimeout(()=>{{
+              if(!listening&&recognition){{
+                voiceDiag('sr_start_timeout');
+                try{{recognition.abort()}}catch(e){{}}
+                recognition=buildRecognition();
+                try{{voiceDiag('sr_retry_call');recognition.start()}}catch(e){{voiceDiag('sr_retry_throw',{{error:String(e?.message||e)}})}}
+              }}
+            }},1400);
+          }}catch(err){{
+            resetRecognitionUI();voiceDiag('sr_start_throw',{{error:String(err?.name||'')+':'+String(err?.message||err)}});
+            const t=(err?.name==='NotAllowedError'||err?.name==='SecurityError')?'Accesso al microfono negato. Consenti il microfono a BodyMind nelle impostazioni di Safari e riprova.':('Microfono non disponibile: '+(err?.message||err));
+            if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+          }}
         }});
       }}else{{
-        mic.addEventListener('click',async()=>{{
-          try{{await ensureMic();avatar.classList.add('listening');mic.classList.add('on');if(voiceStatus)voiceStatus.textContent='Microfono attivo. La trascrizione vocale web non è disponibile qui; sul Mac useremo il Bridge locale.';setTimeout(()=>{{avatar.classList.remove('listening');mic.classList.remove('on');avatar.style.transform='';stopMicStream()}},3500)}}
-          catch(err){{const t='Non riesco ad aprire il microfono: '+(err?.message||err);if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot')}}
+        voiceDiag('sr_unavailable');
+        mic.addEventListener('click',()=>{{
+          const t='Su questo browser il riconoscimento vocale web non è disponibile.';
+          if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
         }});
       }}
 
@@ -1430,6 +1513,29 @@ def bodymind_operator_home():
     """
     return layout(html)
 
+
+@app.post("/operatore-bodymind/voice-diag")
+@login_required
+def bodymind_operator_voice_diag():
+    payload=request.get_json(silent=True) or {}
+    safe={
+        "stage":str(payload.get("stage") or "")[:80],
+        "error":str(payload.get("error") or "")[:160],
+        "message":str(payload.get("message") or "")[:160],
+        "sr":bool(payload.get("sr")),
+        "synth":bool(payload.get("synth")),
+        "voices":int(payload.get("voices") or 0),
+        "voice":str(payload.get("voice") or "")[:120],
+        "gesture":bool(payload.get("gesture")),
+        "final":bool(payload.get("final")),
+        "len":int(payload.get("len") or 0),
+        "ua":str(payload.get("ua") or "")[:220],
+    }
+    try:
+        app.logger.info("[voice-diag] %s", json.dumps(safe,ensure_ascii=False))
+    except Exception:
+        pass
+    return jsonify({"ok":True}),200
 
 @app.post("/operatore-bodymind/chat")
 @login_required
