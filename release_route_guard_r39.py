@@ -26,9 +26,9 @@ required = {
     ("/operatore-bodymind/bridge/status", "GET"),
     ("/operatore-bodymind/bridge/setup", "GET"),
     ("/bodymind-ai-bridge/pair", "POST"),
-    ("/bodymind-ai-bridge/heartbeat", "POST"),
+    ("/bodymind-ai-bridge/heartbeat", "GET"),
     ("/bodymind-ai-bridge/poll", "GET"),
-    ("/bodymind-ai-bridge/result", "POST"),
+    ("/bodymind-ai-bridge/result", "GET"),
     ("/bodymind-ai-bridge/install.sh", "GET"),
 }
 
