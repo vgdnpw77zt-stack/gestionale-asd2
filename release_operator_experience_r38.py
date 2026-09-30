@@ -54,7 +54,9 @@ checks={
     'ios_tts_unlock':'BODYMIND_R39_IOS_TTS_UNLOCK' in body and "speechSynthesis.resume()" in body,
     'ios_tts_persistent':'BODYMIND_R39_IOS_TTS_PERSISTENT_FIX' in body and 'ttsUtterance' in body and 'bodymind_tts_enabled_v2' in body and 'Voce non partita' in body,
     'ios_natural_voice':'BODYMIND_R39_NATURAL_VOICE_V2' in body and 'refreshTTSVoices' in body and 'speechChunks' in body and "includes('premium')" in body and "includes('enhanced')" in body,
-    'ios_mic_direct':'BODYMIND_R39_IOS_MIC_DIRECT_RECOGNITION' in body and "await ensureMic();recognition.start()" not in body and "stopMicStream();if(voiceStatus)voiceStatus.textContent='Ti ascolto…';recognition.start()" in body,
+    'ios_mic_direct':'BODYMIND_R39_IOS_MIC_DIRECT_RECOGNITION' in body and "await ensureMic();recognition.start()" not in body,
+    'ios_voice_recovery_v4':'BODYMIND_R39_IOS_VOICE_RECOVERY_V4' in body and 'bmoVoiceRecover' in body and 'buildRecognition' in body and 'sr_start_timeout' in body and 'sr_retry_call' in body,
+    'ios_sr_recreate_v4':'BODYMIND_R39_IOS_SR_RECREATE_V4' in body and 'recognition=buildRecognition()' in body and "localStorage.getItem(TTS_KEY)==='1')ttsPrimed=true" not in body,
     'family_logo_bodymind':family.status_code==200 and 'https://bodymindaerialstudio.life/seed-media/logo?v=9' in family_body and '/bodymind-media/logo' not in family_body,
     'mobile_imac_only':'IA iMac:' in body and 'LanguageModel' not in body and 'window.ai' not in body,
     'installer_200':installer.status_code==200,
@@ -90,9 +92,11 @@ checks['db_integrity']=integrity.lower()=='ok' and fk==0
 heartbeat_probe=client.get('/bodymind-ai-bridge/heartbeat',headers={'X-BodyMind-Token':'invalid-qa-token'})
 result_probe=client.get('/bodymind-ai-bridge/result?job_id=0',headers={'X-BodyMind-Token':'invalid-qa-token'})
 diag_probe=client.get('/bodymind-ai-bridge/diag?stage=qa',headers={'X-BodyMind-Token':'invalid-qa-token'})
+voice_diag_probe=client.post('/operatore-bodymind/voice-diag',json={'stage':'qa','sr':True,'synth':True,'voices':3},headers={'X-CSRFToken':'qa-r38'})
 checks['heartbeat_get_auth_handler']=heartbeat_probe.status_code==401 and 'application/json' in str(heartbeat_probe.content_type)
 checks['result_get_auth_handler']=result_probe.status_code==401 and 'application/json' in str(result_probe.content_type)
 checks['diag_get_auth_handler']=diag_probe.status_code==401 and 'application/json' in str(diag_probe.content_type)
+checks['voice_diag_runtime']=voice_diag_probe.status_code==200 and (voice_diag_probe.get_json(silent=True) or {}).get('ok') is True
 checks['bridge_get_only_machine_api']='BODYMIND_R39_BRIDGE_GET_ONLY_MACHINE_API' in install_text
 failed=[k for k,v in checks.items() if not v]
 print('[operator-experience-r38] checks='+repr(checks),flush=True)
