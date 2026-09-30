@@ -875,6 +875,106 @@ def _recent_operator_context(conn, limit: int = 8):
     except Exception:
         return []
 
+# BODYMIND_R45_CLOUD_READONLY_AGENT
+_CLOUD_READONLY_TOOLS={
+    "global_status","search_tesserato","inspect_tesserato","list_documents",
+    "find_duplicate_documents","cleanup_duplicate_documents",
+    "list_pending_documents","list_payments","navigate"
+}
+
+def _cloud_readonly_catalog(conn):
+    return [x for x in _agent_tool_catalog(conn)
+            if not bool(x.get("write")) and str(x.get("name") or "") in _CLOUD_READONLY_TOOLS]
+
+def _parse_cloud_plan(text):
+    raw=str(text or "").strip()
+    if not raw:
+        return None
+    if raw.startswith("```"):
+        raw=re.sub(r"^\s*```(?:json)?\s*|\s*```\s*$","",raw,flags=re.I|re.S).strip()
+    try:
+        obj=json.loads(raw)
+        return obj if isinstance(obj,dict) else None
+    except Exception:
+        m=re.search(r"\{.*\}",raw,re.S)
+        if not m:
+            return None
+        try:
+            obj=json.loads(m.group(0))
+            return obj if isinstance(obj,dict) else None
+        except Exception:
+            return None
+
+def _cloud_plan_tool(conn, question: str):
+    """High-capability cloud planner. Strictly read-only in R45."""
+    key=str(os.environ.get("OPENAI_API_KEY") or "").strip()
+    if not key:
+        return None
+    if str(os.environ.get("BODYMIND_AI_CLOUD","1")).strip().lower() not in ("1","true","yes","on"):
+        return None
+    try:
+        from openai import OpenAI
+        model=str(os.environ.get("BODYMIND_AI_MODEL") or "gpt-6-luna").strip()
+        catalog=_cloud_readonly_catalog(conn)
+        compact=[{"name":x["name"],"description":x["description"]} for x in catalog]
+        recent=_recent_operator_context(conn,4)
+        prompt=(
+            "Sei il planner dell'Operatore BodyMind. Devi capire il linguaggio naturale italiano e scegliere, se utile, "
+            "UNO strumento READ-ONLY realmente disponibile. Non simulare operazioni e non inventare dati. "
+            "Vocabolario BodyMind: tesserato, iscritto, atleta, allievo e socio possono indicare la stessa persona nel gestionale; "
+            "CM significa certificato medico; MU significa Modulo Unico / modulo unico tesseramento; "
+            "dossier e archivio atleta indicano i documenti del tesserato; incassi e pagamenti sono concetti collegati. "
+            "Una richiesta di cancellare, modificare, registrare o correggere NON può essere eseguita in R45: "
+            "puoi scegliere soltanto uno strumento di analisi/lettura che aiuti a capire cosa andrebbe fatto. "
+            "Per presunti duplicati devi considerarli candidati, mai equivalenti solo per nome/path/hash: tipi documentali diversi "
+            "(es. CM e MU) sono documenti diversi e richiedono lettura/verifica umana. "
+            "Restituisci SOLO JSON valido nella forma "
+            "{\"tool\":\"nome_o_none\",\"args\":{},\"answer\":\"\"}. "
+            "Se nessun tool serve, usa tool=none e scrivi una risposta naturale breve in answer. "
+            "Strumenti disponibili: "+json.dumps(compact,ensure_ascii=False)+
+            "\nContesto recente: "+json.dumps(recent,ensure_ascii=False)+
+            "\nRichiesta utente: "+str(question or "")[:6000]
+        )
+        client=OpenAI(api_key=key)
+        resp=client.responses.create(model=model,input=prompt)
+        plan=_parse_cloud_plan(getattr(resp,"output_text",""))
+        if not plan:
+            return None
+        tool=str(plan.get("tool") or "").strip()
+        allowed={x["name"] for x in catalog}
+        if tool not in allowed and tool not in ("none","unknown",""):
+            return {"tool":"none","args":{},"answer":"Quella richiesta richiede un'azione che in modalità test non posso ancora eseguire. Posso però analizzare i dati e preparare una proposta."}
+        if not isinstance(plan.get("args"),dict):
+            plan["args"]={}
+        return plan
+    except Exception as exc:
+        try:
+            _log(conn,"system","R45 cloud planner unavailable: "+repr(exc))
+        except Exception:
+            pass
+        return None
+
+def _execute_cloud_readonly_plan(conn, plan, raw_message=""):
+    if not isinstance(plan,dict):
+        return None
+    tool=str(plan.get("tool") or "").strip()
+    if tool in ("","none","unknown"):
+        return None
+    if tool not in _CLOUD_READONLY_TOOLS:
+        return {"text":"Modalità cloud test: questa azione non è autorizzata. Non ho modificato nulla.","mode":"warning"}
+    catalog={x["name"]:x for x in _cloud_readonly_catalog(conn)}
+    if tool not in catalog or bool(catalog[tool].get("write")):
+        return {"text":"Modalità cloud test: il server ha bloccato un'azione non read-only. Non ho modificato nulla.","mode":"warning"}
+    result=_execute_agent_tool(conn,plan,raw_message)
+    if result:
+        result["cloud_ai"]=True
+        result["cloud_readonly"]=True
+        result["agent_plan"]=tool
+        if result.get("mode")=="confirm":
+            return {"text":"Modalità cloud test: ho analizzato la richiesta ma non preparo né eseguo modifiche. Non ho cambiato nulla.","mode":"warning","cloud_ai":True,"cloud_readonly":True}
+    return result
+
+
 def _cloud_operator_answer(conn, question: str, athlete=None):
     """Optional high-capability conversational layer.
     It is read-only: deterministic BodyMind functions remain the only path for writes.
@@ -1167,12 +1267,8 @@ def _answer(conn, text: str):
             "links":[{"label":"Da verificare","href":"/documenti/da-verificare"},{"label":"Quote & Incassi","href":"/quote-incassi"}]
         }
 
-    cloud=_cloud_operator_answer(conn,raw,athlete=None)
-    if cloud:
-        return {"text":cloud,"mode":"cloud","allow_device_ai":False}
-
     return {
-        "text":"Ho capito la richiesta, ma non voglio inventare una risposta. Se riguarda BodyMind posso cercare una persona, documenti, Modulo Unico, certificati, tutela, quote, pagamenti o ricevute. Puoi anche chiedermi “controlla BodyMind”.",
+        "text":"Ho capito la richiesta e la passo al planner intelligente BodyMind.",
         "mode":"fallback",
         "allow_device_ai":True
     }
@@ -1926,29 +2022,66 @@ def bodymind_operator_chat():
         _log(conn,"user",message)
         result=_answer(conn,message)
         planner_used=False
+        # R45: cloud intelligence gets first shot on free-form requests, but only with READ-ONLY tools.
         if str(result.get("mode") or "")=="fallback":
             try:
-                from .routes_operator_bridge import bridge_plan_tool
-                plan=bridge_plan_tool(conn,message,_agent_tool_catalog(conn),_conv_id(),_identity())
+                plan=_cloud_plan_tool(conn,message)
                 if plan:
                     planner_used=True
-                    tool_result=_execute_agent_tool(conn,plan,message)
+                    tool_result=_execute_cloud_readonly_plan(conn,plan,message)
                     if tool_result:
                         result=tool_result
-                        result["agent_plan"]=str(plan.get("tool") or "")
-                    elif str(plan.get("tool") or "") in ("none","unknown") and str(plan.get("answer") or "").strip():
+                    elif str(plan.get("tool") or "") in ("none","unknown","") and str(plan.get("answer") or "").strip():
                         result={
                             "text":str(plan.get("answer") or "").strip(),
-                            "mode":"local_ai",
+                            "mode":"cloud_ai",
                             "allow_device_ai":False,
-                            "local_ai":True,
+                            "cloud_ai":True,
+                            "cloud_readonly":True,
                             "agent_plan":"none",
                         }
-            except Exception as planner_exc:
+            except Exception as cloud_planner_exc:
                 try:
-                    _log(conn,"system","R40 tool planner unavailable: "+repr(planner_exc))
+                    _log(conn,"system","R45 cloud planner unavailable: "+repr(cloud_planner_exc))
                 except Exception:
                     pass
+
+        # Local Mac/Qwen is now fallback only, never the primary planner when cloud succeeds.
+        if not planner_used and str(result.get("mode") or "")=="fallback":
+            try:
+                from .routes_operator_bridge import bridge_plan_tool
+                local_catalog=[x for x in _agent_tool_catalog(conn) if not bool(x.get("write"))]
+                plan=bridge_plan_tool(conn,message,local_catalog,_conv_id(),_identity())
+                if plan:
+                    planner_used=True
+                    tool=str(plan.get("tool") or "")
+                    if tool and tool not in _CLOUD_READONLY_TOOLS and tool not in ("none","unknown"):
+                        result={"text":"Il fallback locale ha proposto un'azione non autorizzata. Non ho modificato nulla.","mode":"warning"}
+                    else:
+                        tool_result=_execute_cloud_readonly_plan(conn,plan,message)
+                        if tool_result:
+                            result=tool_result
+                            result["local_ai"]=True
+                            result["cloud_ai"]=False
+                        elif tool in ("none","unknown","") and str(plan.get("answer") or "").strip():
+                            result={
+                                "text":str(plan.get("answer") or "").strip(),
+                                "mode":"local_ai",
+                                "allow_device_ai":False,
+                                "local_ai":True,
+                                "agent_plan":"none",
+                            }
+            except Exception as planner_exc:
+                try:
+                    _log(conn,"system","R45 local fallback planner unavailable: "+repr(planner_exc))
+                except Exception:
+                    pass
+
+        if not planner_used and str(result.get("mode") or "")=="fallback":
+            cloud=_cloud_operator_answer(conn,message,athlete=None)
+            if cloud:
+                result={"text":cloud,"mode":"cloud_ai","allow_device_ai":False,"cloud_ai":True,"cloud_readonly":True}
+
         if not planner_used and str(result.get("mode") or "")=="fallback":
             try:
                 from .routes_operator_bridge import bridge_enhance_result
@@ -1958,12 +2091,6 @@ def bodymind_operator_chat():
                     _log(conn,"system","Local AI bridge unavailable: "+repr(bridge_exc))
                 except Exception:
                     pass
-        if result.get("allow_device_ai"):
-            cloud=_cloud_ai(message,result.get("text",""))
-            if cloud:
-                result["text"]=cloud
-                result["mode"]="cloud"
-                result["allow_device_ai"]=False
         _log(conn,"assistant",result.get("text",""),result)
         return jsonify(result)
     except Exception as exc:
