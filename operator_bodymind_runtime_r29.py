@@ -20,7 +20,7 @@ from .core import (
     app, db, layout, login_required, csrf_token, current_username, current_role, e
 )
 
-OPERATOR_VERSION = "R46.0-cloud-native-secretary"
+OPERATOR_VERSION = "R47.0-cloud-native-secretary"
 PENDING_STATUSES = (
     "needs_manual_match","associato_tipo_da_verificare","richiede_conferma",
     "needs_review","da_verificare","pending",
@@ -89,7 +89,96 @@ def _schema(conn) -> None:
         UNIQUE(subject_type,subject_id,fact_key)
       )
     """)
+    conn.execute("""
+      CREATE TABLE IF NOT EXISTS bodymind_ai_usage(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kind TEXT NOT NULL,
+        model TEXT,
+        input_tokens INTEGER NOT NULL DEFAULT 0,
+        output_tokens INTEGER NOT NULL DEFAULT 0,
+        seconds REAL NOT NULL DEFAULT 0,
+        estimated_usd REAL NOT NULL DEFAULT 0,
+        request_id TEXT,
+        created_at TEXT NOT NULL
+      )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_bodymind_ai_usage_created ON bodymind_ai_usage(created_at)")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_bodymind_ai_usage_request ON bodymind_ai_usage(request_id) WHERE request_id IS NOT NULL")
     conn.commit()
+
+
+# BODYMIND_R47_AI_BUDGET_METER
+_TEXT_PRICING_PER_MTOK={
+    "gpt-6-luna":(0.10,0.50),
+    "gpt-6.1-sol":(2.00,10.00),
+    "gpt-6-sol":(2.00,10.00),
+    "gpt-6-astra":(10.00,50.00),
+}
+_STT_USD_PER_MIN={"gpt-transcribe":0.0045}
+_TTS_EST_USD_PER_MIN={"gpt-4o-mini-tts":0.015}
+
+def _budget_start():
+    raw=str(os.environ.get("BODYMIND_AI_BUDGET_START") or "1970-01-01T00:00:00").strip()
+    return raw
+
+def _budget_usd():
+    try: return max(0.01,float(os.environ.get("BODYMIND_AI_BUDGET_USD") or "5"))
+    except Exception: return 5.0
+
+def _record_ai_usage(conn,kind,model="",input_tokens=0,output_tokens=0,seconds=0.0,estimated_usd=0.0,request_id=None):
+    _schema(conn)
+    rid=str(request_id or "").strip() or None
+    try:
+        conn.execute(
+            """INSERT INTO bodymind_ai_usage(kind,model,input_tokens,output_tokens,seconds,estimated_usd,request_id,created_at)
+               VALUES(?,?,?,?,?,?,?,?)""",
+            (str(kind),str(model or ""),int(input_tokens or 0),int(output_tokens or 0),float(seconds or 0),float(estimated_usd or 0),rid,datetime.now().isoformat(timespec="seconds"))
+        )
+        conn.commit()
+    except sqlite3.IntegrityError:
+        pass
+
+def _record_response_usage(conn,resp,model,kind="planner"):
+    usage=getattr(resp,"usage",None)
+    inp=int(getattr(usage,"input_tokens",0) or 0) if usage is not None else 0
+    out=int(getattr(usage,"output_tokens",0) or 0) if usage is not None else 0
+    rates=_TEXT_PRICING_PER_MTOK.get(str(model),(0.10,0.50))
+    usd=(inp/1000000.0)*rates[0]+(out/1000000.0)*rates[1]
+    rid=str(getattr(resp,"id","") or "") or None
+    _record_ai_usage(conn,kind,model,inp,out,0.0,usd,rid)
+
+def _usage_summary(conn):
+    _schema(conn)
+    start=_budget_start()
+    row=conn.execute(
+        """SELECT coalesce(sum(estimated_usd),0),coalesce(sum(input_tokens),0),coalesce(sum(output_tokens),0),
+                  coalesce(sum(CASE WHEN kind='stt' THEN seconds ELSE 0 END),0),
+                  coalesce(sum(CASE WHEN kind='tts' THEN seconds ELSE 0 END),0)
+           FROM bodymind_ai_usage WHERE created_at>=?""",(start,)
+    ).fetchone()
+    spent=float(row[0] or 0)
+    budget=_budget_usd()
+    pct=(spent/budget*100.0) if budget else 0
+    if pct>=100: level="critical"
+    elif pct>=90: level="high"
+    elif pct>=70: level="warning"
+    else: level="ok"
+    exhausted=any(x in str(_CLOUD_LAST_ERROR or "").lower() for x in ("credit_balance_exhausted","insufficient_quota","no credits remaining"))
+    if exhausted: level="exhausted"
+    return {
+        "budget_usd":round(budget,4),
+        "estimated_spent_usd":round(spent,4),
+        "estimated_remaining_usd":round(max(0.0,budget-spent),4),
+        "percent":round(pct,1),
+        "level":level,
+        "exhausted":exhausted,
+        "input_tokens":int(row[1] or 0),
+        "output_tokens":int(row[2] or 0),
+        "stt_seconds":round(float(row[3] or 0),1),
+        "tts_seconds":round(float(row[4] or 0),1),
+        "start":start,
+        "estimate":True,
+    }
 
 
 def _conv_id() -> str:
@@ -1220,6 +1309,7 @@ def _cloud_plan_tool(conn, question: str, tool_trace=None):
         )
         client=OpenAI(api_key=key,timeout=18.0,max_retries=0)
         resp=client.responses.create(model=model,input=prompt)
+        _record_response_usage(conn,resp,model,"planner")
         global _CLOUD_LAST_ERROR,_CLOUD_LAST_OK_AT
         _CLOUD_LAST_ERROR=""
         _CLOUD_LAST_OK_AT=datetime.now().isoformat(timespec="seconds")
@@ -1335,6 +1425,7 @@ def _cloud_operator_answer(conn, question: str, athlete=None):
         )
         client=OpenAI(api_key=key,timeout=18.0,max_retries=0)
         resp=client.responses.create(model=model,input=prompt)
+        _record_response_usage(conn,resp,model,"answer")
         out=str(getattr(resp,"output_text","") or "").strip()
         return out[:7000] if out else None
     except Exception as exc:
@@ -1911,15 +2002,906 @@ def bodymind_operator_home():
 
       // BODYMIND_R39_IOS_TTS_UNLOCK
       // BODYMIND_R39_IOS_TTS_PERSISTENT_FIX
-      (async()=>{{
-        const p=document.getElementById('bmoAiPill'); if(!p)return;
+      async function refreshCloudStatus(showAlert=false){{
+        const p=document.getElementById('bmoAiPill'); if(!p)return null;
         try{{
           const r=await fetch('/operatore-bodymind/cloud/status',{{headers:{{'Cache-Control':'no-cache'}}}});
           const d=await r.json();
-          p.textContent=d.ready?'IA Cloud · pronta':'IA Cloud · credito/configurazione';
-          p.title='Modello: '+(d.model||'')+(d.last_ok_at?(' · ultimo successo '+d.last_ok_at):'');
-        }}catch(e){{p.textContent='IA Cloud · stato non disponibile'}}
-      }})();
+          const b=d.budget||{{}};
+          if(b.exhausted){{
+            p.textContent='IA Cloud · CREDITO ESAURITO';
+          }}else if(b.level==='critical'||b.level==='high'||b.level==='warning'){{
+            p.textContent='IA Cloud · budget '+Math.round(b.percent||0)+'%';
+          }}else{{
+            p.textContent=d.ready?'IA Cloud · pronta':'IA Cloud · credito/configurazione';
+          }}
+          p.title='Modello: '+(d.model||'')+' · spesa stimata 
+
+      function esc(s){{const d=document.createElement('div');d.textContent=String(s??'');return d.innerHTML}}
+      function addMsg(text,who='bot',data={{}}){{
+        const box=document.createElement('div');box.className='bmo-msg '+(who==='me'?'me':'bot');
+        box.innerHTML=esc(text);
+        if(data.cards?.length){{
+          const w=document.createElement('div');w.className='bmo-cards';
+          data.cards.forEach(c=>{{const a=document.createElement('a');a.className='bmo-card';a.href=c.href||'#';a.innerHTML='<span>'+esc(c.title)+'</span><strong>'+esc(c.value)+'</strong>';w.appendChild(a)}});
+          box.appendChild(w);
+        }}
+        if(data.links?.length){{
+          const w=document.createElement('div');w.className='bmo-links';
+          data.links.forEach(l=>{{const a=document.createElement('a');a.className='bmo-link';a.href=l.href;a.textContent=l.label;w.appendChild(a)}});
+          box.appendChild(w);
+        }}
+        messages.appendChild(box);messages.scrollTop=messages.scrollHeight;
+      }}
+
+      function stopRecognitionForTTS(){{
+        clearRecognitionWatchdog();
+        if(recognition){{
+          const oldRecognition=recognition;
+          recognition=null;
+          try{{oldRecognition.abort()}}catch(e){{}}
+        }}
+        listening=false;
+        mic?.classList.remove('on');avatar?.classList.remove('listening');
+        stopMicStream();
+        voiceDiag('sr_aborted_for_tts');
+      }}
+      function speak(text,fromUserGesture=false){{
+        if(!voice || !voice.checked || !('speechSynthesis' in window) || !text)return;
+        lastSpeechText=String(text);
+        const chunks=speechChunks(text);
+        if(!chunks.length)return;
+        if(!fromUserGesture && !ttsPrimed){{
+          if(voiceRecover){{voiceRecover.hidden=false;voiceRecover.textContent='🔊 Ascolta risposta'}}
+          if(voiceStatus)voiceStatus.textContent='Tocca 🔊 Ascolta risposta';
+          voiceDiag('tts_waiting_user_gesture');
+          return;
+        }}
+        stopRecognitionForTTS();
+        const seq=++ttsSequence;
+        const begin=()=>{{
+          try{{
+            if(ttsRetryTimer){{clearTimeout(ttsRetryTimer);ttsRetryTimer=null}}
+            speechSynthesis.cancel();
+            speechSynthesis.resume();
+            refreshTTSVoices();
+            voiceDiag('tts_begin',{{gesture:!!fromUserGesture,voice:ttsVoice?.name||'',chunks:chunks.length}});
+            let index=0;
+            const next=()=>{{
+              if(seq!==ttsSequence||index>=chunks.length){{
+                ttsUtterance=null;avatar.classList.remove('speaking');
+                if(voiceStatus)voiceStatus.textContent='Tocca il microfono e parlami';
+                if(voiceRecover)voiceRecover.hidden=true;
+                voiceDiag('tts_complete');
+                return;
+              }}
+              const phrase=chunks[index++];
+              const u=new SpeechSynthesisUtterance(phrase);ttsUtterance=u;
+              u.lang='it-IT';u.rate=(phrase.length<55?1.0:.98);u.pitch=1.02;u.volume=1;
+              if(ttsVoice)u.voice=ttsVoice;
+              let started=false;
+              u.onstart=()=>{{
+                started=true;ttsPrimed=true;
+                try{{localStorage.setItem(TTS_KEY,'1')}}catch(e){{}}
+                avatar.classList.add('speaking');if(voiceRecover)voiceRecover.hidden=true;
+                if(voiceStatus)voiceStatus.textContent='Ti sto rispondendo…';
+                voiceDiag('tts_onstart',{{voice:u.voice?.name||'',index:index}});
+              }};
+              u.onend=()=>{{voiceDiag('tts_onend',{{index:index}});if(seq===ttsSequence)setTimeout(next,phrase.endsWith('.')?55:30)}};
+              u.onerror=e=>{{
+                voiceDiag('tts_onerror',{{error:String(e?.error||e?.message||'unknown'),index:index}});
+                ttsUtterance=null;avatar.classList.remove('speaking');
+                if(voiceRecover)voiceRecover.hidden=false;
+                if(voiceStatus)voiceStatus.textContent='Safari ha bloccato la voce: tocca 🔊 Attiva voce';
+              }};
+              speechSynthesis.speak(u);
+              if(index===1){{
+                ttsRetryTimer=setTimeout(()=>{{
+                  if(!started&&seq===ttsSequence&&ttsUtterance===u){{
+                    voiceDiag('tts_watchdog');
+                    try{{speechSynthesis.cancel();speechSynthesis.resume()}}catch(e){{}}
+                    if(voiceRecover)voiceRecover.hidden=false;
+                    if(voiceStatus)voiceStatus.textContent='Tocca 🔊 Attiva voce per riprodurre la risposta';
+                  }}
+                }},900);
+              }}
+            }};
+            next();
+          }}catch(e){{
+            voiceDiag('tts_throw',{{error:String(e?.message||e)}});
+            if(voiceRecover)voiceRecover.hidden=false;
+            if(voiceStatus)voiceStatus.textContent='Tocca 🔊 Attiva voce per riprodurre la risposta';
+          }}
+        }};
+        if(fromUserGesture){{
+          ttsPrimed=true;
+          try{{localStorage.setItem(TTS_KEY,'1')}}catch(e){{}}
+          begin();
+        }}else{{
+          setTimeout(begin,30);
+        }}
+      }}
+      voiceRecover?.addEventListener('click',()=>{{
+        voiceDiag('tts_recover_tap');
+        ttsPrimed=true;
+        try{{localStorage.setItem(TTS_KEY,'1')}}catch(e){{}}
+        speak(lastSpeechText||'Voce attiva.',true);
+      }});
+
+      // R38: local intelligence is only the paired iMac bridge; offline uses deterministic server logic.
+
+      async function ask(q){{
+        q=String(q||'').trim();if(!q)return;
+        addMsg(q,'me');input.value='';send.disabled=true;
+        try{{
+          const r=await fetch('/operatore-bodymind/chat',{{
+            method:'POST',headers:{{'Content-Type':'application/json','X-CSRFToken':csrf}},
+            body:JSON.stringify({{message:q}})
+          }});
+          const data=await r.json();
+          let text=data.text||'Non ho ricevuto una risposta.';
+          addMsg(text,'bot',data);speak(text);refreshCloudStatus(true);
+        }}catch(err){{
+          addMsg('Non riesco a contattare il motore dell’Operatore in questo momento. Non ho modificato nulla.','bot');
+        }}finally{{send.disabled=false;input.focus()}}
+      }}
+
+      send.addEventListener('click',()=>ask(input.value));
+      input.addEventListener('keydown',ev=>{{if(ev.key==='Enter'&&!ev.shiftKey){{ev.preventDefault();ask(input.value)}}}});
+      document.querySelectorAll('[data-q]').forEach(b=>b.addEventListener('click',()=>ask(b.dataset.q)));
+
+
+      function stopMicStream(){{
+        if(meterRAF){{cancelAnimationFrame(meterRAF);meterRAF=null}}
+        try{{audioContext?.close()}}catch(e){{}}
+        audioContext=null;analyser=null;
+        if(micStream){{micStream.getTracks().forEach(t=>t.stop());micStream=null}}
+      }}
+      function startMeter(stream){{
+        try{{
+          const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;
+          audioContext=new AC();const source=audioContext.createMediaStreamSource(stream);
+          analyser=audioContext.createAnalyser();analyser.fftSize=256;source.connect(analyser);
+          const data=new Uint8Array(analyser.frequencyBinCount);
+          const tick=()=>{{if(!analyser)return;analyser.getByteFrequencyData(data);let sum=0;for(let i=0;i<data.length;i++)sum+=data[i];const level=Math.min(1,(sum/data.length)/90);avatar.style.transform='scale('+(1+level*.045)+')';meterRAF=requestAnimationFrame(tick)}};tick();
+        }}catch(e){{}}
+      }}
+      async function ensureMic(){{
+        if(!window.isSecureContext)throw new Error('Il microfono richiede HTTPS.');
+        if(!navigator.mediaDevices?.getUserMedia)throw new Error('Questo browser non espone il microfono.');
+        if(micStream)return micStream;
+        micStream=await navigator.mediaDevices.getUserMedia({{audio:{{echoCancellation:true,noiseSuppression:true,autoGainControl:true}}}});
+        startMeter(micStream);return micStream;
+      }}
+      async function primeMicForRecognition(){{
+        if(!window.isSecureContext)throw new Error('Il microfono richiede HTTPS.');
+        if(!navigator.mediaDevices?.getUserMedia)throw new Error('Questo browser non espone il microfono.');
+        let stream=null,ctx=null,source=null,an=null;
+        try{{
+          voiceDiag('mic_prime_request');
+          stream=await navigator.mediaDevices.getUserMedia({{audio:{{echoCancellation:true,noiseSuppression:true,autoGainControl:true}},video:false}});
+          const track=(stream.getAudioTracks&&stream.getAudioTracks()[0])||null;
+          voiceDiag('mic_prime_granted',{{muted:!!track?.muted,enabled:track?track.enabled:null,readyState:track?.readyState||''}});
+          const AC=window.AudioContext||window.webkitAudioContext;
+          if(!AC)return {{ok:true,signal:null}};
+          ctx=new AC();
+          try{{await ctx.resume()}}catch(e){{}}
+          source=ctx.createMediaStreamSource(stream);
+          an=ctx.createAnalyser();an.fftSize=512;source.connect(an);
+          const data=new Uint8Array(an.fftSize);
+          let peak=0;
+          const until=performance.now()+700;
+          while(performance.now()<until){{
+            an.getByteTimeDomainData(data);
+            let sum=0;
+            for(let i=0;i<data.length;i++){{const d=(data[i]-128)/128;sum+=d*d}}
+            peak=Math.max(peak,Math.sqrt(sum/data.length));
+            await new Promise(res=>setTimeout(res,55));
+          }}
+          const level=Math.round(peak*1000);
+          voiceDiag('mic_prime_signal',{{level:level}});
+          return {{ok:true,signal:peak}};
+        }}catch(e){{
+          voiceDiag('mic_prime_error',{{error:String(e?.name||''),message:String(e?.message||e)}});
+          return {{ok:false,error:e}};
+        }}finally{{
+          try{{source?.disconnect()}}catch(e){{}}
+          try{{an?.disconnect()}}catch(e){{}}
+          try{{stream?.getTracks().forEach(t=>t.stop())}}catch(e){{}}
+          try{{await ctx?.close()}}catch(e){{}}
+        }}
+      }}
+      function humanMicError(code){{
+        const c=String(code||'');
+        if(c==='not-allowed'||c==='service-not-allowed')return 'Accesso al microfono negato. Consenti il microfono a BodyMind nelle impostazioni di Safari e riprova.';
+        if(c==='audio-capture')return 'Non riesco ad accedere al microfono del dispositivo.';
+        if(c==='aborted')return 'Il riconoscimento è stato interrotto.';
+        if(c==='no-speech')return 'Non ho sentito una frase. Tocca di nuovo il microfono e parla normalmente.';
+        if(c==='network')return 'Il riconoscimento vocale del browser non è riuscito a collegarsi. Riprova.';
+        return 'Il riconoscimento vocale non è partito correttamente ('+c+'). Riprova.';
+      }}
+
+      const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+      function clearRecognitionWatchdog(){{if(recognitionWatchdog){{clearTimeout(recognitionWatchdog);recognitionWatchdog=null}}}}
+      function resetRecognitionUI(){{
+        listening=false;clearRecognitionWatchdog();mic.classList.remove('on');avatar.classList.remove('listening');avatar.style.transform='';stopMicStream();
+      }}
+      function buildRecognition(){{
+        if(!SR)return null;
+        const r=new SR();
+        r.lang='it-IT';r.interimResults=true;r.continuous=false;r.maxAlternatives=1;
+        let submitted=false;
+        r.onstart=()=>{{
+          if(recognition!==r)return;
+          clearRecognitionWatchdog();listening=true;mic.classList.add('on');avatar.classList.add('listening');
+          if(voiceStatus)voiceStatus.textContent='Ti ascolto… parla normalmente';
+          voiceDiag('sr_onstart');
+        }};
+        r.onaudiostart=()=>voiceDiag('sr_onaudiostart');
+        r.onspeechstart=()=>voiceDiag('sr_onspeechstart');
+        r.onspeechend=()=>voiceDiag('sr_onspeechend');
+        r.onresult=ev=>{{
+          if(recognition!==r)return;
+          let txt='';let final=false;
+          for(let i=ev.resultIndex;i<ev.results.length;i++){{txt+=ev.results[i][0].transcript;if(ev.results[i].isFinal)final=true}}
+          input.value=txt.trim();voiceDiag('sr_onresult',{{final:final,len:input.value.length}});
+          if(final&&input.value&&!submitted){{submitted=true;if(voiceStatus)voiceStatus.textContent='Ho capito. Un attimo…';setTimeout(()=>ask(input.value),100)}}
+        }};
+        r.onerror=ev=>{{
+          const err=String(ev?.error||'unknown');
+          if(recognition!==r){{voiceDiag('sr_stale_error_ignored',{{error:err}});return}}
+          if(err==='aborted'){{recognition=null;resetRecognitionUI();voiceDiag('sr_aborted_ignored');return}}
+          voiceDiag('sr_onerror',{{error:err,message:String(ev?.message||'')}});
+          recognition=null;resetRecognitionUI();
+          const t=humanMicError(err);if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+        }};
+        r.onend=()=>{{
+          if(recognition===r)recognition=null;
+          voiceDiag('sr_onend',{{submitted:submitted}});resetRecognitionUI();
+          if(voiceStatus&&voiceStatus.textContent.startsWith('Ti ascolto'))voiceStatus.textContent='Tocca il microfono e parlami';
+        }};
+        return r;
+      }}
+      function waitSpeechIdle(done,tries=0){{
+        let busy=false;
+        try{{busy=!!(speechSynthesis?.speaking||speechSynthesis?.pending)}}catch(e){{}}
+        if(!busy||tries>=8){{setTimeout(done,220);return}}
+        try{{speechSynthesis.cancel()}}catch(e){{}}
+        setTimeout(()=>waitSpeechIdle(done,tries+1),120);
+      }}
+      async function startFreshRecognition(attempt=0){{
+        try{{
+          clearRecognitionWatchdog();
+          if(recognition){{const oldRecognition=recognition;recognition=null;try{{oldRecognition.abort()}}catch(e){{}}}}
+          resetRecognitionUI();
+          try{{ttsSequence++;speechSynthesis?.cancel()}}catch(e){{}}
+          voiceDiag(attempt?'sr_retry_prepare':'sr_prepare',{{attempt:attempt}});
+          const primed=await primeMicForRecognition();
+          if(!primed.ok){{
+            const err=primed.error||{{}};
+            resetRecognitionUI();
+            const t=(err.name==='NotAllowedError'||err.name==='SecurityError')
+              ?'Microfono non autorizzato. Consenti il microfono per BodyMind e riprova.'
+              :'Non riesco ad aprire il microfono del dispositivo.';
+            if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+            return;
+          }}
+          if(primed.signal!==null && primed.signal<0.002){{
+            voiceDiag('mic_prime_no_signal',{{level:Math.round(primed.signal*1000)}});
+            if(voiceStatus)voiceStatus.textContent='Microfono aperto ma non rilevo audio. Parla vicino al microfono e riprova.';
+          }}else{{
+            if(voiceStatus)voiceStatus.textContent='Microfono OK. Avvio riconoscimento…';
+          }}
+          await new Promise(res=>setTimeout(res,320));
+          waitSpeechIdle(()=>{{
+            try{{
+              recognition=buildRecognition();
+              if(!recognition)throw new Error('SpeechRecognition non disponibile');
+              voiceDiag(attempt?'sr_retry_call':'sr_start_call',{{attempt:attempt}});
+              recognition.start();
+              recognitionWatchdog=setTimeout(()=>{{
+                if(!listening&&recognition){{
+                  voiceDiag('sr_start_timeout',{{attempt:attempt}});
+                  const oldRecognition=recognition;
+                  recognition=null;
+                  resetRecognitionUI();
+                  try{{oldRecognition.abort()}}catch(e){{}}
+                  if(attempt<1){{
+                    if(voiceStatus)voiceStatus.textContent='Riprovo il microfono…';
+                    setTimeout(()=>{{startFreshRecognition(1).catch(()=>{{}})}},700);
+                  }}else{{
+                    const t='Safari non ha avviato il riconoscimento. Puoi riprovare il microfono; se iOS continua a bloccarlo, usa temporaneamente la dettatura della tastiera.';
+                    if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+                  }}
+                }}
+              }},7000);
+            }}catch(err){{
+              resetRecognitionUI();voiceDiag('sr_start_throw',{{error:String(err?.name||'')+':'+String(err?.message||err),attempt:attempt}});
+              if(attempt<1)setTimeout(()=>{{startFreshRecognition(1).catch(()=>{{}})}},500);
+              else{{
+                const t=(err?.name==='NotAllowedError'||err?.name==='SecurityError')?'Accesso al microfono negato. Consenti microfono e riconoscimento vocale a Safari e riprova.':('Microfono non disponibile: '+(err?.message||err));
+                if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+              }}
+            }}
+          }});
+        }}catch(err){{
+          resetRecognitionUI();voiceDiag('sr_prepare_throw',{{error:String(err?.message||err)}});
+        }}
+      }}
+      if(SR){{
+        // BODYMIND_R39_IOS_SR_RECREATE_V4
+        // BODYMIND_R39_IOS_SR_WEBKIT27_STATE_MACHINE_V5
+        mic.addEventListener('click',()=>{{
+          if(listening&&recognition){{try{{voiceDiag('sr_manual_stop');recognition.stop()}}catch(e){{}};return}}
+          startFreshRecognition(0).catch(err=>{{voiceDiag('sr_async_throw',{{error:String(err?.message||err)}})}});
+        }});
+      }}else{{
+        voiceDiag('sr_unavailable');
+        mic.addEventListener('click',()=>{{
+          const t='Su questo browser il riconoscimento vocale web non è disponibile.';
+          if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+        }});
+      }}
+
+      // BODYMIND_R46_CLOUD_NATIVE_VOICE
+      // Cloud STT + neural TTS. Legacy WebSpeech remains inert and is not the primary path.
+      let cloudRecorder=null,cloudChunks=[],cloudRecording=false,cloudAudio=null,cloudMaxTimer=null,cloudRecordingStartedAt=0;
+
+      speak=async function(text,fromUserGesture=false){{
+        if(!voice || !voice.checked || !text)return;
+        lastSpeechText=String(text);
+        try{{
+          if(voiceStatus)voiceStatus.textContent='Genero la voce…';
+          const r=await fetch('/operatore-bodymind/voice/speak',{{
+            method:'POST',
+            headers:{{'Content-Type':'application/json','X-CSRFToken':csrf}},
+            body:JSON.stringify({{text:String(text)}})
+          }});
+          if(!r.ok){{
+            let d={{}};try{{d=await r.json()}}catch(e){{}}
+            throw new Error(d.text||('TTS HTTP '+r.status));
+          }}
+          const usageId=r.headers.get('X-BodyMind-Usage-Id')||'';
+          const blob=await r.blob();
+          const url=URL.createObjectURL(blob);
+          try{{if(cloudAudio){{cloudAudio.pause();if(cloudAudio.src)URL.revokeObjectURL(cloudAudio.src)}}}}catch(e){{}}
+          cloudAudio=new Audio(url);
+          cloudAudio.preload='auto';
+          cloudAudio.onloadedmetadata=()=>{{
+            const secs=Number(cloudAudio?.duration||0);
+            if(usageId&&isFinite(secs)&&secs>0){{
+              fetch('/operatore-bodymind/cloud/usage/tts',{{
+                method:'POST',headers:{{'Content-Type':'application/json','X-CSRFToken':csrf}},
+                body:JSON.stringify({{usage_id:usageId,seconds:secs}})
+              }}).then(()=>refreshCloudStatus(true)).catch(()=>{{}});
+            }}
+          }};
+          cloudAudio.onplay=()=>{{avatar?.classList.add('speaking');if(voiceStatus)voiceStatus.textContent='Ti sto rispondendo…';if(voiceRecover)voiceRecover.hidden=true;}};
+          cloudAudio.onended=()=>{{avatar?.classList.remove('speaking');if(voiceStatus)voiceStatus.textContent='Tocca il microfono e parlami';try{{URL.revokeObjectURL(url)}}catch(e){{}}}};
+          try{{
+            await cloudAudio.play();
+          }}catch(e){{
+            if(voiceRecover){{voiceRecover.hidden=false;voiceRecover.textContent='🔊 Ascolta risposta'}}
+            if(voiceStatus)voiceStatus.textContent='Risposta pronta: tocca 🔊 per ascoltarla';
+          }}
+        }}catch(e){{
+          if(voiceStatus)voiceStatus.textContent='Voce cloud non disponibile';
+          voiceDiag('cloud_tts_error',{{error:String(e?.message||e)}});
+        }}
+      }};
+
+      if(voiceRecover){{
+        voiceRecover.onclick=async(ev)=>{{
+          ev.preventDefault();ev.stopImmediatePropagation();
+          if(cloudAudio){{try{{await cloudAudio.play();voiceRecover.hidden=true}}catch(e){{}}}}
+          else if(lastSpeechText){{speak(lastSpeechText,true)}}
+        }};
+      }}
+
+      async function cloudStopAndTranscribe(){{
+        if(!cloudRecording||!cloudRecorder)return;
+        cloudRecording=false;
+        if(cloudMaxTimer){{clearTimeout(cloudMaxTimer);cloudMaxTimer=null}}
+        if(voiceStatus)voiceStatus.textContent='Trascrivo…';
+        try{{cloudRecorder.stop()}}catch(e){{}}
+      }}
+
+      async function cloudStartMic(ev){{
+        if(ev){{ev.preventDefault();ev.stopImmediatePropagation()}}
+        if(cloudRecording){{await cloudStopAndTranscribe();return}}
+        if(!window.MediaRecorder || !navigator.mediaDevices?.getUserMedia){{
+          const t='Questo browser non supporta la registrazione cloud. Usa un browser aggiornato oppure scrivi la richiesta.';
+          if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');return;
+        }}
+        try{{
+          const stream=await navigator.mediaDevices.getUserMedia({{audio:{{echoCancellation:true,noiseSuppression:true,autoGainControl:true}},video:false}});
+          let mime='';
+          for(const m of ['audio/mp4','audio/webm;codecs=opus','audio/webm']){{if(MediaRecorder.isTypeSupported?.(m)){{mime=m;break}}}}
+          cloudChunks=[];
+          cloudRecorder=new MediaRecorder(stream,mime?{{mimeType:mime}}:undefined);
+          cloudRecorder.ondataavailable=e=>{{if(e.data&&e.data.size)cloudChunks.push(e.data)}};
+          cloudRecorder.onerror=e=>{{voiceDiag('cloud_recorder_error',{{error:String(e?.error?.message||e?.message||e)}})}};
+          cloudRecorder.onstop=async()=>{{
+            mic.classList.remove('on');avatar.classList.remove('listening');
+            try{{stream.getTracks().forEach(t=>t.stop())}}catch(e){{}}
+            const blob=new Blob(cloudChunks,{{type:cloudRecorder?.mimeType||mime||'audio/webm'}});
+            if(blob.size<1000){{if(voiceStatus)voiceStatus.textContent='Non ho rilevato audio. Riprova.';return}}
+            const ext=(blob.type||'').includes('mp4')?'m4a':'webm';
+            const fd=new FormData();fd.append('audio',blob,'voce.'+ext);
+            fd.append('duration_ms',String(Math.max(0,performance.now()-cloudRecordingStartedAt)));
+            try{{
+              const r=await fetch('/operatore-bodymind/voice/transcribe',{{method:'POST',headers:{{'X-CSRFToken':csrf}},body:fd}});
+              const d=await r.json();
+              if(!r.ok)throw new Error(d.text||('STT HTTP '+r.status));
+              input.value=String(d.text||'').trim();
+              if(!input.value)throw new Error('Trascrizione vuota');
+              if(voiceStatus)voiceStatus.textContent='Ho capito. Elaboro…';
+              await ask(input.value);
+            }}catch(e){{
+              const t=String(e?.message||e||'Trascrizione cloud non disponibile');
+              if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+            }}
+          }};
+          cloudRecorder.start(250);
+          cloudRecordingStartedAt=performance.now();
+          cloudRecording=true;
+          mic.classList.add('on');avatar.classList.add('listening');
+          if(voiceStatus)voiceStatus.textContent='Ti ascolto… tocca di nuovo per inviare';
+          cloudMaxTimer=setTimeout(()=>{{if(cloudRecording)cloudStopAndTranscribe()}},18000);
+        }}catch(e){{
+          cloudRecording=false;mic.classList.remove('on');avatar.classList.remove('listening');
+          const t=(e?.name==='NotAllowedError'||e?.name==='SecurityError')
+            ?'Microfono non autorizzato. Consenti il microfono a BodyMind e riprova.'
+            :'Non riesco ad aprire il microfono.';
+          if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+        }}
+      }}
+      mic.addEventListener('click',cloudStartMic,true);
+
+      attach?.addEventListener('click',()=>{{
+        const picker=document.createElement('input');
+        picker.type='file';
+        picker.multiple=true;
+        picker.accept='.pdf,.png,.jpg,.jpeg,.webp,.docx';
+        picker.setAttribute('aria-hidden','true');
+        picker.tabIndex=-1;
+        picker.style.setProperty('display','none','important');
+        document.body.appendChild(picker);
+        picker.addEventListener('change',async()=>{{
+          const files=[...(picker.files||[])];
+          try{{
+            if(!files.length)return;
+            const fd=new FormData();files.forEach(f=>fd.append('files',f,f.name));
+            addMsg('Ho ricevuto '+files.length+' file. Li passo all’Autopilot.','bot');
+            const r=await fetch('/operatore-bodymind/upload',{{method:'POST',headers:{{'X-CSRFToken':csrf}},body:fd}});
+            const data=await r.json();addMsg(data.text||'Analisi completata.','bot',data);speak(data.text||'Analisi completata.');
+          }}catch(e){{
+            addMsg('Il caricamento non è riuscito. Non ho modificato file esistenti.','bot');
+          }}finally{{
+            try{{picker.remove()}}catch(e){{}}
+          }}
+        }},{{once:true}});
+        picker.click();
+      }});
+
+      document.getElementById('bmoUploadForm').addEventListener('submit',async ev=>{{
+        ev.preventDefault();
+        const fd=new FormData();
+        const files=[...document.getElementById('bmoFiles').files,...document.getElementById('bmoFolder').files];
+        if(!files.length){{addMsg('Seleziona almeno un file o una cartella.','bot');return}}
+        files.forEach(f=>fd.append('files',f,f.webkitRelativePath||f.name));
+        addMsg('Sto passando '+files.length+' file all’Autopilot. Non chiudere questa pagina.','bot');
+        try{{
+          const r=await fetch('/operatore-bodymind/upload',{{method:'POST',headers:{{'X-CSRFToken':csrf}},body:fd}});
+          const data=await r.json();
+          addMsg(data.text||'Analisi completata.','bot',data);
+          speak(data.text||'Analisi completata.');
+        }}catch(e){{addMsg('Il caricamento non è riuscito. Non ho eliminato né modificato file esistenti.','bot')}}
+      }});
+    }})();
+    </script>
+    """
+    return layout(html)
+
+
+@app.post("/operatore-bodymind/voice-diag")
+@login_required
+def bodymind_operator_voice_diag():
+    payload=request.get_json(silent=True) or {}
+    safe={
+        "stage":str(payload.get("stage") or "")[:80],
+        "error":str(payload.get("error") or "")[:160],
+        "message":str(payload.get("message") or "")[:160],
+        "sr":bool(payload.get("sr")),
+        "synth":bool(payload.get("synth")),
+        "voices":int(payload.get("voices") or 0),
+        "voice":str(payload.get("voice") or "")[:120],
+        "gesture":bool(payload.get("gesture")),
+        "final":bool(payload.get("final")),
+        "len":int(payload.get("len") or 0),
+        "level":int(payload.get("level") or 0),
+        "muted":bool(payload.get("muted")),
+        "enabled":payload.get("enabled"),
+        "readyState":str(payload.get("readyState") or "")[:40],
+        "attempt":int(payload.get("attempt") or 0),
+        "ua":str(payload.get("ua") or "")[:220],
+    }
+    try:
+        line="[voice-diag] "+json.dumps(safe,ensure_ascii=False)
+        app.logger.info("%s", line)
+        print(line, flush=True)
+    except Exception:
+        pass
+    return jsonify({"ok":True}),200
+
+@app.post("/operatore-bodymind/chat")
+@login_required
+def bodymind_operator_chat():
+    payload=request.get_json(silent=True) or {}
+    message=str(payload.get("message") or "")[:8000]
+    conn=db()
+    try:
+        _schema(conn)
+        _log(conn,"user",message)
+        result=_answer(conn,message)
+        planner_used=False
+        # R45: cloud intelligence gets first shot. It may inspect the real system before choosing the action.
+        if str(result.get("mode") or "")=="fallback":
+            try:
+                trace=[]
+                discovery_tools={"discover_capabilities","inspect_route","inspect_system_map","inspect_db_schema"}
+                for agent_step in range(3):
+                    plan=_cloud_plan_tool(conn,message,trace)
+                    if not plan:
+                        break
+                    planner_used=True
+                    tool=str(plan.get("tool") or "").strip()
+                    if tool in ("none","unknown",""):
+                        answer=str(plan.get("answer") or "").strip()
+                        if answer:
+                            result={
+                                "text":answer,
+                                "mode":"cloud_ai",
+                                "allow_device_ai":False,
+                                "cloud_ai":True,
+                                "agent_plan":"none",
+                                "agent_steps":agent_step+1,
+                            }
+                        break
+                    tool_result=_execute_full_agent_plan(conn,plan,message)
+                    if not tool_result:
+                        break
+                    tool_result["agent_steps"]=agent_step+1
+                    if tool in discovery_tools and agent_step<2:
+                        trace.append(_compact_agent_observation(tool,tool_result))
+                        result=tool_result
+                        continue
+                    result=tool_result
+                    break
+            except Exception as cloud_planner_exc:
+                try:
+                    _log(conn,"system","R45 cloud planner unavailable: "+repr(cloud_planner_exc))
+                except Exception:
+                    pass
+
+        # R46 cloud-native: no Mac/Qwen fallback in the user request path.
+        if not planner_used and str(result.get("mode") or "")=="fallback":
+            err=str(_CLOUD_LAST_ERROR or "")
+            low=err.lower()
+            if "credit_balance_exhausted" in low or "insufficient_quota" in low or "no credits remaining" in low:
+                msg="L’IA cloud è configurata ma il credito API è esaurito. Non uso più il Mac/Qwen come ripiego, quindi non ti faccio aspettare inutilmente."
+            elif err:
+                msg="L’IA cloud non è disponibile in questo momento. Non ho eseguito modifiche e non uso il Mac/Qwen come ripiego."
+            else:
+                msg="Questa richiesta richiede l’IA cloud. Non ho eseguito modifiche."
+            result={"text":msg,"mode":"cloud_unavailable","allow_device_ai":False,"cloud_ai":False}
+
+        _log(conn,"assistant",result.get("text",""),result)
+        return jsonify(result)
+    except Exception as exc:
+        try:
+            _log(conn,"system","ERROR "+repr(exc))
+        except Exception:
+            pass
+        return jsonify({"text":"Ho incontrato un errore interno mentre controllavo i dati. Non ho eseguito modifiche.","mode":"error"}),500
+    finally:
+        conn.close()
+
+
+def _cloud_user_error(exc):
+    s=repr(exc)
+    low=s.lower()
+    if "credit_balance_exhausted" in low or "insufficient_quota" in low or "no credits remaining" in low:
+        return "Credito API OpenAI esaurito.",402
+    if "rate_limit" in low or "429" in low:
+        return "Limite temporaneo API raggiunto. Riprova tra poco.",429
+    return "Servizio IA cloud temporaneamente non disponibile.",503
+
+@app.get("/operatore-bodymind/cloud/status")
+@login_required
+def bodymind_cloud_status():
+    err=str(_CLOUD_LAST_ERROR or "")
+    blocked=any(x in err.lower() for x in ("credit_balance_exhausted","insufficient_quota","no credits remaining"))
+    configured=bool(str(os.environ.get("OPENAI_API_KEY") or "").strip()) and str(os.environ.get("BODYMIND_AI_CLOUD","1")).lower() in ("1","true","yes","on")
+    conn=db()
+    try:
+        budget=_usage_summary(conn)
+    finally:
+        conn.close()
+    return jsonify({
+        "configured":configured,
+        "ready":configured and not blocked,
+        "model":str(os.environ.get("BODYMIND_AI_MODEL") or "gpt-6-luna"),
+        "voice_model":str(os.environ.get("BODYMIND_TTS_MODEL") or "gpt-4o-mini-tts"),
+        "transcribe_model":str(os.environ.get("BODYMIND_STT_MODEL") or "gpt-transcribe"),
+        "last_ok_at":_CLOUD_LAST_OK_AT,
+        "local_ai_used":False,
+        "budget":budget,
+    })
+
+@app.post("/operatore-bodymind/voice/transcribe")
+@login_required
+def bodymind_cloud_transcribe():
+    if current_role() not in ("admin","manager"):
+        return jsonify({"text":"Permessi insufficienti."}),403
+    f=request.files.get("audio")
+    if not f:
+        return jsonify({"text":"Audio mancante."}),400
+    data=f.read()
+    if not data:
+        return jsonify({"text":"Audio vuoto."}),400
+    if len(data)>20*1024*1024:
+        return jsonify({"text":"Registrazione troppo grande."}),413
+    key=str(os.environ.get("OPENAI_API_KEY") or "").strip()
+    if not key:
+        return jsonify({"text":"IA cloud non configurata."}),503
+    try:
+        from openai import OpenAI
+        client=OpenAI(api_key=key,timeout=35.0,max_retries=0)
+        model=str(os.environ.get("BODYMIND_STT_MODEL") or "gpt-transcribe").strip()
+        filename=str(f.filename or "voce.webm")
+        mimetype=str(f.mimetype or "audio/webm")
+        tr=client.audio.transcriptions.create(model=model,file=(filename,data,mimetype),language="it")
+        text_out=str(getattr(tr,"text","") or "").strip()
+        if not text_out:
+            return jsonify({"text":"Non ho riconosciuto una frase."}),422
+        try: seconds=max(0.0,min(120.0,float(request.form.get("duration_ms") or 0)/1000.0))
+        except Exception: seconds=0.0
+        rate=_STT_USD_PER_MIN.get(model,0.0045)
+        conn=db()
+        try: _record_ai_usage(conn,"stt",model,0,0,seconds,(seconds/60.0)*rate)
+        finally: conn.close()
+        return jsonify({"ok":True,"text":text_out,"model":model})
+    except Exception as exc:
+        msg,status=_cloud_user_error(exc)
+        try: print("[cloud-voice-r46] stt_error="+repr(exc)[:900],flush=True)
+        except Exception: pass
+        return jsonify({"text":msg}),status
+
+@app.post("/operatore-bodymind/voice/speak")
+@login_required
+def bodymind_cloud_speak():
+    payload=request.get_json(silent=True) or {}
+    text_in=str(payload.get("text") or "").strip()[:5000]
+    if not text_in:
+        return jsonify({"text":"Testo mancante."}),400
+    key=str(os.environ.get("OPENAI_API_KEY") or "").strip()
+    if not key:
+        return jsonify({"text":"IA cloud non configurata."}),503
+    try:
+        from openai import OpenAI
+        client=OpenAI(api_key=key,timeout=35.0,max_retries=0)
+        model=str(os.environ.get("BODYMIND_TTS_MODEL") or "gpt-4o-mini-tts").strip()
+        voice_name=str(os.environ.get("BODYMIND_TTS_VOICE") or "coral").strip()
+        speech=client.audio.speech.create(
+            model=model,voice=voice_name,input=text_in,
+            instructions="Parla in italiano naturale, caldo e professionale. Sei una segretaria virtuale esperta di BodyMind. Ritmo conversazionale, niente tono robotico."
+        )
+        data=getattr(speech,"content",None)
+        if data is None and hasattr(speech,"read"):
+            data=speech.read()
+        if data is None and hasattr(speech,"response"):
+            data=getattr(speech.response,"content",None)
+        if not data:
+            raise RuntimeError("TTS returned no audio bytes")
+        usage_id="tts-"+uuid.uuid4().hex
+        conn=db()
+        try: _record_ai_usage(conn,"tts",model,0,0,0.0,0.0,usage_id)
+        finally: conn.close()
+        resp=Response(data,mimetype="audio/mpeg")
+        resp.headers["Cache-Control"]="no-store"
+        resp.headers["X-BodyMind-Voice"]="cloud-r47"
+        resp.headers["X-BodyMind-Usage-Id"]=usage_id
+        return resp
+    except Exception as exc:
+        msg,status=_cloud_user_error(exc)
+        try: print("[cloud-voice-r46] tts_error="+repr(exc)[:900],flush=True)
+        except Exception: pass
+        return jsonify({"text":msg}),status
+
+
+@app.post("/operatore-bodymind/cloud/usage/tts")
+@login_required
+def bodymind_cloud_tts_usage():
+    payload=request.get_json(silent=True) or {}
+    usage_id=str(payload.get("usage_id") or "").strip()
+    try: seconds=max(0.0,min(600.0,float(payload.get("seconds") or 0)))
+    except Exception: seconds=0.0
+    if not usage_id or seconds<=0:
+        return jsonify({"ok":False}),400
+    conn=db()
+    try:
+        row=conn.execute("SELECT id,model,seconds FROM bodymind_ai_usage WHERE request_id=? AND kind='tts' LIMIT 1",(usage_id,)).fetchone()
+        if row and float(row["seconds"] or 0)<=0:
+            rate=_TTS_EST_USD_PER_MIN.get(str(row["model"] or ""),0.015)
+            conn.execute("UPDATE bodymind_ai_usage SET seconds=?,estimated_usd=? WHERE id=?",(seconds,(seconds/60.0)*rate,int(row["id"])))
+            conn.commit()
+        budget=_usage_summary(conn)
+    finally:
+        conn.close()
+    return jsonify({"ok":True,"budget":budget})
+
+
+@app.post("/operatore-bodymind/upload")
+@login_required
+def bodymind_operator_upload():
+    if current_role() not in ("admin","manager"):
+        return jsonify({"text":"L’account connesso non può affidare documenti all’Autopilot.","mode":"warning"}),403
+    files=request.files.getlist("files")
+    if not files:
+        return jsonify({"text":"Non ho ricevuto file.","mode":"warning"}),400
+    from .routes_email_documents import process_inbound_attachment, ALLOWED_INBOUND_DOCS, extract_attachment_text, find_tesserato_for_text
+    from .routes_documenti import _save_uploaded_asd_document
+    results=[]; errors=[]
+    for f in files[:120]:
+        try:
+            name=(f.filename or "documento").replace("\\","/").split("/")[-1]
+            ext=Path(name).suffix.lower()
+            if ext not in ALLOWED_INBOUND_DOCS:
+                errors.append(name+" · formato non supportato")
+                continue
+            data=f.read()
+            if len(data)>40*1024*1024:
+                errors.append(name+" · oltre 40 MB")
+                continue
+            extracted=""
+            try: extracted=extract_attachment_text(name,data) or ""
+            except Exception: extracted=""
+            athlete_match=None
+            try: athlete_match=find_tesserato_for_text((name+" "+extracted).strip(),current_username())
+            except Exception: athlete_match=None
+            asd_kind=_classify_asd_document(name,extracted) if not athlete_match else None
+            if asd_kind:
+                try:
+                    f.stream.seek(0)
+                    _,saved_name=_save_uploaded_asd_document(f,asd_kind["folder"])
+                    results.append({
+                        "name":name,"status":"archiviato_asd","tesserato_id":None,
+                        "type":"documento_asd","confidence":asd_kind["confidence"],
+                        "folder":asd_kind["folder"],"reason":asd_kind["reason"],"saved_name":saved_name,
+                    })
+                    continue
+                except Exception as exc:
+                    errors.append(name+" · archivio ASD: "+str(exc)[:160])
+                    continue
+            res=process_inbound_attachment(
+                name,data,subject="Operatore BodyMind",
+                sender=current_username(),body_text="Caricato dalla scrivania Operatore BodyMind",
+                source="operatore_bodymind"
+            )
+            results.append({
+                "name":name,
+                "status":res.get("status"),
+                "tesserato_id":res.get("tesserato_id"),
+                "type":(res.get("classification") or {}).get("type"),
+                "confidence":(res.get("classification") or {}).get("confidence"),
+                "folder":"Dossier/Autopilot",
+            })
+        except Exception as exc:
+            errors.append((f.filename or "file")+" · "+str(exc)[:180])
+    auto=sum(1 for r in results if r.get("tesserato_id") and r.get("status") in ("associato","archived_to_tesserato"))
+    asd=sum(1 for r in results if r.get("status")=="archiviato_asd")
+    review=sum(1 for r in results if r.get("status") in PENDING_STATUSES or (not r.get("tesserato_id") and r.get("status")!="archiviato_asd"))
+    text=f"Ho analizzato {len(results)} file: {auto} associati a tesserati, {asd} archiviati come documenti ASD e {review} richiedono verifica."
+    if errors:
+        text+=f" {len(errors)} file non sono stati elaborati."
+    return jsonify({
+        "text":text,"mode":"upload","results":results,"errors":errors,
+        "links":[{"label":"Apri Da verificare","href":"/documenti/da-verificare"},{"label":"Apri Documenti","href":"/documenti"}]
+    })
+
+
+@app.after_request
+def bodymind_family_logo_override(resp):
+    """Keep the public family landing branded BodyMind, never the legacy ASD Pro logo."""
+    try:
+        if request.path != "/area-famiglie" or request.method != "GET" or int(resp.status_code or 200) != 200:
+            return resp
+        if "text/html" not in str(resp.headers.get("Content-Type","")).lower():
+            return resp
+        html=resp.get_data(as_text=True)
+        if "/bodymind-media/logo" in html:
+            html=html.replace("/bodymind-media/logo","https://bodymindaerialstudio.life/seed-media/logo?v=9")
+            resp.set_data(html)
+            resp.headers.pop("Content-Length",None)
+        resp.headers["X-BodyMind-Family-Logo"]="bodymind-public-logo-v1"
+    except Exception:
+        pass
+    return resp
+
+# BODYMIND_R39_FAMILY_LOGO_BODYMIND
+
+@app.after_request
+def bodymind_operator_microphone_policy(resp):
+    try:
+        if request.path.startswith("/operatore-bodymind"):
+            resp.headers["Permissions-Policy"]="microphone=(self)"
+            resp.headers["Cache-Control"]="no-store"
+    except Exception:
+        pass
+    return resp
+
+
+@app.after_request
+def bodymind_operator_mobile_entry(resp):
+    try:
+        if request.path!="/mobile" or request.method!="GET" or int(resp.status_code or 200)!=200:
+            return resp
+        if "text/html" not in str(resp.headers.get("Content-Type","")).lower():
+            return resp
+        if request.path.startswith("/operatore-bodymind"):
+            return resp
+        html=resp.get_data(as_text=True)
+        if "bmo-mobile-entry" in html:
+            return resp
+        button="""
+        <style id="bmo-mobile-entry-style">
+          /* BODYMIND_R39_IPHONE_ENTRY_V2 */
+          @media(max-width:800px){
+            #bmo-mobile-entry{
+              right:12px!important;
+              bottom:calc(86px + env(safe-area-inset-bottom))!important;
+              width:46px!important;
+              height:46px!important;
+              min-width:46px!important;
+              max-width:46px!important;
+              padding:0!important;
+              display:grid!important;
+              place-items:center!important;
+              border-radius:50%!important;
+              font-size:20px!important;
+              line-height:1!important;
+              overflow:hidden!important;
+            }
+          }
+        </style>
+        <a id="bmo-mobile-entry" href="/operatore-bodymind" aria-label="Apri Operatore BodyMind" title="Operatore BodyMind"
+           style="position:fixed;right:14px;bottom:calc(86px + env(safe-area-inset-bottom));z-index:9999;
+           width:46px;height:46px;display:grid;place-items:center;border-radius:50%;
+           background:rgba(18,10,22,.94);border:1px solid rgba(244,90,157,.42);color:#fff;
+           text-decoration:none;font-weight:900;font-size:20px;box-shadow:0 10px 26px rgba(0,0,0,.30);
+           backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)">✦</a>
+        """
+        html=html.replace("</body>",button+"</body>") if "</body>" in html else html+button
+        resp.set_data(html)
+    except Exception:
+        pass
+    return resp
+
+
+@app.get("/favicon.ico")
+def bodymind_operator_favicon():
+    return redirect("/bodymind-media/logo",code=302)
+
+
+@app.before_request
+def bodymind_operator_legacy_entrypoints():
+    if request.method!="GET":
+        return None
+    if request.path=="/assistente-automatico":
+        return redirect("/operatore-bodymind")
+    return None
++Number(b.estimated_spent_usd||0).toFixed(3)+' / 
 
       function esc(s){{const d=document.createElement('div');d.textContent=String(s??'');return d.innerHTML}}
       function addMsg(text,who='bot',data={{}}){{
@@ -2515,6 +3497,11 @@ def bodymind_cloud_status():
     err=str(_CLOUD_LAST_ERROR or "")
     blocked=any(x in err.lower() for x in ("credit_balance_exhausted","insufficient_quota","no credits remaining"))
     configured=bool(str(os.environ.get("OPENAI_API_KEY") or "").strip()) and str(os.environ.get("BODYMIND_AI_CLOUD","1")).lower() in ("1","true","yes","on")
+    conn=db()
+    try:
+        budget=_usage_summary(conn)
+    finally:
+        conn.close()
     return jsonify({
         "configured":configured,
         "ready":configured and not blocked,
@@ -2523,6 +3510,7 @@ def bodymind_cloud_status():
         "transcribe_model":str(os.environ.get("BODYMIND_STT_MODEL") or "gpt-transcribe"),
         "last_ok_at":_CLOUD_LAST_OK_AT,
         "local_ai_used":False,
+        "budget":budget,
     })
 
 @app.post("/operatore-bodymind/voice/transcribe")
@@ -2551,6 +3539,12 @@ def bodymind_cloud_transcribe():
         text_out=str(getattr(tr,"text","") or "").strip()
         if not text_out:
             return jsonify({"text":"Non ho riconosciuto una frase."}),422
+        try: seconds=max(0.0,min(120.0,float(request.form.get("duration_ms") or 0)/1000.0))
+        except Exception: seconds=0.0
+        rate=_STT_USD_PER_MIN.get(model,0.0045)
+        conn=db()
+        try: _record_ai_usage(conn,"stt",model,0,0,seconds,(seconds/60.0)*rate)
+        finally: conn.close()
         return jsonify({"ok":True,"text":text_out,"model":model})
     except Exception as exc:
         msg,status=_cloud_user_error(exc)
@@ -2584,15 +3578,2679 @@ def bodymind_cloud_speak():
             data=getattr(speech.response,"content",None)
         if not data:
             raise RuntimeError("TTS returned no audio bytes")
+        usage_id="tts-"+uuid.uuid4().hex
+        conn=db()
+        try: _record_ai_usage(conn,"tts",model,0,0,0.0,0.0,usage_id)
+        finally: conn.close()
         resp=Response(data,mimetype="audio/mpeg")
         resp.headers["Cache-Control"]="no-store"
-        resp.headers["X-BodyMind-Voice"]="cloud-r46"
+        resp.headers["X-BodyMind-Voice"]="cloud-r47"
+        resp.headers["X-BodyMind-Usage-Id"]=usage_id
         return resp
     except Exception as exc:
         msg,status=_cloud_user_error(exc)
         try: print("[cloud-voice-r46] tts_error="+repr(exc)[:900],flush=True)
         except Exception: pass
         return jsonify({"text":msg}),status
+
+
+@app.post("/operatore-bodymind/cloud/usage/tts")
+@login_required
+def bodymind_cloud_tts_usage():
+    payload=request.get_json(silent=True) or {}
+    usage_id=str(payload.get("usage_id") or "").strip()
+    try: seconds=max(0.0,min(600.0,float(payload.get("seconds") or 0)))
+    except Exception: seconds=0.0
+    if not usage_id or seconds<=0:
+        return jsonify({"ok":False}),400
+    conn=db()
+    try:
+        row=conn.execute("SELECT id,model,seconds FROM bodymind_ai_usage WHERE request_id=? AND kind='tts' LIMIT 1",(usage_id,)).fetchone()
+        if row and float(row["seconds"] or 0)<=0:
+            rate=_TTS_EST_USD_PER_MIN.get(str(row["model"] or ""),0.015)
+            conn.execute("UPDATE bodymind_ai_usage SET seconds=?,estimated_usd=? WHERE id=?",(seconds,(seconds/60.0)*rate,int(row["id"])))
+            conn.commit()
+        budget=_usage_summary(conn)
+    finally:
+        conn.close()
+    return jsonify({"ok":True,"budget":budget})
+
+
+@app.post("/operatore-bodymind/upload")
+@login_required
+def bodymind_operator_upload():
+    if current_role() not in ("admin","manager"):
+        return jsonify({"text":"L’account connesso non può affidare documenti all’Autopilot.","mode":"warning"}),403
+    files=request.files.getlist("files")
+    if not files:
+        return jsonify({"text":"Non ho ricevuto file.","mode":"warning"}),400
+    from .routes_email_documents import process_inbound_attachment, ALLOWED_INBOUND_DOCS, extract_attachment_text, find_tesserato_for_text
+    from .routes_documenti import _save_uploaded_asd_document
+    results=[]; errors=[]
+    for f in files[:120]:
+        try:
+            name=(f.filename or "documento").replace("\\","/").split("/")[-1]
+            ext=Path(name).suffix.lower()
+            if ext not in ALLOWED_INBOUND_DOCS:
+                errors.append(name+" · formato non supportato")
+                continue
+            data=f.read()
+            if len(data)>40*1024*1024:
+                errors.append(name+" · oltre 40 MB")
+                continue
+            extracted=""
+            try: extracted=extract_attachment_text(name,data) or ""
+            except Exception: extracted=""
+            athlete_match=None
+            try: athlete_match=find_tesserato_for_text((name+" "+extracted).strip(),current_username())
+            except Exception: athlete_match=None
+            asd_kind=_classify_asd_document(name,extracted) if not athlete_match else None
+            if asd_kind:
+                try:
+                    f.stream.seek(0)
+                    _,saved_name=_save_uploaded_asd_document(f,asd_kind["folder"])
+                    results.append({
+                        "name":name,"status":"archiviato_asd","tesserato_id":None,
+                        "type":"documento_asd","confidence":asd_kind["confidence"],
+                        "folder":asd_kind["folder"],"reason":asd_kind["reason"],"saved_name":saved_name,
+                    })
+                    continue
+                except Exception as exc:
+                    errors.append(name+" · archivio ASD: "+str(exc)[:160])
+                    continue
+            res=process_inbound_attachment(
+                name,data,subject="Operatore BodyMind",
+                sender=current_username(),body_text="Caricato dalla scrivania Operatore BodyMind",
+                source="operatore_bodymind"
+            )
+            results.append({
+                "name":name,
+                "status":res.get("status"),
+                "tesserato_id":res.get("tesserato_id"),
+                "type":(res.get("classification") or {}).get("type"),
+                "confidence":(res.get("classification") or {}).get("confidence"),
+                "folder":"Dossier/Autopilot",
+            })
+        except Exception as exc:
+            errors.append((f.filename or "file")+" · "+str(exc)[:180])
+    auto=sum(1 for r in results if r.get("tesserato_id") and r.get("status") in ("associato","archived_to_tesserato"))
+    asd=sum(1 for r in results if r.get("status")=="archiviato_asd")
+    review=sum(1 for r in results if r.get("status") in PENDING_STATUSES or (not r.get("tesserato_id") and r.get("status")!="archiviato_asd"))
+    text=f"Ho analizzato {len(results)} file: {auto} associati a tesserati, {asd} archiviati come documenti ASD e {review} richiedono verifica."
+    if errors:
+        text+=f" {len(errors)} file non sono stati elaborati."
+    return jsonify({
+        "text":text,"mode":"upload","results":results,"errors":errors,
+        "links":[{"label":"Apri Da verificare","href":"/documenti/da-verificare"},{"label":"Apri Documenti","href":"/documenti"}]
+    })
+
+
+@app.after_request
+def bodymind_family_logo_override(resp):
+    """Keep the public family landing branded BodyMind, never the legacy ASD Pro logo."""
+    try:
+        if request.path != "/area-famiglie" or request.method != "GET" or int(resp.status_code or 200) != 200:
+            return resp
+        if "text/html" not in str(resp.headers.get("Content-Type","")).lower():
+            return resp
+        html=resp.get_data(as_text=True)
+        if "/bodymind-media/logo" in html:
+            html=html.replace("/bodymind-media/logo","https://bodymindaerialstudio.life/seed-media/logo?v=9")
+            resp.set_data(html)
+            resp.headers.pop("Content-Length",None)
+        resp.headers["X-BodyMind-Family-Logo"]="bodymind-public-logo-v1"
+    except Exception:
+        pass
+    return resp
+
+# BODYMIND_R39_FAMILY_LOGO_BODYMIND
+
+@app.after_request
+def bodymind_operator_microphone_policy(resp):
+    try:
+        if request.path.startswith("/operatore-bodymind"):
+            resp.headers["Permissions-Policy"]="microphone=(self)"
+            resp.headers["Cache-Control"]="no-store"
+    except Exception:
+        pass
+    return resp
+
+
+@app.after_request
+def bodymind_operator_mobile_entry(resp):
+    try:
+        if request.path!="/mobile" or request.method!="GET" or int(resp.status_code or 200)!=200:
+            return resp
+        if "text/html" not in str(resp.headers.get("Content-Type","")).lower():
+            return resp
+        if request.path.startswith("/operatore-bodymind"):
+            return resp
+        html=resp.get_data(as_text=True)
+        if "bmo-mobile-entry" in html:
+            return resp
+        button="""
+        <style id="bmo-mobile-entry-style">
+          /* BODYMIND_R39_IPHONE_ENTRY_V2 */
+          @media(max-width:800px){
+            #bmo-mobile-entry{
+              right:12px!important;
+              bottom:calc(86px + env(safe-area-inset-bottom))!important;
+              width:46px!important;
+              height:46px!important;
+              min-width:46px!important;
+              max-width:46px!important;
+              padding:0!important;
+              display:grid!important;
+              place-items:center!important;
+              border-radius:50%!important;
+              font-size:20px!important;
+              line-height:1!important;
+              overflow:hidden!important;
+            }
+          }
+        </style>
+        <a id="bmo-mobile-entry" href="/operatore-bodymind" aria-label="Apri Operatore BodyMind" title="Operatore BodyMind"
+           style="position:fixed;right:14px;bottom:calc(86px + env(safe-area-inset-bottom));z-index:9999;
+           width:46px;height:46px;display:grid;place-items:center;border-radius:50%;
+           background:rgba(18,10,22,.94);border:1px solid rgba(244,90,157,.42);color:#fff;
+           text-decoration:none;font-weight:900;font-size:20px;box-shadow:0 10px 26px rgba(0,0,0,.30);
+           backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)">✦</a>
+        """
+        html=html.replace("</body>",button+"</body>") if "</body>" in html else html+button
+        resp.set_data(html)
+    except Exception:
+        pass
+    return resp
+
+
+@app.get("/favicon.ico")
+def bodymind_operator_favicon():
+    return redirect("/bodymind-media/logo",code=302)
+
+
+@app.before_request
+def bodymind_operator_legacy_entrypoints():
+    if request.method!="GET":
+        return None
+    if request.path=="/assistente-automatico":
+        return redirect("/operatore-bodymind")
+    return None
++Number(b.budget_usd||0).toFixed(2)+(d.last_ok_at?(' · ultimo successo '+d.last_ok_at):'');
+          if(showAlert && b.level && b.level!=='ok'){{
+            const key='bodymind-budget-'+b.level+'-'+Math.floor(Number(b.percent||0)/10);
+            let seen='';try{{seen=localStorage.getItem('bodymind_budget_alert')||''}}catch(e){{}}
+            if(seen!==key){{
+              let msg=b.exhausted
+                ?'⚠️ Credito API OpenAI esaurito. Ricarica il credito per continuare a usare l’Operatore cloud.'
+                :'⚠️ Budget IA: uso stimato '+Math.round(b.percent||0)+'% (
+
+      function esc(s){{const d=document.createElement('div');d.textContent=String(s??'');return d.innerHTML}}
+      function addMsg(text,who='bot',data={{}}){{
+        const box=document.createElement('div');box.className='bmo-msg '+(who==='me'?'me':'bot');
+        box.innerHTML=esc(text);
+        if(data.cards?.length){{
+          const w=document.createElement('div');w.className='bmo-cards';
+          data.cards.forEach(c=>{{const a=document.createElement('a');a.className='bmo-card';a.href=c.href||'#';a.innerHTML='<span>'+esc(c.title)+'</span><strong>'+esc(c.value)+'</strong>';w.appendChild(a)}});
+          box.appendChild(w);
+        }}
+        if(data.links?.length){{
+          const w=document.createElement('div');w.className='bmo-links';
+          data.links.forEach(l=>{{const a=document.createElement('a');a.className='bmo-link';a.href=l.href;a.textContent=l.label;w.appendChild(a)}});
+          box.appendChild(w);
+        }}
+        messages.appendChild(box);messages.scrollTop=messages.scrollHeight;
+      }}
+
+      function stopRecognitionForTTS(){{
+        clearRecognitionWatchdog();
+        if(recognition){{
+          const oldRecognition=recognition;
+          recognition=null;
+          try{{oldRecognition.abort()}}catch(e){{}}
+        }}
+        listening=false;
+        mic?.classList.remove('on');avatar?.classList.remove('listening');
+        stopMicStream();
+        voiceDiag('sr_aborted_for_tts');
+      }}
+      function speak(text,fromUserGesture=false){{
+        if(!voice || !voice.checked || !('speechSynthesis' in window) || !text)return;
+        lastSpeechText=String(text);
+        const chunks=speechChunks(text);
+        if(!chunks.length)return;
+        if(!fromUserGesture && !ttsPrimed){{
+          if(voiceRecover){{voiceRecover.hidden=false;voiceRecover.textContent='🔊 Ascolta risposta'}}
+          if(voiceStatus)voiceStatus.textContent='Tocca 🔊 Ascolta risposta';
+          voiceDiag('tts_waiting_user_gesture');
+          return;
+        }}
+        stopRecognitionForTTS();
+        const seq=++ttsSequence;
+        const begin=()=>{{
+          try{{
+            if(ttsRetryTimer){{clearTimeout(ttsRetryTimer);ttsRetryTimer=null}}
+            speechSynthesis.cancel();
+            speechSynthesis.resume();
+            refreshTTSVoices();
+            voiceDiag('tts_begin',{{gesture:!!fromUserGesture,voice:ttsVoice?.name||'',chunks:chunks.length}});
+            let index=0;
+            const next=()=>{{
+              if(seq!==ttsSequence||index>=chunks.length){{
+                ttsUtterance=null;avatar.classList.remove('speaking');
+                if(voiceStatus)voiceStatus.textContent='Tocca il microfono e parlami';
+                if(voiceRecover)voiceRecover.hidden=true;
+                voiceDiag('tts_complete');
+                return;
+              }}
+              const phrase=chunks[index++];
+              const u=new SpeechSynthesisUtterance(phrase);ttsUtterance=u;
+              u.lang='it-IT';u.rate=(phrase.length<55?1.0:.98);u.pitch=1.02;u.volume=1;
+              if(ttsVoice)u.voice=ttsVoice;
+              let started=false;
+              u.onstart=()=>{{
+                started=true;ttsPrimed=true;
+                try{{localStorage.setItem(TTS_KEY,'1')}}catch(e){{}}
+                avatar.classList.add('speaking');if(voiceRecover)voiceRecover.hidden=true;
+                if(voiceStatus)voiceStatus.textContent='Ti sto rispondendo…';
+                voiceDiag('tts_onstart',{{voice:u.voice?.name||'',index:index}});
+              }};
+              u.onend=()=>{{voiceDiag('tts_onend',{{index:index}});if(seq===ttsSequence)setTimeout(next,phrase.endsWith('.')?55:30)}};
+              u.onerror=e=>{{
+                voiceDiag('tts_onerror',{{error:String(e?.error||e?.message||'unknown'),index:index}});
+                ttsUtterance=null;avatar.classList.remove('speaking');
+                if(voiceRecover)voiceRecover.hidden=false;
+                if(voiceStatus)voiceStatus.textContent='Safari ha bloccato la voce: tocca 🔊 Attiva voce';
+              }};
+              speechSynthesis.speak(u);
+              if(index===1){{
+                ttsRetryTimer=setTimeout(()=>{{
+                  if(!started&&seq===ttsSequence&&ttsUtterance===u){{
+                    voiceDiag('tts_watchdog');
+                    try{{speechSynthesis.cancel();speechSynthesis.resume()}}catch(e){{}}
+                    if(voiceRecover)voiceRecover.hidden=false;
+                    if(voiceStatus)voiceStatus.textContent='Tocca 🔊 Attiva voce per riprodurre la risposta';
+                  }}
+                }},900);
+              }}
+            }};
+            next();
+          }}catch(e){{
+            voiceDiag('tts_throw',{{error:String(e?.message||e)}});
+            if(voiceRecover)voiceRecover.hidden=false;
+            if(voiceStatus)voiceStatus.textContent='Tocca 🔊 Attiva voce per riprodurre la risposta';
+          }}
+        }};
+        if(fromUserGesture){{
+          ttsPrimed=true;
+          try{{localStorage.setItem(TTS_KEY,'1')}}catch(e){{}}
+          begin();
+        }}else{{
+          setTimeout(begin,30);
+        }}
+      }}
+      voiceRecover?.addEventListener('click',()=>{{
+        voiceDiag('tts_recover_tap');
+        ttsPrimed=true;
+        try{{localStorage.setItem(TTS_KEY,'1')}}catch(e){{}}
+        speak(lastSpeechText||'Voce attiva.',true);
+      }});
+
+      // R38: local intelligence is only the paired iMac bridge; offline uses deterministic server logic.
+
+      async function ask(q){{
+        q=String(q||'').trim();if(!q)return;
+        addMsg(q,'me');input.value='';send.disabled=true;
+        try{{
+          const r=await fetch('/operatore-bodymind/chat',{{
+            method:'POST',headers:{{'Content-Type':'application/json','X-CSRFToken':csrf}},
+            body:JSON.stringify({{message:q}})
+          }});
+          const data=await r.json();
+          let text=data.text||'Non ho ricevuto una risposta.';
+          addMsg(text,'bot',data);speak(text);
+        }}catch(err){{
+          addMsg('Non riesco a contattare il motore dell’Operatore in questo momento. Non ho modificato nulla.','bot');
+        }}finally{{send.disabled=false;input.focus()}}
+      }}
+
+      send.addEventListener('click',()=>ask(input.value));
+      input.addEventListener('keydown',ev=>{{if(ev.key==='Enter'&&!ev.shiftKey){{ev.preventDefault();ask(input.value)}}}});
+      document.querySelectorAll('[data-q]').forEach(b=>b.addEventListener('click',()=>ask(b.dataset.q)));
+
+
+      function stopMicStream(){{
+        if(meterRAF){{cancelAnimationFrame(meterRAF);meterRAF=null}}
+        try{{audioContext?.close()}}catch(e){{}}
+        audioContext=null;analyser=null;
+        if(micStream){{micStream.getTracks().forEach(t=>t.stop());micStream=null}}
+      }}
+      function startMeter(stream){{
+        try{{
+          const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;
+          audioContext=new AC();const source=audioContext.createMediaStreamSource(stream);
+          analyser=audioContext.createAnalyser();analyser.fftSize=256;source.connect(analyser);
+          const data=new Uint8Array(analyser.frequencyBinCount);
+          const tick=()=>{{if(!analyser)return;analyser.getByteFrequencyData(data);let sum=0;for(let i=0;i<data.length;i++)sum+=data[i];const level=Math.min(1,(sum/data.length)/90);avatar.style.transform='scale('+(1+level*.045)+')';meterRAF=requestAnimationFrame(tick)}};tick();
+        }}catch(e){{}}
+      }}
+      async function ensureMic(){{
+        if(!window.isSecureContext)throw new Error('Il microfono richiede HTTPS.');
+        if(!navigator.mediaDevices?.getUserMedia)throw new Error('Questo browser non espone il microfono.');
+        if(micStream)return micStream;
+        micStream=await navigator.mediaDevices.getUserMedia({{audio:{{echoCancellation:true,noiseSuppression:true,autoGainControl:true}}}});
+        startMeter(micStream);return micStream;
+      }}
+      async function primeMicForRecognition(){{
+        if(!window.isSecureContext)throw new Error('Il microfono richiede HTTPS.');
+        if(!navigator.mediaDevices?.getUserMedia)throw new Error('Questo browser non espone il microfono.');
+        let stream=null,ctx=null,source=null,an=null;
+        try{{
+          voiceDiag('mic_prime_request');
+          stream=await navigator.mediaDevices.getUserMedia({{audio:{{echoCancellation:true,noiseSuppression:true,autoGainControl:true}},video:false}});
+          const track=(stream.getAudioTracks&&stream.getAudioTracks()[0])||null;
+          voiceDiag('mic_prime_granted',{{muted:!!track?.muted,enabled:track?track.enabled:null,readyState:track?.readyState||''}});
+          const AC=window.AudioContext||window.webkitAudioContext;
+          if(!AC)return {{ok:true,signal:null}};
+          ctx=new AC();
+          try{{await ctx.resume()}}catch(e){{}}
+          source=ctx.createMediaStreamSource(stream);
+          an=ctx.createAnalyser();an.fftSize=512;source.connect(an);
+          const data=new Uint8Array(an.fftSize);
+          let peak=0;
+          const until=performance.now()+700;
+          while(performance.now()<until){{
+            an.getByteTimeDomainData(data);
+            let sum=0;
+            for(let i=0;i<data.length;i++){{const d=(data[i]-128)/128;sum+=d*d}}
+            peak=Math.max(peak,Math.sqrt(sum/data.length));
+            await new Promise(res=>setTimeout(res,55));
+          }}
+          const level=Math.round(peak*1000);
+          voiceDiag('mic_prime_signal',{{level:level}});
+          return {{ok:true,signal:peak}};
+        }}catch(e){{
+          voiceDiag('mic_prime_error',{{error:String(e?.name||''),message:String(e?.message||e)}});
+          return {{ok:false,error:e}};
+        }}finally{{
+          try{{source?.disconnect()}}catch(e){{}}
+          try{{an?.disconnect()}}catch(e){{}}
+          try{{stream?.getTracks().forEach(t=>t.stop())}}catch(e){{}}
+          try{{await ctx?.close()}}catch(e){{}}
+        }}
+      }}
+      function humanMicError(code){{
+        const c=String(code||'');
+        if(c==='not-allowed'||c==='service-not-allowed')return 'Accesso al microfono negato. Consenti il microfono a BodyMind nelle impostazioni di Safari e riprova.';
+        if(c==='audio-capture')return 'Non riesco ad accedere al microfono del dispositivo.';
+        if(c==='aborted')return 'Il riconoscimento è stato interrotto.';
+        if(c==='no-speech')return 'Non ho sentito una frase. Tocca di nuovo il microfono e parla normalmente.';
+        if(c==='network')return 'Il riconoscimento vocale del browser non è riuscito a collegarsi. Riprova.';
+        return 'Il riconoscimento vocale non è partito correttamente ('+c+'). Riprova.';
+      }}
+
+      const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+      function clearRecognitionWatchdog(){{if(recognitionWatchdog){{clearTimeout(recognitionWatchdog);recognitionWatchdog=null}}}}
+      function resetRecognitionUI(){{
+        listening=false;clearRecognitionWatchdog();mic.classList.remove('on');avatar.classList.remove('listening');avatar.style.transform='';stopMicStream();
+      }}
+      function buildRecognition(){{
+        if(!SR)return null;
+        const r=new SR();
+        r.lang='it-IT';r.interimResults=true;r.continuous=false;r.maxAlternatives=1;
+        let submitted=false;
+        r.onstart=()=>{{
+          if(recognition!==r)return;
+          clearRecognitionWatchdog();listening=true;mic.classList.add('on');avatar.classList.add('listening');
+          if(voiceStatus)voiceStatus.textContent='Ti ascolto… parla normalmente';
+          voiceDiag('sr_onstart');
+        }};
+        r.onaudiostart=()=>voiceDiag('sr_onaudiostart');
+        r.onspeechstart=()=>voiceDiag('sr_onspeechstart');
+        r.onspeechend=()=>voiceDiag('sr_onspeechend');
+        r.onresult=ev=>{{
+          if(recognition!==r)return;
+          let txt='';let final=false;
+          for(let i=ev.resultIndex;i<ev.results.length;i++){{txt+=ev.results[i][0].transcript;if(ev.results[i].isFinal)final=true}}
+          input.value=txt.trim();voiceDiag('sr_onresult',{{final:final,len:input.value.length}});
+          if(final&&input.value&&!submitted){{submitted=true;if(voiceStatus)voiceStatus.textContent='Ho capito. Un attimo…';setTimeout(()=>ask(input.value),100)}}
+        }};
+        r.onerror=ev=>{{
+          const err=String(ev?.error||'unknown');
+          if(recognition!==r){{voiceDiag('sr_stale_error_ignored',{{error:err}});return}}
+          if(err==='aborted'){{recognition=null;resetRecognitionUI();voiceDiag('sr_aborted_ignored');return}}
+          voiceDiag('sr_onerror',{{error:err,message:String(ev?.message||'')}});
+          recognition=null;resetRecognitionUI();
+          const t=humanMicError(err);if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+        }};
+        r.onend=()=>{{
+          if(recognition===r)recognition=null;
+          voiceDiag('sr_onend',{{submitted:submitted}});resetRecognitionUI();
+          if(voiceStatus&&voiceStatus.textContent.startsWith('Ti ascolto'))voiceStatus.textContent='Tocca il microfono e parlami';
+        }};
+        return r;
+      }}
+      function waitSpeechIdle(done,tries=0){{
+        let busy=false;
+        try{{busy=!!(speechSynthesis?.speaking||speechSynthesis?.pending)}}catch(e){{}}
+        if(!busy||tries>=8){{setTimeout(done,220);return}}
+        try{{speechSynthesis.cancel()}}catch(e){{}}
+        setTimeout(()=>waitSpeechIdle(done,tries+1),120);
+      }}
+      async function startFreshRecognition(attempt=0){{
+        try{{
+          clearRecognitionWatchdog();
+          if(recognition){{const oldRecognition=recognition;recognition=null;try{{oldRecognition.abort()}}catch(e){{}}}}
+          resetRecognitionUI();
+          try{{ttsSequence++;speechSynthesis?.cancel()}}catch(e){{}}
+          voiceDiag(attempt?'sr_retry_prepare':'sr_prepare',{{attempt:attempt}});
+          const primed=await primeMicForRecognition();
+          if(!primed.ok){{
+            const err=primed.error||{{}};
+            resetRecognitionUI();
+            const t=(err.name==='NotAllowedError'||err.name==='SecurityError')
+              ?'Microfono non autorizzato. Consenti il microfono per BodyMind e riprova.'
+              :'Non riesco ad aprire il microfono del dispositivo.';
+            if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+            return;
+          }}
+          if(primed.signal!==null && primed.signal<0.002){{
+            voiceDiag('mic_prime_no_signal',{{level:Math.round(primed.signal*1000)}});
+            if(voiceStatus)voiceStatus.textContent='Microfono aperto ma non rilevo audio. Parla vicino al microfono e riprova.';
+          }}else{{
+            if(voiceStatus)voiceStatus.textContent='Microfono OK. Avvio riconoscimento…';
+          }}
+          await new Promise(res=>setTimeout(res,320));
+          waitSpeechIdle(()=>{{
+            try{{
+              recognition=buildRecognition();
+              if(!recognition)throw new Error('SpeechRecognition non disponibile');
+              voiceDiag(attempt?'sr_retry_call':'sr_start_call',{{attempt:attempt}});
+              recognition.start();
+              recognitionWatchdog=setTimeout(()=>{{
+                if(!listening&&recognition){{
+                  voiceDiag('sr_start_timeout',{{attempt:attempt}});
+                  const oldRecognition=recognition;
+                  recognition=null;
+                  resetRecognitionUI();
+                  try{{oldRecognition.abort()}}catch(e){{}}
+                  if(attempt<1){{
+                    if(voiceStatus)voiceStatus.textContent='Riprovo il microfono…';
+                    setTimeout(()=>{{startFreshRecognition(1).catch(()=>{{}})}},700);
+                  }}else{{
+                    const t='Safari non ha avviato il riconoscimento. Puoi riprovare il microfono; se iOS continua a bloccarlo, usa temporaneamente la dettatura della tastiera.';
+                    if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+                  }}
+                }}
+              }},7000);
+            }}catch(err){{
+              resetRecognitionUI();voiceDiag('sr_start_throw',{{error:String(err?.name||'')+':'+String(err?.message||err),attempt:attempt}});
+              if(attempt<1)setTimeout(()=>{{startFreshRecognition(1).catch(()=>{{}})}},500);
+              else{{
+                const t=(err?.name==='NotAllowedError'||err?.name==='SecurityError')?'Accesso al microfono negato. Consenti microfono e riconoscimento vocale a Safari e riprova.':('Microfono non disponibile: '+(err?.message||err));
+                if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+              }}
+            }}
+          }});
+        }}catch(err){{
+          resetRecognitionUI();voiceDiag('sr_prepare_throw',{{error:String(err?.message||err)}});
+        }}
+      }}
+      if(SR){{
+        // BODYMIND_R39_IOS_SR_RECREATE_V4
+        // BODYMIND_R39_IOS_SR_WEBKIT27_STATE_MACHINE_V5
+        mic.addEventListener('click',()=>{{
+          if(listening&&recognition){{try{{voiceDiag('sr_manual_stop');recognition.stop()}}catch(e){{}};return}}
+          startFreshRecognition(0).catch(err=>{{voiceDiag('sr_async_throw',{{error:String(err?.message||err)}})}});
+        }});
+      }}else{{
+        voiceDiag('sr_unavailable');
+        mic.addEventListener('click',()=>{{
+          const t='Su questo browser il riconoscimento vocale web non è disponibile.';
+          if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+        }});
+      }}
+
+      // BODYMIND_R46_CLOUD_NATIVE_VOICE
+      // Cloud STT + neural TTS. Legacy WebSpeech remains inert and is not the primary path.
+      let cloudRecorder=null,cloudChunks=[],cloudRecording=false,cloudAudio=null,cloudMaxTimer=null;
+
+      speak=async function(text,fromUserGesture=false){{
+        if(!voice || !voice.checked || !text)return;
+        lastSpeechText=String(text);
+        try{{
+          if(voiceStatus)voiceStatus.textContent='Genero la voce…';
+          const r=await fetch('/operatore-bodymind/voice/speak',{{
+            method:'POST',
+            headers:{{'Content-Type':'application/json','X-CSRFToken':csrf}},
+            body:JSON.stringify({{text:String(text)}})
+          }});
+          if(!r.ok){{
+            let d={{}};try{{d=await r.json()}}catch(e){{}}
+            throw new Error(d.text||('TTS HTTP '+r.status));
+          }}
+          const blob=await r.blob();
+          const url=URL.createObjectURL(blob);
+          try{{if(cloudAudio){{cloudAudio.pause();if(cloudAudio.src)URL.revokeObjectURL(cloudAudio.src)}}}}catch(e){{}}
+          cloudAudio=new Audio(url);
+          cloudAudio.preload='auto';
+          cloudAudio.onplay=()=>{{avatar?.classList.add('speaking');if(voiceStatus)voiceStatus.textContent='Ti sto rispondendo…';if(voiceRecover)voiceRecover.hidden=true;}};
+          cloudAudio.onended=()=>{{avatar?.classList.remove('speaking');if(voiceStatus)voiceStatus.textContent='Tocca il microfono e parlami';try{{URL.revokeObjectURL(url)}}catch(e){{}}}};
+          try{{
+            await cloudAudio.play();
+          }}catch(e){{
+            if(voiceRecover){{voiceRecover.hidden=false;voiceRecover.textContent='🔊 Ascolta risposta'}}
+            if(voiceStatus)voiceStatus.textContent='Risposta pronta: tocca 🔊 per ascoltarla';
+          }}
+        }}catch(e){{
+          if(voiceStatus)voiceStatus.textContent='Voce cloud non disponibile';
+          voiceDiag('cloud_tts_error',{{error:String(e?.message||e)}});
+        }}
+      }};
+
+      if(voiceRecover){{
+        voiceRecover.onclick=async(ev)=>{{
+          ev.preventDefault();ev.stopImmediatePropagation();
+          if(cloudAudio){{try{{await cloudAudio.play();voiceRecover.hidden=true}}catch(e){{}}}}
+          else if(lastSpeechText){{speak(lastSpeechText,true)}}
+        }};
+      }}
+
+      async function cloudStopAndTranscribe(){{
+        if(!cloudRecording||!cloudRecorder)return;
+        cloudRecording=false;
+        if(cloudMaxTimer){{clearTimeout(cloudMaxTimer);cloudMaxTimer=null}}
+        if(voiceStatus)voiceStatus.textContent='Trascrivo…';
+        try{{cloudRecorder.stop()}}catch(e){{}}
+      }}
+
+      async function cloudStartMic(ev){{
+        if(ev){{ev.preventDefault();ev.stopImmediatePropagation()}}
+        if(cloudRecording){{await cloudStopAndTranscribe();return}}
+        if(!window.MediaRecorder || !navigator.mediaDevices?.getUserMedia){{
+          const t='Questo browser non supporta la registrazione cloud. Usa un browser aggiornato oppure scrivi la richiesta.';
+          if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');return;
+        }}
+        try{{
+          const stream=await navigator.mediaDevices.getUserMedia({{audio:{{echoCancellation:true,noiseSuppression:true,autoGainControl:true}},video:false}});
+          let mime='';
+          for(const m of ['audio/mp4','audio/webm;codecs=opus','audio/webm']){{if(MediaRecorder.isTypeSupported?.(m)){{mime=m;break}}}}
+          cloudChunks=[];
+          cloudRecorder=new MediaRecorder(stream,mime?{{mimeType:mime}}:undefined);
+          cloudRecorder.ondataavailable=e=>{{if(e.data&&e.data.size)cloudChunks.push(e.data)}};
+          cloudRecorder.onerror=e=>{{voiceDiag('cloud_recorder_error',{{error:String(e?.error?.message||e?.message||e)}})}};
+          cloudRecorder.onstop=async()=>{{
+            mic.classList.remove('on');avatar.classList.remove('listening');
+            try{{stream.getTracks().forEach(t=>t.stop())}}catch(e){{}}
+            const blob=new Blob(cloudChunks,{{type:cloudRecorder?.mimeType||mime||'audio/webm'}});
+            if(blob.size<1000){{if(voiceStatus)voiceStatus.textContent='Non ho rilevato audio. Riprova.';return}}
+            const ext=(blob.type||'').includes('mp4')?'m4a':'webm';
+            const fd=new FormData();fd.append('audio',blob,'voce.'+ext);
+            try{{
+              const r=await fetch('/operatore-bodymind/voice/transcribe',{{method:'POST',headers:{{'X-CSRFToken':csrf}},body:fd}});
+              const d=await r.json();
+              if(!r.ok)throw new Error(d.text||('STT HTTP '+r.status));
+              input.value=String(d.text||'').trim();
+              if(!input.value)throw new Error('Trascrizione vuota');
+              if(voiceStatus)voiceStatus.textContent='Ho capito. Elaboro…';
+              await ask(input.value);
+            }}catch(e){{
+              const t=String(e?.message||e||'Trascrizione cloud non disponibile');
+              if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+            }}
+          }};
+          cloudRecorder.start(250);
+          cloudRecording=true;
+          mic.classList.add('on');avatar.classList.add('listening');
+          if(voiceStatus)voiceStatus.textContent='Ti ascolto… tocca di nuovo per inviare';
+          cloudMaxTimer=setTimeout(()=>{{if(cloudRecording)cloudStopAndTranscribe()}},18000);
+        }}catch(e){{
+          cloudRecording=false;mic.classList.remove('on');avatar.classList.remove('listening');
+          const t=(e?.name==='NotAllowedError'||e?.name==='SecurityError')
+            ?'Microfono non autorizzato. Consenti il microfono a BodyMind e riprova.'
+            :'Non riesco ad aprire il microfono.';
+          if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+        }}
+      }}
+      mic.addEventListener('click',cloudStartMic,true);
+
+      attach?.addEventListener('click',()=>{{
+        const picker=document.createElement('input');
+        picker.type='file';
+        picker.multiple=true;
+        picker.accept='.pdf,.png,.jpg,.jpeg,.webp,.docx';
+        picker.setAttribute('aria-hidden','true');
+        picker.tabIndex=-1;
+        picker.style.setProperty('display','none','important');
+        document.body.appendChild(picker);
+        picker.addEventListener('change',async()=>{{
+          const files=[...(picker.files||[])];
+          try{{
+            if(!files.length)return;
+            const fd=new FormData();files.forEach(f=>fd.append('files',f,f.name));
+            addMsg('Ho ricevuto '+files.length+' file. Li passo all’Autopilot.','bot');
+            const r=await fetch('/operatore-bodymind/upload',{{method:'POST',headers:{{'X-CSRFToken':csrf}},body:fd}});
+            const data=await r.json();addMsg(data.text||'Analisi completata.','bot',data);speak(data.text||'Analisi completata.');
+          }}catch(e){{
+            addMsg('Il caricamento non è riuscito. Non ho modificato file esistenti.','bot');
+          }}finally{{
+            try{{picker.remove()}}catch(e){{}}
+          }}
+        }},{{once:true}});
+        picker.click();
+      }});
+
+      document.getElementById('bmoUploadForm').addEventListener('submit',async ev=>{{
+        ev.preventDefault();
+        const fd=new FormData();
+        const files=[...document.getElementById('bmoFiles').files,...document.getElementById('bmoFolder').files];
+        if(!files.length){{addMsg('Seleziona almeno un file o una cartella.','bot');return}}
+        files.forEach(f=>fd.append('files',f,f.webkitRelativePath||f.name));
+        addMsg('Sto passando '+files.length+' file all’Autopilot. Non chiudere questa pagina.','bot');
+        try{{
+          const r=await fetch('/operatore-bodymind/upload',{{method:'POST',headers:{{'X-CSRFToken':csrf}},body:fd}});
+          const data=await r.json();
+          addMsg(data.text||'Analisi completata.','bot',data);
+          speak(data.text||'Analisi completata.');
+        }}catch(e){{addMsg('Il caricamento non è riuscito. Non ho eliminato né modificato file esistenti.','bot')}}
+      }});
+    }})();
+    </script>
+    """
+    return layout(html)
+
+
+@app.post("/operatore-bodymind/voice-diag")
+@login_required
+def bodymind_operator_voice_diag():
+    payload=request.get_json(silent=True) or {}
+    safe={
+        "stage":str(payload.get("stage") or "")[:80],
+        "error":str(payload.get("error") or "")[:160],
+        "message":str(payload.get("message") or "")[:160],
+        "sr":bool(payload.get("sr")),
+        "synth":bool(payload.get("synth")),
+        "voices":int(payload.get("voices") or 0),
+        "voice":str(payload.get("voice") or "")[:120],
+        "gesture":bool(payload.get("gesture")),
+        "final":bool(payload.get("final")),
+        "len":int(payload.get("len") or 0),
+        "level":int(payload.get("level") or 0),
+        "muted":bool(payload.get("muted")),
+        "enabled":payload.get("enabled"),
+        "readyState":str(payload.get("readyState") or "")[:40],
+        "attempt":int(payload.get("attempt") or 0),
+        "ua":str(payload.get("ua") or "")[:220],
+    }
+    try:
+        line="[voice-diag] "+json.dumps(safe,ensure_ascii=False)
+        app.logger.info("%s", line)
+        print(line, flush=True)
+    except Exception:
+        pass
+    return jsonify({"ok":True}),200
+
+@app.post("/operatore-bodymind/chat")
+@login_required
+def bodymind_operator_chat():
+    payload=request.get_json(silent=True) or {}
+    message=str(payload.get("message") or "")[:8000]
+    conn=db()
+    try:
+        _schema(conn)
+        _log(conn,"user",message)
+        result=_answer(conn,message)
+        planner_used=False
+        # R45: cloud intelligence gets first shot. It may inspect the real system before choosing the action.
+        if str(result.get("mode") or "")=="fallback":
+            try:
+                trace=[]
+                discovery_tools={"discover_capabilities","inspect_route","inspect_system_map","inspect_db_schema"}
+                for agent_step in range(3):
+                    plan=_cloud_plan_tool(conn,message,trace)
+                    if not plan:
+                        break
+                    planner_used=True
+                    tool=str(plan.get("tool") or "").strip()
+                    if tool in ("none","unknown",""):
+                        answer=str(plan.get("answer") or "").strip()
+                        if answer:
+                            result={
+                                "text":answer,
+                                "mode":"cloud_ai",
+                                "allow_device_ai":False,
+                                "cloud_ai":True,
+                                "agent_plan":"none",
+                                "agent_steps":agent_step+1,
+                            }
+                        break
+                    tool_result=_execute_full_agent_plan(conn,plan,message)
+                    if not tool_result:
+                        break
+                    tool_result["agent_steps"]=agent_step+1
+                    if tool in discovery_tools and agent_step<2:
+                        trace.append(_compact_agent_observation(tool,tool_result))
+                        result=tool_result
+                        continue
+                    result=tool_result
+                    break
+            except Exception as cloud_planner_exc:
+                try:
+                    _log(conn,"system","R45 cloud planner unavailable: "+repr(cloud_planner_exc))
+                except Exception:
+                    pass
+
+        # R46 cloud-native: no Mac/Qwen fallback in the user request path.
+        if not planner_used and str(result.get("mode") or "")=="fallback":
+            err=str(_CLOUD_LAST_ERROR or "")
+            low=err.lower()
+            if "credit_balance_exhausted" in low or "insufficient_quota" in low or "no credits remaining" in low:
+                msg="L’IA cloud è configurata ma il credito API è esaurito. Non uso più il Mac/Qwen come ripiego, quindi non ti faccio aspettare inutilmente."
+            elif err:
+                msg="L’IA cloud non è disponibile in questo momento. Non ho eseguito modifiche e non uso il Mac/Qwen come ripiego."
+            else:
+                msg="Questa richiesta richiede l’IA cloud. Non ho eseguito modifiche."
+            result={"text":msg,"mode":"cloud_unavailable","allow_device_ai":False,"cloud_ai":False}
+
+        _log(conn,"assistant",result.get("text",""),result)
+        return jsonify(result)
+    except Exception as exc:
+        try:
+            _log(conn,"system","ERROR "+repr(exc))
+        except Exception:
+            pass
+        return jsonify({"text":"Ho incontrato un errore interno mentre controllavo i dati. Non ho eseguito modifiche.","mode":"error"}),500
+    finally:
+        conn.close()
+
+
+def _cloud_user_error(exc):
+    s=repr(exc)
+    low=s.lower()
+    if "credit_balance_exhausted" in low or "insufficient_quota" in low or "no credits remaining" in low:
+        return "Credito API OpenAI esaurito.",402
+    if "rate_limit" in low or "429" in low:
+        return "Limite temporaneo API raggiunto. Riprova tra poco.",429
+    return "Servizio IA cloud temporaneamente non disponibile.",503
+
+@app.get("/operatore-bodymind/cloud/status")
+@login_required
+def bodymind_cloud_status():
+    err=str(_CLOUD_LAST_ERROR or "")
+    blocked=any(x in err.lower() for x in ("credit_balance_exhausted","insufficient_quota","no credits remaining"))
+    configured=bool(str(os.environ.get("OPENAI_API_KEY") or "").strip()) and str(os.environ.get("BODYMIND_AI_CLOUD","1")).lower() in ("1","true","yes","on")
+    conn=db()
+    try:
+        budget=_usage_summary(conn)
+    finally:
+        conn.close()
+    return jsonify({
+        "configured":configured,
+        "ready":configured and not blocked,
+        "model":str(os.environ.get("BODYMIND_AI_MODEL") or "gpt-6-luna"),
+        "voice_model":str(os.environ.get("BODYMIND_TTS_MODEL") or "gpt-4o-mini-tts"),
+        "transcribe_model":str(os.environ.get("BODYMIND_STT_MODEL") or "gpt-transcribe"),
+        "last_ok_at":_CLOUD_LAST_OK_AT,
+        "local_ai_used":False,
+        "budget":budget,
+    })
+
+@app.post("/operatore-bodymind/voice/transcribe")
+@login_required
+def bodymind_cloud_transcribe():
+    if current_role() not in ("admin","manager"):
+        return jsonify({"text":"Permessi insufficienti."}),403
+    f=request.files.get("audio")
+    if not f:
+        return jsonify({"text":"Audio mancante."}),400
+    data=f.read()
+    if not data:
+        return jsonify({"text":"Audio vuoto."}),400
+    if len(data)>20*1024*1024:
+        return jsonify({"text":"Registrazione troppo grande."}),413
+    key=str(os.environ.get("OPENAI_API_KEY") or "").strip()
+    if not key:
+        return jsonify({"text":"IA cloud non configurata."}),503
+    try:
+        from openai import OpenAI
+        client=OpenAI(api_key=key,timeout=35.0,max_retries=0)
+        model=str(os.environ.get("BODYMIND_STT_MODEL") or "gpt-transcribe").strip()
+        filename=str(f.filename or "voce.webm")
+        mimetype=str(f.mimetype or "audio/webm")
+        tr=client.audio.transcriptions.create(model=model,file=(filename,data,mimetype),language="it")
+        text_out=str(getattr(tr,"text","") or "").strip()
+        if not text_out:
+            return jsonify({"text":"Non ho riconosciuto una frase."}),422
+        try: seconds=max(0.0,min(120.0,float(request.form.get("duration_ms") or 0)/1000.0))
+        except Exception: seconds=0.0
+        rate=_STT_USD_PER_MIN.get(model,0.0045)
+        conn=db()
+        try: _record_ai_usage(conn,"stt",model,0,0,seconds,(seconds/60.0)*rate)
+        finally: conn.close()
+        return jsonify({"ok":True,"text":text_out,"model":model})
+    except Exception as exc:
+        msg,status=_cloud_user_error(exc)
+        try: print("[cloud-voice-r46] stt_error="+repr(exc)[:900],flush=True)
+        except Exception: pass
+        return jsonify({"text":msg}),status
+
+@app.post("/operatore-bodymind/voice/speak")
+@login_required
+def bodymind_cloud_speak():
+    payload=request.get_json(silent=True) or {}
+    text_in=str(payload.get("text") or "").strip()[:5000]
+    if not text_in:
+        return jsonify({"text":"Testo mancante."}),400
+    key=str(os.environ.get("OPENAI_API_KEY") or "").strip()
+    if not key:
+        return jsonify({"text":"IA cloud non configurata."}),503
+    try:
+        from openai import OpenAI
+        client=OpenAI(api_key=key,timeout=35.0,max_retries=0)
+        model=str(os.environ.get("BODYMIND_TTS_MODEL") or "gpt-4o-mini-tts").strip()
+        voice_name=str(os.environ.get("BODYMIND_TTS_VOICE") or "coral").strip()
+        speech=client.audio.speech.create(
+            model=model,voice=voice_name,input=text_in,
+            instructions="Parla in italiano naturale, caldo e professionale. Sei una segretaria virtuale esperta di BodyMind. Ritmo conversazionale, niente tono robotico."
+        )
+        data=getattr(speech,"content",None)
+        if data is None and hasattr(speech,"read"):
+            data=speech.read()
+        if data is None and hasattr(speech,"response"):
+            data=getattr(speech.response,"content",None)
+        if not data:
+            raise RuntimeError("TTS returned no audio bytes")
+        usage_id="tts-"+uuid.uuid4().hex
+        conn=db()
+        try: _record_ai_usage(conn,"tts",model,0,0,0.0,0.0,usage_id)
+        finally: conn.close()
+        resp=Response(data,mimetype="audio/mpeg")
+        resp.headers["Cache-Control"]="no-store"
+        resp.headers["X-BodyMind-Voice"]="cloud-r47"
+        resp.headers["X-BodyMind-Usage-Id"]=usage_id
+        return resp
+    except Exception as exc:
+        msg,status=_cloud_user_error(exc)
+        try: print("[cloud-voice-r46] tts_error="+repr(exc)[:900],flush=True)
+        except Exception: pass
+        return jsonify({"text":msg}),status
+
+
+@app.post("/operatore-bodymind/cloud/usage/tts")
+@login_required
+def bodymind_cloud_tts_usage():
+    payload=request.get_json(silent=True) or {}
+    usage_id=str(payload.get("usage_id") or "").strip()
+    try: seconds=max(0.0,min(600.0,float(payload.get("seconds") or 0)))
+    except Exception: seconds=0.0
+    if not usage_id or seconds<=0:
+        return jsonify({"ok":False}),400
+    conn=db()
+    try:
+        row=conn.execute("SELECT id,model,seconds FROM bodymind_ai_usage WHERE request_id=? AND kind='tts' LIMIT 1",(usage_id,)).fetchone()
+        if row and float(row["seconds"] or 0)<=0:
+            rate=_TTS_EST_USD_PER_MIN.get(str(row["model"] or ""),0.015)
+            conn.execute("UPDATE bodymind_ai_usage SET seconds=?,estimated_usd=? WHERE id=?",(seconds,(seconds/60.0)*rate,int(row["id"])))
+            conn.commit()
+        budget=_usage_summary(conn)
+    finally:
+        conn.close()
+    return jsonify({"ok":True,"budget":budget})
+
+
+@app.post("/operatore-bodymind/upload")
+@login_required
+def bodymind_operator_upload():
+    if current_role() not in ("admin","manager"):
+        return jsonify({"text":"L’account connesso non può affidare documenti all’Autopilot.","mode":"warning"}),403
+    files=request.files.getlist("files")
+    if not files:
+        return jsonify({"text":"Non ho ricevuto file.","mode":"warning"}),400
+    from .routes_email_documents import process_inbound_attachment, ALLOWED_INBOUND_DOCS, extract_attachment_text, find_tesserato_for_text
+    from .routes_documenti import _save_uploaded_asd_document
+    results=[]; errors=[]
+    for f in files[:120]:
+        try:
+            name=(f.filename or "documento").replace("\\","/").split("/")[-1]
+            ext=Path(name).suffix.lower()
+            if ext not in ALLOWED_INBOUND_DOCS:
+                errors.append(name+" · formato non supportato")
+                continue
+            data=f.read()
+            if len(data)>40*1024*1024:
+                errors.append(name+" · oltre 40 MB")
+                continue
+            extracted=""
+            try: extracted=extract_attachment_text(name,data) or ""
+            except Exception: extracted=""
+            athlete_match=None
+            try: athlete_match=find_tesserato_for_text((name+" "+extracted).strip(),current_username())
+            except Exception: athlete_match=None
+            asd_kind=_classify_asd_document(name,extracted) if not athlete_match else None
+            if asd_kind:
+                try:
+                    f.stream.seek(0)
+                    _,saved_name=_save_uploaded_asd_document(f,asd_kind["folder"])
+                    results.append({
+                        "name":name,"status":"archiviato_asd","tesserato_id":None,
+                        "type":"documento_asd","confidence":asd_kind["confidence"],
+                        "folder":asd_kind["folder"],"reason":asd_kind["reason"],"saved_name":saved_name,
+                    })
+                    continue
+                except Exception as exc:
+                    errors.append(name+" · archivio ASD: "+str(exc)[:160])
+                    continue
+            res=process_inbound_attachment(
+                name,data,subject="Operatore BodyMind",
+                sender=current_username(),body_text="Caricato dalla scrivania Operatore BodyMind",
+                source="operatore_bodymind"
+            )
+            results.append({
+                "name":name,
+                "status":res.get("status"),
+                "tesserato_id":res.get("tesserato_id"),
+                "type":(res.get("classification") or {}).get("type"),
+                "confidence":(res.get("classification") or {}).get("confidence"),
+                "folder":"Dossier/Autopilot",
+            })
+        except Exception as exc:
+            errors.append((f.filename or "file")+" · "+str(exc)[:180])
+    auto=sum(1 for r in results if r.get("tesserato_id") and r.get("status") in ("associato","archived_to_tesserato"))
+    asd=sum(1 for r in results if r.get("status")=="archiviato_asd")
+    review=sum(1 for r in results if r.get("status") in PENDING_STATUSES or (not r.get("tesserato_id") and r.get("status")!="archiviato_asd"))
+    text=f"Ho analizzato {len(results)} file: {auto} associati a tesserati, {asd} archiviati come documenti ASD e {review} richiedono verifica."
+    if errors:
+        text+=f" {len(errors)} file non sono stati elaborati."
+    return jsonify({
+        "text":text,"mode":"upload","results":results,"errors":errors,
+        "links":[{"label":"Apri Da verificare","href":"/documenti/da-verificare"},{"label":"Apri Documenti","href":"/documenti"}]
+    })
+
+
+@app.after_request
+def bodymind_family_logo_override(resp):
+    """Keep the public family landing branded BodyMind, never the legacy ASD Pro logo."""
+    try:
+        if request.path != "/area-famiglie" or request.method != "GET" or int(resp.status_code or 200) != 200:
+            return resp
+        if "text/html" not in str(resp.headers.get("Content-Type","")).lower():
+            return resp
+        html=resp.get_data(as_text=True)
+        if "/bodymind-media/logo" in html:
+            html=html.replace("/bodymind-media/logo","https://bodymindaerialstudio.life/seed-media/logo?v=9")
+            resp.set_data(html)
+            resp.headers.pop("Content-Length",None)
+        resp.headers["X-BodyMind-Family-Logo"]="bodymind-public-logo-v1"
+    except Exception:
+        pass
+    return resp
+
+# BODYMIND_R39_FAMILY_LOGO_BODYMIND
+
+@app.after_request
+def bodymind_operator_microphone_policy(resp):
+    try:
+        if request.path.startswith("/operatore-bodymind"):
+            resp.headers["Permissions-Policy"]="microphone=(self)"
+            resp.headers["Cache-Control"]="no-store"
+    except Exception:
+        pass
+    return resp
+
+
+@app.after_request
+def bodymind_operator_mobile_entry(resp):
+    try:
+        if request.path!="/mobile" or request.method!="GET" or int(resp.status_code or 200)!=200:
+            return resp
+        if "text/html" not in str(resp.headers.get("Content-Type","")).lower():
+            return resp
+        if request.path.startswith("/operatore-bodymind"):
+            return resp
+        html=resp.get_data(as_text=True)
+        if "bmo-mobile-entry" in html:
+            return resp
+        button="""
+        <style id="bmo-mobile-entry-style">
+          /* BODYMIND_R39_IPHONE_ENTRY_V2 */
+          @media(max-width:800px){
+            #bmo-mobile-entry{
+              right:12px!important;
+              bottom:calc(86px + env(safe-area-inset-bottom))!important;
+              width:46px!important;
+              height:46px!important;
+              min-width:46px!important;
+              max-width:46px!important;
+              padding:0!important;
+              display:grid!important;
+              place-items:center!important;
+              border-radius:50%!important;
+              font-size:20px!important;
+              line-height:1!important;
+              overflow:hidden!important;
+            }
+          }
+        </style>
+        <a id="bmo-mobile-entry" href="/operatore-bodymind" aria-label="Apri Operatore BodyMind" title="Operatore BodyMind"
+           style="position:fixed;right:14px;bottom:calc(86px + env(safe-area-inset-bottom));z-index:9999;
+           width:46px;height:46px;display:grid;place-items:center;border-radius:50%;
+           background:rgba(18,10,22,.94);border:1px solid rgba(244,90,157,.42);color:#fff;
+           text-decoration:none;font-weight:900;font-size:20px;box-shadow:0 10px 26px rgba(0,0,0,.30);
+           backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)">✦</a>
+        """
+        html=html.replace("</body>",button+"</body>") if "</body>" in html else html+button
+        resp.set_data(html)
+    except Exception:
+        pass
+    return resp
+
+
+@app.get("/favicon.ico")
+def bodymind_operator_favicon():
+    return redirect("/bodymind-media/logo",code=302)
+
+
+@app.before_request
+def bodymind_operator_legacy_entrypoints():
+    if request.method!="GET":
+        return None
+    if request.path=="/assistente-automatico":
+        return redirect("/operatore-bodymind")
+    return None
++Number(b.estimated_spent_usd||0).toFixed(2)+' su 
+
+      function esc(s){{const d=document.createElement('div');d.textContent=String(s??'');return d.innerHTML}}
+      function addMsg(text,who='bot',data={{}}){{
+        const box=document.createElement('div');box.className='bmo-msg '+(who==='me'?'me':'bot');
+        box.innerHTML=esc(text);
+        if(data.cards?.length){{
+          const w=document.createElement('div');w.className='bmo-cards';
+          data.cards.forEach(c=>{{const a=document.createElement('a');a.className='bmo-card';a.href=c.href||'#';a.innerHTML='<span>'+esc(c.title)+'</span><strong>'+esc(c.value)+'</strong>';w.appendChild(a)}});
+          box.appendChild(w);
+        }}
+        if(data.links?.length){{
+          const w=document.createElement('div');w.className='bmo-links';
+          data.links.forEach(l=>{{const a=document.createElement('a');a.className='bmo-link';a.href=l.href;a.textContent=l.label;w.appendChild(a)}});
+          box.appendChild(w);
+        }}
+        messages.appendChild(box);messages.scrollTop=messages.scrollHeight;
+      }}
+
+      function stopRecognitionForTTS(){{
+        clearRecognitionWatchdog();
+        if(recognition){{
+          const oldRecognition=recognition;
+          recognition=null;
+          try{{oldRecognition.abort()}}catch(e){{}}
+        }}
+        listening=false;
+        mic?.classList.remove('on');avatar?.classList.remove('listening');
+        stopMicStream();
+        voiceDiag('sr_aborted_for_tts');
+      }}
+      function speak(text,fromUserGesture=false){{
+        if(!voice || !voice.checked || !('speechSynthesis' in window) || !text)return;
+        lastSpeechText=String(text);
+        const chunks=speechChunks(text);
+        if(!chunks.length)return;
+        if(!fromUserGesture && !ttsPrimed){{
+          if(voiceRecover){{voiceRecover.hidden=false;voiceRecover.textContent='🔊 Ascolta risposta'}}
+          if(voiceStatus)voiceStatus.textContent='Tocca 🔊 Ascolta risposta';
+          voiceDiag('tts_waiting_user_gesture');
+          return;
+        }}
+        stopRecognitionForTTS();
+        const seq=++ttsSequence;
+        const begin=()=>{{
+          try{{
+            if(ttsRetryTimer){{clearTimeout(ttsRetryTimer);ttsRetryTimer=null}}
+            speechSynthesis.cancel();
+            speechSynthesis.resume();
+            refreshTTSVoices();
+            voiceDiag('tts_begin',{{gesture:!!fromUserGesture,voice:ttsVoice?.name||'',chunks:chunks.length}});
+            let index=0;
+            const next=()=>{{
+              if(seq!==ttsSequence||index>=chunks.length){{
+                ttsUtterance=null;avatar.classList.remove('speaking');
+                if(voiceStatus)voiceStatus.textContent='Tocca il microfono e parlami';
+                if(voiceRecover)voiceRecover.hidden=true;
+                voiceDiag('tts_complete');
+                return;
+              }}
+              const phrase=chunks[index++];
+              const u=new SpeechSynthesisUtterance(phrase);ttsUtterance=u;
+              u.lang='it-IT';u.rate=(phrase.length<55?1.0:.98);u.pitch=1.02;u.volume=1;
+              if(ttsVoice)u.voice=ttsVoice;
+              let started=false;
+              u.onstart=()=>{{
+                started=true;ttsPrimed=true;
+                try{{localStorage.setItem(TTS_KEY,'1')}}catch(e){{}}
+                avatar.classList.add('speaking');if(voiceRecover)voiceRecover.hidden=true;
+                if(voiceStatus)voiceStatus.textContent='Ti sto rispondendo…';
+                voiceDiag('tts_onstart',{{voice:u.voice?.name||'',index:index}});
+              }};
+              u.onend=()=>{{voiceDiag('tts_onend',{{index:index}});if(seq===ttsSequence)setTimeout(next,phrase.endsWith('.')?55:30)}};
+              u.onerror=e=>{{
+                voiceDiag('tts_onerror',{{error:String(e?.error||e?.message||'unknown'),index:index}});
+                ttsUtterance=null;avatar.classList.remove('speaking');
+                if(voiceRecover)voiceRecover.hidden=false;
+                if(voiceStatus)voiceStatus.textContent='Safari ha bloccato la voce: tocca 🔊 Attiva voce';
+              }};
+              speechSynthesis.speak(u);
+              if(index===1){{
+                ttsRetryTimer=setTimeout(()=>{{
+                  if(!started&&seq===ttsSequence&&ttsUtterance===u){{
+                    voiceDiag('tts_watchdog');
+                    try{{speechSynthesis.cancel();speechSynthesis.resume()}}catch(e){{}}
+                    if(voiceRecover)voiceRecover.hidden=false;
+                    if(voiceStatus)voiceStatus.textContent='Tocca 🔊 Attiva voce per riprodurre la risposta';
+                  }}
+                }},900);
+              }}
+            }};
+            next();
+          }}catch(e){{
+            voiceDiag('tts_throw',{{error:String(e?.message||e)}});
+            if(voiceRecover)voiceRecover.hidden=false;
+            if(voiceStatus)voiceStatus.textContent='Tocca 🔊 Attiva voce per riprodurre la risposta';
+          }}
+        }};
+        if(fromUserGesture){{
+          ttsPrimed=true;
+          try{{localStorage.setItem(TTS_KEY,'1')}}catch(e){{}}
+          begin();
+        }}else{{
+          setTimeout(begin,30);
+        }}
+      }}
+      voiceRecover?.addEventListener('click',()=>{{
+        voiceDiag('tts_recover_tap');
+        ttsPrimed=true;
+        try{{localStorage.setItem(TTS_KEY,'1')}}catch(e){{}}
+        speak(lastSpeechText||'Voce attiva.',true);
+      }});
+
+      // R38: local intelligence is only the paired iMac bridge; offline uses deterministic server logic.
+
+      async function ask(q){{
+        q=String(q||'').trim();if(!q)return;
+        addMsg(q,'me');input.value='';send.disabled=true;
+        try{{
+          const r=await fetch('/operatore-bodymind/chat',{{
+            method:'POST',headers:{{'Content-Type':'application/json','X-CSRFToken':csrf}},
+            body:JSON.stringify({{message:q}})
+          }});
+          const data=await r.json();
+          let text=data.text||'Non ho ricevuto una risposta.';
+          addMsg(text,'bot',data);speak(text);
+        }}catch(err){{
+          addMsg('Non riesco a contattare il motore dell’Operatore in questo momento. Non ho modificato nulla.','bot');
+        }}finally{{send.disabled=false;input.focus()}}
+      }}
+
+      send.addEventListener('click',()=>ask(input.value));
+      input.addEventListener('keydown',ev=>{{if(ev.key==='Enter'&&!ev.shiftKey){{ev.preventDefault();ask(input.value)}}}});
+      document.querySelectorAll('[data-q]').forEach(b=>b.addEventListener('click',()=>ask(b.dataset.q)));
+
+
+      function stopMicStream(){{
+        if(meterRAF){{cancelAnimationFrame(meterRAF);meterRAF=null}}
+        try{{audioContext?.close()}}catch(e){{}}
+        audioContext=null;analyser=null;
+        if(micStream){{micStream.getTracks().forEach(t=>t.stop());micStream=null}}
+      }}
+      function startMeter(stream){{
+        try{{
+          const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;
+          audioContext=new AC();const source=audioContext.createMediaStreamSource(stream);
+          analyser=audioContext.createAnalyser();analyser.fftSize=256;source.connect(analyser);
+          const data=new Uint8Array(analyser.frequencyBinCount);
+          const tick=()=>{{if(!analyser)return;analyser.getByteFrequencyData(data);let sum=0;for(let i=0;i<data.length;i++)sum+=data[i];const level=Math.min(1,(sum/data.length)/90);avatar.style.transform='scale('+(1+level*.045)+')';meterRAF=requestAnimationFrame(tick)}};tick();
+        }}catch(e){{}}
+      }}
+      async function ensureMic(){{
+        if(!window.isSecureContext)throw new Error('Il microfono richiede HTTPS.');
+        if(!navigator.mediaDevices?.getUserMedia)throw new Error('Questo browser non espone il microfono.');
+        if(micStream)return micStream;
+        micStream=await navigator.mediaDevices.getUserMedia({{audio:{{echoCancellation:true,noiseSuppression:true,autoGainControl:true}}}});
+        startMeter(micStream);return micStream;
+      }}
+      async function primeMicForRecognition(){{
+        if(!window.isSecureContext)throw new Error('Il microfono richiede HTTPS.');
+        if(!navigator.mediaDevices?.getUserMedia)throw new Error('Questo browser non espone il microfono.');
+        let stream=null,ctx=null,source=null,an=null;
+        try{{
+          voiceDiag('mic_prime_request');
+          stream=await navigator.mediaDevices.getUserMedia({{audio:{{echoCancellation:true,noiseSuppression:true,autoGainControl:true}},video:false}});
+          const track=(stream.getAudioTracks&&stream.getAudioTracks()[0])||null;
+          voiceDiag('mic_prime_granted',{{muted:!!track?.muted,enabled:track?track.enabled:null,readyState:track?.readyState||''}});
+          const AC=window.AudioContext||window.webkitAudioContext;
+          if(!AC)return {{ok:true,signal:null}};
+          ctx=new AC();
+          try{{await ctx.resume()}}catch(e){{}}
+          source=ctx.createMediaStreamSource(stream);
+          an=ctx.createAnalyser();an.fftSize=512;source.connect(an);
+          const data=new Uint8Array(an.fftSize);
+          let peak=0;
+          const until=performance.now()+700;
+          while(performance.now()<until){{
+            an.getByteTimeDomainData(data);
+            let sum=0;
+            for(let i=0;i<data.length;i++){{const d=(data[i]-128)/128;sum+=d*d}}
+            peak=Math.max(peak,Math.sqrt(sum/data.length));
+            await new Promise(res=>setTimeout(res,55));
+          }}
+          const level=Math.round(peak*1000);
+          voiceDiag('mic_prime_signal',{{level:level}});
+          return {{ok:true,signal:peak}};
+        }}catch(e){{
+          voiceDiag('mic_prime_error',{{error:String(e?.name||''),message:String(e?.message||e)}});
+          return {{ok:false,error:e}};
+        }}finally{{
+          try{{source?.disconnect()}}catch(e){{}}
+          try{{an?.disconnect()}}catch(e){{}}
+          try{{stream?.getTracks().forEach(t=>t.stop())}}catch(e){{}}
+          try{{await ctx?.close()}}catch(e){{}}
+        }}
+      }}
+      function humanMicError(code){{
+        const c=String(code||'');
+        if(c==='not-allowed'||c==='service-not-allowed')return 'Accesso al microfono negato. Consenti il microfono a BodyMind nelle impostazioni di Safari e riprova.';
+        if(c==='audio-capture')return 'Non riesco ad accedere al microfono del dispositivo.';
+        if(c==='aborted')return 'Il riconoscimento è stato interrotto.';
+        if(c==='no-speech')return 'Non ho sentito una frase. Tocca di nuovo il microfono e parla normalmente.';
+        if(c==='network')return 'Il riconoscimento vocale del browser non è riuscito a collegarsi. Riprova.';
+        return 'Il riconoscimento vocale non è partito correttamente ('+c+'). Riprova.';
+      }}
+
+      const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+      function clearRecognitionWatchdog(){{if(recognitionWatchdog){{clearTimeout(recognitionWatchdog);recognitionWatchdog=null}}}}
+      function resetRecognitionUI(){{
+        listening=false;clearRecognitionWatchdog();mic.classList.remove('on');avatar.classList.remove('listening');avatar.style.transform='';stopMicStream();
+      }}
+      function buildRecognition(){{
+        if(!SR)return null;
+        const r=new SR();
+        r.lang='it-IT';r.interimResults=true;r.continuous=false;r.maxAlternatives=1;
+        let submitted=false;
+        r.onstart=()=>{{
+          if(recognition!==r)return;
+          clearRecognitionWatchdog();listening=true;mic.classList.add('on');avatar.classList.add('listening');
+          if(voiceStatus)voiceStatus.textContent='Ti ascolto… parla normalmente';
+          voiceDiag('sr_onstart');
+        }};
+        r.onaudiostart=()=>voiceDiag('sr_onaudiostart');
+        r.onspeechstart=()=>voiceDiag('sr_onspeechstart');
+        r.onspeechend=()=>voiceDiag('sr_onspeechend');
+        r.onresult=ev=>{{
+          if(recognition!==r)return;
+          let txt='';let final=false;
+          for(let i=ev.resultIndex;i<ev.results.length;i++){{txt+=ev.results[i][0].transcript;if(ev.results[i].isFinal)final=true}}
+          input.value=txt.trim();voiceDiag('sr_onresult',{{final:final,len:input.value.length}});
+          if(final&&input.value&&!submitted){{submitted=true;if(voiceStatus)voiceStatus.textContent='Ho capito. Un attimo…';setTimeout(()=>ask(input.value),100)}}
+        }};
+        r.onerror=ev=>{{
+          const err=String(ev?.error||'unknown');
+          if(recognition!==r){{voiceDiag('sr_stale_error_ignored',{{error:err}});return}}
+          if(err==='aborted'){{recognition=null;resetRecognitionUI();voiceDiag('sr_aborted_ignored');return}}
+          voiceDiag('sr_onerror',{{error:err,message:String(ev?.message||'')}});
+          recognition=null;resetRecognitionUI();
+          const t=humanMicError(err);if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+        }};
+        r.onend=()=>{{
+          if(recognition===r)recognition=null;
+          voiceDiag('sr_onend',{{submitted:submitted}});resetRecognitionUI();
+          if(voiceStatus&&voiceStatus.textContent.startsWith('Ti ascolto'))voiceStatus.textContent='Tocca il microfono e parlami';
+        }};
+        return r;
+      }}
+      function waitSpeechIdle(done,tries=0){{
+        let busy=false;
+        try{{busy=!!(speechSynthesis?.speaking||speechSynthesis?.pending)}}catch(e){{}}
+        if(!busy||tries>=8){{setTimeout(done,220);return}}
+        try{{speechSynthesis.cancel()}}catch(e){{}}
+        setTimeout(()=>waitSpeechIdle(done,tries+1),120);
+      }}
+      async function startFreshRecognition(attempt=0){{
+        try{{
+          clearRecognitionWatchdog();
+          if(recognition){{const oldRecognition=recognition;recognition=null;try{{oldRecognition.abort()}}catch(e){{}}}}
+          resetRecognitionUI();
+          try{{ttsSequence++;speechSynthesis?.cancel()}}catch(e){{}}
+          voiceDiag(attempt?'sr_retry_prepare':'sr_prepare',{{attempt:attempt}});
+          const primed=await primeMicForRecognition();
+          if(!primed.ok){{
+            const err=primed.error||{{}};
+            resetRecognitionUI();
+            const t=(err.name==='NotAllowedError'||err.name==='SecurityError')
+              ?'Microfono non autorizzato. Consenti il microfono per BodyMind e riprova.'
+              :'Non riesco ad aprire il microfono del dispositivo.';
+            if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+            return;
+          }}
+          if(primed.signal!==null && primed.signal<0.002){{
+            voiceDiag('mic_prime_no_signal',{{level:Math.round(primed.signal*1000)}});
+            if(voiceStatus)voiceStatus.textContent='Microfono aperto ma non rilevo audio. Parla vicino al microfono e riprova.';
+          }}else{{
+            if(voiceStatus)voiceStatus.textContent='Microfono OK. Avvio riconoscimento…';
+          }}
+          await new Promise(res=>setTimeout(res,320));
+          waitSpeechIdle(()=>{{
+            try{{
+              recognition=buildRecognition();
+              if(!recognition)throw new Error('SpeechRecognition non disponibile');
+              voiceDiag(attempt?'sr_retry_call':'sr_start_call',{{attempt:attempt}});
+              recognition.start();
+              recognitionWatchdog=setTimeout(()=>{{
+                if(!listening&&recognition){{
+                  voiceDiag('sr_start_timeout',{{attempt:attempt}});
+                  const oldRecognition=recognition;
+                  recognition=null;
+                  resetRecognitionUI();
+                  try{{oldRecognition.abort()}}catch(e){{}}
+                  if(attempt<1){{
+                    if(voiceStatus)voiceStatus.textContent='Riprovo il microfono…';
+                    setTimeout(()=>{{startFreshRecognition(1).catch(()=>{{}})}},700);
+                  }}else{{
+                    const t='Safari non ha avviato il riconoscimento. Puoi riprovare il microfono; se iOS continua a bloccarlo, usa temporaneamente la dettatura della tastiera.';
+                    if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+                  }}
+                }}
+              }},7000);
+            }}catch(err){{
+              resetRecognitionUI();voiceDiag('sr_start_throw',{{error:String(err?.name||'')+':'+String(err?.message||err),attempt:attempt}});
+              if(attempt<1)setTimeout(()=>{{startFreshRecognition(1).catch(()=>{{}})}},500);
+              else{{
+                const t=(err?.name==='NotAllowedError'||err?.name==='SecurityError')?'Accesso al microfono negato. Consenti microfono e riconoscimento vocale a Safari e riprova.':('Microfono non disponibile: '+(err?.message||err));
+                if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+              }}
+            }}
+          }});
+        }}catch(err){{
+          resetRecognitionUI();voiceDiag('sr_prepare_throw',{{error:String(err?.message||err)}});
+        }}
+      }}
+      if(SR){{
+        // BODYMIND_R39_IOS_SR_RECREATE_V4
+        // BODYMIND_R39_IOS_SR_WEBKIT27_STATE_MACHINE_V5
+        mic.addEventListener('click',()=>{{
+          if(listening&&recognition){{try{{voiceDiag('sr_manual_stop');recognition.stop()}}catch(e){{}};return}}
+          startFreshRecognition(0).catch(err=>{{voiceDiag('sr_async_throw',{{error:String(err?.message||err)}})}});
+        }});
+      }}else{{
+        voiceDiag('sr_unavailable');
+        mic.addEventListener('click',()=>{{
+          const t='Su questo browser il riconoscimento vocale web non è disponibile.';
+          if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+        }});
+      }}
+
+      // BODYMIND_R46_CLOUD_NATIVE_VOICE
+      // Cloud STT + neural TTS. Legacy WebSpeech remains inert and is not the primary path.
+      let cloudRecorder=null,cloudChunks=[],cloudRecording=false,cloudAudio=null,cloudMaxTimer=null;
+
+      speak=async function(text,fromUserGesture=false){{
+        if(!voice || !voice.checked || !text)return;
+        lastSpeechText=String(text);
+        try{{
+          if(voiceStatus)voiceStatus.textContent='Genero la voce…';
+          const r=await fetch('/operatore-bodymind/voice/speak',{{
+            method:'POST',
+            headers:{{'Content-Type':'application/json','X-CSRFToken':csrf}},
+            body:JSON.stringify({{text:String(text)}})
+          }});
+          if(!r.ok){{
+            let d={{}};try{{d=await r.json()}}catch(e){{}}
+            throw new Error(d.text||('TTS HTTP '+r.status));
+          }}
+          const blob=await r.blob();
+          const url=URL.createObjectURL(blob);
+          try{{if(cloudAudio){{cloudAudio.pause();if(cloudAudio.src)URL.revokeObjectURL(cloudAudio.src)}}}}catch(e){{}}
+          cloudAudio=new Audio(url);
+          cloudAudio.preload='auto';
+          cloudAudio.onplay=()=>{{avatar?.classList.add('speaking');if(voiceStatus)voiceStatus.textContent='Ti sto rispondendo…';if(voiceRecover)voiceRecover.hidden=true;}};
+          cloudAudio.onended=()=>{{avatar?.classList.remove('speaking');if(voiceStatus)voiceStatus.textContent='Tocca il microfono e parlami';try{{URL.revokeObjectURL(url)}}catch(e){{}}}};
+          try{{
+            await cloudAudio.play();
+          }}catch(e){{
+            if(voiceRecover){{voiceRecover.hidden=false;voiceRecover.textContent='🔊 Ascolta risposta'}}
+            if(voiceStatus)voiceStatus.textContent='Risposta pronta: tocca 🔊 per ascoltarla';
+          }}
+        }}catch(e){{
+          if(voiceStatus)voiceStatus.textContent='Voce cloud non disponibile';
+          voiceDiag('cloud_tts_error',{{error:String(e?.message||e)}});
+        }}
+      }};
+
+      if(voiceRecover){{
+        voiceRecover.onclick=async(ev)=>{{
+          ev.preventDefault();ev.stopImmediatePropagation();
+          if(cloudAudio){{try{{await cloudAudio.play();voiceRecover.hidden=true}}catch(e){{}}}}
+          else if(lastSpeechText){{speak(lastSpeechText,true)}}
+        }};
+      }}
+
+      async function cloudStopAndTranscribe(){{
+        if(!cloudRecording||!cloudRecorder)return;
+        cloudRecording=false;
+        if(cloudMaxTimer){{clearTimeout(cloudMaxTimer);cloudMaxTimer=null}}
+        if(voiceStatus)voiceStatus.textContent='Trascrivo…';
+        try{{cloudRecorder.stop()}}catch(e){{}}
+      }}
+
+      async function cloudStartMic(ev){{
+        if(ev){{ev.preventDefault();ev.stopImmediatePropagation()}}
+        if(cloudRecording){{await cloudStopAndTranscribe();return}}
+        if(!window.MediaRecorder || !navigator.mediaDevices?.getUserMedia){{
+          const t='Questo browser non supporta la registrazione cloud. Usa un browser aggiornato oppure scrivi la richiesta.';
+          if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');return;
+        }}
+        try{{
+          const stream=await navigator.mediaDevices.getUserMedia({{audio:{{echoCancellation:true,noiseSuppression:true,autoGainControl:true}},video:false}});
+          let mime='';
+          for(const m of ['audio/mp4','audio/webm;codecs=opus','audio/webm']){{if(MediaRecorder.isTypeSupported?.(m)){{mime=m;break}}}}
+          cloudChunks=[];
+          cloudRecorder=new MediaRecorder(stream,mime?{{mimeType:mime}}:undefined);
+          cloudRecorder.ondataavailable=e=>{{if(e.data&&e.data.size)cloudChunks.push(e.data)}};
+          cloudRecorder.onerror=e=>{{voiceDiag('cloud_recorder_error',{{error:String(e?.error?.message||e?.message||e)}})}};
+          cloudRecorder.onstop=async()=>{{
+            mic.classList.remove('on');avatar.classList.remove('listening');
+            try{{stream.getTracks().forEach(t=>t.stop())}}catch(e){{}}
+            const blob=new Blob(cloudChunks,{{type:cloudRecorder?.mimeType||mime||'audio/webm'}});
+            if(blob.size<1000){{if(voiceStatus)voiceStatus.textContent='Non ho rilevato audio. Riprova.';return}}
+            const ext=(blob.type||'').includes('mp4')?'m4a':'webm';
+            const fd=new FormData();fd.append('audio',blob,'voce.'+ext);
+            try{{
+              const r=await fetch('/operatore-bodymind/voice/transcribe',{{method:'POST',headers:{{'X-CSRFToken':csrf}},body:fd}});
+              const d=await r.json();
+              if(!r.ok)throw new Error(d.text||('STT HTTP '+r.status));
+              input.value=String(d.text||'').trim();
+              if(!input.value)throw new Error('Trascrizione vuota');
+              if(voiceStatus)voiceStatus.textContent='Ho capito. Elaboro…';
+              await ask(input.value);
+            }}catch(e){{
+              const t=String(e?.message||e||'Trascrizione cloud non disponibile');
+              if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+            }}
+          }};
+          cloudRecorder.start(250);
+          cloudRecording=true;
+          mic.classList.add('on');avatar.classList.add('listening');
+          if(voiceStatus)voiceStatus.textContent='Ti ascolto… tocca di nuovo per inviare';
+          cloudMaxTimer=setTimeout(()=>{{if(cloudRecording)cloudStopAndTranscribe()}},18000);
+        }}catch(e){{
+          cloudRecording=false;mic.classList.remove('on');avatar.classList.remove('listening');
+          const t=(e?.name==='NotAllowedError'||e?.name==='SecurityError')
+            ?'Microfono non autorizzato. Consenti il microfono a BodyMind e riprova.'
+            :'Non riesco ad aprire il microfono.';
+          if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+        }}
+      }}
+      mic.addEventListener('click',cloudStartMic,true);
+
+      attach?.addEventListener('click',()=>{{
+        const picker=document.createElement('input');
+        picker.type='file';
+        picker.multiple=true;
+        picker.accept='.pdf,.png,.jpg,.jpeg,.webp,.docx';
+        picker.setAttribute('aria-hidden','true');
+        picker.tabIndex=-1;
+        picker.style.setProperty('display','none','important');
+        document.body.appendChild(picker);
+        picker.addEventListener('change',async()=>{{
+          const files=[...(picker.files||[])];
+          try{{
+            if(!files.length)return;
+            const fd=new FormData();files.forEach(f=>fd.append('files',f,f.name));
+            addMsg('Ho ricevuto '+files.length+' file. Li passo all’Autopilot.','bot');
+            const r=await fetch('/operatore-bodymind/upload',{{method:'POST',headers:{{'X-CSRFToken':csrf}},body:fd}});
+            const data=await r.json();addMsg(data.text||'Analisi completata.','bot',data);speak(data.text||'Analisi completata.');
+          }}catch(e){{
+            addMsg('Il caricamento non è riuscito. Non ho modificato file esistenti.','bot');
+          }}finally{{
+            try{{picker.remove()}}catch(e){{}}
+          }}
+        }},{{once:true}});
+        picker.click();
+      }});
+
+      document.getElementById('bmoUploadForm').addEventListener('submit',async ev=>{{
+        ev.preventDefault();
+        const fd=new FormData();
+        const files=[...document.getElementById('bmoFiles').files,...document.getElementById('bmoFolder').files];
+        if(!files.length){{addMsg('Seleziona almeno un file o una cartella.','bot');return}}
+        files.forEach(f=>fd.append('files',f,f.webkitRelativePath||f.name));
+        addMsg('Sto passando '+files.length+' file all’Autopilot. Non chiudere questa pagina.','bot');
+        try{{
+          const r=await fetch('/operatore-bodymind/upload',{{method:'POST',headers:{{'X-CSRFToken':csrf}},body:fd}});
+          const data=await r.json();
+          addMsg(data.text||'Analisi completata.','bot',data);
+          speak(data.text||'Analisi completata.');
+        }}catch(e){{addMsg('Il caricamento non è riuscito. Non ho eliminato né modificato file esistenti.','bot')}}
+      }});
+    }})();
+    </script>
+    """
+    return layout(html)
+
+
+@app.post("/operatore-bodymind/voice-diag")
+@login_required
+def bodymind_operator_voice_diag():
+    payload=request.get_json(silent=True) or {}
+    safe={
+        "stage":str(payload.get("stage") or "")[:80],
+        "error":str(payload.get("error") or "")[:160],
+        "message":str(payload.get("message") or "")[:160],
+        "sr":bool(payload.get("sr")),
+        "synth":bool(payload.get("synth")),
+        "voices":int(payload.get("voices") or 0),
+        "voice":str(payload.get("voice") or "")[:120],
+        "gesture":bool(payload.get("gesture")),
+        "final":bool(payload.get("final")),
+        "len":int(payload.get("len") or 0),
+        "level":int(payload.get("level") or 0),
+        "muted":bool(payload.get("muted")),
+        "enabled":payload.get("enabled"),
+        "readyState":str(payload.get("readyState") or "")[:40],
+        "attempt":int(payload.get("attempt") or 0),
+        "ua":str(payload.get("ua") or "")[:220],
+    }
+    try:
+        line="[voice-diag] "+json.dumps(safe,ensure_ascii=False)
+        app.logger.info("%s", line)
+        print(line, flush=True)
+    except Exception:
+        pass
+    return jsonify({"ok":True}),200
+
+@app.post("/operatore-bodymind/chat")
+@login_required
+def bodymind_operator_chat():
+    payload=request.get_json(silent=True) or {}
+    message=str(payload.get("message") or "")[:8000]
+    conn=db()
+    try:
+        _schema(conn)
+        _log(conn,"user",message)
+        result=_answer(conn,message)
+        planner_used=False
+        # R45: cloud intelligence gets first shot. It may inspect the real system before choosing the action.
+        if str(result.get("mode") or "")=="fallback":
+            try:
+                trace=[]
+                discovery_tools={"discover_capabilities","inspect_route","inspect_system_map","inspect_db_schema"}
+                for agent_step in range(3):
+                    plan=_cloud_plan_tool(conn,message,trace)
+                    if not plan:
+                        break
+                    planner_used=True
+                    tool=str(plan.get("tool") or "").strip()
+                    if tool in ("none","unknown",""):
+                        answer=str(plan.get("answer") or "").strip()
+                        if answer:
+                            result={
+                                "text":answer,
+                                "mode":"cloud_ai",
+                                "allow_device_ai":False,
+                                "cloud_ai":True,
+                                "agent_plan":"none",
+                                "agent_steps":agent_step+1,
+                            }
+                        break
+                    tool_result=_execute_full_agent_plan(conn,plan,message)
+                    if not tool_result:
+                        break
+                    tool_result["agent_steps"]=agent_step+1
+                    if tool in discovery_tools and agent_step<2:
+                        trace.append(_compact_agent_observation(tool,tool_result))
+                        result=tool_result
+                        continue
+                    result=tool_result
+                    break
+            except Exception as cloud_planner_exc:
+                try:
+                    _log(conn,"system","R45 cloud planner unavailable: "+repr(cloud_planner_exc))
+                except Exception:
+                    pass
+
+        # R46 cloud-native: no Mac/Qwen fallback in the user request path.
+        if not planner_used and str(result.get("mode") or "")=="fallback":
+            err=str(_CLOUD_LAST_ERROR or "")
+            low=err.lower()
+            if "credit_balance_exhausted" in low or "insufficient_quota" in low or "no credits remaining" in low:
+                msg="L’IA cloud è configurata ma il credito API è esaurito. Non uso più il Mac/Qwen come ripiego, quindi non ti faccio aspettare inutilmente."
+            elif err:
+                msg="L’IA cloud non è disponibile in questo momento. Non ho eseguito modifiche e non uso il Mac/Qwen come ripiego."
+            else:
+                msg="Questa richiesta richiede l’IA cloud. Non ho eseguito modifiche."
+            result={"text":msg,"mode":"cloud_unavailable","allow_device_ai":False,"cloud_ai":False}
+
+        _log(conn,"assistant",result.get("text",""),result)
+        return jsonify(result)
+    except Exception as exc:
+        try:
+            _log(conn,"system","ERROR "+repr(exc))
+        except Exception:
+            pass
+        return jsonify({"text":"Ho incontrato un errore interno mentre controllavo i dati. Non ho eseguito modifiche.","mode":"error"}),500
+    finally:
+        conn.close()
+
+
+def _cloud_user_error(exc):
+    s=repr(exc)
+    low=s.lower()
+    if "credit_balance_exhausted" in low or "insufficient_quota" in low or "no credits remaining" in low:
+        return "Credito API OpenAI esaurito.",402
+    if "rate_limit" in low or "429" in low:
+        return "Limite temporaneo API raggiunto. Riprova tra poco.",429
+    return "Servizio IA cloud temporaneamente non disponibile.",503
+
+@app.get("/operatore-bodymind/cloud/status")
+@login_required
+def bodymind_cloud_status():
+    err=str(_CLOUD_LAST_ERROR or "")
+    blocked=any(x in err.lower() for x in ("credit_balance_exhausted","insufficient_quota","no credits remaining"))
+    configured=bool(str(os.environ.get("OPENAI_API_KEY") or "").strip()) and str(os.environ.get("BODYMIND_AI_CLOUD","1")).lower() in ("1","true","yes","on")
+    conn=db()
+    try:
+        budget=_usage_summary(conn)
+    finally:
+        conn.close()
+    return jsonify({
+        "configured":configured,
+        "ready":configured and not blocked,
+        "model":str(os.environ.get("BODYMIND_AI_MODEL") or "gpt-6-luna"),
+        "voice_model":str(os.environ.get("BODYMIND_TTS_MODEL") or "gpt-4o-mini-tts"),
+        "transcribe_model":str(os.environ.get("BODYMIND_STT_MODEL") or "gpt-transcribe"),
+        "last_ok_at":_CLOUD_LAST_OK_AT,
+        "local_ai_used":False,
+        "budget":budget,
+    })
+
+@app.post("/operatore-bodymind/voice/transcribe")
+@login_required
+def bodymind_cloud_transcribe():
+    if current_role() not in ("admin","manager"):
+        return jsonify({"text":"Permessi insufficienti."}),403
+    f=request.files.get("audio")
+    if not f:
+        return jsonify({"text":"Audio mancante."}),400
+    data=f.read()
+    if not data:
+        return jsonify({"text":"Audio vuoto."}),400
+    if len(data)>20*1024*1024:
+        return jsonify({"text":"Registrazione troppo grande."}),413
+    key=str(os.environ.get("OPENAI_API_KEY") or "").strip()
+    if not key:
+        return jsonify({"text":"IA cloud non configurata."}),503
+    try:
+        from openai import OpenAI
+        client=OpenAI(api_key=key,timeout=35.0,max_retries=0)
+        model=str(os.environ.get("BODYMIND_STT_MODEL") or "gpt-transcribe").strip()
+        filename=str(f.filename or "voce.webm")
+        mimetype=str(f.mimetype or "audio/webm")
+        tr=client.audio.transcriptions.create(model=model,file=(filename,data,mimetype),language="it")
+        text_out=str(getattr(tr,"text","") or "").strip()
+        if not text_out:
+            return jsonify({"text":"Non ho riconosciuto una frase."}),422
+        try: seconds=max(0.0,min(120.0,float(request.form.get("duration_ms") or 0)/1000.0))
+        except Exception: seconds=0.0
+        rate=_STT_USD_PER_MIN.get(model,0.0045)
+        conn=db()
+        try: _record_ai_usage(conn,"stt",model,0,0,seconds,(seconds/60.0)*rate)
+        finally: conn.close()
+        return jsonify({"ok":True,"text":text_out,"model":model})
+    except Exception as exc:
+        msg,status=_cloud_user_error(exc)
+        try: print("[cloud-voice-r46] stt_error="+repr(exc)[:900],flush=True)
+        except Exception: pass
+        return jsonify({"text":msg}),status
+
+@app.post("/operatore-bodymind/voice/speak")
+@login_required
+def bodymind_cloud_speak():
+    payload=request.get_json(silent=True) or {}
+    text_in=str(payload.get("text") or "").strip()[:5000]
+    if not text_in:
+        return jsonify({"text":"Testo mancante."}),400
+    key=str(os.environ.get("OPENAI_API_KEY") or "").strip()
+    if not key:
+        return jsonify({"text":"IA cloud non configurata."}),503
+    try:
+        from openai import OpenAI
+        client=OpenAI(api_key=key,timeout=35.0,max_retries=0)
+        model=str(os.environ.get("BODYMIND_TTS_MODEL") or "gpt-4o-mini-tts").strip()
+        voice_name=str(os.environ.get("BODYMIND_TTS_VOICE") or "coral").strip()
+        speech=client.audio.speech.create(
+            model=model,voice=voice_name,input=text_in,
+            instructions="Parla in italiano naturale, caldo e professionale. Sei una segretaria virtuale esperta di BodyMind. Ritmo conversazionale, niente tono robotico."
+        )
+        data=getattr(speech,"content",None)
+        if data is None and hasattr(speech,"read"):
+            data=speech.read()
+        if data is None and hasattr(speech,"response"):
+            data=getattr(speech.response,"content",None)
+        if not data:
+            raise RuntimeError("TTS returned no audio bytes")
+        usage_id="tts-"+uuid.uuid4().hex
+        conn=db()
+        try: _record_ai_usage(conn,"tts",model,0,0,0.0,0.0,usage_id)
+        finally: conn.close()
+        resp=Response(data,mimetype="audio/mpeg")
+        resp.headers["Cache-Control"]="no-store"
+        resp.headers["X-BodyMind-Voice"]="cloud-r47"
+        resp.headers["X-BodyMind-Usage-Id"]=usage_id
+        return resp
+    except Exception as exc:
+        msg,status=_cloud_user_error(exc)
+        try: print("[cloud-voice-r46] tts_error="+repr(exc)[:900],flush=True)
+        except Exception: pass
+        return jsonify({"text":msg}),status
+
+
+@app.post("/operatore-bodymind/cloud/usage/tts")
+@login_required
+def bodymind_cloud_tts_usage():
+    payload=request.get_json(silent=True) or {}
+    usage_id=str(payload.get("usage_id") or "").strip()
+    try: seconds=max(0.0,min(600.0,float(payload.get("seconds") or 0)))
+    except Exception: seconds=0.0
+    if not usage_id or seconds<=0:
+        return jsonify({"ok":False}),400
+    conn=db()
+    try:
+        row=conn.execute("SELECT id,model,seconds FROM bodymind_ai_usage WHERE request_id=? AND kind='tts' LIMIT 1",(usage_id,)).fetchone()
+        if row and float(row["seconds"] or 0)<=0:
+            rate=_TTS_EST_USD_PER_MIN.get(str(row["model"] or ""),0.015)
+            conn.execute("UPDATE bodymind_ai_usage SET seconds=?,estimated_usd=? WHERE id=?",(seconds,(seconds/60.0)*rate,int(row["id"])))
+            conn.commit()
+        budget=_usage_summary(conn)
+    finally:
+        conn.close()
+    return jsonify({"ok":True,"budget":budget})
+
+
+@app.post("/operatore-bodymind/upload")
+@login_required
+def bodymind_operator_upload():
+    if current_role() not in ("admin","manager"):
+        return jsonify({"text":"L’account connesso non può affidare documenti all’Autopilot.","mode":"warning"}),403
+    files=request.files.getlist("files")
+    if not files:
+        return jsonify({"text":"Non ho ricevuto file.","mode":"warning"}),400
+    from .routes_email_documents import process_inbound_attachment, ALLOWED_INBOUND_DOCS, extract_attachment_text, find_tesserato_for_text
+    from .routes_documenti import _save_uploaded_asd_document
+    results=[]; errors=[]
+    for f in files[:120]:
+        try:
+            name=(f.filename or "documento").replace("\\","/").split("/")[-1]
+            ext=Path(name).suffix.lower()
+            if ext not in ALLOWED_INBOUND_DOCS:
+                errors.append(name+" · formato non supportato")
+                continue
+            data=f.read()
+            if len(data)>40*1024*1024:
+                errors.append(name+" · oltre 40 MB")
+                continue
+            extracted=""
+            try: extracted=extract_attachment_text(name,data) or ""
+            except Exception: extracted=""
+            athlete_match=None
+            try: athlete_match=find_tesserato_for_text((name+" "+extracted).strip(),current_username())
+            except Exception: athlete_match=None
+            asd_kind=_classify_asd_document(name,extracted) if not athlete_match else None
+            if asd_kind:
+                try:
+                    f.stream.seek(0)
+                    _,saved_name=_save_uploaded_asd_document(f,asd_kind["folder"])
+                    results.append({
+                        "name":name,"status":"archiviato_asd","tesserato_id":None,
+                        "type":"documento_asd","confidence":asd_kind["confidence"],
+                        "folder":asd_kind["folder"],"reason":asd_kind["reason"],"saved_name":saved_name,
+                    })
+                    continue
+                except Exception as exc:
+                    errors.append(name+" · archivio ASD: "+str(exc)[:160])
+                    continue
+            res=process_inbound_attachment(
+                name,data,subject="Operatore BodyMind",
+                sender=current_username(),body_text="Caricato dalla scrivania Operatore BodyMind",
+                source="operatore_bodymind"
+            )
+            results.append({
+                "name":name,
+                "status":res.get("status"),
+                "tesserato_id":res.get("tesserato_id"),
+                "type":(res.get("classification") or {}).get("type"),
+                "confidence":(res.get("classification") or {}).get("confidence"),
+                "folder":"Dossier/Autopilot",
+            })
+        except Exception as exc:
+            errors.append((f.filename or "file")+" · "+str(exc)[:180])
+    auto=sum(1 for r in results if r.get("tesserato_id") and r.get("status") in ("associato","archived_to_tesserato"))
+    asd=sum(1 for r in results if r.get("status")=="archiviato_asd")
+    review=sum(1 for r in results if r.get("status") in PENDING_STATUSES or (not r.get("tesserato_id") and r.get("status")!="archiviato_asd"))
+    text=f"Ho analizzato {len(results)} file: {auto} associati a tesserati, {asd} archiviati come documenti ASD e {review} richiedono verifica."
+    if errors:
+        text+=f" {len(errors)} file non sono stati elaborati."
+    return jsonify({
+        "text":text,"mode":"upload","results":results,"errors":errors,
+        "links":[{"label":"Apri Da verificare","href":"/documenti/da-verificare"},{"label":"Apri Documenti","href":"/documenti"}]
+    })
+
+
+@app.after_request
+def bodymind_family_logo_override(resp):
+    """Keep the public family landing branded BodyMind, never the legacy ASD Pro logo."""
+    try:
+        if request.path != "/area-famiglie" or request.method != "GET" or int(resp.status_code or 200) != 200:
+            return resp
+        if "text/html" not in str(resp.headers.get("Content-Type","")).lower():
+            return resp
+        html=resp.get_data(as_text=True)
+        if "/bodymind-media/logo" in html:
+            html=html.replace("/bodymind-media/logo","https://bodymindaerialstudio.life/seed-media/logo?v=9")
+            resp.set_data(html)
+            resp.headers.pop("Content-Length",None)
+        resp.headers["X-BodyMind-Family-Logo"]="bodymind-public-logo-v1"
+    except Exception:
+        pass
+    return resp
+
+# BODYMIND_R39_FAMILY_LOGO_BODYMIND
+
+@app.after_request
+def bodymind_operator_microphone_policy(resp):
+    try:
+        if request.path.startswith("/operatore-bodymind"):
+            resp.headers["Permissions-Policy"]="microphone=(self)"
+            resp.headers["Cache-Control"]="no-store"
+    except Exception:
+        pass
+    return resp
+
+
+@app.after_request
+def bodymind_operator_mobile_entry(resp):
+    try:
+        if request.path!="/mobile" or request.method!="GET" or int(resp.status_code or 200)!=200:
+            return resp
+        if "text/html" not in str(resp.headers.get("Content-Type","")).lower():
+            return resp
+        if request.path.startswith("/operatore-bodymind"):
+            return resp
+        html=resp.get_data(as_text=True)
+        if "bmo-mobile-entry" in html:
+            return resp
+        button="""
+        <style id="bmo-mobile-entry-style">
+          /* BODYMIND_R39_IPHONE_ENTRY_V2 */
+          @media(max-width:800px){
+            #bmo-mobile-entry{
+              right:12px!important;
+              bottom:calc(86px + env(safe-area-inset-bottom))!important;
+              width:46px!important;
+              height:46px!important;
+              min-width:46px!important;
+              max-width:46px!important;
+              padding:0!important;
+              display:grid!important;
+              place-items:center!important;
+              border-radius:50%!important;
+              font-size:20px!important;
+              line-height:1!important;
+              overflow:hidden!important;
+            }
+          }
+        </style>
+        <a id="bmo-mobile-entry" href="/operatore-bodymind" aria-label="Apri Operatore BodyMind" title="Operatore BodyMind"
+           style="position:fixed;right:14px;bottom:calc(86px + env(safe-area-inset-bottom));z-index:9999;
+           width:46px;height:46px;display:grid;place-items:center;border-radius:50%;
+           background:rgba(18,10,22,.94);border:1px solid rgba(244,90,157,.42);color:#fff;
+           text-decoration:none;font-weight:900;font-size:20px;box-shadow:0 10px 26px rgba(0,0,0,.30);
+           backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)">✦</a>
+        """
+        html=html.replace("</body>",button+"</body>") if "</body>" in html else html+button
+        resp.set_data(html)
+    except Exception:
+        pass
+    return resp
+
+
+@app.get("/favicon.ico")
+def bodymind_operator_favicon():
+    return redirect("/bodymind-media/logo",code=302)
+
+
+@app.before_request
+def bodymind_operator_legacy_entrypoints():
+    if request.method!="GET":
+        return None
+    if request.path=="/assistente-automatico":
+        return redirect("/operatore-bodymind")
+    return None
++Number(b.budget_usd||0).toFixed(2)+').';
+              addMsg(msg,'bot');
+              try{{localStorage.setItem('bodymind_budget_alert',key)}}catch(e){{}}
+            }}
+          }}
+          return d;
+        }}catch(e){{p.textContent='IA Cloud · stato non disponibile';return null}}
+      }}
+      refreshCloudStatus(true);
+
+      function esc(s){{const d=document.createElement('div');d.textContent=String(s??'');return d.innerHTML}}
+      function addMsg(text,who='bot',data={{}}){{
+        const box=document.createElement('div');box.className='bmo-msg '+(who==='me'?'me':'bot');
+        box.innerHTML=esc(text);
+        if(data.cards?.length){{
+          const w=document.createElement('div');w.className='bmo-cards';
+          data.cards.forEach(c=>{{const a=document.createElement('a');a.className='bmo-card';a.href=c.href||'#';a.innerHTML='<span>'+esc(c.title)+'</span><strong>'+esc(c.value)+'</strong>';w.appendChild(a)}});
+          box.appendChild(w);
+        }}
+        if(data.links?.length){{
+          const w=document.createElement('div');w.className='bmo-links';
+          data.links.forEach(l=>{{const a=document.createElement('a');a.className='bmo-link';a.href=l.href;a.textContent=l.label;w.appendChild(a)}});
+          box.appendChild(w);
+        }}
+        messages.appendChild(box);messages.scrollTop=messages.scrollHeight;
+      }}
+
+      function stopRecognitionForTTS(){{
+        clearRecognitionWatchdog();
+        if(recognition){{
+          const oldRecognition=recognition;
+          recognition=null;
+          try{{oldRecognition.abort()}}catch(e){{}}
+        }}
+        listening=false;
+        mic?.classList.remove('on');avatar?.classList.remove('listening');
+        stopMicStream();
+        voiceDiag('sr_aborted_for_tts');
+      }}
+      function speak(text,fromUserGesture=false){{
+        if(!voice || !voice.checked || !('speechSynthesis' in window) || !text)return;
+        lastSpeechText=String(text);
+        const chunks=speechChunks(text);
+        if(!chunks.length)return;
+        if(!fromUserGesture && !ttsPrimed){{
+          if(voiceRecover){{voiceRecover.hidden=false;voiceRecover.textContent='🔊 Ascolta risposta'}}
+          if(voiceStatus)voiceStatus.textContent='Tocca 🔊 Ascolta risposta';
+          voiceDiag('tts_waiting_user_gesture');
+          return;
+        }}
+        stopRecognitionForTTS();
+        const seq=++ttsSequence;
+        const begin=()=>{{
+          try{{
+            if(ttsRetryTimer){{clearTimeout(ttsRetryTimer);ttsRetryTimer=null}}
+            speechSynthesis.cancel();
+            speechSynthesis.resume();
+            refreshTTSVoices();
+            voiceDiag('tts_begin',{{gesture:!!fromUserGesture,voice:ttsVoice?.name||'',chunks:chunks.length}});
+            let index=0;
+            const next=()=>{{
+              if(seq!==ttsSequence||index>=chunks.length){{
+                ttsUtterance=null;avatar.classList.remove('speaking');
+                if(voiceStatus)voiceStatus.textContent='Tocca il microfono e parlami';
+                if(voiceRecover)voiceRecover.hidden=true;
+                voiceDiag('tts_complete');
+                return;
+              }}
+              const phrase=chunks[index++];
+              const u=new SpeechSynthesisUtterance(phrase);ttsUtterance=u;
+              u.lang='it-IT';u.rate=(phrase.length<55?1.0:.98);u.pitch=1.02;u.volume=1;
+              if(ttsVoice)u.voice=ttsVoice;
+              let started=false;
+              u.onstart=()=>{{
+                started=true;ttsPrimed=true;
+                try{{localStorage.setItem(TTS_KEY,'1')}}catch(e){{}}
+                avatar.classList.add('speaking');if(voiceRecover)voiceRecover.hidden=true;
+                if(voiceStatus)voiceStatus.textContent='Ti sto rispondendo…';
+                voiceDiag('tts_onstart',{{voice:u.voice?.name||'',index:index}});
+              }};
+              u.onend=()=>{{voiceDiag('tts_onend',{{index:index}});if(seq===ttsSequence)setTimeout(next,phrase.endsWith('.')?55:30)}};
+              u.onerror=e=>{{
+                voiceDiag('tts_onerror',{{error:String(e?.error||e?.message||'unknown'),index:index}});
+                ttsUtterance=null;avatar.classList.remove('speaking');
+                if(voiceRecover)voiceRecover.hidden=false;
+                if(voiceStatus)voiceStatus.textContent='Safari ha bloccato la voce: tocca 🔊 Attiva voce';
+              }};
+              speechSynthesis.speak(u);
+              if(index===1){{
+                ttsRetryTimer=setTimeout(()=>{{
+                  if(!started&&seq===ttsSequence&&ttsUtterance===u){{
+                    voiceDiag('tts_watchdog');
+                    try{{speechSynthesis.cancel();speechSynthesis.resume()}}catch(e){{}}
+                    if(voiceRecover)voiceRecover.hidden=false;
+                    if(voiceStatus)voiceStatus.textContent='Tocca 🔊 Attiva voce per riprodurre la risposta';
+                  }}
+                }},900);
+              }}
+            }};
+            next();
+          }}catch(e){{
+            voiceDiag('tts_throw',{{error:String(e?.message||e)}});
+            if(voiceRecover)voiceRecover.hidden=false;
+            if(voiceStatus)voiceStatus.textContent='Tocca 🔊 Attiva voce per riprodurre la risposta';
+          }}
+        }};
+        if(fromUserGesture){{
+          ttsPrimed=true;
+          try{{localStorage.setItem(TTS_KEY,'1')}}catch(e){{}}
+          begin();
+        }}else{{
+          setTimeout(begin,30);
+        }}
+      }}
+      voiceRecover?.addEventListener('click',()=>{{
+        voiceDiag('tts_recover_tap');
+        ttsPrimed=true;
+        try{{localStorage.setItem(TTS_KEY,'1')}}catch(e){{}}
+        speak(lastSpeechText||'Voce attiva.',true);
+      }});
+
+      // R38: local intelligence is only the paired iMac bridge; offline uses deterministic server logic.
+
+      async function ask(q){{
+        q=String(q||'').trim();if(!q)return;
+        addMsg(q,'me');input.value='';send.disabled=true;
+        try{{
+          const r=await fetch('/operatore-bodymind/chat',{{
+            method:'POST',headers:{{'Content-Type':'application/json','X-CSRFToken':csrf}},
+            body:JSON.stringify({{message:q}})
+          }});
+          const data=await r.json();
+          let text=data.text||'Non ho ricevuto una risposta.';
+          addMsg(text,'bot',data);speak(text);
+        }}catch(err){{
+          addMsg('Non riesco a contattare il motore dell’Operatore in questo momento. Non ho modificato nulla.','bot');
+        }}finally{{send.disabled=false;input.focus()}}
+      }}
+
+      send.addEventListener('click',()=>ask(input.value));
+      input.addEventListener('keydown',ev=>{{if(ev.key==='Enter'&&!ev.shiftKey){{ev.preventDefault();ask(input.value)}}}});
+      document.querySelectorAll('[data-q]').forEach(b=>b.addEventListener('click',()=>ask(b.dataset.q)));
+
+
+      function stopMicStream(){{
+        if(meterRAF){{cancelAnimationFrame(meterRAF);meterRAF=null}}
+        try{{audioContext?.close()}}catch(e){{}}
+        audioContext=null;analyser=null;
+        if(micStream){{micStream.getTracks().forEach(t=>t.stop());micStream=null}}
+      }}
+      function startMeter(stream){{
+        try{{
+          const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;
+          audioContext=new AC();const source=audioContext.createMediaStreamSource(stream);
+          analyser=audioContext.createAnalyser();analyser.fftSize=256;source.connect(analyser);
+          const data=new Uint8Array(analyser.frequencyBinCount);
+          const tick=()=>{{if(!analyser)return;analyser.getByteFrequencyData(data);let sum=0;for(let i=0;i<data.length;i++)sum+=data[i];const level=Math.min(1,(sum/data.length)/90);avatar.style.transform='scale('+(1+level*.045)+')';meterRAF=requestAnimationFrame(tick)}};tick();
+        }}catch(e){{}}
+      }}
+      async function ensureMic(){{
+        if(!window.isSecureContext)throw new Error('Il microfono richiede HTTPS.');
+        if(!navigator.mediaDevices?.getUserMedia)throw new Error('Questo browser non espone il microfono.');
+        if(micStream)return micStream;
+        micStream=await navigator.mediaDevices.getUserMedia({{audio:{{echoCancellation:true,noiseSuppression:true,autoGainControl:true}}}});
+        startMeter(micStream);return micStream;
+      }}
+      async function primeMicForRecognition(){{
+        if(!window.isSecureContext)throw new Error('Il microfono richiede HTTPS.');
+        if(!navigator.mediaDevices?.getUserMedia)throw new Error('Questo browser non espone il microfono.');
+        let stream=null,ctx=null,source=null,an=null;
+        try{{
+          voiceDiag('mic_prime_request');
+          stream=await navigator.mediaDevices.getUserMedia({{audio:{{echoCancellation:true,noiseSuppression:true,autoGainControl:true}},video:false}});
+          const track=(stream.getAudioTracks&&stream.getAudioTracks()[0])||null;
+          voiceDiag('mic_prime_granted',{{muted:!!track?.muted,enabled:track?track.enabled:null,readyState:track?.readyState||''}});
+          const AC=window.AudioContext||window.webkitAudioContext;
+          if(!AC)return {{ok:true,signal:null}};
+          ctx=new AC();
+          try{{await ctx.resume()}}catch(e){{}}
+          source=ctx.createMediaStreamSource(stream);
+          an=ctx.createAnalyser();an.fftSize=512;source.connect(an);
+          const data=new Uint8Array(an.fftSize);
+          let peak=0;
+          const until=performance.now()+700;
+          while(performance.now()<until){{
+            an.getByteTimeDomainData(data);
+            let sum=0;
+            for(let i=0;i<data.length;i++){{const d=(data[i]-128)/128;sum+=d*d}}
+            peak=Math.max(peak,Math.sqrt(sum/data.length));
+            await new Promise(res=>setTimeout(res,55));
+          }}
+          const level=Math.round(peak*1000);
+          voiceDiag('mic_prime_signal',{{level:level}});
+          return {{ok:true,signal:peak}};
+        }}catch(e){{
+          voiceDiag('mic_prime_error',{{error:String(e?.name||''),message:String(e?.message||e)}});
+          return {{ok:false,error:e}};
+        }}finally{{
+          try{{source?.disconnect()}}catch(e){{}}
+          try{{an?.disconnect()}}catch(e){{}}
+          try{{stream?.getTracks().forEach(t=>t.stop())}}catch(e){{}}
+          try{{await ctx?.close()}}catch(e){{}}
+        }}
+      }}
+      function humanMicError(code){{
+        const c=String(code||'');
+        if(c==='not-allowed'||c==='service-not-allowed')return 'Accesso al microfono negato. Consenti il microfono a BodyMind nelle impostazioni di Safari e riprova.';
+        if(c==='audio-capture')return 'Non riesco ad accedere al microfono del dispositivo.';
+        if(c==='aborted')return 'Il riconoscimento è stato interrotto.';
+        if(c==='no-speech')return 'Non ho sentito una frase. Tocca di nuovo il microfono e parla normalmente.';
+        if(c==='network')return 'Il riconoscimento vocale del browser non è riuscito a collegarsi. Riprova.';
+        return 'Il riconoscimento vocale non è partito correttamente ('+c+'). Riprova.';
+      }}
+
+      const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+      function clearRecognitionWatchdog(){{if(recognitionWatchdog){{clearTimeout(recognitionWatchdog);recognitionWatchdog=null}}}}
+      function resetRecognitionUI(){{
+        listening=false;clearRecognitionWatchdog();mic.classList.remove('on');avatar.classList.remove('listening');avatar.style.transform='';stopMicStream();
+      }}
+      function buildRecognition(){{
+        if(!SR)return null;
+        const r=new SR();
+        r.lang='it-IT';r.interimResults=true;r.continuous=false;r.maxAlternatives=1;
+        let submitted=false;
+        r.onstart=()=>{{
+          if(recognition!==r)return;
+          clearRecognitionWatchdog();listening=true;mic.classList.add('on');avatar.classList.add('listening');
+          if(voiceStatus)voiceStatus.textContent='Ti ascolto… parla normalmente';
+          voiceDiag('sr_onstart');
+        }};
+        r.onaudiostart=()=>voiceDiag('sr_onaudiostart');
+        r.onspeechstart=()=>voiceDiag('sr_onspeechstart');
+        r.onspeechend=()=>voiceDiag('sr_onspeechend');
+        r.onresult=ev=>{{
+          if(recognition!==r)return;
+          let txt='';let final=false;
+          for(let i=ev.resultIndex;i<ev.results.length;i++){{txt+=ev.results[i][0].transcript;if(ev.results[i].isFinal)final=true}}
+          input.value=txt.trim();voiceDiag('sr_onresult',{{final:final,len:input.value.length}});
+          if(final&&input.value&&!submitted){{submitted=true;if(voiceStatus)voiceStatus.textContent='Ho capito. Un attimo…';setTimeout(()=>ask(input.value),100)}}
+        }};
+        r.onerror=ev=>{{
+          const err=String(ev?.error||'unknown');
+          if(recognition!==r){{voiceDiag('sr_stale_error_ignored',{{error:err}});return}}
+          if(err==='aborted'){{recognition=null;resetRecognitionUI();voiceDiag('sr_aborted_ignored');return}}
+          voiceDiag('sr_onerror',{{error:err,message:String(ev?.message||'')}});
+          recognition=null;resetRecognitionUI();
+          const t=humanMicError(err);if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+        }};
+        r.onend=()=>{{
+          if(recognition===r)recognition=null;
+          voiceDiag('sr_onend',{{submitted:submitted}});resetRecognitionUI();
+          if(voiceStatus&&voiceStatus.textContent.startsWith('Ti ascolto'))voiceStatus.textContent='Tocca il microfono e parlami';
+        }};
+        return r;
+      }}
+      function waitSpeechIdle(done,tries=0){{
+        let busy=false;
+        try{{busy=!!(speechSynthesis?.speaking||speechSynthesis?.pending)}}catch(e){{}}
+        if(!busy||tries>=8){{setTimeout(done,220);return}}
+        try{{speechSynthesis.cancel()}}catch(e){{}}
+        setTimeout(()=>waitSpeechIdle(done,tries+1),120);
+      }}
+      async function startFreshRecognition(attempt=0){{
+        try{{
+          clearRecognitionWatchdog();
+          if(recognition){{const oldRecognition=recognition;recognition=null;try{{oldRecognition.abort()}}catch(e){{}}}}
+          resetRecognitionUI();
+          try{{ttsSequence++;speechSynthesis?.cancel()}}catch(e){{}}
+          voiceDiag(attempt?'sr_retry_prepare':'sr_prepare',{{attempt:attempt}});
+          const primed=await primeMicForRecognition();
+          if(!primed.ok){{
+            const err=primed.error||{{}};
+            resetRecognitionUI();
+            const t=(err.name==='NotAllowedError'||err.name==='SecurityError')
+              ?'Microfono non autorizzato. Consenti il microfono per BodyMind e riprova.'
+              :'Non riesco ad aprire il microfono del dispositivo.';
+            if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+            return;
+          }}
+          if(primed.signal!==null && primed.signal<0.002){{
+            voiceDiag('mic_prime_no_signal',{{level:Math.round(primed.signal*1000)}});
+            if(voiceStatus)voiceStatus.textContent='Microfono aperto ma non rilevo audio. Parla vicino al microfono e riprova.';
+          }}else{{
+            if(voiceStatus)voiceStatus.textContent='Microfono OK. Avvio riconoscimento…';
+          }}
+          await new Promise(res=>setTimeout(res,320));
+          waitSpeechIdle(()=>{{
+            try{{
+              recognition=buildRecognition();
+              if(!recognition)throw new Error('SpeechRecognition non disponibile');
+              voiceDiag(attempt?'sr_retry_call':'sr_start_call',{{attempt:attempt}});
+              recognition.start();
+              recognitionWatchdog=setTimeout(()=>{{
+                if(!listening&&recognition){{
+                  voiceDiag('sr_start_timeout',{{attempt:attempt}});
+                  const oldRecognition=recognition;
+                  recognition=null;
+                  resetRecognitionUI();
+                  try{{oldRecognition.abort()}}catch(e){{}}
+                  if(attempt<1){{
+                    if(voiceStatus)voiceStatus.textContent='Riprovo il microfono…';
+                    setTimeout(()=>{{startFreshRecognition(1).catch(()=>{{}})}},700);
+                  }}else{{
+                    const t='Safari non ha avviato il riconoscimento. Puoi riprovare il microfono; se iOS continua a bloccarlo, usa temporaneamente la dettatura della tastiera.';
+                    if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+                  }}
+                }}
+              }},7000);
+            }}catch(err){{
+              resetRecognitionUI();voiceDiag('sr_start_throw',{{error:String(err?.name||'')+':'+String(err?.message||err),attempt:attempt}});
+              if(attempt<1)setTimeout(()=>{{startFreshRecognition(1).catch(()=>{{}})}},500);
+              else{{
+                const t=(err?.name==='NotAllowedError'||err?.name==='SecurityError')?'Accesso al microfono negato. Consenti microfono e riconoscimento vocale a Safari e riprova.':('Microfono non disponibile: '+(err?.message||err));
+                if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+              }}
+            }}
+          }});
+        }}catch(err){{
+          resetRecognitionUI();voiceDiag('sr_prepare_throw',{{error:String(err?.message||err)}});
+        }}
+      }}
+      if(SR){{
+        // BODYMIND_R39_IOS_SR_RECREATE_V4
+        // BODYMIND_R39_IOS_SR_WEBKIT27_STATE_MACHINE_V5
+        mic.addEventListener('click',()=>{{
+          if(listening&&recognition){{try{{voiceDiag('sr_manual_stop');recognition.stop()}}catch(e){{}};return}}
+          startFreshRecognition(0).catch(err=>{{voiceDiag('sr_async_throw',{{error:String(err?.message||err)}})}});
+        }});
+      }}else{{
+        voiceDiag('sr_unavailable');
+        mic.addEventListener('click',()=>{{
+          const t='Su questo browser il riconoscimento vocale web non è disponibile.';
+          if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+        }});
+      }}
+
+      // BODYMIND_R46_CLOUD_NATIVE_VOICE
+      // Cloud STT + neural TTS. Legacy WebSpeech remains inert and is not the primary path.
+      let cloudRecorder=null,cloudChunks=[],cloudRecording=false,cloudAudio=null,cloudMaxTimer=null;
+
+      speak=async function(text,fromUserGesture=false){{
+        if(!voice || !voice.checked || !text)return;
+        lastSpeechText=String(text);
+        try{{
+          if(voiceStatus)voiceStatus.textContent='Genero la voce…';
+          const r=await fetch('/operatore-bodymind/voice/speak',{{
+            method:'POST',
+            headers:{{'Content-Type':'application/json','X-CSRFToken':csrf}},
+            body:JSON.stringify({{text:String(text)}})
+          }});
+          if(!r.ok){{
+            let d={{}};try{{d=await r.json()}}catch(e){{}}
+            throw new Error(d.text||('TTS HTTP '+r.status));
+          }}
+          const blob=await r.blob();
+          const url=URL.createObjectURL(blob);
+          try{{if(cloudAudio){{cloudAudio.pause();if(cloudAudio.src)URL.revokeObjectURL(cloudAudio.src)}}}}catch(e){{}}
+          cloudAudio=new Audio(url);
+          cloudAudio.preload='auto';
+          cloudAudio.onplay=()=>{{avatar?.classList.add('speaking');if(voiceStatus)voiceStatus.textContent='Ti sto rispondendo…';if(voiceRecover)voiceRecover.hidden=true;}};
+          cloudAudio.onended=()=>{{avatar?.classList.remove('speaking');if(voiceStatus)voiceStatus.textContent='Tocca il microfono e parlami';try{{URL.revokeObjectURL(url)}}catch(e){{}}}};
+          try{{
+            await cloudAudio.play();
+          }}catch(e){{
+            if(voiceRecover){{voiceRecover.hidden=false;voiceRecover.textContent='🔊 Ascolta risposta'}}
+            if(voiceStatus)voiceStatus.textContent='Risposta pronta: tocca 🔊 per ascoltarla';
+          }}
+        }}catch(e){{
+          if(voiceStatus)voiceStatus.textContent='Voce cloud non disponibile';
+          voiceDiag('cloud_tts_error',{{error:String(e?.message||e)}});
+        }}
+      }};
+
+      if(voiceRecover){{
+        voiceRecover.onclick=async(ev)=>{{
+          ev.preventDefault();ev.stopImmediatePropagation();
+          if(cloudAudio){{try{{await cloudAudio.play();voiceRecover.hidden=true}}catch(e){{}}}}
+          else if(lastSpeechText){{speak(lastSpeechText,true)}}
+        }};
+      }}
+
+      async function cloudStopAndTranscribe(){{
+        if(!cloudRecording||!cloudRecorder)return;
+        cloudRecording=false;
+        if(cloudMaxTimer){{clearTimeout(cloudMaxTimer);cloudMaxTimer=null}}
+        if(voiceStatus)voiceStatus.textContent='Trascrivo…';
+        try{{cloudRecorder.stop()}}catch(e){{}}
+      }}
+
+      async function cloudStartMic(ev){{
+        if(ev){{ev.preventDefault();ev.stopImmediatePropagation()}}
+        if(cloudRecording){{await cloudStopAndTranscribe();return}}
+        if(!window.MediaRecorder || !navigator.mediaDevices?.getUserMedia){{
+          const t='Questo browser non supporta la registrazione cloud. Usa un browser aggiornato oppure scrivi la richiesta.';
+          if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');return;
+        }}
+        try{{
+          const stream=await navigator.mediaDevices.getUserMedia({{audio:{{echoCancellation:true,noiseSuppression:true,autoGainControl:true}},video:false}});
+          let mime='';
+          for(const m of ['audio/mp4','audio/webm;codecs=opus','audio/webm']){{if(MediaRecorder.isTypeSupported?.(m)){{mime=m;break}}}}
+          cloudChunks=[];
+          cloudRecorder=new MediaRecorder(stream,mime?{{mimeType:mime}}:undefined);
+          cloudRecorder.ondataavailable=e=>{{if(e.data&&e.data.size)cloudChunks.push(e.data)}};
+          cloudRecorder.onerror=e=>{{voiceDiag('cloud_recorder_error',{{error:String(e?.error?.message||e?.message||e)}})}};
+          cloudRecorder.onstop=async()=>{{
+            mic.classList.remove('on');avatar.classList.remove('listening');
+            try{{stream.getTracks().forEach(t=>t.stop())}}catch(e){{}}
+            const blob=new Blob(cloudChunks,{{type:cloudRecorder?.mimeType||mime||'audio/webm'}});
+            if(blob.size<1000){{if(voiceStatus)voiceStatus.textContent='Non ho rilevato audio. Riprova.';return}}
+            const ext=(blob.type||'').includes('mp4')?'m4a':'webm';
+            const fd=new FormData();fd.append('audio',blob,'voce.'+ext);
+            try{{
+              const r=await fetch('/operatore-bodymind/voice/transcribe',{{method:'POST',headers:{{'X-CSRFToken':csrf}},body:fd}});
+              const d=await r.json();
+              if(!r.ok)throw new Error(d.text||('STT HTTP '+r.status));
+              input.value=String(d.text||'').trim();
+              if(!input.value)throw new Error('Trascrizione vuota');
+              if(voiceStatus)voiceStatus.textContent='Ho capito. Elaboro…';
+              await ask(input.value);
+            }}catch(e){{
+              const t=String(e?.message||e||'Trascrizione cloud non disponibile');
+              if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+            }}
+          }};
+          cloudRecorder.start(250);
+          cloudRecording=true;
+          mic.classList.add('on');avatar.classList.add('listening');
+          if(voiceStatus)voiceStatus.textContent='Ti ascolto… tocca di nuovo per inviare';
+          cloudMaxTimer=setTimeout(()=>{{if(cloudRecording)cloudStopAndTranscribe()}},18000);
+        }}catch(e){{
+          cloudRecording=false;mic.classList.remove('on');avatar.classList.remove('listening');
+          const t=(e?.name==='NotAllowedError'||e?.name==='SecurityError')
+            ?'Microfono non autorizzato. Consenti il microfono a BodyMind e riprova.'
+            :'Non riesco ad aprire il microfono.';
+          if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
+        }}
+      }}
+      mic.addEventListener('click',cloudStartMic,true);
+
+      attach?.addEventListener('click',()=>{{
+        const picker=document.createElement('input');
+        picker.type='file';
+        picker.multiple=true;
+        picker.accept='.pdf,.png,.jpg,.jpeg,.webp,.docx';
+        picker.setAttribute('aria-hidden','true');
+        picker.tabIndex=-1;
+        picker.style.setProperty('display','none','important');
+        document.body.appendChild(picker);
+        picker.addEventListener('change',async()=>{{
+          const files=[...(picker.files||[])];
+          try{{
+            if(!files.length)return;
+            const fd=new FormData();files.forEach(f=>fd.append('files',f,f.name));
+            addMsg('Ho ricevuto '+files.length+' file. Li passo all’Autopilot.','bot');
+            const r=await fetch('/operatore-bodymind/upload',{{method:'POST',headers:{{'X-CSRFToken':csrf}},body:fd}});
+            const data=await r.json();addMsg(data.text||'Analisi completata.','bot',data);speak(data.text||'Analisi completata.');
+          }}catch(e){{
+            addMsg('Il caricamento non è riuscito. Non ho modificato file esistenti.','bot');
+          }}finally{{
+            try{{picker.remove()}}catch(e){{}}
+          }}
+        }},{{once:true}});
+        picker.click();
+      }});
+
+      document.getElementById('bmoUploadForm').addEventListener('submit',async ev=>{{
+        ev.preventDefault();
+        const fd=new FormData();
+        const files=[...document.getElementById('bmoFiles').files,...document.getElementById('bmoFolder').files];
+        if(!files.length){{addMsg('Seleziona almeno un file o una cartella.','bot');return}}
+        files.forEach(f=>fd.append('files',f,f.webkitRelativePath||f.name));
+        addMsg('Sto passando '+files.length+' file all’Autopilot. Non chiudere questa pagina.','bot');
+        try{{
+          const r=await fetch('/operatore-bodymind/upload',{{method:'POST',headers:{{'X-CSRFToken':csrf}},body:fd}});
+          const data=await r.json();
+          addMsg(data.text||'Analisi completata.','bot',data);
+          speak(data.text||'Analisi completata.');
+        }}catch(e){{addMsg('Il caricamento non è riuscito. Non ho eliminato né modificato file esistenti.','bot')}}
+      }});
+    }})();
+    </script>
+    """
+    return layout(html)
+
+
+@app.post("/operatore-bodymind/voice-diag")
+@login_required
+def bodymind_operator_voice_diag():
+    payload=request.get_json(silent=True) or {}
+    safe={
+        "stage":str(payload.get("stage") or "")[:80],
+        "error":str(payload.get("error") or "")[:160],
+        "message":str(payload.get("message") or "")[:160],
+        "sr":bool(payload.get("sr")),
+        "synth":bool(payload.get("synth")),
+        "voices":int(payload.get("voices") or 0),
+        "voice":str(payload.get("voice") or "")[:120],
+        "gesture":bool(payload.get("gesture")),
+        "final":bool(payload.get("final")),
+        "len":int(payload.get("len") or 0),
+        "level":int(payload.get("level") or 0),
+        "muted":bool(payload.get("muted")),
+        "enabled":payload.get("enabled"),
+        "readyState":str(payload.get("readyState") or "")[:40],
+        "attempt":int(payload.get("attempt") or 0),
+        "ua":str(payload.get("ua") or "")[:220],
+    }
+    try:
+        line="[voice-diag] "+json.dumps(safe,ensure_ascii=False)
+        app.logger.info("%s", line)
+        print(line, flush=True)
+    except Exception:
+        pass
+    return jsonify({"ok":True}),200
+
+@app.post("/operatore-bodymind/chat")
+@login_required
+def bodymind_operator_chat():
+    payload=request.get_json(silent=True) or {}
+    message=str(payload.get("message") or "")[:8000]
+    conn=db()
+    try:
+        _schema(conn)
+        _log(conn,"user",message)
+        result=_answer(conn,message)
+        planner_used=False
+        # R45: cloud intelligence gets first shot. It may inspect the real system before choosing the action.
+        if str(result.get("mode") or "")=="fallback":
+            try:
+                trace=[]
+                discovery_tools={"discover_capabilities","inspect_route","inspect_system_map","inspect_db_schema"}
+                for agent_step in range(3):
+                    plan=_cloud_plan_tool(conn,message,trace)
+                    if not plan:
+                        break
+                    planner_used=True
+                    tool=str(plan.get("tool") or "").strip()
+                    if tool in ("none","unknown",""):
+                        answer=str(plan.get("answer") or "").strip()
+                        if answer:
+                            result={
+                                "text":answer,
+                                "mode":"cloud_ai",
+                                "allow_device_ai":False,
+                                "cloud_ai":True,
+                                "agent_plan":"none",
+                                "agent_steps":agent_step+1,
+                            }
+                        break
+                    tool_result=_execute_full_agent_plan(conn,plan,message)
+                    if not tool_result:
+                        break
+                    tool_result["agent_steps"]=agent_step+1
+                    if tool in discovery_tools and agent_step<2:
+                        trace.append(_compact_agent_observation(tool,tool_result))
+                        result=tool_result
+                        continue
+                    result=tool_result
+                    break
+            except Exception as cloud_planner_exc:
+                try:
+                    _log(conn,"system","R45 cloud planner unavailable: "+repr(cloud_planner_exc))
+                except Exception:
+                    pass
+
+        # R46 cloud-native: no Mac/Qwen fallback in the user request path.
+        if not planner_used and str(result.get("mode") or "")=="fallback":
+            err=str(_CLOUD_LAST_ERROR or "")
+            low=err.lower()
+            if "credit_balance_exhausted" in low or "insufficient_quota" in low or "no credits remaining" in low:
+                msg="L’IA cloud è configurata ma il credito API è esaurito. Non uso più il Mac/Qwen come ripiego, quindi non ti faccio aspettare inutilmente."
+            elif err:
+                msg="L’IA cloud non è disponibile in questo momento. Non ho eseguito modifiche e non uso il Mac/Qwen come ripiego."
+            else:
+                msg="Questa richiesta richiede l’IA cloud. Non ho eseguito modifiche."
+            result={"text":msg,"mode":"cloud_unavailable","allow_device_ai":False,"cloud_ai":False}
+
+        _log(conn,"assistant",result.get("text",""),result)
+        return jsonify(result)
+    except Exception as exc:
+        try:
+            _log(conn,"system","ERROR "+repr(exc))
+        except Exception:
+            pass
+        return jsonify({"text":"Ho incontrato un errore interno mentre controllavo i dati. Non ho eseguito modifiche.","mode":"error"}),500
+    finally:
+        conn.close()
+
+
+def _cloud_user_error(exc):
+    s=repr(exc)
+    low=s.lower()
+    if "credit_balance_exhausted" in low or "insufficient_quota" in low or "no credits remaining" in low:
+        return "Credito API OpenAI esaurito.",402
+    if "rate_limit" in low or "429" in low:
+        return "Limite temporaneo API raggiunto. Riprova tra poco.",429
+    return "Servizio IA cloud temporaneamente non disponibile.",503
+
+@app.get("/operatore-bodymind/cloud/status")
+@login_required
+def bodymind_cloud_status():
+    err=str(_CLOUD_LAST_ERROR or "")
+    blocked=any(x in err.lower() for x in ("credit_balance_exhausted","insufficient_quota","no credits remaining"))
+    configured=bool(str(os.environ.get("OPENAI_API_KEY") or "").strip()) and str(os.environ.get("BODYMIND_AI_CLOUD","1")).lower() in ("1","true","yes","on")
+    conn=db()
+    try:
+        budget=_usage_summary(conn)
+    finally:
+        conn.close()
+    return jsonify({
+        "configured":configured,
+        "ready":configured and not blocked,
+        "model":str(os.environ.get("BODYMIND_AI_MODEL") or "gpt-6-luna"),
+        "voice_model":str(os.environ.get("BODYMIND_TTS_MODEL") or "gpt-4o-mini-tts"),
+        "transcribe_model":str(os.environ.get("BODYMIND_STT_MODEL") or "gpt-transcribe"),
+        "last_ok_at":_CLOUD_LAST_OK_AT,
+        "local_ai_used":False,
+        "budget":budget,
+    })
+
+@app.post("/operatore-bodymind/voice/transcribe")
+@login_required
+def bodymind_cloud_transcribe():
+    if current_role() not in ("admin","manager"):
+        return jsonify({"text":"Permessi insufficienti."}),403
+    f=request.files.get("audio")
+    if not f:
+        return jsonify({"text":"Audio mancante."}),400
+    data=f.read()
+    if not data:
+        return jsonify({"text":"Audio vuoto."}),400
+    if len(data)>20*1024*1024:
+        return jsonify({"text":"Registrazione troppo grande."}),413
+    key=str(os.environ.get("OPENAI_API_KEY") or "").strip()
+    if not key:
+        return jsonify({"text":"IA cloud non configurata."}),503
+    try:
+        from openai import OpenAI
+        client=OpenAI(api_key=key,timeout=35.0,max_retries=0)
+        model=str(os.environ.get("BODYMIND_STT_MODEL") or "gpt-transcribe").strip()
+        filename=str(f.filename or "voce.webm")
+        mimetype=str(f.mimetype or "audio/webm")
+        tr=client.audio.transcriptions.create(model=model,file=(filename,data,mimetype),language="it")
+        text_out=str(getattr(tr,"text","") or "").strip()
+        if not text_out:
+            return jsonify({"text":"Non ho riconosciuto una frase."}),422
+        try: seconds=max(0.0,min(120.0,float(request.form.get("duration_ms") or 0)/1000.0))
+        except Exception: seconds=0.0
+        rate=_STT_USD_PER_MIN.get(model,0.0045)
+        conn=db()
+        try: _record_ai_usage(conn,"stt",model,0,0,seconds,(seconds/60.0)*rate)
+        finally: conn.close()
+        return jsonify({"ok":True,"text":text_out,"model":model})
+    except Exception as exc:
+        msg,status=_cloud_user_error(exc)
+        try: print("[cloud-voice-r46] stt_error="+repr(exc)[:900],flush=True)
+        except Exception: pass
+        return jsonify({"text":msg}),status
+
+@app.post("/operatore-bodymind/voice/speak")
+@login_required
+def bodymind_cloud_speak():
+    payload=request.get_json(silent=True) or {}
+    text_in=str(payload.get("text") or "").strip()[:5000]
+    if not text_in:
+        return jsonify({"text":"Testo mancante."}),400
+    key=str(os.environ.get("OPENAI_API_KEY") or "").strip()
+    if not key:
+        return jsonify({"text":"IA cloud non configurata."}),503
+    try:
+        from openai import OpenAI
+        client=OpenAI(api_key=key,timeout=35.0,max_retries=0)
+        model=str(os.environ.get("BODYMIND_TTS_MODEL") or "gpt-4o-mini-tts").strip()
+        voice_name=str(os.environ.get("BODYMIND_TTS_VOICE") or "coral").strip()
+        speech=client.audio.speech.create(
+            model=model,voice=voice_name,input=text_in,
+            instructions="Parla in italiano naturale, caldo e professionale. Sei una segretaria virtuale esperta di BodyMind. Ritmo conversazionale, niente tono robotico."
+        )
+        data=getattr(speech,"content",None)
+        if data is None and hasattr(speech,"read"):
+            data=speech.read()
+        if data is None and hasattr(speech,"response"):
+            data=getattr(speech.response,"content",None)
+        if not data:
+            raise RuntimeError("TTS returned no audio bytes")
+        usage_id="tts-"+uuid.uuid4().hex
+        conn=db()
+        try: _record_ai_usage(conn,"tts",model,0,0,0.0,0.0,usage_id)
+        finally: conn.close()
+        resp=Response(data,mimetype="audio/mpeg")
+        resp.headers["Cache-Control"]="no-store"
+        resp.headers["X-BodyMind-Voice"]="cloud-r47"
+        resp.headers["X-BodyMind-Usage-Id"]=usage_id
+        return resp
+    except Exception as exc:
+        msg,status=_cloud_user_error(exc)
+        try: print("[cloud-voice-r46] tts_error="+repr(exc)[:900],flush=True)
+        except Exception: pass
+        return jsonify({"text":msg}),status
+
+
+@app.post("/operatore-bodymind/cloud/usage/tts")
+@login_required
+def bodymind_cloud_tts_usage():
+    payload=request.get_json(silent=True) or {}
+    usage_id=str(payload.get("usage_id") or "").strip()
+    try: seconds=max(0.0,min(600.0,float(payload.get("seconds") or 0)))
+    except Exception: seconds=0.0
+    if not usage_id or seconds<=0:
+        return jsonify({"ok":False}),400
+    conn=db()
+    try:
+        row=conn.execute("SELECT id,model,seconds FROM bodymind_ai_usage WHERE request_id=? AND kind='tts' LIMIT 1",(usage_id,)).fetchone()
+        if row and float(row["seconds"] or 0)<=0:
+            rate=_TTS_EST_USD_PER_MIN.get(str(row["model"] or ""),0.015)
+            conn.execute("UPDATE bodymind_ai_usage SET seconds=?,estimated_usd=? WHERE id=?",(seconds,(seconds/60.0)*rate,int(row["id"])))
+            conn.commit()
+        budget=_usage_summary(conn)
+    finally:
+        conn.close()
+    return jsonify({"ok":True,"budget":budget})
 
 
 @app.post("/operatore-bodymind/upload")
