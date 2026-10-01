@@ -110,7 +110,12 @@ def analyze_bytes(conn,name,data,extracted_text="",type_hint="",record_usage=Non
       +(("\nTipo dichiarato dall'utente, da verificare: "+str(type_hint)) if type_hint else "")
       +(("\nTesto estratto localmente:\n"+str(extracted_text)[:18000]) if extracted_text else "")
     )
-    part=_input_part(name,data)
+    # R55D: text-first for PDFs. If local extraction already contains enough text,
+    # avoid sending full page images; visual PDF fallback remains for scans/poor extraction.
+    ext=Path(str(name or "")).suffix.lower()
+    clean_text=str(extracted_text or "").strip()
+    use_visual=not (ext==".pdf" and len(clean_text)>=240)
+    part=_input_part(name,data) if use_visual else None
     cb=(lambda c,r,m: record_usage(c,r,m,"document_semantics")) if record_usage else None
     obj=_call_json(conn,model,prompt,[part] if part else [],SEMANTIC_SCHEMA,"bodymind_doc_semantics",cb,950)
     dtype=str(obj.get("document_type") or "altro")
