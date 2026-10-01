@@ -3029,9 +3029,15 @@ def bodymind_operator_home():
       }}
 
       // R49: cloud-native intelligence and voice only.
+      let uploadInFlight=false;
 
       async function ask(q){{
         q=String(q||'').trim();if(!q)return;
+        if(uploadInFlight){{
+          addMsg(q,'me');input.value='';
+          const t='Il file è ancora in trasferimento o in analisi sul server BodyMind. Ti confermo l’esito appena il server termina; non considero ancora il caricamento completato.';
+          addMsg(t,'bot');if(voiceStageOpen)setVoiceStage('Caricamento in corso',t);speak(t);return;
+        }}
         addMsg(q,'me');input.value='';send.disabled=true;
         if(voiceStageOpen)setVoiceStage('Sto lavorando',q,'Controllo il gestionale e gli strumenti necessari.');
         try{{
@@ -3281,12 +3287,14 @@ def bodymind_operator_home():
             fd.append('production_mode','1');
             const hint=document.getElementById('bmoUploadType')?.value||'';
             if(hint)fd.append('document_type_hint',hint);
+            uploadInFlight=true;
             addMsg('Sto inviando '+files.length+' file al server BodyMind. Ti confermo la ricezione appena il server li prende in carico.','bot');
             const r=await fetch('/operatore-bodymind/upload',{{method:'POST',headers:{{'X-CSRFToken':csrf}},body:fd}});
             const data=await r.json();addMsg(data.text||'Analisi completata.','bot',data);speak(data.text||'Analisi completata.');
           }}catch(e){{
             addMsg('Il caricamento non è riuscito. Non ho modificato file esistenti.','bot');
           }}finally{{
+            uploadInFlight=false;
             try{{picker.remove()}}catch(e){{}}
           }}
         }},{{once:true}});
@@ -3302,6 +3310,7 @@ def bodymind_operator_home():
         fd.append('production_mode',document.getElementById('bmoProductionMode')?.checked?'1':'0');
         const declaredType=document.getElementById('bmoUploadType')?.value||'';
         if(declaredType)fd.append('document_type_hint',declaredType);
+        uploadInFlight=true;
         addMsg('Sto inviando '+files.length+' file al server BodyMind. L’analisi inizierà dopo la conferma di ricezione.','bot');
         try{{
           const r=await fetch('/operatore-bodymind/upload',{{method:'POST',headers:{{'X-CSRFToken':csrf}},body:fd}});
@@ -3309,6 +3318,7 @@ def bodymind_operator_home():
           addMsg(data.text||'Analisi completata.','bot',data);
           speak(data.text||'Analisi completata.');
         }}catch(e){{addMsg('Il caricamento non è riuscito. Non ho eliminato né modificato file esistenti.','bot')}}
+        finally{{uploadInFlight=false}}
       }});
     }})();
     </script>
