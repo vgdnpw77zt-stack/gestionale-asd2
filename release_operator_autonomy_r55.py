@@ -88,6 +88,21 @@ if old not in s:
     raise RuntimeError('R55 semantic match anchor missing')
 s=s.replace(old,new,1)
 
+# R55C: exclude the document row linked to the same inbound while reconciling an already-stored upload.
+old_sig='''def _same_existing_document(conn,tid,name,data,analysis,max_candidates=8):
+    wanted=_norm((analysis or {}).get("document_type") or "")
+    for row in _visible_docs(conn,int(tid))[:80]:
+'''
+new_sig='''def _same_existing_document(conn,tid,name,data,analysis,max_candidates=8,exclude_inbound_id=0):
+    wanted=_norm((analysis or {}).get("document_type") or "")
+    for row in _visible_docs(conn,int(tid))[:80]:
+        if exclude_inbound_id and "inbound_id" in row.keys() and int(row["inbound_id"] or 0)==int(exclude_inbound_id):
+            continue
+'''
+if old_sig not in s:
+    raise RuntimeError('R55C duplicate signature anchor missing')
+s=s.replace(old_sig,new_sig,1)
+
 old='''        existing=_semantic_for_document_row(conn,row,"documenti")
         if not existing:
             continue
