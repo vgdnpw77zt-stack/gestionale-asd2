@@ -1887,14 +1887,20 @@ def _parse_cloud_plan(text):
         obj=json.loads(raw)
         return obj if isinstance(obj,dict) else None
     except Exception:
-        m=re.search(r"\{.*\}",raw,re.S)
-        if not m:
-            return None
+        pass
+    # Responses API may expose more than one message/output_text block.
+    # Decode the first complete JSON object instead of greedily spanning all blocks.
+    dec=json.JSONDecoder()
+    for i,ch in enumerate(raw):
+        if ch!="{":
+            continue
         try:
-            obj=json.loads(m.group(0))
-            return obj if isinstance(obj,dict) else None
+            obj,_end=dec.raw_decode(raw[i:])
+            if isinstance(obj,dict):
+                return obj
         except Exception:
-            return None
+            continue
+    return None
 
 def _compact_agent_observation(tool, result):
     if not isinstance(result,dict):
