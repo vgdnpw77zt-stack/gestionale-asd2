@@ -47,6 +47,7 @@ COPY release_operator_web_audio_r52.py /opt/bodymind/release_operator_web_audio_
 COPY release_operator_autonomy_r55.py /opt/bodymind/release_operator_autonomy_r55.py
 COPY release_operator_pending_reconcile_r55.py /opt/bodymind/release_operator_pending_reconcile_r55.py
 COPY release_operator_pending_audit_r55e.py /opt/bodymind/release_operator_pending_audit_r55e.py
+COPY release_operator_dinicola_r55f.py /opt/bodymind/release_operator_dinicola_r55f.py
 COPY release_operator_read_smoke_r53.py /opt/bodymind/release_operator_read_smoke_r53.py
 COPY release_operator_experience_r38.py /opt/bodymind/release_operator_experience_r38.py
 COPY release_operator_qa_r32.py /opt/bodymind/release_operator_qa_r32.py
