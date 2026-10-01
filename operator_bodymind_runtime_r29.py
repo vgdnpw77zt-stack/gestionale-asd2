@@ -1995,6 +1995,18 @@ def _cloud_plan_tool(conn, question: str, tool_trace=None):
         _CLOUD_LAST_ERROR=""
         _CLOUD_LAST_OK_AT=datetime.now().isoformat(timespec="seconds")
         raw_plan=str(getattr(resp,"output_text","") or "")
+        if not raw_plan.strip():
+            parts=[]
+            try:
+                for item in (getattr(resp,"output",None) or []):
+                    for part in (getattr(item,"content",None) or []):
+                        if str(getattr(part,"type","") or "")=="output_text":
+                            txt=str(getattr(part,"text","") or "")
+                            if txt:
+                                parts.append(txt)
+            except Exception:
+                parts=[]
+            raw_plan="\n".join(parts).strip()
         plan=_parse_cloud_plan(raw_plan)
         if not plan:
             status=str(getattr(resp,"status","") or "")
