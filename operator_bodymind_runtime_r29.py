@@ -3077,6 +3077,34 @@ def bodymind_operator_home():
         }}catch(e){{voiceDiag('mic_meter_error',{{error:String(e?.message||e)}})}}
       }}
 
+      async function playCloudVoiceBytes(bytes,usageId=''){{
+        const ctx=await unlockVoiceAudio();
+        if(!ctx)throw new Error('AudioContext non disponibile');
+        if(voicePlaybackSource){{try{{voicePlaybackSource.stop()}}catch(e){{}}}}
+        const decoded=await ctx.decodeAudioData(bytes.slice(0));
+        if(usageId&&decoded.duration>0){{
+          fetch('/operatore-bodymind/cloud/usage/tts',{{
+            method:'POST',headers:{{'Content-Type':'application/json','X-CSRFToken':csrf}},
+            body:JSON.stringify({{usage_id:usageId,seconds:decoded.duration}})
+          }}).then(()=>refreshCloudStatus(true)).catch(()=>{{}});
+        }}
+        const source=ctx.createBufferSource();source.buffer=decoded;source.connect(ctx.destination);
+        voicePlaybackSource=source;
+        avatar?.classList.add('speaking');voiceOrb?.classList.add('speaking');voiceOrb?.classList.remove('listening');
+        if(voiceStatus)voiceStatus.textContent='Ti sto rispondendo…';
+        if(voiceStageOpen)setVoiceStage('Ti rispondo',lastSpeechText,'Quando ho finito continuo ad ascoltarti.');
+        if(voiceRecover)voiceRecover.hidden=true;
+        source.onended=()=>{{
+          avatar?.classList.remove('speaking');voiceOrb?.classList.remove('speaking');
+          if(voiceStatus)voiceStatus.textContent='Pronto ad ascoltarti';
+          if(voiceStageOpen){{
+            setVoiceStage('Segretario BodyMind','Parla pure.','Ti ascolto automaticamente dopo ogni risposta.');
+            setTimeout(()=>{{if(voiceStageOpen&&!cloudRecording)cloudStartMic()}},550);
+          }}
+        }};
+        source.start(0);
+      }}
+
       async function speak(text,fromUserGesture=false){{
         if(!voice || !voice.checked || !text)return;
         lastSpeechText=String(text);
