@@ -48,6 +48,7 @@ if 'BODYMIND_R65_HANDWRITING_ENROLLMENT' not in s:
     from io import BytesIO
     from werkzeug.datastructures import FileStorage
 
+    physical_file_count=len(files)
     expanded_files=[]
     for original in files[:120]:
         original_name=(getattr(original,"filename","") or "documento").replace(chr(92),"/").split("/")[-1]
@@ -164,7 +165,7 @@ if 'BODYMIND_R65_HANDWRITING_ENROLLMENT' not in s:
         _log(conn2,"assistant",text,{"mode":"upload_preview","summary":summary,"action_id":aid,"task_id":task_id})
     finally: conn2.close()
 '''
-    new=r'''    summary={"received":len(results),"ready":len(ready_ids),"new_athletes":len(new_athletes),"duplicates":len(duplicate_items),"review":len(review_items),"errors":len(errors),"document_type":type_hint}
+    new=r'''    summary={"received":len(results),"source_files":physical_file_count,"logical_documents":len(results),"ready":len(ready_ids),"new_athletes":len(new_athletes),"duplicates":len(duplicate_items),"review":len(review_items),"errors":len(errors),"document_type":type_hint}
     conn2=db()
     try:
         task_id=int((task or {}).get("id") or 0)
@@ -181,7 +182,7 @@ if 'BODYMIND_R65_HANDWRITING_ENROLLMENT' not in s:
             aid=_set_pending_action(conn2,"productionize_batch",{"task_id":task_id,"inbound_ids":ready_ids,"document_type":type_hint})
         else:
             aid=None
-        text=f"Ho analizzato {len(results)} file: {len(ready_ids)} documenti nuovi per tesserate già presenti, {len(new_athletes)} moduli di nuove tesserate leggibili, {len(duplicate_items)} duplicati che non importerò, {len(review_items)} da verificare."
+        text=f"Il server ha ricevuto {physical_file_count} file e ha analizzato {len(results)} documenti logici: {len(ready_ids)} documenti nuovi per tesserate già presenti, {len(new_athletes)} moduli di nuove tesserate leggibili, {len(duplicate_items)} duplicati che non importerò, {len(review_items)} da verificare."
         if new_athletes:
             names=[]
             for c in new_athletes[:8]:
