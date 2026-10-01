@@ -7,10 +7,17 @@ SEMANTIC_SCHEMA={
  "type":"object","additionalProperties":False,
  "properties":{
   "document_type":{"type":"string","enum":list(DOC_TYPES)},
-  "person_name":{"type":"string"},"codice_fiscale":{"type":"string"},
-  "birth_date":{"type":"string"},"issue_date":{"type":"string"},"expiry_date":{"type":"string"},
+  "person_name":{"type":"string"},"first_name":{"type":"string"},"last_name":{"type":"string"},
+  "codice_fiscale":{"type":"string"},"birth_date":{"type":"string"},"birth_place":{"type":"string"},
+  "address":{"type":"string"},"city":{"type":"string"},"postal_code":{"type":"string"},"province":{"type":"string"},
+  "phone":{"type":"string"},"email":{"type":"string"},"nationality":{"type":"string"},"gender":{"type":"string"},
+  "issue_date":{"type":"string"},"expiry_date":{"type":"string"},
   "season_year":{"type":"string"},"form_version":{"type":"string"},
-  "guardian_name":{"type":"string"},"doctor_name":{"type":"string"},
+  "guardian_name":{"type":"string"},"guardian_phone":{"type":"string"},"guardian_email":{"type":"string"},
+  "emergency_contact_name":{"type":"string"},"emergency_contact_phone":{"type":"string"},
+  "course_requested":{"type":"string"},"notes":{"type":"string"},"doctor_name":{"type":"string"},
+  "handwriting_present":{"type":"string","enum":["yes","no","unknown"]},
+  "handwriting_legibility":{"type":"string","enum":["clear","partial","poor","unknown"]},
   "privacy_consent":{"type":"string","enum":["yes","no","unknown"]},
   "image_consent":{"type":"string","enum":["yes","no","unknown"]},
   "autonomous_exit":{"type":"string","enum":["yes","no","unknown"]},
@@ -20,8 +27,11 @@ SEMANTIC_SCHEMA={
   "content_summary":{"type":"string"},"evidence":{"type":"array","items":{"type":"string"}},
   "confidence":{"type":"number","minimum":0,"maximum":1}
  },
- "required":["document_type","person_name","codice_fiscale","birth_date","issue_date","expiry_date",
-             "season_year","form_version","guardian_name","doctor_name","privacy_consent","image_consent",
+ "required":["document_type","person_name","first_name","last_name","codice_fiscale","birth_date","birth_place",
+             "address","city","postal_code","province","phone","email","nationality","gender",
+             "issue_date","expiry_date","season_year","form_version","guardian_name","guardian_phone","guardian_email",
+             "emergency_contact_name","emergency_contact_phone","course_requested","notes","doctor_name",
+             "handwriting_present","handwriting_legibility","privacy_consent","image_consent",
              "autonomous_exit","delegation","athlete_signature","guardian_signature","content_summary",
              "evidence","confidence"]
 }
@@ -99,9 +109,12 @@ def analyze_bytes(conn,name,data,extracted_text="",type_hint="",record_usage=Non
     model=str(os.environ.get("BODYMIND_AI_DOCUMENT_MODEL") or os.environ.get("BODYMIND_AI_MODEL") or "gpt-6-luna").strip()
     prompt=(
       "Analizza questo documento reale della segreteria BodyMind Aerial Studio ASD. "
-      "Leggi testo, compilazioni, date, checkbox, firme e annotazioni visibili. "
+      "Leggi sia testo stampato sia testo manoscritto: compilazioni a penna, date, nomi, indirizzi, telefoni, email, checkbox, firme e annotazioni visibili. "
+      "Il testo a penna è dato primario: non ignorarlo solo perché il PDF contiene già molto testo stampato. "
       "Non identificare la persona dal solo nome file se il contenuto dice altro. "
-      "Per Modulo Unico valuta anche consensi, autorizzazioni, firme e stagione/versione. "
+      "Per Modulo Unico/modulo di iscrizione estrai anche nome, cognome, codice fiscale, data e luogo di nascita, indirizzo, città, CAP, provincia, telefono, email, nazionalità, sesso, "
+      "dati del genitore/tutore, contatto di emergenza, corso richiesto, note, consensi, autorizzazioni, firme e stagione/versione. "
+      "Se un campo è scritto a mano, trascrivilo solo se realmente leggibile; in dubbio lascia stringa vuota e riduci la confidence. "
       "Se nel CONTENUTO compare esplicitamente Modulo Unico, modulo di iscrizione/tesseramento, domanda di iscrizione con consensi/manleva, "
       "classificalo come modulo_unico_tesseramento con confidenza alta se intestatario e struttura sono coerenti. "
       "Per certificato medico valuta intestatario, rilascio, scadenza e medico. "
@@ -110,11 +123,17 @@ def analyze_bytes(conn,name,data,extracted_text="",type_hint="",record_usage=Non
       +(("\nTipo dichiarato dall'utente, da verificare: "+str(type_hint)) if type_hint else "")
       +(("\nTesto estratto localmente:\n"+str(extracted_text)[:18000]) if extracted_text else "")
     )
-    # R55D: text-first for PDFs. If local extraction already contains enough text,
-    # avoid sending full page images; visual PDF fallback remains for scans/poor extraction.
+    # BODYMIND_R65_HANDWRITING_VISION:
+    # Enrollment/MU documents are ALWAYS sent visually, even when the PDF has abundant printed text,
+    # because handwriting often sits on top of a digitally generated form and would be lost by text-first extraction.
     ext=Path(str(name or "")).suffix.lower()
     clean_text=str(extracted_text or "").strip()
-    use_visual=not (ext==".pdf" and len(clean_text)>=240)
+    low=clean_text.lower()
+    enrollment_hint=str(type_hint or "").strip()=="modulo_unico_tesseramento" or any(x in low for x in (
+        "modulo unico","modulo di iscrizione","modulo iscrizione","domanda di iscrizione",
+        "domanda iscrizione","richiesta di tesseramento","privacy","manleva"
+    ))
+    use_visual=(ext in {".png",".jpg",".jpeg",".webp"}) or enrollment_hint or not (ext==".pdf" and len(clean_text)>=240)
     part=_input_part(name,data) if use_visual else None
     cb=(lambda c,r,m: record_usage(c,r,m,"document_semantics")) if record_usage else None
     obj=_call_json(conn,model,prompt,[part] if part else [],SEMANTIC_SCHEMA,"bodymind_doc_semantics",cb,950)
