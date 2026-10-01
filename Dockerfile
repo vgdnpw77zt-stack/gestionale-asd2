@@ -27,6 +27,8 @@ COPY release_force_pdf_ocr_r21.py /opt/bodymind/release_force_pdf_ocr_r21.py
 COPY release_document_flow_r25.py /opt/bodymind/release_document_flow_r25.py
 COPY release_document_preview_r26.py /opt/bodymind/release_document_preview_r26.py
 COPY operator_bodymind_runtime_r29.py /opt/bodymind/operator_bodymind_runtime_r29.py
+COPY operator_doc_semantic_core_r52.py /opt/bodymind/operator_doc_semantic_core_r52.py
+COPY operator_doc_semantic_ai_r52.py /opt/bodymind/operator_doc_semantic_ai_r52.py
 COPY release_operator_r29.py /opt/bodymind/release_operator_r29.py
 COPY release_route_cleanup_r31.py /opt/bodymind/release_route_cleanup_r31.py
 COPY release_operator_r30.py /opt/bodymind/release_operator_r30.py
