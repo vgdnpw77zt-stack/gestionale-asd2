@@ -3281,7 +3281,7 @@ def bodymind_operator_home():
             fd.append('production_mode','1');
             const hint=document.getElementById('bmoUploadType')?.value||'';
             if(hint)fd.append('document_type_hint',hint);
-            addMsg('Ho ricevuto '+files.length+' file. Li analizzo e porto in produzione quelli certi.','bot');
+            addMsg('Sto inviando '+files.length+' file al server BodyMind. Ti confermo la ricezione appena il server li prende in carico.','bot');
             const r=await fetch('/operatore-bodymind/upload',{{method:'POST',headers:{{'X-CSRFToken':csrf}},body:fd}});
             const data=await r.json();addMsg(data.text||'Analisi completata.','bot',data);speak(data.text||'Analisi completata.');
           }}catch(e){{
@@ -3302,7 +3302,7 @@ def bodymind_operator_home():
         fd.append('production_mode',document.getElementById('bmoProductionMode')?.checked?'1':'0');
         const declaredType=document.getElementById('bmoUploadType')?.value||'';
         if(declaredType)fd.append('document_type_hint',declaredType);
-        addMsg('Sto elaborando '+files.length+' file. I match certi verranno portati fino alla produzione e verificati.','bot');
+        addMsg('Sto inviando '+files.length+' file al server BodyMind. L’analisi inizierà dopo la conferma di ricezione.','bot');
         try{{
           const r=await fetch('/operatore-bodymind/upload',{{method:'POST',headers:{{'X-CSRFToken':csrf}},body:fd}});
           const data=await r.json();
