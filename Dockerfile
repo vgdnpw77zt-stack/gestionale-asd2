@@ -53,6 +53,7 @@ COPY release_operator_targeted_missing_r60.py /opt/bodymind/release_operator_tar
 COPY release_operator_response_scope_r61.py /opt/bodymind/release_operator_response_scope_r61.py
 COPY release_operator_query_polarity_r62.py /opt/bodymind/release_operator_query_polarity_r62.py
 COPY release_operator_cloud_first_r63.py /opt/bodymind/release_operator_cloud_first_r63.py
+COPY release_operator_cloud_first_smoke_r63.py /opt/bodymind/release_operator_cloud_first_smoke_r63.py
 COPY release_operator_polarity_smoke_r62.py /opt/bodymind/release_operator_polarity_smoke_r62.py
 COPY release_operator_scope_smoke_r61.py /opt/bodymind/release_operator_scope_smoke_r61.py
 COPY release_operator_targeted_smoke_r60.py /opt/bodymind/release_operator_targeted_smoke_r60.py
