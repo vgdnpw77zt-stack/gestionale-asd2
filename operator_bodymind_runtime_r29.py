@@ -3162,6 +3162,13 @@ def bodymind_operator_home():
             try{{stream.getTracks().forEach(t=>t.stop())}}catch(e){{}}
             const blob=new Blob(cloudChunks,{{type:cloudRecorder?.mimeType||mime||'audio/webm'}});
             if(blob.size<1000){{if(voiceStatus)voiceStatus.textContent='Non ho rilevato audio. Riprova.';return}}
+            if(!cloudSpeechSeen){{
+              const t='Il microfono è aperto, ma non rilevo la tua voce. Controlla il microfono e riprova.';
+              if(voiceStatus)voiceStatus.textContent=t;
+              if(voiceStageOpen)setVoiceStage('Non sento voce',t,'Parla più vicino al microfono o controlla il permesso audio.');
+              voiceDiag('no_voice_signal',{{len:blob.size}});
+              return;
+            }}
             const ext=(blob.type||'').includes('mp4')?'m4a':'webm';
             const fd=new FormData();fd.append('audio',blob,'voce.'+ext);
             fd.append('duration_ms',String(Math.max(0,performance.now()-cloudRecordingStartedAt)));
