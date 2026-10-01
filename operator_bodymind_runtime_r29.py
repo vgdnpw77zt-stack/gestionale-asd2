@@ -1404,6 +1404,14 @@ def _set_pending_action(conn, action_type: str, payload: dict) -> int:
 def _execute_pending(conn):
     aid=int(session.get("bodymind_operator_pending_action") or 0)
     if not aid:
+        row=conn.execute(
+            "SELECT id FROM bodymind_operator_actions WHERE conversation_id=? AND status='proposed' ORDER BY id DESC LIMIT 1",
+            (_conv_id(),)
+        ).fetchone()
+        if row:
+            aid=int(row["id"])
+            session["bodymind_operator_pending_action"]=aid
+    if not aid:
         return None
     row=conn.execute("SELECT * FROM bodymind_operator_actions WHERE id=?",(aid,)).fetchone()
     if not row or str(row["status"])!="proposed":
