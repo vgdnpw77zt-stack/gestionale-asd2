@@ -5,7 +5,7 @@ import json, sqlite3, sys
 
 APP=Path('/data/top2_app')
 DB=Path('/data/tenants/default/asd.db')
-MARK=APP/'.BODYMIND_OPERATOR_PENDING_RECONCILE_R55'
+MARK=APP/'.BODYMIND_OPERATOR_PENDING_RECONCILE_R55B'
 
 def table(conn,name):
     return bool(conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(name,)).fetchone())
@@ -58,12 +58,13 @@ else:
                     ic=op._cols(conn,'inbound_documents')
                     where=["lower(coalesce(status,'')) IN ("+','.join('?' for _ in op.PENDING_STATUSES)+")"]
                     params=list(op.PENDING_STATUSES)
-                    if 'source' in ic:
-                        where.append("lower(coalesce(source,''))='operatore_bodymind'")
+                    # R55B: process the whole pending queue. Historical uploads do not
+                    # consistently preserve the source marker, so source cannot be a trust boundary.
+                    # Safety comes from semantic type/person confidence gates below, not metadata origin.
                     if 'deleted_at' in ic:
                         where.append("coalesce(deleted_at,'')=''")
                     rows=conn.execute(
-                        "SELECT * FROM inbound_documents WHERE "+" AND ".join(where)+" ORDER BY id DESC LIMIT 60",
+                        "SELECT * FROM inbound_documents WHERE "+" AND ".join(where)+" ORDER BY id DESC LIMIT 80",
                         params
                     ).fetchall()
                 finally:
