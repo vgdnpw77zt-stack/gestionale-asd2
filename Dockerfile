@@ -48,6 +48,7 @@ COPY release_operator_autonomy_r55.py /opt/bodymind/release_operator_autonomy_r5
 COPY release_operator_fast_dedupe_r56.py /opt/bodymind/release_operator_fast_dedupe_r56.py
 COPY release_operator_dedupe_smoke_r56.py /opt/bodymind/release_operator_dedupe_smoke_r56.py
 COPY release_operator_avatar_r57.py /opt/bodymind/release_operator_avatar_r57.py
+COPY release_operator_voice_state_r59.py /opt/bodymind/release_operator_voice_state_r59.py
 COPY release_operator_intent_smoke_r57.py /opt/bodymind/release_operator_intent_smoke_r57.py
 COPY release_operator_pending_reconcile_r55.py /opt/bodymind/release_operator_pending_reconcile_r55.py
 COPY release_operator_pending_audit_r55e.py /opt/bodymind/release_operator_pending_audit_r55e.py
