@@ -2715,6 +2715,7 @@ def bodymind_operator_home():
           </div>
         </div>
         <div class="bmo-top-actions">
+          <a class="bmo-top-btn icon" href="/" title="Torna al gestionale" aria-label="Torna al gestionale" style="display:grid;place-items:center;text-decoration:none">←</a>
           <button class="bmo-top-btn" id="bmoNewChat" type="button" title="Nuova conversazione">＋ <span>Nuova chat</span></button>
           <button class="bmo-top-btn icon" id="bmoSettings" type="button" title="Impostazioni segreteria" aria-label="Impostazioni">⚙</button>
         </div>
@@ -2990,7 +2991,8 @@ def bodymind_operator_home():
           data.links.forEach(l=>{{const a=document.createElement('a');a.className='bmo-link';a.href=l.href;a.textContent=l.label;w.appendChild(a)}});
           box.appendChild(w);
         }}
-        row.appendChild(box);messages.appendChild(row);window.scrollTo(0,document.body.scrollHeight);
+        row.appendChild(box);messages.appendChild(row);
+        requestAnimationFrame(()=>{{messages.scrollTop=messages.scrollHeight}});
       }}
       if(Array.isArray(initialHistory)&&initialHistory.length){{
         initialHistory.forEach(m=>addMsg(m.message,m.speaker==='user'?'me':'bot',m.payload||{{}}));
@@ -3022,8 +3024,15 @@ def bodymind_operator_home():
         }}finally{{send.disabled=false;input.focus()}}
       }}
 
+      // BODYMIND_R52_COMPOSER_AUTOGROW
+      function fitComposer(){{
+        input.style.height='40px';
+        input.style.height=Math.min(132,Math.max(40,input.scrollHeight))+'px';
+      }}
       send.addEventListener('click',()=>ask(input.value));
-      input.addEventListener('keydown',ev=>{{if(ev.key==='Enter'&&!ev.shiftKey){{ev.preventDefault();ask(input.value)}}}});
+      input.addEventListener('input',fitComposer);
+      input.addEventListener('keydown',ev=>{{if(ev.key==='Enter'&&!ev.shiftKey){{ev.preventDefault();ask(input.value);fitComposer()}}}});
+      fitComposer();
       document.querySelectorAll('[data-q]').forEach(b=>b.addEventListener('click',()=>ask(b.dataset.q)));
 
 
