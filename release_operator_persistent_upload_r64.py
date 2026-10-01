@@ -247,9 +247,7 @@ s=s.replace(insert_before,branch+insert_before,1)
 
 # Replace upload endpoint: stage -> semantic analyse -> dedupe -> preview/confirm.
 start=s.index('@app.post("/operatore-bodymind/upload")')
-end=s.index('
-@app.after_request
-def bodymind_family_logo_override',start)
+end=s.index('\n@app.after_request\ndef bodymind_family_logo_override',start)
 upload=r'''@app.post("/operatore-bodymind/upload")
 @login_required
 def bodymind_operator_upload():
