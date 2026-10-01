@@ -690,6 +690,41 @@ def _semantic_duplicate_groups(conn, tid=None, max_comparisons=24):
     return groups,comparisons
 
 
+def _revalidate_semantic_duplicate_group(conn, group):
+    try:
+        keep_id=int(group.get("keep_id") or 0)
+        remove_id=int((group.get("remove_ids") or [0])[0] or 0)
+    except Exception:
+        return False,"identificativi non validi"
+    if keep_id<=0 or remove_id<=0 or keep_id==remove_id:
+        return False,"identificativi non validi"
+    keep=conn.execute("SELECT * FROM documenti WHERE id=?",(keep_id,)).fetchone()
+    rem=conn.execute("SELECT * FROM documenti WHERE id=?",(remove_id,)).fetchone()
+    if not keep or not rem:
+        return False,"uno dei documenti non esiste più"
+    if int(keep["tesserato_id"] or 0)!=int(rem["tesserato_id"] or 0):
+        return False,"documenti associati a persone diverse"
+    if _canonical_document_kind(keep)!=_canonical_document_kind(rem):
+        return False,"tipi documentali diversi"
+    kname,kdata,_=_document_bytes_from_row(keep)
+    rname,rdata,_=_document_bytes_from_row(rem)
+    if not kdata or not rdata:
+        return False,"file fisico non leggibile"
+    if _docsem_sha256(kdata)==_docsem_sha256(rdata):
+        return True,"contenuto identico SHA-256"
+    left=_semantic_for_document_row(conn,keep,"documenti")
+    right=_semantic_for_document_row(conn,rem,"documenti")
+    if not left or not right:
+        return False,"lettura semantica incompleta"
+    try:
+        cmp=_semantic_same_pair(conn,kname,kdata,left,rname,rdata,right)
+    except Exception as exc:
+        return False,"confronto semantico non disponibile: "+str(exc)[:120]
+    if bool(cmp.get("same_document")) and float(cmp.get("confidence") or 0)>=.95:
+        return True,str(cmp.get("reason") or "stesso documento")
+    return False,str(cmp.get("reason") or "non abbastanza certo")
+
+
 def _canonical_document_kind(row):
     parts=[]
     for key in ("doc_type","categoria","titolo","original_filename","filename"):
