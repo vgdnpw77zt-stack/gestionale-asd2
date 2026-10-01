@@ -277,7 +277,7 @@ def bodymind_operator_upload():
     results=[]; errors=[]; ready_ids=[]; duplicate_items=[]; review_items=[]
     for f in files[:120]:
         try:
-            name=(f.filename or "documento").replace("\","/").split("/")[-1]
+            name=(f.filename or "documento").replace(chr(92),"/").split("/")[-1]
             ext=Path(name).suffix.lower()
             if ext not in ALLOWED_INBOUND_DOCS:
                 errors.append(name+" · formato non supportato"); continue
