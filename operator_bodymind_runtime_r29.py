@@ -1981,6 +1981,7 @@ def _cloud_plan_tool(conn, question: str, tool_trace=None):
             reasoning={"effort":reasoning_effort},
             max_output_tokens=350,
             store=False,
+            text={"format":{"type":"json_object"}},
             prompt_cache_key="bodymind-r51-planner-"+model,
         )
         elapsed_ms=int((time.perf_counter()-started)*1000)
@@ -1993,9 +1994,18 @@ def _cloud_plan_tool(conn, question: str, tool_trace=None):
         global _CLOUD_LAST_ERROR,_CLOUD_LAST_OK_AT
         _CLOUD_LAST_ERROR=""
         _CLOUD_LAST_OK_AT=datetime.now().isoformat(timespec="seconds")
-        plan=_parse_cloud_plan(getattr(resp,"output_text",""))
+        raw_plan=str(getattr(resp,"output_text","") or "")
+        plan=_parse_cloud_plan(raw_plan)
         if not plan:
+            status=str(getattr(resp,"status","") or "")
+            incomplete=str(getattr(resp,"incomplete_details","") or "")[:300]
+            output_types=[]
+            try:
+                output_types=[str(getattr(x,"type","") or "") for x in (getattr(resp,"output",None) or [])][:8]
+            except Exception:
+                output_types=[]
             _CLOUD_LAST_ERROR="empty_plan"
+            print("[cloud-agent-r53] empty_plan status="+status+" incomplete="+incomplete+" output_types="+json.dumps(output_types),flush=True)
             return None
         tool=str(plan.get("tool") or "").strip()
         allowed={x["name"] for x in catalog}
