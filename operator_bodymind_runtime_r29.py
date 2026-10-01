@@ -13,6 +13,7 @@ import uuid
 import base64
 import smtplib
 import ssl
+import time
 from email.message import EmailMessage
 from datetime import date, datetime, timedelta
 from difflib import SequenceMatcher
@@ -24,7 +25,7 @@ from .core import (
     app, db, layout, login_required, csrf_token, current_username, current_role, e
 )
 
-OPERATOR_VERSION = "R50.0-cloud-secretary"
+OPERATOR_VERSION = "R51.0-fast-cloud-secretary"
 PENDING_STATUSES = (
     "needs_manual_match","associato_tipo_da_verificare","richiede_conferma",
     "needs_review","da_verificare","pending",
@@ -1658,28 +1659,30 @@ def _cloud_plan_tool(conn, question: str, tool_trace=None):
         catalog=_full_agent_tool_catalog(conn)
         compact=[{"name":x["name"],"description":x["description"],"write":bool(x.get("write"))} for x in catalog]
         manifest=_bodymind_route_manifest()
+        funcs=_bodymind_function_manifest()
         dbm=_bodymind_db_manifest(conn)
         overview={
             "routes":len(manifest),
-            "modules":sorted(set(x["module"] for x in manifest if x["module"]))[:120],
-            "tables":[{"name":x["table"],"count":x["count"]} for x in dbm],
-            "glossary":_BODYMIND_GLOSSARY,
+            "functions":len(funcs),
+            "tables":len(dbm),
+            "areas":sorted(_BODYMIND_GLOSSARY.keys()),
         }
-        recent=_recent_operator_context(conn,6)
+        recent=_recent_operator_context(conn,4)
         trace=tool_trace if isinstance(tool_trace,list) else []
         relevant=_capability_search(conn,question)
         relevant_context={
-            "routes":relevant.get("routes",[])[:25],
-            "functions":relevant.get("functions",[])[:30],
-            "tables":relevant.get("tables",[])[:12],
+            "routes":relevant.get("routes",[])[:12],
+            "functions":relevant.get("functions",[])[:16],
+            "tables":relevant.get("tables",[])[:8],
+            "terms":relevant.get("terms",[])[:24],
         }
         prompt=(
             "Sei la Segreteria BodyMind: un assistente operativo cloud con qualità conversazionale paragonabile a un ottimo assistente generale, ma specializzato completamente nel gestionale BodyMind. "
             "Parla in italiano naturale, chiaro e sintetico; non mostrare route, nomi tecnici o ragionamenti interni se non richiesti. Devi capire italiano naturale, sinonimi, abbreviazioni e contesto. "
             "Tesserato/iscritto/atleta/allievo/socio possono riferirsi alla stessa anagrafica; CM=certificato medico; "
             "MU=Modulo Unico; dossier=archivio documentale del tesserato. "
-            "Conosci la struttura reale del gestionale attraverso la mappa runtime allegata. "
-            "Scegli UNO strumento reale. Se una richiesta richiede prima di scoprire dove si trova una funzione, usa discover_capabilities. "
+            "Conosci l'intero gestionale tramite l'indice runtime, ma per questa richiesta ricevi già gli elementi più pertinenti. "
+            "Scegli UNO strumento reale e preferisci direttamente lo strumento operativo corretto. Usa discover_capabilities solo se gli elementi pertinenti non bastano davvero. "
             "Puoi scegliere strumenti write quando la richiesta lo richiede, ma NON dichiarare mai eseguita una modifica: "
             "il server presenterà anteprima/conferma e applicherà permessi, validazioni e audit. "
             "Per cancellazioni, fusioni, duplicati o operazioni distruttive devi essere conservativo: documenti di tipo diverso "
@@ -1687,17 +1690,32 @@ def _cloud_plan_tool(conn, question: str, tool_trace=None):
             "Restituisci SOLO JSON valido: {\"tool\":\"nome_o_none\",\"args\":{},\"answer\":\"\"}. "
             "Tool=none solo se è pura conversazione o se nessuno strumento disponibile copre ancora l'azione. "
             "Catalogo strumenti: "+json.dumps(compact,ensure_ascii=False)+
-            "\nMappa sistema: "+json.dumps(overview,ensure_ascii=False)[:18000]+
-            "\nElementi rilevanti per questa richiesta: "+json.dumps(relevant_context,ensure_ascii=False)[:22000]+
-            "\nContesto recente: "+json.dumps(recent,ensure_ascii=False)+
-            "\nRisultati strumenti già usati in questa richiesta: "+json.dumps(trace,ensure_ascii=False)[:18000]+
+            "\nIndice sistema: "+json.dumps(overview,ensure_ascii=False)[:5000]+
+            "\nElementi rilevanti per questa richiesta: "+json.dumps(relevant_context,ensure_ascii=False)[:12000]+
+            "\nContesto recente: "+json.dumps(recent,ensure_ascii=False)[:6000]+
+            "\nRisultati strumenti già usati in questa richiesta: "+json.dumps(trace,ensure_ascii=False)[:8000]+
             "\nSe i risultati degli strumenti bastano per rispondere, usa tool=none e formula la risposta finale in answer. "
             "Se serve un altro passaggio, scegli il prossimo strumento. "
             "\nRichiesta utente: "+str(question or "")[:7000]
         )
         client=OpenAI(api_key=key,timeout=18.0,max_retries=0)
-        resp=client.responses.create(model=model,input=prompt)
+        reasoning_effort=str(os.environ.get("BODYMIND_AI_REASONING") or "none").strip().lower()
+        started=time.perf_counter()
+        resp=client.responses.create(
+            model=model,
+            input=prompt,
+            reasoning={"effort":reasoning_effort},
+            max_output_tokens=350,
+            store=False,
+            prompt_cache_key="bodymind-r51-planner-"+model,
+        )
+        elapsed_ms=int((time.perf_counter()-started)*1000)
         _record_response_usage(conn,resp,model,"planner")
+        try:
+            usage=getattr(resp,"usage",None)
+            print("[cloud-agent-r51] model="+model+" ms="+str(elapsed_ms)+" input_tokens="+str(int(getattr(usage,"input_tokens",0) or 0))+" output_tokens="+str(int(getattr(usage,"output_tokens",0) or 0)),flush=True)
+        except Exception:
+            pass
         global _CLOUD_LAST_ERROR,_CLOUD_LAST_OK_AT
         _CLOUD_LAST_ERROR=""
         _CLOUD_LAST_OK_AT=datetime.now().isoformat(timespec="seconds")
@@ -1812,7 +1830,14 @@ def _cloud_operator_answer(conn, question: str, athlete=None):
             "\nRichiesta: "+str(question or "")[:6000]
         )
         client=OpenAI(api_key=key,timeout=18.0,max_retries=0)
-        resp=client.responses.create(model=model,input=prompt)
+        resp=client.responses.create(
+            model=model,
+            input=prompt,
+            reasoning={"effort":"none"},
+            max_output_tokens=900,
+            store=False,
+            prompt_cache_key="bodymind-r51-answer-"+model,
+        )
         _record_response_usage(conn,resp,model,"answer")
         out=str(getattr(resp,"output_text","") or "").strip()
         return out[:7000] if out else None
@@ -1852,6 +1877,21 @@ def _answer(conn, text: str):
         return {
             "text":f"Ciao {_identity()}. Sono l’Operatore BodyMind. Posso controllare il gestionale e lavorare con te come una segreteria: dimmi cosa vuoi verificare.",
             "mode":"local"
+        }
+
+    # BODYMIND_R51_FAST_FACTS
+    # Fatti semplici e inequivocabili arrivano direttamente dal DB: più veloci, più economici, zero allucinazioni.
+    if (
+        re.search(r"\b(quanti|numero|totale)\b",n)
+        and any(x in n for x in ("tesserat","iscritt","atlet","alliev","soci"))
+        and not any(x in n for x in ("manca","document","certificat","pagament","ricevut","quota"))
+    ):
+        cnt=len(_athletes(conn))
+        return {
+            "text":f"Nel gestionale risultano {cnt} tesserati.",
+            "mode":"fast_fact",
+            "cloud_ai":False,
+            "links":[{"label":"Apri Tesserati","href":"/tesserati"}]
         }
 
     athlete, ambiguous=_match_athlete(conn,raw)
