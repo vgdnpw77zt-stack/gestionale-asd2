@@ -912,8 +912,8 @@ def _alert_audit(conn):
 
 def _agent_tool_catalog(conn):
     return [
-        {"name":"global_status","description":"Controlla stato generale BodyMind: tesserati, documenti da verificare, certificati, tutele, pagamenti e ricevute.","write":False},
-        {"name":"secretary_audit","description":"Audit completo da segreteria: controlla tutti i tesserati attivi, Modulo Unico, documenti medici, scadenze certificati, tutela minori, documenti da verificare, pagamenti e ricevute. Usalo per richieste tipo controlla tutto/cosa manca/sistema la segreteria.","write":False},
+        {"name":"global_status","description":"Controlla solo il riepilogo generale BodyMind: conteggi tesserati, documenti da verificare, certificati senza scadenza, tutele, pagamenti e ricevute. NON usarlo per elencare certificati scaduti/in scadenza.","write":False},
+        {"name":"secretary_audit","description":"Audit completo da segreteria: controlla tutti i tesserati attivi, Modulo Unico, documenti medici, scadenze certificati, tutela minori, documenti da verificare, pagamenti e ricevute. Usalo anche per richieste su QUALI certificati medici sono scaduti o stanno per scadere e per cosa manca ai tesserati.","write":False},
         {"name":"scan_document_storage","description":"Controlla fisicamente l'archivio documenti sul volume BodyMind e segnala file non indicizzati nel database. Non cancella né sposta nulla.","write":False},
         {"name":"audit_alerts","description":"Controlla tabelle e storico relativi ad alert, notifiche, email, reminder e scadenze, senza esporre segreti.","write":False},
         {"name":"smtp_status","description":"Controlla se il servizio SMTP è configurato e se l'ultimo test di connessione è riuscito. Non legge né espone password.","write":False},
@@ -1962,7 +1962,7 @@ def _cloud_plan_tool(conn, question: str, tool_trace=None):
             "Tesserato/iscritto/atleta/allievo/socio possono riferirsi alla stessa anagrafica; CM=certificato medico; "
             "MU=Modulo Unico; dossier=archivio documentale del tesserato. "
             "Conosci l'intero gestionale tramite l'indice runtime, ma per questa richiesta ricevi già gli elementi più pertinenti. "
-            "Scegli UNO strumento reale e preferisci direttamente lo strumento operativo corretto. Usa discover_capabilities solo se gli elementi pertinenti non bastano davvero. "
+            "Scegli UNO strumento reale e preferisci direttamente lo strumento operativo corretto. Usa discover_capabilities solo se gli elementi pertinenti non bastano davvero. "            "Per domande su QUALI certificati medici sono scaduti o stanno per scadere usa secretary_audit, non global_status. "
             "Puoi scegliere strumenti write quando la richiesta lo richiede, ma NON dichiarare mai eseguita una modifica: "
             "il server presenterà anteprima/conferma e applicherà permessi, validazioni e audit. "
             "Per cancellazioni, fusioni, duplicati o operazioni distruttive devi essere conservativo: documenti di tipo diverso "
