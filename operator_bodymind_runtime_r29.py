@@ -24,8 +24,18 @@ from flask import Response, jsonify, redirect, request, session, send_file
 from .core import (
     app, db, layout, login_required, csrf_token, current_username, current_role, e
 )
+from .operator_doc_semantic_core_r52 import (
+    ensure_schema as _docsem_ensure_schema,
+    sha256_bytes as _docsem_sha256,
+    cache_get as _docsem_cache_get,
+    cache_put as _docsem_cache_put,
+)
+from .operator_doc_semantic_ai_r52 import (
+    analyze_bytes as _docsem_analyze_bytes,
+    compare_bytes as _docsem_compare_bytes,
+)
 
-OPERATOR_VERSION = "R51.0-fast-cloud-secretary"
+OPERATOR_VERSION = "R52.0-semantic-secretary"
 PENDING_STATUSES = (
     "needs_manual_match","associato_tipo_da_verificare","richiede_conferma",
     "needs_review","da_verificare","pending",
@@ -109,6 +119,7 @@ def _schema(conn) -> None:
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_bodymind_ai_usage_created ON bodymind_ai_usage(created_at)")
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_bodymind_ai_usage_request ON bodymind_ai_usage(request_id) WHERE request_id IS NOT NULL")
+    _docsem_ensure_schema(conn)
     conn.execute("""
       CREATE TABLE IF NOT EXISTS bodymind_secure_settings(
         setting_key TEXT PRIMARY KEY,
@@ -514,6 +525,102 @@ def _document_fingerprint(row):
         return "path:"+os.path.normpath(filename), filename
     return "", ""
 
+
+# BODYMIND_R52_SEMANTIC_RUNTIME
+def _document_bytes_from_row(row):
+    stored=""
+    for key in ("filename","saved_path","path"):
+        if key in row.keys() and str(row[key] or "").strip():
+            stored=str(row[key] or "").strip(); break
+    for p in _document_file_candidates(stored):
+        try:
+            if p.is_file():
+                data=p.read_bytes()
+                if len(data)>40*1024*1024:
+                    continue
+                name=""
+                for key in ("original_filename","filename"):
+                    if key in row.keys() and str(row[key] or "").strip():
+                        name=Path(str(row[key] or "")).name; break
+                return name or p.name,data,str(p)
+        except Exception:
+            continue
+    return "",b"",""
+
+def _docsem_usage(conn,response,model,kind):
+    _record_response_usage(conn,response,model,kind)
+
+def _semantic_for_document_row(conn,row,source_table="documenti"):
+    name,data,_path=_document_bytes_from_row(row)
+    if not data:
+        return None
+    sha=_docsem_sha256(data)
+    cached=_docsem_cache_get(conn,source_table,int(row["id"]),sha)
+    if cached:
+        return cached
+    extracted=""
+    try:
+        from .routes_email_documents import extract_attachment_text
+        extracted=str(extract_attachment_text(name,data) or "")
+    except Exception:
+        pass
+    hint=_canonical_document_kind(row) if source_table=="documenti" else ""
+    analysis=_docsem_analyze_bytes(conn,name,data,extracted,hint,_docsem_usage)
+    _docsem_cache_put(conn,source_table,int(row["id"]),analysis)
+    return analysis
+
+def _semantic_match_athlete(conn,analysis):
+    cf=re.sub(r"[^A-Z0-9]","",str((analysis or {}).get("codice_fiscale") or "").upper())
+    tc=_cols(conn,"tesserati") if _table(conn,"tesserati") else set()
+    if cf and "codice_fiscale" in tc:
+        rows=conn.execute(
+            "SELECT * FROM tesserati WHERE upper(replace(replace(coalesce(codice_fiscale,''),' ',''),'-',''))=?",(cf,)
+        ).fetchall()
+        if len(rows)==1:
+            return rows[0],1.0,"codice_fiscale"
+    pname=str((analysis or {}).get("person_name") or "").strip()
+    if pname:
+        athlete,amb=_match_athlete(conn,pname)
+        if athlete and not amb:
+            score=.94
+            birth=str((analysis or {}).get("birth_date") or "")[:10]
+            if birth and "data_nascita" in athlete.keys() and str(athlete["data_nascita"] or "")[:10]==birth:
+                score=.99
+            return athlete,score,"contenuto_documento"
+    return None,0.0,""
+
+def _semantic_for_new_bytes(conn,name,data,extracted_text="",type_hint=""):
+    return _docsem_analyze_bytes(conn,name,data,extracted_text,type_hint,_docsem_usage)
+
+def _semantic_same_pair(conn,name_a,data_a,analysis_a,name_b,data_b,analysis_b):
+    return _docsem_compare_bytes(conn,name_a,data_a,analysis_a,name_b,data_b,analysis_b,_docsem_usage)
+
+def _same_existing_document(conn,tid,name,data,analysis,max_candidates=8):
+    wanted=_norm((analysis or {}).get("document_type") or "")
+    for row in _visible_docs(conn,int(tid))[:80]:
+        if wanted and _norm(_canonical_document_kind(row))!=wanted:
+            continue
+        ename,edata,_=_document_bytes_from_row(row)
+        if not edata:
+            continue
+        if _docsem_sha256(edata)==_docsem_sha256(data):
+            return {"duplicate":True,"existing_id":int(row["id"]),"confidence":1.0,"reason":"contenuto identico","method":"sha256"}
+        existing=_semantic_for_document_row(conn,row,"documenti")
+        if not existing:
+            continue
+        try:
+            cmp=_semantic_same_pair(conn,name,data,analysis,ename,edata,existing)
+        except Exception as exc:
+            cmp={"same_document":False,"confidence":0.0,"reason":str(exc)[:120]}
+        if bool(cmp.get("same_document")) and float(cmp.get("confidence") or 0)>=.95:
+            return {
+                "duplicate":True,"existing_id":int(row["id"]),"confidence":float(cmp.get("confidence") or 0),
+                "reason":str(cmp.get("reason") or "stesso documento"),"method":str(cmp.get("method") or "multimodal")
+            }
+        max_candidates-=1
+        if max_candidates<=0:
+            break
+    return {"duplicate":False,"existing_id":None,"confidence":0.0,"reason":"","method":""}
 
 def _canonical_document_kind(row):
     parts=[]
