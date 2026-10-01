@@ -80,6 +80,7 @@ checks={
     'autonomous_secretary_r55':'BODYMIND_R55_AUTONOMOUS_SECRETARY' in operator_text and 'BODYMIND_R55_LIVING_LOGO' in operator_text and '_sync_mu_after_production' in operator_text and '_operator_db_backup' in operator_text,
     'semantic_type_safety_r55':'documents of different semantic type are NEVER duplicate candidates' in operator_text and 'modulo_unico_tesseramento' in operator_text and 'certificato_medico' in operator_text,
     'fast_safe_dedupe_r56':'BODYMIND_R56_FAST_DEDUPE' in operator_text and 'askInFlight' in operator_text and 'live multimodal/OpenAI comparisons' in operator_text and 'semantic_duplicates_' in operator_text,
+    'chat_avatar_r57':'BODYMIND_R57_CHAT_AVATAR' in operator_text and "bmo-msg-avatar" in operator_text,
 
 }
 
