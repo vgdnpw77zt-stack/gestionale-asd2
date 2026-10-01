@@ -92,7 +92,7 @@ def _targeted_query_response(conn, raw_message):
             return {"text":f"I documenti che richiedono verifica sono {cnt}.","mode":"targeted_fact","cloud_ai":False,"target":"pending_documents","value":cnt,
                     "links":[{"label":"Apri Da verificare","href":"/documenti/da-verificare"}]}
 
-    if any(x in n for x in ("tutela minori","tutele minori","consenso minori","minori incompleti","tutela genitoriale")):
+    if ("minor" in n) and any(x in n for x in ("tutela","consenso","genitor","autorizz")):
         a=_secretary_audit(conn); names=list(a.get("minor_issues") or [])
         if asks_list or missing:
             return {"text":("Minori con tutela da rivedere: "+", ".join(names)+".") if names else "Non risultano minori con tutela da rivedere.",
