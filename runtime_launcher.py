@@ -49,6 +49,7 @@ runpy.run_path("/opt/bodymind/release_operator_mobile_r33.py", run_name="__main_
 runpy.run_path("/opt/bodymind/release_operator_batch_r52.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_upload_semantic_r52.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_web_audio_r52.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_operator_read_smoke_r53.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_experience_r38.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_qa_r32.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_logic_qa_r37.py", run_name="__main__")
