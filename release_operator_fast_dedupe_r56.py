@@ -164,6 +164,12 @@ def _revalidate_semantic_duplicate_group(conn, group):
 '''
 s=s[:start]+replacement+s[end:]
 
+old_scope='''    if ("document" in n or "dossier" in n) and any(x in n for x in ("duplicat","doppion")):'''
+new_scope='''    if any(x in n for x in ("document","dossier","certificat","modulo","mu ")) and any(x in n for x in ("duplicat","doppion")):'''
+if old_scope not in s:
+    raise RuntimeError('R56 duplicate scope anchor missing')
+s=s.replace(old_scope,new_scope,1)
+
 old='''        want_cleanup=any(x in n for x in ("elimina","eliminare","rimuovi","rimuovere","cancella","cancellare","pulisci","pulire"))'''
 new='''        want_cleanup=any(x in n for x in (
             "elimina","eliminare","rimuovi","rimuovere","cancella","cancellare","pulisci","pulire",
