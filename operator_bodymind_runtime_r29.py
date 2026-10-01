@@ -1447,6 +1447,68 @@ def _execute_pending(conn):
             "mode":"action","links":links
         }
 
+    if kind=="archive_semantic_duplicates":
+        if current_role()!="admin":
+            return {"text":"La rimozione di copie documentali richiede un account amministratore. Non ho modificato nulla.","mode":"warning"}
+        groups=payload.get("groups") if isinstance(payload.get("groups"),list) else []
+        if not groups:
+            conn.execute("UPDATE bodymind_operator_actions SET status='cancelled' WHERE id=?",(aid,))
+            conn.commit(); session.pop("bodymind_operator_pending_action",None)
+            return {"text":"Non ci sono copie da rimuovere. Non ho modificato nulla.","mode":"warning"}
+        backup_dir=Path("/data/operator_backups")
+        backup_dir.mkdir(parents=True,exist_ok=True)
+        backup_file=backup_dir/(datetime.now().strftime("%Y%m%d_%H%M%S")+"_semantic_duplicates_"+str(aid)+".db")
+        db_path=Path("/data/tenants/default/asd.db")
+        if db_path.exists():
+            shutil.copy2(db_path,backup_file)
+        dc=_cols(conn,"documenti")
+        archived=[]; blocked=[]
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            for group in groups:
+                ok,reason=_revalidate_semantic_duplicate_group(conn,group)
+                rid=int((group.get("remove_ids") or [0])[0] or 0)
+                keep_id=int(group.get("keep_id") or 0)
+                if not ok:
+                    blocked.append({"remove_id":rid,"keep_id":keep_id,"reason":reason})
+                    continue
+                sets=[]; vals=[]
+                if "visibile" in dc:
+                    sets.append("visibile=0")
+                if "status" in dc:
+                    sets.append("status=?"); vals.append("semantic_duplicate_archived")
+                if "note" in dc:
+                    sets.append("note=?"); vals.append("Copia semantica rimossa dal dossier attivo tramite Segreteria BodyMind; originale mantenuto ID "+str(keep_id))
+                if not sets:
+                    blocked.append({"remove_id":rid,"keep_id":keep_id,"reason":"schema documenti non archiviabile"})
+                    continue
+                vals.extend([rid,int(group.get("tesserato_id") or 0)])
+                cur=conn.execute(
+                    "UPDATE documenti SET "+",".join(sets)+" WHERE id=? AND tesserato_id=?"+(" AND coalesce(visibile,1)=1" if "visibile" in dc else ""),
+                    tuple(vals)
+                )
+                if int(cur.rowcount or 0)==1:
+                    archived.append({"remove_id":rid,"keep_id":keep_id,"reason":reason})
+                else:
+                    blocked.append({"remove_id":rid,"keep_id":keep_id,"reason":"record cambiato o già non attivo"})
+            action_status="executed" if not blocked else ("executed_partial" if archived else "blocked_safety")
+            conn.execute(
+                "UPDATE bodymind_operator_actions SET status=?,confirmed_by=?,executed_at=?,payload_json=? WHERE id=?",
+                (action_status,_identity(),datetime.now().isoformat(timespec="seconds"),
+                 json.dumps({**payload,"archived":archived,"blocked":blocked,"backup":str(backup_file)},ensure_ascii=False),aid)
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        session.pop("bodymind_operator_pending_action",None)
+        if not archived:
+            return {"text":"Non ho rimosso alcun documento: la seconda verifica non ha confermato con sufficiente certezza le copie proposte. Il dossier è rimasto invariato.","mode":"warning","semantic_blocked":blocked}
+        text_out=f"Ho rimosso dal dossier attivo {len(archived)} copia/e semantiche confermate, mantenendo sempre l'originale migliore. Backup creato: {backup_file.name}."
+        if blocked:
+            text_out+=f" {len(blocked)} confronto/i sono stati bloccati perché non più abbastanza certi."
+        return {"text":text_out,"mode":"action","semantic_archived":archived,"semantic_blocked":blocked,"links":[{"label":"Apri Documenti","href":"/documenti"}]}
+
     if kind=="archive_duplicate_documents":
         conn.execute("UPDATE bodymind_operator_actions SET status='blocked_safety' WHERE id=? AND status='proposed'",(aid,))
         conn.commit(); session.pop("bodymind_operator_pending_action",None)
