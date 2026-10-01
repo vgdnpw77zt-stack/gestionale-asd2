@@ -41,12 +41,35 @@ def _parse_json(raw):
     try:
         obj=json.loads(s)
         if isinstance(obj,dict): return obj
-    except Exception: pass
-    m=re.search(r"\{.*\}",s,re.S)
-    if not m: raise RuntimeError("Risposta IA documentale non interpretabile")
-    obj=json.loads(m.group(0))
-    if not isinstance(obj,dict): raise RuntimeError("Risposta IA documentale non valida")
-    return obj
+    except Exception:
+        pass
+    dec=json.JSONDecoder()
+    for i,ch in enumerate(s):
+        if ch!="{":
+            continue
+        try:
+            obj,_end=dec.raw_decode(s[i:])
+            if isinstance(obj,dict):
+                return obj
+        except Exception:
+            continue
+    raise RuntimeError("Risposta IA documentale non interpretabile")
+
+def _response_text(response):
+    raw=str(getattr(response,"output_text","") or "").strip()
+    if raw:
+        return raw
+    parts=[]
+    try:
+        for item in (getattr(response,"output",None) or []):
+            for part in (getattr(item,"content",None) or []):
+                if str(getattr(part,"type","") or "")=="output_text":
+                    txt=str(getattr(part,"text","") or "")
+                    if txt:
+                        parts.append(txt)
+    except Exception:
+        pass
+    return "\n".join(parts).strip()
 
 def _input_part(name,data):
     if not data or len(data)>18*1024*1024: return None
@@ -70,7 +93,7 @@ def _call_json(conn,model,prompt,parts,schema,name,record_usage,max_tokens):
         msg["content"][0]["text"]=prompt+"\nRestituisci solo JSON valido conforme allo schema: "+json.dumps(schema,ensure_ascii=False)
         response=client.responses.create(**kwargs)
     if record_usage: record_usage(conn,response,model)
-    return _parse_json(getattr(response,"output_text",""))
+    return _parse_json(_response_text(response))
 
 def analyze_bytes(conn,name,data,extracted_text="",type_hint="",record_usage=None):
     model=str(os.environ.get("BODYMIND_AI_DOCUMENT_MODEL") or os.environ.get("BODYMIND_AI_MODEL") or "gpt-6-luna").strip()
@@ -79,7 +102,10 @@ def analyze_bytes(conn,name,data,extracted_text="",type_hint="",record_usage=Non
       "Leggi testo, compilazioni, date, checkbox, firme e annotazioni visibili. "
       "Non identificare la persona dal solo nome file se il contenuto dice altro. "
       "Per Modulo Unico valuta anche consensi, autorizzazioni, firme e stagione/versione. "
+      "Se nel CONTENUTO compare esplicitamente Modulo Unico, modulo di iscrizione/tesseramento, domanda di iscrizione con consensi/manleva, "
+      "classificalo come modulo_unico_tesseramento con confidenza alta se intestatario e struttura sono coerenti. "
       "Per certificato medico valuta intestatario, rilascio, scadenza e medico. "
+      "Modulo Unico e certificato medico sono tipi distinti: non confonderli mai. "
       "Usa stringa vuota se un dato non è leggibile e unknown per scelte non determinabili."
       +(("\nTipo dichiarato dall'utente, da verificare: "+str(type_hint)) if type_hint else "")
       +(("\nTesto estratto localmente:\n"+str(extracted_text)[:18000]) if extracted_text else "")
@@ -102,7 +128,8 @@ def compare_bytes(conn,name_a,data_a,analysis_a,name_b,data_b,analysis_b,record_
       "Confronta materialmente Documento A e Documento B. Decidi se sono la stessa copia/logico documento "
       "oppure versioni/documenti distinti. Controlla persona, date, versione/stagione, checkbox, consensi, "
       "firme, annotazioni e contenuto manoscritto. Una differenza sostanziale rende i documenti distinti. "
-      "same_document=true solo con evidenza forte; in dubbio false."
+      "same_document=true solo con evidenza forte; in dubbio false. "
+      "REGOLA ASSOLUTA: se document_type di A e B è diverso, soprattutto modulo_unico_tesseramento vs certificato_medico, same_document deve essere false."
       "\nMetadati A: "+json.dumps(analysis_a or {},ensure_ascii=False)[:7000]+
       "\nMetadati B: "+json.dumps(analysis_b or {},ensure_ascii=False)[:7000]
     )
