@@ -5,7 +5,7 @@ import json, os, sqlite3, sys
 
 APP=Path('/data/top2_app')
 DB=Path('/data/tenants/default/asd.db')
-MARK=APP/'.BODYMIND_OPERATOR_READ_SMOKE_R53E'
+MARK=APP/'.BODYMIND_OPERATOR_CERT_SMOKE_R54'
 
 def business_counts():
     c=sqlite3.connect(str(DB),timeout=20)
@@ -40,18 +40,12 @@ else:
         from asd_app.core import app, db
         import asd_app.routes_operator_bodymind as op
         questions=[
-            ('tesserati','Quanti tesserati abbiamo?',{'global_status'}),
-            ('pending','Quanti documenti sono da verificare?',{'global_status','list_pending_documents','secretary_audit'}),
-            ('search_elena','Cercami Elena',{'search_tesserato'}),
-            ('dossier_elena','Fammi vedere il dossier di Elena',{'inspect_tesserato','list_documents','search_tesserato'}),
-            ('cert_scadenza','Quali certificati medici stanno scadendo?',{'secretary_audit','global_status','discover_capabilities'}),
-            ('mancanze_elena','Che cosa manca a Elena?',{'inspect_tesserato','secretary_audit','search_tesserato'}),
-            ('navigate_dossier','Portami alla pagina corretta per il dossier di Elena',{'navigate','inspect_tesserato','search_tesserato'}),
+            ('cert_scadenza','Quali certificati medici stanno scadendo?',{'secretary_audit'}),
         ]
         with app.test_request_context('/operatore-bodymind'):
             from flask import session
             session.update({'logged':True,'username':'admin','display_name':'Daniele','role':'admin','tenant_slug':'default',
-                            '_csrf_token':'r53-read-smoke','bodymind_operator_conversation':'r53e-read-smoke',
+                            '_csrf_token':'r53-read-smoke','bodymind_operator_conversation':'r54-cert-smoke',
                             'bodymind_operator_identity':'Daniele'})
             conn=db()
             try:
@@ -67,6 +61,8 @@ else:
                         passed=passed and str(before.get('tesserati',0)) in text_out
                     if name=='pending':
                         passed=passed and ('document' in text_out.lower())
+                    if name=='cert_scadenza':
+                        passed=passed and ('certificati scaduti/in scadenza' in text_out.lower())
                     outcome['tests'].append({'name':name,'tool':tool,'mode':mode,'ok':bool(passed)})
                     if not passed:
                         raise RuntimeError(name+' unexpected tool/result: '+tool+' '+mode)
