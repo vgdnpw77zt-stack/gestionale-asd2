@@ -44,6 +44,8 @@ COPY release_secretary_capability_audit_r48.py /opt/bodymind/release_secretary_c
 COPY release_operator_batch_r52.py /opt/bodymind/release_operator_batch_r52.py
 COPY release_operator_upload_semantic_r52.py /opt/bodymind/release_operator_upload_semantic_r52.py
 COPY release_operator_web_audio_r52.py /opt/bodymind/release_operator_web_audio_r52.py
+COPY release_operator_autonomy_r55.py /opt/bodymind/release_operator_autonomy_r55.py
+COPY release_operator_pending_reconcile_r55.py /opt/bodymind/release_operator_pending_reconcile_r55.py
 COPY release_operator_read_smoke_r53.py /opt/bodymind/release_operator_read_smoke_r53.py
 COPY release_operator_experience_r38.py /opt/bodymind/release_operator_experience_r38.py
 COPY release_operator_qa_r32.py /opt/bodymind/release_operator_qa_r32.py
