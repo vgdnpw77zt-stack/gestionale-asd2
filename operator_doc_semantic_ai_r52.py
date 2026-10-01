@@ -79,7 +79,7 @@ def _input_part(name,data):
         mime=mimetypes.guess_type(str(name or ""))[0] or "image/jpeg"
         return {"type":"input_image","image_url":"data:"+mime+";base64,"+encoded,"detail":"high"}
     if ext==".pdf":
-        return {"type":"input_file","filename":str(name or "documento.pdf"),"file_data":encoded}
+        return {"type":"input_file","filename":str(name or "documento.pdf"),"file_data":"data:application/pdf;base64,"+encoded,"detail":"high"}
     return None
 
 def _call_json(conn,model,prompt,parts,schema,name,record_usage,max_tokens):
