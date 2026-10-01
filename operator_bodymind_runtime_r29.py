@@ -3275,6 +3275,20 @@ def bodymind_operator_home():
       voiceOrb?.addEventListener('click',cloudStartMic,true);
       voiceOrb?.addEventListener('keydown',ev=>{{if(ev.key==='Enter'||ev.key===' ')cloudStartMic(ev)}});
 
+      // BODYMIND_R67_ASYNC_UPLOAD_JOBS
+      async function waitUploadJob(jobId){{
+        const started=Date.now();
+        while(Date.now()-started < 15*60*1000){{
+          await new Promise(resolve=>setTimeout(resolve,1800));
+          const rr=await fetch('/operatore-bodymind/upload-job/'+encodeURIComponent(jobId),{{headers:{{'X-CSRFToken':csrf}}}});
+          const jj=await rr.json();
+          if(!rr.ok)throw new Error(jj.text||('Stato upload HTTP '+rr.status));
+          if(jj.status==='completed')return jj.result||jj;
+          if(jj.status==='failed')throw new Error(jj.text||jj.error||'Analisi documentale non riuscita.');
+        }}
+        throw new Error('L’analisi documentale sta impiegando troppo tempo. Il job resta registrato sul server.');
+      }}
+
       attach?.addEventListener('click',()=>{{
         const picker=document.createElement('input');
         picker.type='file';
@@ -3294,8 +3308,15 @@ def bodymind_operator_home():
             if(hint)fd.append('document_type_hint',hint);
             uploadInFlight=true;
             addMsg('Sto inviando '+files.length+' file al server BodyMind. Ti confermo la ricezione appena il server li prende in carico.','bot');
-            const r=await fetch('/operatore-bodymind/upload',{{method:'POST',headers:{{'X-CSRFToken':csrf}},body:fd}});
-            const data=await r.json();addMsg(data.text||'Analisi completata.','bot',data);speak(data.text||'Analisi completata.');
+            const r=await fetch('/operatore-bodymind/upload-async',{{method:'POST',headers:{{'X-CSRFToken':csrf}},body:fd}});
+            const data=await r.json();
+            if(!r.ok)throw new Error(data.text||('Upload HTTP '+r.status));
+            addMsg(data.text||'File ricevuti dal server. Avvio l’analisi.','bot',data);
+            if(data.job_id){{
+              const finalData=await waitUploadJob(data.job_id);
+              addMsg(finalData.text||'Analisi completata.','bot',finalData);
+              speak(finalData.text||'Analisi completata.');
+            }}else{{speak(data.text||'File ricevuti dal server.');}}
           }}catch(e){{
             addMsg('Il caricamento non è riuscito. Non ho modificato file esistenti.','bot');
           }}finally{{
@@ -3318,10 +3339,15 @@ def bodymind_operator_home():
         uploadInFlight=true;
         addMsg('Sto inviando '+files.length+' file al server BodyMind. L’analisi inizierà dopo la conferma di ricezione.','bot');
         try{{
-          const r=await fetch('/operatore-bodymind/upload',{{method:'POST',headers:{{'X-CSRFToken':csrf}},body:fd}});
+          const r=await fetch('/operatore-bodymind/upload-async',{{method:'POST',headers:{{'X-CSRFToken':csrf}},body:fd}});
           const data=await r.json();
-          addMsg(data.text||'Analisi completata.','bot',data);
-          speak(data.text||'Analisi completata.');
+          if(!r.ok)throw new Error(data.text||('Upload HTTP '+r.status));
+          addMsg(data.text||'File ricevuti dal server. Avvio l’analisi.','bot',data);
+          if(data.job_id){{
+            const finalData=await waitUploadJob(data.job_id);
+            addMsg(finalData.text||'Analisi completata.','bot',finalData);
+            speak(finalData.text||'Analisi completata.');
+          }}else{{speak(data.text||'File ricevuti dal server.');}}
         }}catch(e){{addMsg('Il caricamento non è riuscito. Non ho eliminato né modificato file esistenti.','bot')}}
         finally{{uploadInFlight=false}}
       }});
