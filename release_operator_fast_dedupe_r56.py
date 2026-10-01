@@ -195,6 +195,16 @@ s=s.replace(old,new,1)
 old='''      async function ask(q){{
         q=String(q||'').trim();if(!q)return;
         addMsg(q,'me');input.value='';send.disabled=true;'''
+old_upload='''      let uploadInFlight=false;
+
+      async function ask(q){{
+        q=String(q||'').trim();if(!q)return;
+        if(uploadInFlight){{
+          addMsg(q,'me');input.value='';
+          const t='Il file è ancora in trasferimento o in analisi sul server BodyMind. Ti confermo l’esito appena il server termina; non considero ancora il caricamento completato.';
+          addMsg(t,'bot');if(voiceStageOpen)setVoiceStage('Caricamento in corso',t);speak(t);return;
+        }}
+        addMsg(q,'me');input.value='';send.disabled=true;'''
 new='''      let askInFlight=false;
       async function ask(q){{
         q=String(q||'').trim();if(!q)return;
@@ -204,9 +214,28 @@ new='''      let askInFlight=false;
         }}
         askInFlight=true;
         addMsg(q,'me');input.value='';send.disabled=true;'''
-if old not in s:
+new_upload='''      let uploadInFlight=false;
+      let askInFlight=false;
+
+      async function ask(q){{
+        q=String(q||'').trim();if(!q)return;
+        if(uploadInFlight){{
+          addMsg(q,'me');input.value='';
+          const t='Il file è ancora in trasferimento o in analisi sul server BodyMind. Ti confermo l’esito appena il server termina; non considero ancora il caricamento completato.';
+          addMsg(t,'bot');if(voiceStageOpen)setVoiceStage('Caricamento in corso',t);speak(t);return;
+        }}
+        if(askInFlight){{
+          if(voiceStageOpen)setVoiceStage('Sto ancora lavorando','Attendi la risposta precedente.','Evito richieste sovrapposte che rallentano il gestionale.');
+          return;
+        }}
+        askInFlight=true;
+        addMsg(q,'me');input.value='';send.disabled=true;'''
+if old_upload in s:
+    s=s.replace(old_upload,new_upload,1)
+elif old in s:
+    s=s.replace(old,new,1)
+elif 'let askInFlight=false;' not in s:
     raise RuntimeError('R56 ask anchor missing')
-s=s.replace(old,new,1)
 
 old='''        }}catch(err){{
           const t='Non riesco a contattare il motore dell’Operatore in questo momento. Non ho modificato nulla.';
