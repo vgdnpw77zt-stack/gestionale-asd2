@@ -54,6 +54,9 @@ COPY release_operator_response_scope_r61.py /opt/bodymind/release_operator_respo
 COPY release_operator_query_polarity_r62.py /opt/bodymind/release_operator_query_polarity_r62.py
 COPY release_operator_cloud_first_r63.py /opt/bodymind/release_operator_cloud_first_r63.py
 COPY release_operator_persistent_upload_r64.py /opt/bodymind/release_operator_persistent_upload_r64.py
+COPY enrollment_ingest_core_r65.py /opt/bodymind/enrollment_ingest_core_r65.py
+COPY release_handwriting_enrollment_r65.py /opt/bodymind/release_handwriting_enrollment_r65.py
+COPY release_handwriting_enrollment_smoke_r65.py /opt/bodymind/release_handwriting_enrollment_smoke_r65.py
 COPY release_operator_upload_smoke_r64.py /opt/bodymind/release_operator_upload_smoke_r64.py
 COPY release_operator_cloud_first_smoke_r63.py /opt/bodymind/release_operator_cloud_first_smoke_r63.py
 COPY release_operator_polarity_smoke_r62.py /opt/bodymind/release_operator_polarity_smoke_r62.py
