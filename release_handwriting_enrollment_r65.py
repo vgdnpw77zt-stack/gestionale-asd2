@@ -48,6 +48,7 @@ if 'BODYMIND_R65_HANDWRITING_ENROLLMENT' not in s:
     from io import BytesIO
     from werkzeug.datastructures import FileStorage
 
+    # BODYMIND_R66_UPLOAD_TRUTH_MULTIDOC
     physical_file_count=len(files)
     expanded_files=[]
     for original in files[:120]:
@@ -290,10 +291,10 @@ if 'BODYMIND_R65_HANDWRITING_ENROLLMENT' not in s:
         raise RuntimeError('R65 pending action anchor missing')
     s=s.replace(anchor,branch+anchor,1)
 
-    s=s.replace('OPERATOR_VERSION = "R64.0-persistent-upload-task"','OPERATOR_VERSION = "R65.0-handwriting-enrollment"',1)
+    s=s.replace('OPERATOR_VERSION = "R64.0-persistent-upload-task"','OPERATOR_VERSION = "R66.0-upload-truth-multidoc"',1)
     OP.write_text(s,encoding='utf-8')
     py_compile.compile(str(OP),doraise=True)
-    print('[operator-r65] PASS handwriting-enrollment preview-confirm create-profile second-gate',flush=True)
+    print('[operator-r66] PASS handwriting-enrollment truthful-upload multidoc-pdf preview-confirm second-gate',flush=True)
 else:
     print('[operator-r65] already applied',flush=True)
 
