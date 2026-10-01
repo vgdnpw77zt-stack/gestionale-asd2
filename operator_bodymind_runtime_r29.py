@@ -3130,8 +3130,11 @@ def bodymind_operator_home():
 
       async function cloudStopAndTranscribe(){{
         if(!cloudRecording||!cloudRecorder)return;
+        const elapsed=performance.now()-cloudRecordingStartedAt;
+        if(elapsed<650){{if(voiceStatus)voiceStatus.textContent='Ti ascolto…';return}}
         cloudRecording=false;
         if(cloudMaxTimer){{clearTimeout(cloudMaxTimer);cloudMaxTimer=null}}
+        stopMicMeter();
         if(voiceStatus)voiceStatus.textContent='Trascrivo…';
         voiceOrb?.classList.remove('listening');
         if(voiceStageOpen)setVoiceStage('Trascrivo','Un attimo…','Sto trasformando la tua voce in testo.');
