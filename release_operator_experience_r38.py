@@ -43,14 +43,14 @@ operator_text=operator.read_text(encoding='utf-8',errors='replace')
 app_text=(APP/'app.py').read_text(encoding='utf-8',errors='replace')
 checks={
     'home_200':home.status_code==200,
-    'operator_r38':('OPERATOR_VERSION = "R52.0-semantic-secretary"' in operator_text) or ('OPERATOR_VERSION = "R50.0-cloud-secretary"' in operator_text) or ('OPERATOR_VERSION = "R49.0-chat-secretary"' in operator_text),
+    'operator_r38':('OPERATOR_VERSION = "R55.0-autonomous-secretary"' in operator_text) or ('OPERATOR_VERSION = "R52.0-semantic-secretary"' in operator_text) or ('OPERATOR_VERSION = "R50.0-cloud-secretary"' in operator_text) or ('OPERATOR_VERSION = "R49.0-chat-secretary"' in operator_text),
     'mobile_compact':'BODYMIND_R38_MOBILE' in body and '.bmo-status .bmo-pill{display:none;}' in body,
     'mobile_layout_fix':(('BODYMIND_R52_CHAT_NATIVE_UI' in body and 'width:100vw!important' in body and 'height:100dvh!important' in body) or ('BODYMIND_R39_IPHONE_LAYOUT_V2' in body and 'width:100vw' not in body)) and 'BODYMIND_R39_IPHONE_FILE_PICKER_DYNAMIC' in body and 'id="bmoMobileFiles"' not in body and "document.createElement('input')" in body and 'font-size:16px' in body,
     'operator_entry_no_overlap':mobile_home.status_code==200 and 'BODYMIND_R39_IPHONE_ENTRY_V2' in mobile_body and 'bottom:calc(86px + env(safe-area-inset-bottom))' in mobile_body and 'width:46px' in mobile_body,
     'family_logo_bodymind':family.status_code==200 and 'https://bodymindaerialstudio.life/seed-media/logo?v=9' in family_body and '/bodymind-media/logo' not in family_body,
     'cloud_native_ui_r49':'IA Cloud ·' in body and 'IA iMac:' not in body and 'BODYMIND_R49_CLOUD_NATIVE_VOICE_ONLY' in body,
     'cloud_voice_only_r49':'speechSynthesis' not in body and 'webkitSpeechRecognition' not in body and 'SpeechRecognition' not in body and 'MediaRecorder' in body and '/operatore-bodymind/voice/transcribe' in operator_text and '/operatore-bodymind/voice/speak' in operator_text,
-    'chat_secretary_ui_r49':'BODYMIND_R49_CHATGPT_STYLE_SECRETARY' in operator_text and 'Segreteria BodyMind' in body and '/bodymind-media/logo' in body and 'Messaggio a Segreteria BodyMind' in body,
+    'chat_secretary_ui_r49':'BODYMIND_R49_CHATGPT_STYLE_SECRETARY' in operator_text and 'Segreteria BodyMind' in body and ('https://bodymindaerialstudio.life/seed-media/logo?v=9' in body or '/bodymind-media/logo' in body) and 'Messaggio a Segreteria BodyMind' in body,
     'chat_history_r49':'initialHistory' in operator_text and 'bodymind_operator_messages' in operator_text and "speaker IN ('user','assistant')" in operator_text,
     'new_chat_r49':'/operatore-bodymind/new-chat' in operator_text and 'bmoNewChat' in body and 'bodymind_operator_conversation' in operator_text,
     'agent_tools_r40':'BODYMIND_R40_AGENT_TOOLS' in operator_text and '_agent_tool_catalog' in operator_text and '_execute_agent_tool' in operator_text and 'archive_duplicate_documents' in operator_text and '_duplicate_document_groups' in operator_text,
@@ -63,7 +63,7 @@ checks={
     'cloud_write_confirmation_r45':'_set_pending_action(conn,"generic_route_action"' in operator_text and 'bodymind_operator_pending_action' in operator_text and 'backup_file=backup_dir/' in operator_text,
     'cloud_generic_safety_r45':'_GENERIC_DESTRUCTIVE_HINTS' in operator_text and 'send_mail' in operator_text and 'stripe' in operator_text and 'shutil.rmtree' in operator_text and 'blocked_safety' in operator_text,
     'cloud_agent_loop_r45':'for agent_step in range(3)' in operator_text and '_compact_agent_observation' in operator_text and 'Risultati strumenti già usati in questa richiesta' in operator_text,
-    'cloud_native_secretary_r50':'BODYMIND_R46_CLOUD_NATIVE_SECRETARY' in operator_text and ('R52.0-semantic-secretary' in operator_text or 'R50.0-cloud-secretary' in operator_text or 'R49.0-chat-secretary' in operator_text),
+    'cloud_native_secretary_r50':'BODYMIND_R46_CLOUD_NATIVE_SECRETARY' in operator_text and ('R55.0-autonomous-secretary' in operator_text or 'R52.0-semantic-secretary' in operator_text or 'R50.0-cloud-secretary' in operator_text or 'R49.0-chat-secretary' in operator_text),
     'cloud_no_local_fallback_r46':'bridge_plan_tool' not in operator_text and 'bridge_enhance_result' not in operator_text and 'Mac/Qwen' not in operator_text and 'IA iMac' not in operator_text,
     'cloud_bridge_removed_r47':'/bodymind-ai-bridge' not in body and 'IA iMac:' not in body and 'routes_operator_bridge' not in app_text and not (APP/'asd_app/routes_operator_bridge.py').exists(),
     'cloud_voice_backend_r46':'/operatore-bodymind/voice/transcribe' in operator_text and '/operatore-bodymind/voice/speak' in operator_text and 'gpt-transcribe' in operator_text and 'gpt-4o-mini-tts' in operator_text,
@@ -77,6 +77,8 @@ checks={
     'smtp_send_r48':'"name":"send_email"' in operator_text and '_smtp_send_message' in operator_text and 'bodymind_email_log' in operator_text and 'kind=="send_email"' in operator_text,
     'batch_intent_r48':'"name":"prepare_batch_upload"' in operator_text and 'bodymind_operator_upload_intent' in operator_text and 'document_type_hint' in operator_text,
     'document_production_r48':'_productionize_inbound' in operator_text and '_verify_document_production' in operator_text and 'produced} messi in produzione e verificati' in operator_text,
+    'autonomous_secretary_r55':'BODYMIND_R55_AUTONOMOUS_SECRETARY' in operator_text and 'BODYMIND_R55_LIVING_LOGO' in operator_text and '_sync_mu_after_production' in operator_text and '_operator_db_backup' in operator_text,
+    'semantic_type_safety_r55':'documents of different semantic type are NEVER duplicate candidates' in operator_text and 'modulo_unico_tesseramento' in operator_text and 'certificato_medico' in operator_text,
 
 }
 
