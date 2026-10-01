@@ -923,8 +923,8 @@ def _agent_tool_catalog(conn):
         {"name":"search_tesserato","description":"Cerca un tesserato per nome o cognome.","write":False},
         {"name":"inspect_tesserato","description":"Legge dossier, documenti, certificato, tutela, quota e pagamenti di un tesserato.","write":False},
         {"name":"list_documents","description":"Elenca i documenti visibili di un tesserato.","write":False},
-        {"name":"find_duplicate_documents","description":"Trova documenti duplicati veri nel dossier di uno o di tutti i tesserati usando hash file o stesso path.","write":False},
-        {"name":"cleanup_duplicate_documents","description":"Analizza candidati duplicati ma NON elimina né nasconde documenti. La rimozione automatica è disabilitata per sicurezza; serve revisione umana del contenuto.","write":False},
+        {"name":"find_duplicate_documents","description":"Legge e confronta il contenuto reale dei documenti nel dossier e trova copie semanticamente uguali. Hash identico è una scorciatoia, altrimenti confronta persona, date, scelte, firme e contenuto.","write":False},
+        {"name":"cleanup_duplicate_documents","description":"Legge e confronta il contenuto reale dei documenti e prepara la rimozione dal dossier attivo delle sole copie confermate uguali con confidenza almeno 95%. Richiede conferma e una seconda verifica prima dell'esecuzione.","write":True},
         {"name":"list_pending_documents","description":"Conta e riepiloga la coda documenti da verificare.","write":False},
         {"name":"list_payments","description":"Legge pagamenti di un tesserato oppure il conteggio globale.","write":False},
         {"name":"set_quota","description":"Prepara la modifica della quota personalizzata di un tesserato; richiede conferma.","write":True},
@@ -1061,17 +1061,19 @@ def _execute_agent_tool(conn, plan, raw_message=""):
 
     if tool in ("find_duplicate_documents","cleanup_duplicate_documents"):
         scope_tid=int(athlete["id"]) if athlete else 0
-        groups,remove_ids=_prepare_duplicate_cleanup(conn,scope_tid or None)
+        groups,comparisons=_semantic_duplicate_groups(conn,scope_tid or None)
+        remove_ids=[rid for g in groups for rid in (g.get("remove_ids") or [])]
         if not groups:
             scope=(" per "+_athlete_name(athlete)) if athlete else ""
-            return {"text":"Non trovo documenti duplicati certi"+scope+". Ho confrontato contenuto file quando disponibile e riferimenti allo stesso file.","mode":"agent_tool","links":_links_for(scope_tid or None)}
+            return {"text":"Non trovo copie documentali semanticamente uguali"+scope+". Ho confrontato i documenti dello stesso tipo e della stessa persona; quelli non abbastanza certi restano distinti.","mode":"agent_tool","semantic_comparisons":comparisons,"links":_links_for(scope_tid or None)}
         athlete_count=len(set(g["tesserato_id"] for g in groups))
-        sample="; ".join(g["athlete_name"]+": "+g["filename"] for g in groups[:6])
+        sample="; ".join(g["athlete_name"]+" · "+g["document_kind"]+" · "+str(int(round(float(g.get("confidence") or 0)*100)))+"%" for g in groups[:8])
         if tool=="find_duplicate_documents":
-            return {"text":f"Ho trovato {len(remove_ids)} candidati duplicati in {len(groups)} gruppi su {athlete_count} tesserati. Li considero solo candidati: prima di qualsiasi rimozione vanno confrontati tipo e contenuto. "+sample,"mode":"agent_tool","links":_links_for(scope_tid or None)}
+            return {"text":f"Ho trovato {len(remove_ids)} copie confermate in {len(groups)} confronti positivi su {athlete_count} tesserati. "+sample,"mode":"agent_tool","semantic_duplicates":groups,"semantic_comparisons":comparisons,"links":_links_for(scope_tid or None)}
+        aid=_set_pending_action(conn,"archive_semantic_duplicates",{"groups":groups,"scope_tesserato_id":scope_tid or None})
         return {
-            "text":f"Ho trovato {len(remove_ids)} candidati in {len(groups)} gruppi, ma la rimozione automatica dei documenti è disabilitata per sicurezza. Posso mostrarti i candidati, ma non nascondo né elimino nulla senza una verifica umana del contenuto.",
-            "mode":"warning","links":_links_for(scope_tid or None)
+            "text":f"Ho letto i documenti e trovato {len(remove_ids)} copie con confidenza almeno 95%. Terrò l'originale migliore e rimuoverò dal dossier attivo soltanto le copie indicate. Prima di agire le confronterò una seconda volta e creerò un backup del database. Confermi?",
+            "mode":"confirm","action_id":aid,"semantic_duplicates":groups,"semantic_comparisons":comparisons,"links":_links_for(scope_tid or None)
         }
 
     if tool=="list_pending_documents":
