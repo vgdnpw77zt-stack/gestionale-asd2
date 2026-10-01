@@ -215,7 +215,7 @@ new='''    conn=db()
     return verified,details
 '''
 # only replace first occurrence after production function
-prodpos=s.indexOf('def _productionize_inbound')
+prodpos=s.index('def _productionize_inbound')
 tailpos=s.find(old,prodpos)
 if tailpos<0:
     raise RuntimeError('R55 production tail anchor missing')
