@@ -54,6 +54,7 @@ runpy.run_path("/opt/bodymind/release_operator_fast_dedupe_r56.py", run_name="__
 runpy.run_path("/opt/bodymind/release_operator_dedupe_smoke_r56.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_avatar_r57.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_voice_state_r59.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_operator_targeted_missing_r60.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_intent_smoke_r57.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_read_smoke_r53.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_experience_r38.py", run_name="__main__")
