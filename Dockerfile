@@ -51,6 +51,7 @@ COPY release_operator_avatar_r57.py /opt/bodymind/release_operator_avatar_r57.py
 COPY release_operator_voice_state_r59.py /opt/bodymind/release_operator_voice_state_r59.py
 COPY release_operator_targeted_missing_r60.py /opt/bodymind/release_operator_targeted_missing_r60.py
 COPY release_operator_response_scope_r61.py /opt/bodymind/release_operator_response_scope_r61.py
+COPY release_operator_query_polarity_r62.py /opt/bodymind/release_operator_query_polarity_r62.py
 COPY release_operator_scope_smoke_r61.py /opt/bodymind/release_operator_scope_smoke_r61.py
 COPY release_operator_targeted_smoke_r60.py /opt/bodymind/release_operator_targeted_smoke_r60.py
 COPY release_operator_intent_smoke_r57.py /opt/bodymind/release_operator_intent_smoke_r57.py
