@@ -3186,13 +3186,15 @@ def bodymind_operator_home():
               if(voiceStatus)voiceStatus.textContent=t;addMsg(t,'bot');
             }}
           }};
+          cloudSpeechSeen=false;cloudLastSpeechAt=0;
           cloudRecorder.start(250);
           cloudRecordingStartedAt=performance.now();
           cloudRecording=true;
+          await startMicMeter(stream);
           mic.classList.add('on');avatar.classList.add('listening');voiceOrb?.classList.add('listening');
           if(voiceStatus)voiceStatus.textContent='Ti ascolto… tocca di nuovo per inviare';
           if(voiceStageOpen)setVoiceStage('Ti ascolto','Parla normalmente.','Tocca di nuovo l’orb per inviare subito.');
-          cloudMaxTimer=setTimeout(()=>{{if(cloudRecording)cloudStopAndTranscribe()}},18000);
+          cloudMaxTimer=setTimeout(()=>{{if(cloudRecording)cloudStopAndTranscribe()}},20000);
         }}catch(e){{
           cloudRecording=false;mic.classList.remove('on');avatar.classList.remove('listening');voiceOrb?.classList.remove('listening');
           const t=(e?.name==='NotAllowedError'||e?.name==='SecurityError')
