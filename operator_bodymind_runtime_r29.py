@@ -3038,7 +3038,44 @@ def bodymind_operator_home():
 
       // BODYMIND_R49_CLOUD_NATIVE_VOICE_ONLY
       // Browser captures audio only; transcription and speech synthesis are cloud services.
+      // BODYMIND_R52_AUDIO_SIGNAL
       let cloudRecorder=null,cloudChunks=[],cloudRecording=false,cloudAudio=null,cloudMaxTimer=null,cloudRecordingStartedAt=0;
+      let voiceAudioCtx=null,voicePlaybackSource=null,lastTtsBytes=null;
+      let micAnalyser=null,micSourceNode=null,micLevelTimer=null,cloudSpeechSeen=false,cloudLastSpeechAt=0;
+
+      async function unlockVoiceAudio(){{
+        const Ctx=window.AudioContext||window.webkitAudioContext;
+        if(!Ctx)return null;
+        if(!voiceAudioCtx)voiceAudioCtx=new Ctx();
+        if(voiceAudioCtx.state==='suspended'){{try{{await voiceAudioCtx.resume()}}catch(e){{}}}}
+        return voiceAudioCtx;
+      }}
+      function stopMicMeter(){{
+        if(micLevelTimer){{clearInterval(micLevelTimer);micLevelTimer=null}}
+        try{{micSourceNode?.disconnect()}}catch(e){{}}
+        micSourceNode=null;micAnalyser=null;
+        if(voiceOrb)voiceOrb.style.transform='';
+      }}
+      async function startMicMeter(stream){{
+        const ctx=await unlockVoiceAudio();if(!ctx)return;
+        try{{
+          micSourceNode=ctx.createMediaStreamSource(stream);
+          micAnalyser=ctx.createAnalyser();micAnalyser.fftSize=512;micAnalyser.smoothingTimeConstant=.55;
+          micSourceNode.connect(micAnalyser);
+          const buf=new Uint8Array(micAnalyser.fftSize);
+          micLevelTimer=setInterval(()=>{{
+            if(!cloudRecording||!micAnalyser)return;
+            micAnalyser.getByteTimeDomainData(buf);
+            let sum=0;for(const v of buf){{const x=(v-128)/128;sum+=x*x}}
+            const rms=Math.sqrt(sum/buf.length);
+            const scale=1+Math.min(.07,rms*1.7);
+            if(voiceOrb)voiceOrb.style.transform='scale('+scale.toFixed(3)+')';
+            if(rms>.025){{cloudSpeechSeen=true;cloudLastSpeechAt=performance.now();}}
+            const elapsed=performance.now()-cloudRecordingStartedAt;
+            if(cloudSpeechSeen&&elapsed>1100&&performance.now()-cloudLastSpeechAt>1150)cloudStopAndTranscribe();
+          }},90);
+        }}catch(e){{voiceDiag('mic_meter_error',{{error:String(e?.message||e)}})}}
+      }}
 
       async function speak(text,fromUserGesture=false){{
         if(!voice || !voice.checked || !text)return;
