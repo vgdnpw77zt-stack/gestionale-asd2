@@ -76,7 +76,7 @@ checks={
     'smtp_secure_r48':'/operatore-bodymind/secure/smtp' in operator_text and '/operatore-bodymind/smtp/setup' in operator_text and '_smtp_test_connection' in operator_text,
     'smtp_send_r48':'"name":"send_email"' in operator_text and '_smtp_send_message' in operator_text and 'bodymind_email_log' in operator_text and 'kind=="send_email"' in operator_text,
     'batch_intent_r48':'"name":"prepare_batch_upload"' in operator_text and 'bodymind_operator_upload_intent' in operator_text and 'document_type_hint' in operator_text,
-    'document_production_r48':'_productionize_inbound' in operator_text and '_verify_document_production' in operator_text and 'produced} messi in produzione e verificati' in operator_text,
+    'document_production_r48':'_productionize_inbound' in operator_text and '_verify_document_production' in operator_text and (('produced} messi in produzione e verificati' in operator_text) or ('BODYMIND_R64_PERSISTENT_UPLOAD_TASK' in operator_text and 'productionize_batch' in operator_text and 'nuovo_pronto' in operator_text and 'awaiting_confirmation' in operator_text)),
     'autonomous_secretary_r55':'BODYMIND_R55_AUTONOMOUS_SECRETARY' in operator_text and 'BODYMIND_R55_LIVING_LOGO' in operator_text and '_sync_mu_after_production' in operator_text and '_operator_db_backup' in operator_text,
     'semantic_type_safety_r55':'documents of different semantic type are NEVER duplicate candidates' in operator_text and 'modulo_unico_tesseramento' in operator_text and 'certificato_medico' in operator_text,
     'fast_safe_dedupe_r56':'BODYMIND_R56_FAST_DEDUPE' in operator_text and 'askInFlight' in operator_text and 'live multimodal/OpenAI comparisons' in operator_text and 'semantic_duplicates_' in operator_text,
