@@ -34,6 +34,11 @@ from .operator_doc_semantic_ai_r52 import (
     analyze_bytes as _docsem_analyze_bytes,
     compare_bytes as _docsem_compare_bytes,
 )
+from .operator_async_upload_core_r67 import (
+    create_job as _async_upload_create_job,
+    get_job as _async_upload_get_job,
+    start_job as _async_upload_start_job,
+)
 
 OPERATOR_VERSION = "R52.0-semantic-secretary"
 PENDING_STATUSES = (
