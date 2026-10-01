@@ -919,7 +919,7 @@ def _agent_tool_catalog(conn):
         {"name":"smtp_status","description":"Controlla se il servizio SMTP è configurato e se l'ultimo test di connessione è riuscito. Non legge né espone password.","write":False},
         {"name":"open_smtp_setup","description":"Apre nel gestionale il pannello sicuro per configurare SMTP/Gmail. Le credenziali non vengono inviate al modello.","write":False},
         {"name":"send_email","description":"Prepara una email reale da inviare tramite SMTP BodyMind. Args: recipient, subject, body. Richiede conferma prima dell'invio.","write":True},
-        {"name":"prepare_batch_upload","description":"Prepara il prossimo caricamento massivo dichiarando il tipo documento e se va portato in produzione. Args: document_type, production. Usalo solo se l'utente lo chiede esplicitamente.","write":True},
+        {"name":"prepare_batch_upload","description":"Prepara il prossimo caricamento massivo. Se l'utente dice che sta caricando Moduli Unici/certificati, imposta document_type e production=true: ogni file verrà letto, confrontato col dossier e importato solo se non è già presente. Args: document_type, production.","write":True},
         {"name":"search_tesserato","description":"Cerca un tesserato per nome o cognome.","write":False},
         {"name":"inspect_tesserato","description":"Legge dossier, documenti, certificato, tutela, quota e pagamenti di un tesserato.","write":False},
         {"name":"list_documents","description":"Elenca i documenti visibili di un tesserato.","write":False},
@@ -1023,7 +1023,7 @@ def _execute_agent_tool(conn, plan, raw_message=""):
         aliases={"modulo unico":"modulo_unico_tesseramento","modulo_unico":"modulo_unico_tesseramento","iscrizione":"modulo_unico_tesseramento","modulo iscrizione":"modulo_unico_tesseramento"}
         dtype=aliases.get(dtype,dtype)
         production=bool(args.get("production"))
-        explicit=any(x in _norm(raw_message) for x in ("produzione","mettili","mandali","implementali","verifica tutti","conferma tutti","carico","caricare"))
+        explicit=any(x in _norm(raw_message) for x in ("produzione","mettili","mandali","implementali","verifica tutti","conferma tutti","carico","caricare","caricando","sto caricando","te li carico","ti sto caricando"))
         if production and not explicit:
             return {"text":"Per il passaggio automatico in produzione dimmelo esplicitamente, per esempio: “i prossimi file sono Moduli Unici, mettili in produzione”.","mode":"clarify"}
         if dtype not in ("modulo_unico_tesseramento","certificato_medico","documento_identita","trasporto_minori","documenti_gara","documenti_saggio"):
