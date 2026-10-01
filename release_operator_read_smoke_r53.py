@@ -5,7 +5,7 @@ import json, os, sqlite3, sys
 
 APP=Path('/data/top2_app')
 DB=Path('/data/tenants/default/asd.db')
-MARK=APP/'.BODYMIND_OPERATOR_READ_SMOKE_R53B'
+MARK=APP/'.BODYMIND_OPERATOR_READ_SMOKE_R53C'
 
 def business_counts():
     c=sqlite3.connect(str(DB),timeout=20)
@@ -51,7 +51,7 @@ else:
         with app.test_request_context('/operatore-bodymind'):
             from flask import session
             session.update({'logged':True,'username':'admin','display_name':'Daniele','role':'admin','tenant_slug':'default',
-                            '_csrf_token':'r53-read-smoke','bodymind_operator_conversation':'r53b-read-smoke',
+                            '_csrf_token':'r53-read-smoke','bodymind_operator_conversation':'r53c-read-smoke',
                             'bodymind_operator_identity':'Daniele'})
             conn=db()
             try:
