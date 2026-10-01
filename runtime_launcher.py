@@ -45,14 +45,16 @@ runpy.run_path("/opt/bodymind/release_secretary_capability_audit_r48.py", run_na
 if not (APP / ".BODYMIND_TIMELINE_INSPECT_R35").exists():
     runpy.run_path("/opt/bodymind/runtime_timeline_inspect_r35.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_mobile_r33.py", run_name="__main__")
-# R52 is the final operator layer. Nothing is allowed to mutate the operator after these patches except QA.
+# R55 is the final operator layer. R55 adds semantic autonomy and the BodyMind living voice logo.
 runpy.run_path("/opt/bodymind/release_operator_batch_r52.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_upload_semantic_r52.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_web_audio_r52.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_operator_autonomy_r55.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_read_smoke_r53.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_experience_r38.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_qa_r32.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_logic_qa_r37.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_operator_pending_reconcile_r55.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_cleanup_r2.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_route_guard_r39.py", run_name="__main__")
 incoming = pathlib.Path("/data/incoming")
