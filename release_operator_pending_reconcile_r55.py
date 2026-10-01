@@ -119,7 +119,7 @@ else:
                                 item["reason"]="confidence_gate"
                                 report["items"].append(item)
                                 continue
-                            duplicate=op._same_existing_document(conn,int(athlete["id"]),name,data,semantic)
+                            duplicate=op._same_existing_document(conn,int(athlete["id"]),name,data,semantic,exclude_inbound_id=iid)
                             if duplicate.get("duplicate"):
                                 report["duplicates"]+=1
                                 item.update({
