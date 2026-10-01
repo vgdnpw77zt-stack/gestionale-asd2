@@ -622,6 +622,74 @@ def _same_existing_document(conn,tid,name,data,analysis,max_candidates=8):
             break
     return {"duplicate":False,"existing_id":None,"confidence":0.0,"reason":"","method":""}
 
+# BODYMIND_R52_SEMANTIC_DUPLICATES
+def _semantic_duplicate_groups(conn, tid=None, max_comparisons=24):
+    if not _table(conn,"documenti"):
+        return [],0
+    rows=_visible_docs(conn,int(tid)) if tid else conn.execute(
+        "SELECT * FROM documenti"+(" WHERE coalesce(visibile,1)=1" if "visibile" in _cols(conn,"documenti") else "")+
+        " ORDER BY tesserato_id,id"
+    ).fetchall()
+    buckets={}
+    for row in rows:
+        athlete_id=int(row["tesserato_id"] or 0) if "tesserato_id" in row.keys() else 0
+        if athlete_id<=0:
+            continue
+        buckets.setdefault((athlete_id,_canonical_document_kind(row)),[]).append(row)
+    groups=[]; comparisons=0
+    for (athlete_id,kind),items in buckets.items():
+        if len(items)<2:
+            continue
+        def _rank(row):
+            st=_norm(row["status"]) if "status" in row.keys() else ""
+            verified=1 if st in ("verified","verificato","ok","approved","completo","salvato") else 0
+            try: conf=float(row["confidence"] or 0) if "confidence" in row.keys() else 0
+            except Exception: conf=0
+            return (verified,conf,-int(row["id"]))
+        keepers=[]
+        for row in sorted(items,key=_rank,reverse=True):
+            name,data,_=_document_bytes_from_row(row)
+            if not data:
+                keepers.append(row); continue
+            match=None
+            for keep in keepers:
+                kname,kdata,_=_document_bytes_from_row(keep)
+                if not kdata:
+                    continue
+                if _docsem_sha256(data)==_docsem_sha256(kdata):
+                    cmp={"same_document":True,"confidence":1.0,"reason":"contenuto identico","method":"sha256"}
+                else:
+                    if comparisons>=max_comparisons:
+                        break
+                    left=_semantic_for_document_row(conn,row,"documenti")
+                    right=_semantic_for_document_row(conn,keep,"documenti")
+                    if not left or not right:
+                        continue
+                    comparisons+=1
+                    try:
+                        cmp=_semantic_same_pair(conn,name,data,left,kname,kdata,right)
+                    except Exception:
+                        cmp={"same_document":False,"confidence":0.0}
+                if bool(cmp.get("same_document")) and float(cmp.get("confidence") or 0)>=.95:
+                    match=(keep,cmp); break
+            if match:
+                keep,cmp=match
+                athlete=conn.execute("SELECT nome,cognome FROM tesserati WHERE id=?",(athlete_id,)).fetchone()
+                groups.append({
+                    "tesserato_id":athlete_id,
+                    "athlete_name":_athlete_name(athlete) if athlete else ("Tesserato "+str(athlete_id)),
+                    "document_kind":kind,
+                    "keep_id":int(keep["id"]),
+                    "remove_ids":[int(row["id"])],
+                    "confidence":float(cmp.get("confidence") or 0),
+                    "reason":str(cmp.get("reason") or ""),
+                    "comparison_method":str(cmp.get("method") or "multimodal"),
+                })
+            else:
+                keepers.append(row)
+    return groups,comparisons
+
+
 def _canonical_document_kind(row):
     parts=[]
     for key in ("doc_type","categoria","titolo","original_filename","filename"):
