@@ -5,7 +5,7 @@ import json, sqlite3, sys
 
 APP=Path('/data/top2_app')
 DB=Path('/data/tenants/default/asd.db')
-MARK=APP/'.BODYMIND_OPERATOR_PENDING_RECONCILE_R55C'
+MARK=APP/'.BODYMIND_OPERATOR_PENDING_RECONCILE_R55D'
 
 def table(conn,name):
     return bool(conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(name,)).fetchone())
@@ -156,6 +156,17 @@ else:
                             report["uncertain"]+=1
                             item["reason"]=str(details.get("reason") or "production_gate")
                         report["items"].append(item)
+                        print("[operator-r55-reconcile-progress] "+json.dumps({
+                            "inbound_id":iid,
+                            "type":item.get("type"),
+                            "tesserato_id":item.get("tesserato_id"),
+                            "produced":item.get("produced"),
+                            "reason":item.get("reason",""),
+                            "done":len(report["items"]),
+                            "produced_total":report["produced"],
+                            "duplicates_total":report["duplicates"],
+                            "uncertain_total":report["uncertain"]
+                        },ensure_ascii=False),flush=True)
                     except Exception as exc:
                         report["errors"].append({"inbound_id":iid,"error":repr(exc)[:240]})
                         item["reason"]="error"
