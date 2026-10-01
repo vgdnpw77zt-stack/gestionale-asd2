@@ -50,6 +50,7 @@ COPY release_operator_dedupe_smoke_r56.py /opt/bodymind/release_operator_dedupe_
 COPY release_operator_avatar_r57.py /opt/bodymind/release_operator_avatar_r57.py
 COPY release_operator_voice_state_r59.py /opt/bodymind/release_operator_voice_state_r59.py
 COPY release_operator_targeted_missing_r60.py /opt/bodymind/release_operator_targeted_missing_r60.py
+COPY release_operator_response_scope_r61.py /opt/bodymind/release_operator_response_scope_r61.py
 COPY release_operator_targeted_smoke_r60.py /opt/bodymind/release_operator_targeted_smoke_r60.py
 COPY release_operator_intent_smoke_r57.py /opt/bodymind/release_operator_intent_smoke_r57.py
 COPY release_operator_pending_reconcile_r55.py /opt/bodymind/release_operator_pending_reconcile_r55.py
