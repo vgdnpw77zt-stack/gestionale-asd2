@@ -46,6 +46,7 @@ COPY release_operator_upload_semantic_r52.py /opt/bodymind/release_operator_uplo
 COPY release_operator_web_audio_r52.py /opt/bodymind/release_operator_web_audio_r52.py
 COPY release_operator_autonomy_r55.py /opt/bodymind/release_operator_autonomy_r55.py
 COPY release_operator_fast_dedupe_r56.py /opt/bodymind/release_operator_fast_dedupe_r56.py
+COPY release_operator_dedupe_smoke_r56.py /opt/bodymind/release_operator_dedupe_smoke_r56.py
 COPY release_operator_pending_reconcile_r55.py /opt/bodymind/release_operator_pending_reconcile_r55.py
 COPY release_operator_pending_audit_r55e.py /opt/bodymind/release_operator_pending_audit_r55e.py
 COPY release_operator_dinicola_r55f.py /opt/bodymind/release_operator_dinicola_r55f.py
