@@ -1,5 +1,6 @@
 from __future__ import annotations
-import base64, json, mimetypes, os, re
+import base64, io, json, mimetypes, os, re
+from pypdf import PdfReader, PdfWriter
 from pathlib import Path
 from .operator_doc_semantic_core_r52 import DOC_TYPES, semantic_key, sha256_bytes
 
@@ -35,6 +36,27 @@ SEMANTIC_SCHEMA={
              "autonomous_exit","delegation","athlete_signature","guardian_signature","content_summary",
              "evidence","confidence"]
 }
+
+MULTIDOC_SCHEMA={
+ "type":"object","additionalProperties":False,
+ "properties":{
+  "contains_multiple_documents":{"type":"boolean"},
+  "documents":{"type":"array","items":{
+   "type":"object","additionalProperties":False,
+   "properties":{
+    "page_start":{"type":"integer","minimum":1},
+    "page_end":{"type":"integer","minimum":1},
+    "document_type":{"type":"string","enum":list(DOC_TYPES)},
+    "person_name":{"type":"string"},
+    "confidence":{"type":"number","minimum":0,"maximum":1},
+    "evidence":{"type":"string"}
+   },
+   "required":["page_start","page_end","document_type","person_name","confidence","evidence"]
+  }}
+ },
+ "required":["contains_multiple_documents","documents"]
+}
+
 COMPARE_SCHEMA={
  "type":"object","additionalProperties":False,
  "properties":{
@@ -168,3 +190,64 @@ def compare_bytes(conn,name_a,data_a,analysis_a,name_b,data_b,analysis_b,record_
     except Exception: obj["confidence"]=0.0
     obj["method"]="multimodal"; obj["model"]=model
     return obj
+
+
+def segment_pdf_documents(conn,name,data,type_hint="",record_usage=None):
+    """Detect and split a PDF containing multiple logical documents."""
+    if not data or Path(str(name or "")).suffix.lower()!=".pdf":
+        return {"ok":True,"multiple":False,"page_count":0,"segments":[]}
+    reader=PdfReader(io.BytesIO(data))
+    page_count=len(reader.pages)
+    if page_count<=1:
+        return {"ok":True,"multiple":False,"page_count":page_count,"segments":[]}
+    if len(data)>32*1024*1024:
+        return {"ok":False,"multiple":False,"page_count":page_count,"segments":[],"reason":"pdf_too_large_for_segmentation"}
+    model=str(os.environ.get("BODYMIND_AI_DOCUMENT_MODEL") or os.environ.get("BODYMIND_AI_MODEL") or "gpt-6-luna").strip()
+    prompt=(
+      "Analizza questo PDF come fascicolo documentale BodyMind. Determina se contiene più documenti logici distinti. "
+      "Restituisci un intervallo consecutivo di pagine per ciascun documento. "
+      "Un certificato medico seguito dal proprio ECG/referto della stessa persona resta nello stesso documento logico. "
+      "Quando cambia persona o inizia chiaramente un nuovo certificato/modulo, inizia un nuovo documento. "
+      "Non inventare persone e non sovrapporre gli intervalli. "
+      "Se è un solo documento multipagina, contains_multiple_documents=false e usa un solo intervallo 1..N. "
+      "Pagine totali: "+str(page_count)+
+      ((". Tipo dichiarato: "+str(type_hint)) if type_hint else "")
+    )
+    part=_input_part(name,data)
+    cb=(lambda c,r,m: record_usage(c,r,m,"document_segment")) if record_usage else None
+    obj=_call_json(conn,model,prompt,[part] if part else [],MULTIDOC_SCHEMA,"bodymind_multidoc",cb,1600)
+    docs=obj.get("documents") if isinstance(obj,dict) else []
+    if not isinstance(docs,list) or len(docs)<=1 or not bool(obj.get("contains_multiple_documents")):
+        return {"ok":True,"multiple":False,"page_count":page_count,"segments":[]}
+    clean=[]; occupied=set()
+    for raw in docs:
+        if not isinstance(raw,dict):
+            continue
+        try:
+            a=max(1,min(page_count,int(raw.get("page_start") or 1)))
+            b=max(a,min(page_count,int(raw.get("page_end") or a)))
+            conf=max(0.0,min(1.0,float(raw.get("confidence") or 0)))
+        except Exception:
+            continue
+        pages=set(range(a,b+1))
+        if pages & occupied:
+            continue
+        occupied |= pages
+        dtype=str(raw.get("document_type") or "altro")
+        if dtype not in DOC_TYPES:
+            dtype="altro"
+        writer=PdfWriter()
+        for idx in range(a-1,b):
+            writer.add_page(reader.pages[idx])
+        bio=io.BytesIO(); writer.write(bio)
+        person=re.sub(r"[^A-Za-z0-9._-]+","_",str(raw.get("person_name") or "").strip()).strip("._-")[:60] or "documento"
+        stem=re.sub(r"[^A-Za-z0-9._-]+","_",Path(str(name or "documento.pdf")).stem).strip("._-")[:60] or "documento"
+        clean.append({
+          "page_start":a,"page_end":b,"document_type":dtype,
+          "person_name":str(raw.get("person_name") or "").strip(),
+          "confidence":conf,"evidence":str(raw.get("evidence") or "").strip(),
+          "filename":stem+"__p"+str(a)+"-"+str(b)+"__"+person+".pdf",
+          "data":bio.getvalue()
+        })
+    clean.sort(key=lambda x:(x["page_start"],x["page_end"]))
+    return {"ok":True,"multiple":len(clean)>1,"page_count":page_count,"segments":clean}
