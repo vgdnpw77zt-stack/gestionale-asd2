@@ -12,6 +12,8 @@ SEM_CORE_SRC=Path('/opt/bodymind/operator_doc_semantic_core_r52.py')
 SEM_AI_SRC=Path('/opt/bodymind/operator_doc_semantic_ai_r52.py')
 SEM_CORE_TARGET=APP/'asd_app/operator_doc_semantic_core_r52.py'
 SEM_AI_TARGET=APP/'asd_app/operator_doc_semantic_ai_r52.py'
+ASYNC_CORE_SRC=Path('/opt/bodymind/operator_async_upload_core_r67.py')
+ASYNC_CORE_TARGET=APP/'asd_app/operator_async_upload_core_r67.py'
 MARKER=APP/'.BODYMIND_OPERATOR_R29'
 BACKUPS=Path('/data/release_backups/20260929_operator_r29')
 
@@ -146,10 +148,11 @@ if not MARKER.exists():
             health_patched=True
             break
 
-    if not SEM_CORE_SRC.exists() or not SEM_AI_SRC.exists():
-        raise RuntimeError('R52 semantic helper source missing')
+    if not SEM_CORE_SRC.exists() or not SEM_AI_SRC.exists() or not ASYNC_CORE_SRC.exists():
+        raise RuntimeError('R52/R67 helper source missing')
     SEM_CORE_TARGET.write_text(SEM_CORE_SRC.read_text(encoding='utf-8'),encoding='utf-8')
     SEM_AI_TARGET.write_text(SEM_AI_SRC.read_text(encoding='utf-8'),encoding='utf-8')
+    ASYNC_CORE_TARGET.write_text(ASYNC_CORE_SRC.read_text(encoding='utf-8'),encoding='utf-8')
     if not compileall.compile_dir(str(APP/'asd_app'),quiet=1):
         raise RuntimeError('R29 compileall failed')
     if not compileall.compile_file(str(APP/'app.py'),quiet=1):
@@ -176,12 +179,15 @@ if not MARKER.exists():
     print('[operator-r29-selftest] PASS voice identity conversation athlete-search docs minors certificates quota-confirm upload-autopilot simplified-nav dead-js-cleanup',flush=True)
 else:
     # R52 semantic helpers are code only: refresh them from the image on every boot.
-    if not SEM_CORE_SRC.exists() or not SEM_AI_SRC.exists():
-        raise RuntimeError('R52 semantic helper source missing')
+    if not SEM_CORE_SRC.exists() or not SEM_AI_SRC.exists() or not ASYNC_CORE_SRC.exists():
+        raise RuntimeError('R52/R67 helper source missing')
     SEM_CORE_TARGET.write_text(SEM_CORE_SRC.read_text(encoding='utf-8'),encoding='utf-8')
     SEM_AI_TARGET.write_text(SEM_AI_SRC.read_text(encoding='utf-8'),encoding='utf-8')
-    if not compileall.compile_file(str(SEM_CORE_TARGET),quiet=1) or not compileall.compile_file(str(SEM_AI_TARGET),quiet=1):
-        raise RuntimeError('R52 semantic helper compile failed')
+    ASYNC_CORE_TARGET.write_text(ASYNC_CORE_SRC.read_text(encoding='utf-8'),encoding='utf-8')
+    if (not compileall.compile_file(str(SEM_CORE_TARGET),quiet=1)
+        or not compileall.compile_file(str(SEM_AI_TARGET),quiet=1)
+        or not compileall.compile_file(str(ASYNC_CORE_TARGET),quiet=1)):
+        raise RuntimeError('R52/R67 helper compile failed')
     print('[operator-r29] semantic helper modules refreshed',flush=True)
 
     # Keep operator runtime source current if the container image is newer, without touching data.
