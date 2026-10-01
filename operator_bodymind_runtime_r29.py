@@ -2647,6 +2647,57 @@ def bodymind_operator_home():
       .bmo-starters{{display:grid;grid-template-columns:1fr 1fr}}
       .bmo-starters button{{text-align:left;border-radius:14px}}
     }}
+    /* BODYMIND_R52_CHAT_NATIVE_UI
+       Final layout authority: conversational shell, not dashboard. */
+    :root{{--bmo-bg:#171717;--bmo-panel:#212121;--bmo-soft:#2f2f2f;--bmo-line:rgba(255,255,255,.09);--bmo-text:#ececec;--bmo-muted:#a7a7a7}}
+    .bmo{{position:fixed!important;inset:0!important;z-index:9000!important;width:100vw!important;height:100dvh!important;min-height:0!important;margin:0!important;padding:0!important;overflow:hidden!important;background:var(--bmo-bg)!important;color:var(--bmo-text)!important}}
+    .bmo-hero{{position:relative!important;top:auto!important;z-index:2!important;flex:0 0 56px!important;height:56px!important;box-sizing:border-box!important;padding:8px 14px!important;background:rgba(23,23,23,.96)!important;border:0!important;border-bottom:1px solid var(--bmo-line)!important}}
+    .bmo-brand{{gap:9px!important}} .bmo-avatar{{width:34px!important;height:34px!important;border-radius:10px!important}} .bmo-avatar img{{width:32px!important;height:32px!important}}
+    .bmo-brand-title{{font-size:14px!important;font-weight:700!important}} .bmo-brand-sub{{font-size:10.5px!important;color:var(--bmo-muted)!important}}
+    .bmo-top-actions{{gap:6px!important}} .bmo-top-btn{{height:34px!important;background:transparent!important;border:1px solid var(--bmo-line)!important;border-radius:9px!important;color:#ddd!important}}
+    .bmo-grid{{display:flex!important;flex:1!important;min-height:0!important;margin:0!important;overflow:hidden!important}}
+    .bmo-chat{{display:flex!important;flex-direction:column!important;flex:1!important;min-height:0!important;height:100%!important;background:var(--bmo-bg)!important;border:0!important;overflow:hidden!important}}
+    .bmo-side{{display:none!important}}
+    .bmo-messages{{flex:1 1 auto!important;min-height:0!important;height:auto!important;max-height:none!important;overflow-y:auto!important;overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important;width:100%!important;max-width:none!important;margin:0!important;padding:28px max(16px,calc((100vw - 820px)/2)) 24px!important;box-sizing:border-box!important;gap:22px!important;scrollbar-gutter:stable}}
+    .bmo-msg-row{{width:100%!important;max-width:820px!important;margin:0 auto!important;gap:12px!important}}
+    .bmo-msg-row.me{{justify-content:flex-end!important}}
+    .bmo-msg-avatar{{width:28px!important;height:28px!important;flex:0 0 28px!important;border-radius:8px!important}}
+    .bmo-msg{{font-size:15px!important;line-height:1.62!important;color:var(--bmo-text)!important;max-width:calc(100% - 46px)!important;white-space:pre-wrap!important}}
+    .bmo-msg.bot{{background:transparent!important;padding:2px 0!important;border:0!important}}
+    .bmo-msg.me{{background:var(--bmo-soft)!important;padding:10px 15px!important;border-radius:18px!important;max-width:min(72%,620px)!important}}
+    .bmo-card{{background:#252525!important;border:1px solid var(--bmo-line)!important;color:var(--bmo-text)!important}}
+    .bmo-link{{background:#292929!important;border:1px solid var(--bmo-line)!important;color:#eee!important;border-radius:10px!important}}
+    .bmo-empty{{flex:1!important;min-height:0!important;height:100%!important;padding:36px 18px!important;box-sizing:border-box!important}}
+    .bmo-empty-logo{{width:64px!important;height:64px!important;margin-bottom:16px!important}} .bmo-empty h1{{font-size:30px!important}} .bmo-empty p{{color:var(--bmo-muted)!important}}
+    .bmo-starters{{gap:8px!important}} .bmo-starters button{{background:#242424!important;border:1px solid var(--bmo-line)!important;color:#ddd!important}}
+    .bmo-compose-shell{{position:relative!important;left:auto!important;right:auto!important;bottom:auto!important;z-index:3!important;flex:0 0 auto!important;width:100%!important;padding:8px 12px calc(10px + env(safe-area-inset-bottom))!important;box-sizing:border-box!important;background:linear-gradient(180deg,rgba(23,23,23,0),var(--bmo-bg) 18%)!important}}
+    .bmo-compose{{position:relative!important;left:auto!important;right:auto!important;bottom:auto!important;width:min(800px,100%)!important;max-width:800px!important;margin:0 auto!important;display:grid!important;grid-template-columns:38px minmax(0,1fr) 38px 38px!important;gap:6px!important;align-items:end!important;padding:8px!important;background:#2f2f2f!important;border:1px solid rgba(255,255,255,.08)!important;border-radius:24px!important;box-shadow:0 5px 20px rgba(0,0,0,.18)!important}}
+    .bmo-compose textarea{{width:100%!important;min-height:40px!important;height:40px!important;max-height:132px!important;padding:9px 7px!important;background:transparent!important;border:0!important;outline:0!important;resize:none!important;color:#f1f1f1!important;font-size:16px!important;line-height:22px!important;overflow-y:auto!important}}
+    .bmo-compose textarea::placeholder{{color:#999!important}}
+    .bmo-mic,.bmo-send,.bmo-attach{{display:grid!important;place-items:center!important;width:38px!important;height:38px!important;min-width:38px!important;padding:0!important;border:0!important;border-radius:50%!important;box-shadow:none!important}}
+    .bmo-attach,.bmo-mic{{background:transparent!important;color:#ddd!important}} .bmo-attach:hover,.bmo-mic:hover{{background:#3b3b3b!important}}
+    .bmo-mic.on{{background:#6f2448!important;color:#fff!important}} .bmo-send{{background:#f4f4f4!important;color:#181818!important}}
+    .bmo-compose-note{{margin:5px auto 0!important;color:#777!important;font-size:10px!important}}
+    .bmo-voice-stage{{z-index:10020!important;background:#171717!important;padding:18px!important}}
+    .bmo-voice-stage-inner{{width:min(680px,100%)!important;min-height:100%!important}}
+    .bmo-voice-orb{{width:170px!important;height:170px!important;background:#242424!important;box-shadow:0 0 0 1px var(--bmo-line)!important}}
+    .bmo-voice-orb:before,.bmo-voice-orb:after{{display:none!important}}
+    .bmo-voice-stage-state{{margin-top:36px!important;color:#bbb!important;font-size:12px!important}}
+    .bmo-voice-stage-text{{font-size:clamp(22px,4vw,34px)!important;max-width:620px!important}}
+    .bmo-voice-stage-hint{{color:#888!important}}
+    .bmo-secure-modal{{z-index:10030!important;background:rgba(0,0,0,.72)!important}} .bmo-secure-card{{background:#242424!important;border-color:var(--bmo-line)!important}}
+    @media(max-width:800px){{
+      .bmo-hero{{height:52px!important;flex-basis:52px!important;padding:7px 10px!important}}
+      .bmo-top-btn span{{display:none!important}} .bmo-top-btn{{width:34px!important;padding:0!important}}
+      .bmo-messages{{padding:20px 12px 16px!important;gap:18px!important}}
+      .bmo-msg{{font-size:14.5px!important;max-width:calc(100% - 40px)!important}}
+      .bmo-msg.me{{max-width:86%!important}}
+      .bmo-compose-shell{{padding:7px 7px calc(8px + env(safe-area-inset-bottom))!important}}
+      .bmo-compose{{width:100%!important;border-radius:22px!important}}
+      .bmo-compose-note{{display:none!important}}
+      .bmo-starters{{display:grid!important;grid-template-columns:1fr!important;width:min(430px,100%)!important}}
+      .bmo-starters button{{text-align:left!important;border-radius:13px!important}}
+    }}
     </style>
 
     <main class="bmo">
