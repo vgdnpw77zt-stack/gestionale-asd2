@@ -54,6 +54,7 @@ runpy.run_path("/opt/bodymind/release_operator_read_smoke_r53.py", run_name="__m
 runpy.run_path("/opt/bodymind/release_operator_experience_r38.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_qa_r32.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_logic_qa_r37.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_operator_dinicola_r55f.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_pending_audit_r55e.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_cleanup_r2.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_route_guard_r39.py", run_name="__main__")
