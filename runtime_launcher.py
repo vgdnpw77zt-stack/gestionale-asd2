@@ -57,6 +57,7 @@ runpy.run_path("/opt/bodymind/release_operator_voice_state_r59.py", run_name="__
 runpy.run_path("/opt/bodymind/release_operator_targeted_missing_r60.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_response_scope_r61.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_query_polarity_r62.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_operator_cloud_first_r63.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_polarity_smoke_r62.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_scope_smoke_r61.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_targeted_smoke_r60.py", run_name="__main__")
