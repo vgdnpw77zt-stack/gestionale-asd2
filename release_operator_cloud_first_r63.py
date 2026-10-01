@@ -34,6 +34,15 @@ if old not in s:
     raise RuntimeError('R63 planner prompt anchor missing')
 s=s.replace(old,new,1)
 
+schema_old='''            "Restituisci SOLO JSON valido: {\\\"tool\\\":\\\"nome_o_none\\\",\\\"args\\\":{},\\\"answer\\\":\\\"\\\"}. "
+'''
+schema_new='''            "Restituisci SOLO JSON valido: {\\\"tool\\\":\\\"nome_o_none\\\",\\\"args\\\":{},\\\"answer\\\":\\\"\\\",\\\"resolved_question\\\":\\\"richiesta autonoma completa\\\"}. "
+            "resolved_question deve sempre riscrivere la richiesta come frase autonoma, esplicitando l'argomento recuperato dal contesto recente senza cambiarne il significato. "
+'''
+if schema_old not in s:
+    raise RuntimeError('R63 planner JSON schema anchor missing')
+s=s.replace(schema_old,schema_new,1)
+
 old='''        recent=_recent_operator_context(conn,4)'''
 new='''        recent=_recent_operator_context(conn,10)'''
 if old not in s:
@@ -87,9 +96,13 @@ def bodymind_operator_chat():
                             "agent_plan":"none",
                             "agent_steps":agent_step+1,
                             "cloud_first":True,
+                            "resolved_question":str(plan.get("resolved_question") or message).strip() or message,
                         }
                     break
-                tool_result=_execute_full_agent_plan(conn,plan,message)
+                resolved=str(plan.get("resolved_question") or message).strip() or message
+                tool_result=_execute_full_agent_plan(conn,plan,resolved)
+                if isinstance(tool_result,dict):
+                    tool_result["resolved_question"]=resolved
                 if not tool_result:
                     break
                 tool_result["agent_steps"]=agent_step+1
