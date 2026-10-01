@@ -5,7 +5,7 @@ import json, sqlite3, sys
 
 APP=Path('/data/top2_app')
 DB=Path('/data/tenants/default/asd.db')
-MARK=APP/'.BODYMIND_OPERATOR_PENDING_RECONCILE_R55B'
+MARK=APP/'.BODYMIND_OPERATOR_PENDING_RECONCILE_R55C'
 
 def table(conn,name):
     return bool(conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(name,)).fetchone())
