@@ -412,13 +412,13 @@ new='''        recent=_recent_operator_context(conn,10)
 if old not in s:
     raise RuntimeError('R64 planner context anchor missing')
 s=s.replace(old,new,1)
-old='''            "\nContesto recente: "+json.dumps(recent,ensure_ascii=False)[:6000]+
-            "\nRisultati strumenti già usati in questa richiesta: "+json.dumps(trace,ensure_ascii=False)[:8000]+
+old='''            "\\nContesto recente: "+json.dumps(recent,ensure_ascii=False)[:6000]+
+            "\\nRisultati strumenti già usati in questa richiesta: "+json.dumps(trace,ensure_ascii=False)[:8000]+
 '''
-new='''            "\nContesto recente: "+json.dumps(recent,ensure_ascii=False)[:6000]+
-            "\nTASK DOCUMENTALE CORRENTE (fonte di verità sul batch caricato): "+json.dumps(upload_task,ensure_ascii=False)[:5000]+
-            "\nSe il task documentale contiene document_type o last_batch, NON chiedere di nuovo che tipo di file sono e NON fingere di non averli ricevuti. "+
-            "\nRisultati strumenti già usati in questa richiesta: "+json.dumps(trace,ensure_ascii=False)[:8000]+
+new='''            "\\nContesto recente: "+json.dumps(recent,ensure_ascii=False)[:6000]+
+            "\\nTASK DOCUMENTALE CORRENTE (fonte di verità sul batch caricato): "+json.dumps(upload_task,ensure_ascii=False)[:5000]+
+            "\\nSe il task documentale contiene document_type o last_batch, NON chiedere di nuovo che tipo di file sono e NON fingere di non averli ricevuti. "+
+            "\\nRisultati strumenti già usati in questa richiesta: "+json.dumps(trace,ensure_ascii=False)[:8000]+
 '''
 if old not in s:
     raise RuntimeError('R64 planner prompt task anchor missing')
