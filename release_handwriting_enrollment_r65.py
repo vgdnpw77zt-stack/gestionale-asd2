@@ -44,7 +44,41 @@ if 'BODYMIND_R65_HANDWRITING_ENROLLMENT' not in s:
     # Extend R64 upload collections.
     old='''    results=[]; errors=[]; ready_ids=[]; duplicate_items=[]; review_items=[]
 '''
-    new='''    results=[]; errors=[]; ready_ids=[]; duplicate_items=[]; review_items=[]; new_athletes=[]
+    new='''    from .operator_doc_semantic_ai_r52 import segment_pdf_documents as _docsem_segment_pdf_documents
+    from io import BytesIO
+    from werkzeug.datastructures import FileStorage
+
+    expanded_files=[]
+    for original in files[:120]:
+        original_name=(getattr(original,"filename","") or "documento").replace(chr(92),"/").split("/")[-1]
+        if Path(original_name).suffix.lower()!=".pdf" or type_hint!="certificato_medico":
+            expanded_files.append(original)
+            continue
+        try:
+            raw=original.read()
+            original.stream.seek(0)
+            conn_seg=db()
+            try:
+                segmented=_docsem_segment_pdf_documents(conn_seg,original_name,raw,type_hint,_record_response_usage)
+            finally:
+                conn_seg.close()
+            parts=(segmented or {}).get("segments") or []
+            if bool((segmented or {}).get("multiple")) and len(parts)>1:
+                for part in parts:
+                    pdata=bytes(part.get("data") or b"")
+                    if pdata:
+                        expanded_files.append(FileStorage(stream=BytesIO(pdata),filename=str(part.get("filename") or original_name),content_type="application/pdf"))
+            else:
+                expanded_files.append(original)
+        except Exception:
+            try:
+                original.stream.seek(0)
+            except Exception:
+                pass
+            expanded_files.append(original)
+    files=expanded_files
+
+    results=[]; errors=[]; ready_ids=[]; duplicate_items=[]; review_items=[]; new_athletes=[]
 '''
     if old not in s:
         raise RuntimeError('R65 upload collections anchor missing')
