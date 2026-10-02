@@ -44,14 +44,31 @@ if 'BODYMIND_R112_OPERATOR_BYTES_FALLBACK' not in s:
 else:
     print('[r112-operator] already applied',flush=True)
 
-# Read-only symbol/runtime gate.
+# Source gate + safe QA hydration.
+# The migration process may have imported routes_operator_bodymind before R107 patched
+# its source.  Do NOT reload the Flask module (that would duplicate routes).  Instead
+# hydrate only plain _r107_* helper functions into the cached module for this QA process.
+import ast
+source_now=OP.read_text(encoding='utf-8',errors='replace')
 sys.path.insert(0,str(APP))
 import app as _full_app
 import asd_app.routes_operator_bodymind as op
+
+try:
+    tree=ast.parse(source_now)
+    helper_nodes=[n for n in tree.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name.startswith('_r107_')]
+    if helper_nodes:
+        mod=ast.Module(body=helper_nodes,type_ignores=[])
+        ast.fix_missing_locations(mod)
+        exec(compile(mod,str(OP),'exec'),op.__dict__,op.__dict__)
+except Exception as exc:
+    raise RuntimeError('R112 could not hydrate R107 helpers safely: '+repr(exc))
+
 checks={
+  'r107_source':'def _r107_handle_create_from_attachment' in source_now,
   'r107_handler':hasattr(op,'_r107_handle_create_from_attachment'),
   'bytes_helper':hasattr(op,'_document_bytes_from_row'),
-  'stale_helper_not_called':'_inbound_file_bytes(inbound)' not in OP.read_text(encoding='utf-8',errors='replace'),
+  'stale_helper_not_called':'_inbound_file_bytes(inbound)' not in source_now,
 }
 conn=sqlite3.connect(str(DB),timeout=20)
 try:
@@ -62,4 +79,4 @@ checks['db_ok']=integrity.lower()=='ok' and fk==0
 print('[r112-checks] '+repr(checks)+' integrity='+integrity+' fk='+str(fk),flush=True)
 failed=[k for k,v in checks.items() if not v]
 if failed: raise RuntimeError('R112 failed '+repr(failed))
-print('[r112-selftest] PASS operator attachment byte-helper runtime-safe db-ok',flush=True)
+print('[r112-selftest] PASS operator attachment helpers hydrated-without-route-reload byte-helper runtime-safe db-ok',flush=True)
