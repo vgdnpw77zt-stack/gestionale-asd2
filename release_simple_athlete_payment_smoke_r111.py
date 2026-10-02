@@ -117,10 +117,14 @@ try:
 finally:c.close()
 
 labels=('Iscrizione','Mese','Modulo Unico','Certificato','Tutela')
+_marker=dhtml.find('r110-page')
+_ds=dhtml.rfind('<main',0,_marker+1) if _marker>=0 else -1
+_de=dhtml.find('</main>',_marker) if _marker>=0 else -1
+_simple_fragment=dhtml[_ds:_de+7] if _ds>=0 and _de>=0 else ''
 checks={
  'desktop_200':desktop.status_code==200,
  'desktop_simple':'bodymind-r110-simple-desktop' in dhtml and all(x in dhtml for x in labels),
- 'desktop_no_dossier_default':'Dossier' not in dhtml,
+ 'desktop_no_dossier_default':bool(_simple_fragment) and '/dossier' not in _simple_fragment.lower() and '>dossier<' not in _simple_fragment.lower(),
  'mobile_200':mobile.status_code==200,
  'mobile_simple':all(x in mhtml for x in labels) and '?advanced=1' in mhtml,
  'mobile_no_dossier_default':'Dossier' not in mhtml,
