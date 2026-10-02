@@ -79,19 +79,27 @@ def _identity_matches(target,analysis):
     tk=set(target.keys())
     target_cf=re.sub(r"[^A-Z0-9]","",str(target["codice_fiscale"] or "").upper()) if "codice_fiscale" in tk else ""
     ai_cf=re.sub(r"[^A-Z0-9]","",str(analysis.get("codice_fiscale") or "").upper())
-    if target_cf and ai_cf:
-        return (target_cf==ai_cf),"cf"
+    cf_conflict=bool(target_cf and ai_cf and target_cf!=ai_cf)
+    if target_cf and ai_cf and target_cf==ai_cf:
+        return True,"cf"
     tn=_norm(target["nome"] if "nome" in tk else "")
     tc=_norm(target["cognome"] if "cognome" in tk else "")
     an=_norm(analysis.get("first_name"))
     ac=_norm(analysis.get("last_name"))
-    if tn and tc and an and ac:
-        return (tn==an and tc==ac),"name"
+    target_birth=_iso(target["data_nascita"] if "data_nascita" in tk else "")
+    ai_birth=_iso(analysis.get("birth_date"))
+    if tn and tc and an and ac and tn==an and tc==ac:
+        if target_birth and ai_birth and target_birth==ai_birth:
+            return True,("name_birth_cf_conflict" if cf_conflict else "name_birth")
+        if not target_birth or not ai_birth:
+            return True,("name_cf_conflict" if cf_conflict else "name")
+        return False,"birth_mismatch"
     person=_norm(analysis.get("person_name"))
-    if tn and tc and person:
-        ok=(tn in person and tc in person)
-        return ok,"person_name"
-    return False,"insufficient_identity"
+    if tn and tc and person and tn in person and tc in person:
+        if target_birth and ai_birth and target_birth!=ai_birth:
+            return False,"birth_mismatch"
+        return True,("person_name_cf_conflict" if cf_conflict else "person_name")
+    return False,("cf_and_identity_mismatch" if cf_conflict else "insufficient_identity")
 
 def _iso(v):
     raw=str(v or "").strip()[:10]
@@ -192,8 +200,9 @@ def sync_analysis_to_existing_athlete(conn,tid,analysis,source="verified_mu"):
         return {"ok":False,"reason":"identity_mismatch","identity_check":why,"confidence":conf}
 
     age=_age(analysis.get("birth_date"))
+    safe_cf="" if "cf_conflict" in str(why) else re.sub(r"[^A-Z0-9]","",str(analysis.get("codice_fiscale") or "").upper())
     mapping={
-      "codice_fiscale":re.sub(r"[^A-Z0-9]","",str(analysis.get("codice_fiscale") or "").upper()),
+      "codice_fiscale":safe_cf,
       "data_nascita":_iso(analysis.get("birth_date")),
       "luogo_nascita":str(analysis.get("birth_place") or "").strip(),
       "indirizzo":str(analysis.get("address") or "").strip(),
