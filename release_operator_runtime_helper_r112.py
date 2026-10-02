@@ -24,8 +24,11 @@ if 'BODYMIND_R112_OPERATOR_BYTES_FALLBACK' not in s:
                     'name,data,_=_document_bytes_from_row(inbound)',1)
     elif '_inbound_file_bytes(inbound)' in s:
         s=s.replace('_inbound_file_bytes(inbound)','_document_bytes_from_row(inbound)',1)
+    elif '_r107_read_inbound_bytes(inbound)' in s or '_document_bytes_from_row(inbound)' in s:
+        # Earlier convergence already removed the stale helper call.
+        pass
     else:
-        raise RuntimeError('R112 could not find R107 inbound byte call')
+        raise RuntimeError('R112 could not verify R107 inbound byte call')
     s=marker+s
     tmp=OP.with_name(OP.name+'.r112.tmp')
     try:
