@@ -65,7 +65,10 @@ for ep in ("fix12_mobile_atlete","tesserati_delete"):
 r=client.get("/operatore-bodymind",headers={"User-Agent":iphone},follow_redirects=True)
 html=r.get_data(as_text=True)
 result["operator_status"]=r.status_code
-result["operator_ui"]=(r.status_code==200 and "BODYMIND_R74_IPHONE_COMPOSER" in html and "visualViewport" in html and "bmo-compose-shell" in html)
+r74i=html.find("BODYMIND_R74_IPHONE_COMPOSER")
+r90i=html.rfind("BODYMIND_R90_IOS_KEYBOARD_COMPOSER")
+result["operator_keyboard"]=(r.status_code==200 and r90i>r74i>=0 and "--bmo-r90-vv-height" in html and "bodymindR90SyncViewport" in html and "bmo-r90-operator" in html)
+result["operator_ui"]=(r.status_code==200 and "BODYMIND_R74_IPHONE_COMPOSER" in html and "visualViewport" in html and "bmo-compose-shell" in html and result["operator_keyboard"])
 
 r=client.get("/tesserati",headers={"User-Agent":iphone},follow_redirects=True)
 mhtml=r.get_data(as_text=True)
@@ -132,4 +135,4 @@ obj=json.loads(lines[-1])
 print("[r84-ui-smoke] "+json.dumps(obj,ensure_ascii=False),flush=True)
 if not obj.get("ok"):
     raise RuntimeError("R84 UI regression failed: "+json.dumps(obj,ensure_ascii=False))
-print("[r84-selftest] PASS rendered-UI MU-alert guardian-alert hidden-doc mobile-delete iphone-composer",flush=True)
+print("[r84-selftest] PASS rendered-UI MU-alert guardian-alert hidden-doc mobile-delete iphone-keyboard-composer",flush=True)

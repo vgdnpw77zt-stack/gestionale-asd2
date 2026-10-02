@@ -70,7 +70,7 @@ COPY release_operator_document_core_r78.py /opt/bodymind/release_operator_docume
 COPY release_mu_canonical_r79.py /opt/bodymind/release_mu_canonical_r79.py
 COPY release_stabilization_audit_r80.py /opt/bodymind/release_stabilization_audit_r80.py
 COPY release_mobile_delete_r85.py /opt/bodymind/release_mobile_delete_r85.py
-COPY release_mobile_athlete_delete_r87.py /opt/bodymind/release_mobile_athlete_delete_r87.py
+COPY release_mobile_athlete_delete_r87.py /opt/bodymind/release_mobile_athlete_delete_r87.py\nCOPY release_operator_ios_keyboard_r90.py /opt/bodymind/release_operator_ios_keyboard_r90.py
 COPY release_ui_regression_smoke_r84.py /opt/bodymind/release_ui_regression_smoke_r84.py
 COPY release_stabilization_repair_r81.py /opt/bodymind/release_stabilization_repair_r81.py
 COPY release_guardian_convergence_r82.py /opt/bodymind/release_guardian_convergence_r82.py
