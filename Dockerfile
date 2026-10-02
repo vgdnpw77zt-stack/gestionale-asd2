@@ -60,6 +60,7 @@ COPY release_handwriting_enrollment_r65.py /opt/bodymind/release_handwriting_enr
 COPY release_operator_async_upload_r67.py /opt/bodymind/release_operator_async_upload_r67.py
 COPY verified_mu_sync_core_r68.py /opt/bodymind/verified_mu_sync_core_r68.py
 COPY release_verified_mu_profile_sync_r68.py /opt/bodymind/release_verified_mu_profile_sync_r68.py
+COPY runtime_annunziato_readonly_r71.py /opt/bodymind/runtime_annunziato_readonly_r71.py
 COPY release_global_reconcile_r69.py /opt/bodymind/release_global_reconcile_r69.py
 COPY release_complete_mu_cache_r70.py /opt/bodymind/release_complete_mu_cache_r70.py
 COPY release_guardian_refresh_r71.py /opt/bodymind/release_guardian_refresh_r71.py
