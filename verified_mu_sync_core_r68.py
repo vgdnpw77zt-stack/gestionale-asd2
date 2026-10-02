@@ -80,6 +80,11 @@ def _identity_matches(target,analysis):
     target_cf=re.sub(r"[^A-Z0-9]","",str(target["codice_fiscale"] or "").upper()) if "codice_fiscale" in tk else ""
     ai_cf=re.sub(r"[^A-Z0-9]","",str(analysis.get("codice_fiscale") or "").upper())
     cf_conflict=bool(target_cf and ai_cf and target_cf!=ai_cf)
+    # BODYMIND_R73_HARD_CF_CONFLICT_GATE
+    # A real fiscal-code disagreement is a hard identity conflict. Never let a
+    # matching name/date silently override it; the document must remain in review.
+    if cf_conflict:
+        return False,"cf_conflict"
     if target_cf and ai_cf and target_cf==ai_cf:
         return True,"cf"
     tn=_norm(target["nome"] if "nome" in tk else "")
