@@ -80,6 +80,7 @@ COPY release_mu_residenza_r95.py /opt/bodymind/release_mu_residenza_r95.py
 COPY release_medical_criticality_audit_r96.py /opt/bodymind/release_medical_criticality_audit_r96.py
 COPY release_medical_save_audit_r97.py /opt/bodymind/release_medical_save_audit_r97.py
 COPY release_medical_save_compact_r98.py /opt/bodymind/release_medical_save_compact_r98.py
+COPY release_active_route_audit_r99.py /opt/bodymind/release_active_route_audit_r99.py
 COPY release_mu_autoenroll_r92.py /opt/bodymind/release_mu_autoenroll_r92.py
 COPY release_ui_regression_smoke_r84.py /opt/bodymind/release_ui_regression_smoke_r84.py
 COPY release_stabilization_repair_r81.py /opt/bodymind/release_stabilization_repair_r81.py
