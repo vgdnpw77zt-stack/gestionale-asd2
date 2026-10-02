@@ -35,6 +35,78 @@ def is_mu_row(r):
         'modulo iscrizione','domanda iscrizione','iscrizione manleva'
     ))
 
+# BODYMIND_R73_GLOBAL_MU_PRESENCE
+# Apply on every startup, even when the historical R41 marker already exists.
+R73_COH=APP/'asd_app/routes_document_coherence_r41.py'
+if R73_COH.exists():
+    r73=R73_COH.read_text(encoding='utf-8',errors='replace')
+    if 'BODYMIND_R73_GLOBAL_MU_PRESENCE' not in r73:
+        backup('asd_app/routes_document_coherence_r41.py')
+        a=r73.find('def _mu_state(tid):')
+        b=r73.find('def _replace_contextual_not_generated',a)
+        if a<0 or b<0:
+            raise RuntimeError('R73 MU state anchor missing')
+        func='''# BODYMIND_R73_GLOBAL_MU_PRESENCE
+def _mu_state(tid):
+    if tid<=0:
+        return None
+    conn=db()
+    try:
+        states=[]
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='documenti'").fetchone():
+            rows=conn.execute("SELECT * FROM documenti WHERE tesserato_id=? AND coalesce(visibile,1)=1 ORDER BY id DESC",(tid,)).fetchall()
+            for r in rows:
+                hay=' '.join(str(r[k] or '').strip().lower() for k in ('doc_type','categoria','titolo','original_filename','filename') if k in r.keys())
+                if any(x in hay for x in _MU_ALIASES):
+                    status=str(r['status'] or '').strip().lower() if 'status' in r.keys() else ''
+                    states.append('verified' if status in _TRUSTED else 'pending')
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='inbound_documents'").fetchone():
+            rows=conn.execute("SELECT * FROM inbound_documents WHERE coalesce(tesserato_id,0)=? ORDER BY id DESC",(tid,)).fetchall()
+            for r in rows:
+                keys=set(r.keys())
+                dtype=str(r['document_type'] or '').strip().lower() if 'document_type' in keys else ''
+                hay=' '.join(str(r[k] or '').strip().lower() for k in ('document_type','original_filename','filename','saved_path') if k in keys)
+                if dtype not in _MU_ALIASES and not any(x in hay for x in _MU_ALIASES):
+                    continue
+                status=str(r['status'] or '').strip().lower() if 'status' in keys else ''
+                conf=int(r['document_confidence'] or 0) if 'document_confidence' in keys else 0
+                match=int(r['match_score'] or 0) if 'match_score' in keys else 0
+                trusted=status in ('accepted','manual_accepted','verificato','archived_to_tesserato','resolved')
+                associated=status=='associato' and (conf>=95 or match>=95)
+                states.append('verified' if (trusted or associated) else 'pending')
+        if 'verified' in states:
+            return 'verified'
+        if states:
+            return 'pending'
+        return None
+    finally:
+        conn.close()
+
+'''
+        r73=r73[:a]+func+r73[b:]
+        ua_anchor="        ua=str(request.headers.get('User-Agent') or '')"
+        mobile_patch="""        # BODYMIND_R73_MOBILE_DELETE_VISIBILITY
+        if request.path=='/mobile' or request.path.startswith('/tesserati'):
+            _r73_patch=\"\"\"<style id='BODYMIND_R73_MOBILE_DELETE_VISIBILITY'>
+@media(max-width:800px){
+form[action*='elimina' i],form[action*='delete' i],a[href*='elimina' i],a[href*='delete' i],
+button[name*='elimina' i],button[data-action*='delete' i],button[data-action*='elimina' i]{
+display:inline-flex!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important}}
+</style><script>(function(){if(!window.matchMedia||!window.matchMedia('(max-width:800px)').matches)return;
+document.querySelectorAll('button,a,input[type=submit]').forEach(function(el){var txt=(el.textContent||el.value||'').toLowerCase();
+var href=(el.getAttribute('href')||'').toLowerCase();var f=el.closest('form');var action=(f&&f.action?f.action:'').toLowerCase();
+if(txt.indexOf('elimina')>=0||txt.indexOf('cancella')>=0||href.indexOf('elimina')>=0||href.indexOf('delete')>=0||action.indexOf('elimina')>=0||action.indexOf('delete')>=0){
+el.style.setProperty('display','inline-flex','important');el.style.setProperty('visibility','visible','important');el.style.setProperty('opacity','1','important');}});})();</script>\"\"\"
+            html=html.replace('</body>',_r73_patch+'</body>',1) if '</body>' in html else html+_r73_patch
+"""
+        if ua_anchor not in r73:
+            raise RuntimeError('R73 mobile delete anchor missing')
+        r73=r73.replace(ua_anchor,mobile_patch+'\n'+ua_anchor,1)
+        R73_COH.write_text(r73,encoding='utf-8')
+        if not compileall.compile_file(str(R73_COH),quiet=1):
+            raise RuntimeError('R73 coherence compile failed')
+        print('[document-coherence-r73] PASS uploaded-MU presence + mobile delete visibility',flush=True)
+
 before={}
 if DB.exists():
     conn=sqlite3.connect(str(DB),timeout=20)
