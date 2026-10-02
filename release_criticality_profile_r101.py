@@ -151,39 +151,63 @@ else:
 # ------------------------------------------------------------------
 qa=r'''
 import json, sqlite3, sys
+from html.parser import HTMLParser
 sys.path.insert(0,"/data/top2_app")
 import app as _full_app
 from asd_app.core import app
 DB="/data/tenants/default/asd.db"
 
+class HiddenParser(HTMLParser):
+    def __init__(self):
+        super().__init__(); self.hidden={}
+    def handle_starttag(self,tag,attrs):
+        if tag.lower()!="input": return
+        d={str(k).lower():str(v or "") for k,v in attrs}
+        if d.get("type","").lower()=="hidden" and d.get("name"):
+            self.hidden[d["name"]]=d.get("value","")
+
 conn=sqlite3.connect(DB,timeout=20); conn.row_factory=sqlite3.Row
 try:
-    row=conn.execute("SELECT id,email,updated_at FROM tesserati WHERE id=45").fetchone()
+    row=conn.execute("SELECT id,corso,updated_at FROM tesserati WHERE id=45").fetchone()
     if not row:
-        row=conn.execute("SELECT id,email,updated_at FROM tesserati WHERE minorenne=0 ORDER BY id LIMIT 1").fetchone()
-    tid=int(row["id"]); email=str(row["email"] or ""); old_updated=str(row["updated_at"] or "")
+        row=conn.execute("SELECT id,corso,updated_at FROM tesserati WHERE minorenne=0 ORDER BY id LIMIT 1").fetchone()
+    tid=int(row["id"]); old_course=str(row["corso"] or ""); old_updated=str(row["updated_at"] or "")
 finally:
     conn.close()
 
 client=app.test_client()
-with client.session_transaction() as s:
-    s["logged"]=True; s["username"]="admin"; s["display_name"]="R101 QA"; s["role"]="admin"; s["tenant_slug"]="default"; s["_csrf_token"]="r101"
-resp=client.post("/mobile/atleta/"+str(tid),data={"email":email},headers={"User-Agent":"Mozilla/5.0 (iPhone) Mobile Safari"},follow_redirects=False)
-loc=resp.headers.get("Location","")
+with client.session_transaction() as sess:
+    sess["logged"]=True; sess["username"]="admin"; sess["display_name"]="R101 QA"; sess["role"]="admin"; sess["tenant_slug"]="default"
 
-conn=sqlite3.connect(DB,timeout=20); conn.row_factory=sqlite3.Row
+ua={"User-Agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1"}
+getr=client.get("/mobile/atleta/"+str(tid),headers=ua,follow_redirects=False)
+parser=HiddenParser(); parser.feed(getr.get_data(as_text=True))
+payload=dict(parser.hidden)
+sentinel=("R101-QA-"+str(tid))[:80]
+payload["corso"]=sentinel
+resp=None; persisted=False; loc=""; restored=False
 try:
-    fresh=conn.execute("SELECT email,updated_at FROM tesserati WHERE id=?",(tid,)).fetchone()
-    persisted=str(fresh["email"] or "")==email
-    # QA leaves business state byte-for-byte equivalent for the timestamp touched by the route.
-    conn.execute("UPDATE tesserati SET updated_at=? WHERE id=?",(old_updated,tid)); conn.commit()
-    integrity=str(conn.execute("PRAGMA integrity_check").fetchone()[0]); fk=len(conn.execute("PRAGMA foreign_key_check").fetchall())
+    resp=client.post("/mobile/atleta/"+str(tid),data=payload,headers=ua,follow_redirects=False)
+    loc=resp.headers.get("Location","")
+    conn=sqlite3.connect(DB,timeout=20); conn.row_factory=sqlite3.Row
+    try:
+        fresh=conn.execute("SELECT corso FROM tesserati WHERE id=?",(tid,)).fetchone()
+        persisted=bool(fresh and str(fresh["corso"] or "")==sentinel)
+    finally:
+        conn.close()
 finally:
-    conn.close()
+    conn=sqlite3.connect(DB,timeout=20)
+    try:
+        conn.execute("UPDATE tesserati SET corso=?,updated_at=? WHERE id=?",(old_course,old_updated,tid)); conn.commit()
+        restored=True
+        integrity=str(conn.execute("PRAGMA integrity_check").fetchone()[0]); fk=len(conn.execute("PRAGMA foreign_key_check").fetchall())
+    finally:
+        conn.close()
 
-obj={"status":resp.status_code,"location":loc,"tid":tid,"persisted":persisted,"integrity":integrity,"fk":fk}
+obj={"get_status":getr.status_code,"hidden_fields":sorted(payload.keys()),"post_status":resp.status_code if resp else None,
+     "location":loc,"tid":tid,"persisted_changed_value":persisted,"restored":restored,"integrity":integrity,"fk":fk}
 print("[r101-profile-post-smoke] "+json.dumps(obj,ensure_ascii=False),flush=True)
-if resp.status_code not in (302,303) or not loc.startswith("/mobile/atlete?updated=") or not persisted or integrity.lower()!="ok" or fk:
+if getr.status_code!=200 or resp is None or resp.status_code not in (302,303) or not loc.startswith("/mobile/atlete?updated=") or not persisted or not restored or integrity.lower()!="ok" or fk:
     raise RuntimeError("R101 profile POST smoke failed "+repr(obj))
 '''
 proc=subprocess.run([sys.executable,'-c',qa],capture_output=True,text=True,timeout=90)
