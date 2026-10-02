@@ -70,6 +70,7 @@ COPY release_operator_document_core_r78.py /opt/bodymind/release_operator_docume
 COPY release_mu_canonical_r79.py /opt/bodymind/release_mu_canonical_r79.py
 COPY release_stabilization_audit_r80.py /opt/bodymind/release_stabilization_audit_r80.py
 COPY release_stabilization_repair_r81.py /opt/bodymind/release_stabilization_repair_r81.py
+COPY release_guardian_convergence_r82.py /opt/bodymind/release_guardian_convergence_r82.py
 COPY release_handwriting_enrollment_smoke_r65.py /opt/bodymind/release_handwriting_enrollment_smoke_r65.py
 COPY release_operator_upload_smoke_r64.py /opt/bodymind/release_operator_upload_smoke_r64.py
 COPY release_operator_cloud_first_smoke_r63.py /opt/bodymind/release_operator_cloud_first_smoke_r63.py
