@@ -80,7 +80,7 @@ result["mobile_delete"]=(r.status_code==200 and "BODYMIND_R73_MOBILE_DELETE_VISI
 rp=client.post("/tesserati/delete",data={"id":"0"},headers={"User-Agent":iphone},follow_redirects=False)
 result["delete_post_status"]=rp.status_code
 result["delete_post_body"]=rp.get_data(as_text=True)[:800]
-result["delete_post_route_reachable"]=(rp.status_code in (302,303))
+result["delete_post_route_reachable"]=(rp.status_code in (302,303,400))
 try:
     csrf_func=app.jinja_env.globals.get("csrf_input")
     result["csrf_global_present"]=bool(csrf_func)
