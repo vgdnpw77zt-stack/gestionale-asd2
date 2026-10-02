@@ -23,19 +23,22 @@ src=sqlite3.connect(str(DB),timeout=30); dst=sqlite3.connect(tmpdb)
 try: src.backup(dst)
 finally: dst.close(); src.close()
 
-orig_db=op.db
-orig_conv=op._conv_id
-orig_backup=op._operator_db_backup
-orig_bytes=op._document_bytes_from_row
-orig_dup=op._semantic_key_duplicate
-orig_prod=op._productionize_inbound
+_missing=object()
+_orig={
+  'db':getattr(op,'db',_missing),
+  '_conv_id':getattr(op,'_conv_id',_missing),
+  '_operator_db_backup':getattr(op,'_operator_db_backup',_missing),
+  '_document_bytes_from_row':getattr(op,'_document_bytes_from_row',_missing),
+  '_semantic_key_duplicate':getattr(op,'_semantic_key_duplicate',_missing),
+  '_productionize_inbound':getattr(op,'_productionize_inbound',_missing),
+}
 try:
     def _tdb():
         c=sqlite3.connect(tmpdb,timeout=30); c.row_factory=sqlite3.Row; return c
     op.db=_tdb
     op._conv_id=lambda:'r111-fixture-conversation'
     op._operator_db_backup=lambda label:'temp-db-fixture'
-    op._inbound_file_bytes=lambda row:('r111_mu.pdf',b'%PDF-1.4\nR111 MU FIXTURE\n%%EOF\n','application/pdf')
+    op._document_bytes_from_row=lambda row:('r111_mu.pdf',b'%PDF-1.4\nR111 MU FIXTURE\n%%EOF\n','application/pdf')
     op._semantic_key_duplicate=lambda *a,**k:{'duplicate':False}
     op._productionize_inbound=lambda *a,**k:(True,{'fixture':True,'document_id':999999})
 
@@ -79,8 +82,12 @@ try:
     result['operator_create']=bool(first and first.get('created') is True and n1==1 and 'Non trovo' not in str(first.get('text') or ''))
     result['operator_idempotent']=bool(second and second.get('created') is False and n2==1 and 'Non trovo' not in str(second.get('text') or ''))
 finally:
-    op.db=orig_db; op._conv_id=orig_conv; op._operator_db_backup=orig_backup
-    op._document_bytes_from_row=orig_bytes; op._semantic_key_duplicate=orig_dup; op._productionize_inbound=orig_prod
+    for _name,_value in _orig.items():
+        if _value is _missing:
+            try: delattr(op,_name)
+            except Exception: pass
+        else:
+            setattr(op,_name,_value)
     try: os.unlink(tmpdb)
     except Exception: pass
 
