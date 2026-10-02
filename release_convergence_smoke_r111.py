@@ -11,7 +11,7 @@ from asd_app.core import app
 import asd_app.routes_operator_bodymind as op
 
 result={'operator_create':False,'operator_idempotent':False,'desktop_simple':False,'mobile_simple':False,
-        'desktop_no_dossier_default':False,'mobile_no_dossier_default':False,'payment_filter_route':False,
+        'desktop_no_dossier_default':False,'mobile_no_dossier_default':False,'payment_filter_route':False,'payment_link_scoped':False,
         'integrity':'','fk':None}
 
 # --------------------------------------------------------------
@@ -110,6 +110,7 @@ _desktop_simple_fragment=dh[_ds:_de+7] if _ds>=0 and _de>=0 else ''
 result['desktop_no_dossier_default']=bool(_desktop_simple_fragment) and '/dossier' not in _desktop_simple_fragment.lower() and '>dossier<' not in _desktop_simple_fragment.lower()
 result['mobile_no_dossier_default']='Dossier' not in mh and 'dossier' not in mh.lower()
 result['payment_filter_route']=pay.status_code in (200,302)
+result['payment_link_scoped']=("/pagamenti?tesserato_id=33" in dh and "/pagamenti?tesserato_id=33" in mh)
 
 c=sqlite3.connect(str(DB),timeout=30)
 try:
@@ -118,7 +119,7 @@ try:
 finally:c.close()
 
 result['ok']=all(result[k] for k in ('operator_create','operator_idempotent','desktop_simple','mobile_simple',
-    'desktop_no_dossier_default','mobile_no_dossier_default','payment_filter_route')) and result['integrity'].lower()=='ok' and result['fk']==0
+    'desktop_no_dossier_default','mobile_no_dossier_default','payment_filter_route','payment_link_scoped')) and result['integrity'].lower()=='ok' and result['fk']==0
 print('[r111-convergence-smoke] '+json.dumps(result,ensure_ascii=False),flush=True)
 if not result['ok']:
     raise RuntimeError('R111 convergence smoke failed '+json.dumps(result,ensure_ascii=False))
