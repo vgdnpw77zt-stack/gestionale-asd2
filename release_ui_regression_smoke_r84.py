@@ -3,7 +3,7 @@ from __future__ import annotations
 import json, sqlite3, subprocess, sys
 
 code=r'''
-import json, sqlite3, sys
+import json, re, sqlite3, sys
 sys.path.insert(0,"/data/top2_app")
 import app as _full_app
 from asd_app.core import app
@@ -49,6 +49,12 @@ with client.session_transaction() as s:
 
 iphone="Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1"
 result={"operator_ui":False,"mobile_delete":False,"mu_pages":[],"guardian_pages":[],"hidden_docs":[]}
+result["delete_routes"]=[
+  {"rule":str(rule.rule),"endpoint":str(rule.endpoint),"methods":sorted(set(rule.methods or ())-{"HEAD","OPTIONS"})}
+  for rule in app.url_map.iter_rules()
+  if ("tesser" in (str(rule.rule)+" "+str(rule.endpoint)).lower())
+     and any(x in (str(rule.rule)+" "+str(rule.endpoint)).lower() for x in ("elimina","delete","remove","cancella"))
+]
 
 r=client.get("/operatore-bodymind",headers={"User-Agent":iphone},follow_redirects=True)
 html=r.get_data(as_text=True)
@@ -58,7 +64,11 @@ result["operator_ui"]=(r.status_code==200 and "BODYMIND_R74_IPHONE_COMPOSER" in 
 r=client.get("/tesserati",headers={"User-Agent":iphone},follow_redirects=True)
 mhtml=r.get_data(as_text=True)
 result["mobile_status"]=r.status_code
-result["mobile_delete"]=(r.status_code==200 and "BODYMIND_R73_MOBILE_DELETE_VISIBILITY" in mhtml)
+result["mobile_final_path"]=str(getattr(r.request,"path",""))
+clean=re.sub(r"(?is)<style id=['\"]BODYMIND_R73_MOBILE_DELETE_VISIBILITY['\"].*?</script>","",mhtml)
+actual_delete=bool(re.search(r"(?is)(?:action|href|data-action|onclick)\s*=\s*['\"][^'\"]*(?:elimina|delete|remove|cancella)|>\s*(?:elimina|cancella|rimuovi)\b",clean))
+result["mobile_delete_control"]=actual_delete
+result["mobile_delete"]=(r.status_code==200 and "BODYMIND_R73_MOBILE_DELETE_VISIBILITY" in mhtml and actual_delete)
 
 for tid in mu_tids:
     rr=client.get("/documenti?tesserato_id="+str(tid),headers={"User-Agent":iphone},follow_redirects=True)
