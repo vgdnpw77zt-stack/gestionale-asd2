@@ -79,7 +79,14 @@ result["mobile_delete"]=(r.status_code==200 and "BODYMIND_R73_MOBILE_DELETE_VISI
 # Exercise the real delete POST with an invalid id: must reach the route without mutating data.
 rp=client.post("/tesserati/delete",data={"id":"0"},headers={"User-Agent":iphone},follow_redirects=False)
 result["delete_post_status"]=rp.status_code
+result["delete_post_body"]=rp.get_data(as_text=True)[:800]
 result["delete_post_route_reachable"]=(rp.status_code in (302,303))
+try:
+    csrf_func=app.jinja_env.globals.get("csrf_input")
+    result["csrf_global_present"]=bool(csrf_func)
+    result["csrf_global_source"]=inspect.getsource(csrf_func)[:4000] if csrf_func else ""
+except Exception as exc:
+    result["csrf_global_source"]="ERR:"+repr(exc)
 result["mobile_delete"]=bool(result["mobile_delete"] and result["delete_post_route_reachable"])
 result["mobile_links"]=[x for x in re.findall(r"(?i)href\\s*=\\s*['\\\"]([^'\\\"]+)['\\\"]",clean) if any(k in x.lower() for k in ("tesser","atlet","scheda","profil"))][:80]
 result["mobile_form_actions"]=re.findall(r"(?i)<form[^>]+action\\s*=\\s*['\\\"]([^'\\\"]+)['\\\"]",clean)[:80]
