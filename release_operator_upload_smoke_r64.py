@@ -41,13 +41,20 @@ with app.test_request_context('/operatore-bodymind'):
         task2=op._current_upload_task(conn)
         result["summary_ok"]=bool(task2 and (task2.get("summary") or {}).get("received")==21 and task2.get("status")=="awaiting_confirmation")
 
-        row=conn.execute("SELECT * FROM documenti WHERE coalesce(tesserato_id,0)>0 ORDER BY id LIMIT 1").fetchone()
-        if row:
+        # Test the active canonical dossier, not an archived/invisible historical row.
+        # R78/R79 intentionally hide duplicates, so ORDER BY id LIMIT 1 can select a
+        # legitimate archived row that _visible_docs() must exclude.
+        rows=conn.execute("""SELECT * FROM documenti
+          WHERE coalesce(tesserato_id,0)>0 AND coalesce(visibile,1)=1 ORDER BY id""").fetchall()
+        for row in rows:
             name,data,_=op._document_bytes_from_row(row)
-            if data:
-                analysis={"document_type":op._canonical_document_kind(row),"semantic_key":"qa","confidence":1.0}
-                dup=op._semantic_key_duplicate(conn,int(row["tesserato_id"]),name,data,analysis)
-                result["duplicate_ok"]=bool(dup.get("duplicate") and dup.get("method")=="sha256")
+            if not data:
+                continue
+            analysis={"document_type":op._canonical_document_kind(row),"semantic_key":"qa","confidence":1.0}
+            dup=op._semantic_key_duplicate(conn,int(row["tesserato_id"]),name,data,analysis)
+            if dup.get("duplicate") and dup.get("method")=="sha256":
+                result["duplicate_ok"]=True
+                break
         # QA must leave no persistent workflow state behind.
         if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='bodymind_operator_tasks'").fetchone():
             conn.execute("DELETE FROM bodymind_operator_tasks WHERE conversation_id=?",(conv,))
