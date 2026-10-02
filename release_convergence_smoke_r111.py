@@ -26,7 +26,7 @@ finally: dst.close(); src.close()
 orig_db=op.db
 orig_conv=op._conv_id
 orig_backup=op._operator_db_backup
-orig_bytes=op._inbound_file_bytes
+orig_bytes=op._document_bytes_from_row
 orig_dup=op._semantic_key_duplicate
 orig_prod=op._productionize_inbound
 try:
@@ -80,7 +80,7 @@ try:
     result['operator_idempotent']=bool(second and second.get('created') is False and n2==1 and 'Non trovo' not in str(second.get('text') or ''))
 finally:
     op.db=orig_db; op._conv_id=orig_conv; op._operator_db_backup=orig_backup
-    op._inbound_file_bytes=orig_bytes; op._semantic_key_duplicate=orig_dup; op._productionize_inbound=orig_prod
+    op._document_bytes_from_row=orig_bytes; op._semantic_key_duplicate=orig_dup; op._productionize_inbound=orig_prod
     try: os.unlink(tmpdb)
     except Exception: pass
 
