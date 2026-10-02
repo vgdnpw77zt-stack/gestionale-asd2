@@ -7,7 +7,13 @@ from pathlib import Path
 
 ROOT = Path("/opt/bodymind")
 
-# R73 compatibility: R73 logic lives in already-packaged R55/R41/core files.\n# The launcher target is only a no-op marker so older launcher ordering remains valid.\nr73_stub = ROOT / "release_mobile_operator_mu_r73.py"\nif not r73_stub.exists():\n    r73_stub.write_text("print(\\\"[r73-launcher-stub] source-level R73 active\\\", flush=True)\\n", encoding="utf-8")\n\nPY_FILES = sorted(p for p in ROOT.glob("*.py") if p.is_file())
+# R73 compatibility: R73 logic lives in already-packaged R55/R41/core files.
+# The launcher target is only a no-op marker so older launcher ordering remains valid.
+r73_stub = ROOT / "release_mobile_operator_mu_r73.py"
+if not r73_stub.exists():
+    r73_stub.write_text("print('[r73-launcher-stub] source-level R73 active', flush=True)\n", encoding="utf-8")
+
+PY_FILES = sorted(p for p in ROOT.glob("*.py") if p.is_file())
 
 errors = []
 for path in PY_FILES:
