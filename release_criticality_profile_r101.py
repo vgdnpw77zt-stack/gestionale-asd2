@@ -65,6 +65,25 @@ if len(matches)!=1:
     raise RuntimeError('R101 expected one R100 mobile athlete source, found '+repr([str(x[0]) for x in matches]))
 PROFILE,ps=matches[0]
 
+# R103: R100/R101 profile-save logic uses date/datetime inside the patched
+# runtime module. Ensure those names exist in that module, even if the legacy
+# source never imported them.
+if 'from datetime import date, datetime' not in ps:
+    backup_file(PROFILE)
+    lines=ps.splitlines(True)
+    insert_at=0
+    for idx,line in enumerate(lines[:12]):
+        stripped=line.strip()
+        if stripped.startswith('from __future__ import '):
+            insert_at=idx+1
+        elif idx==0 and (stripped.startswith('#!') or 'coding' in stripped):
+            insert_at=max(insert_at,idx+1)
+    lines.insert(insert_at,'from datetime import date, datetime\n')
+    ps=''.join(lines)
+    PROFILE.write_text(ps,encoding='utf-8')
+    py_compile.compile(str(PROFILE),doraise=True)
+    print('[r103-profile-import] PASS date+datetime available to mobile POST',flush=True)
+
 if 'BODYMIND_R101_MINOR_CONSENT_IN_PROFILE' not in ps:
     backup_file(PROFILE)
 
@@ -155,6 +174,8 @@ from html.parser import HTMLParser
 sys.path.insert(0,"/data/top2_app")
 import app as _full_app
 from asd_app.core import app
+app.config["TESTING"]=True
+app.config["PROPAGATE_EXCEPTIONS"]=True
 DB="/data/tenants/default/asd.db"
 
 class HiddenParser(HTMLParser):

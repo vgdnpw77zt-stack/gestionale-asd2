@@ -6,13 +6,15 @@ def _bodymind_storage_preflight():
     data_root = pathlib.Path("/data")
     backup_root = data_root / "release_backups"
     db_path = data_root / "tenants/default/asd.db"
-    target_free = 1536 * 1024 * 1024
+    target_free = 2048 * 1024 * 1024
+    cleanup_trigger = 1536 * 1024 * 1024
     hard_floor = 512 * 1024 * 1024
     before = shutil.disk_usage(str(data_root))
     deleted = []
     freed = 0
+    protected = set()
 
-    if before.free < 1024 * 1024 * 1024 and backup_root.exists():
+    if before.free < cleanup_trigger and backup_root.exists():
         candidates = []
         for p in backup_root.rglob("*"):
             try:
@@ -27,7 +29,6 @@ def _bodymind_storage_preflight():
 
         # Preserve the known-good R100 snapshot. If it is unavailable, preserve
         # the newest full database-looking backup as an emergency rollback point.
-        protected = set()
         known = [x for x in candidates if "r100_medical_profile" in str(x[2]) or "pre_r100" in x[2].name.lower()]
         if known:
             protected.add(max(known, key=lambda x: x[0])[2])
