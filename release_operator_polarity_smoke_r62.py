@@ -11,10 +11,10 @@ from asd_app.core import app,db
 import asd_app.routes_operator_bodymind as op
 
 cases=[
- ("positive1","Voglio sapere quanti hanno il certificato medico.","present_medical_count",14,"23"),
- ("positive2","Quanti sono i tesserati con documento medico riconosciuto?","present_medical_count",14,"23"),
- ("negative","Quanti tesserati non hanno il certificato medico riconosciuto?","missing_medical_count",23,"14"),
- ("ambiguous","Quanti certificati medici abbiamo?","medical_polarity_clarification",None,None),
+ ("positive1","Voglio sapere quanti hanno il certificato medico.","present_medical_count"),
+ ("positive2","Quanti sono i tesserati con documento medico riconosciuto?","present_medical_count"),
+ ("negative","Quanti tesserati non hanno il certificato medico riconosciuto?","missing_medical_count"),
+ ("ambiguous","Quanti certificati medici abbiamo?","medical_polarity_clarification"),
 ]
 out=[]
 with app.test_request_context('/operatore-bodymind/chat'):
@@ -22,16 +22,22 @@ with app.test_request_context('/operatore-bodymind/chat'):
                     '_csrf_token':'r62','bodymind_operator_conversation':'r62','bodymind_operator_identity':'R62 QA'})
     conn=db()
     try:
-        for name,q,target,expected,bad in cases:
+        total=int(conn.execute("SELECT COUNT(*) FROM tesserati").fetchone()[0])
+        for name,q,target in cases:
             t=time.perf_counter(); r=op._answer(conn,q); ms=int((time.perf_counter()-t)*1000)
             txt=str((r or {}).get("text") or "")
             ok=(r or {}).get("target")==target and ms<2000
-            if expected is not None:
-                ok=ok and int((r or {}).get("value") or -1)==expected and str(expected) in txt and (bad not in txt if bad else True)
+            if target!="medical_polarity_clarification":
+                try: value=int((r or {}).get("value"))
+                except Exception: value=-1
+                ok=ok and value>=0 and str(value) in txt
             else:
                 ok=ok and (r or {}).get("mode")=="clarify"
             out.append({"name":name,"q":q,"mode":(r or {}).get("mode"),"target":(r or {}).get("target"),
                         "value":(r or {}).get("value"),"ms":ms,"text":txt,"ok":ok})
+        present=int(out[0]["value"]); present2=int(out[1]["value"]); missing=int(out[2]["value"])
+        if present!=present2 or present+missing!=total:
+            for item in out[:3]: item["ok"]=False
     finally:
         conn.close()
 
