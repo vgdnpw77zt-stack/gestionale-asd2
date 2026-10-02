@@ -1,5 +1,93 @@
 # R39 build and route guards - autodeploy trigger 2
-import os, sys, pathlib, runpy, sqlite3
+import os, sys, pathlib, runpy, sqlite3, shutil, json, time
+
+# BODYMIND_R102_STORAGE_PREFLIGHT
+def _bodymind_storage_preflight():
+    data_root = pathlib.Path("/data")
+    backup_root = data_root / "release_backups"
+    db_path = data_root / "tenants/default/asd.db"
+    target_free = 1536 * 1024 * 1024
+    hard_floor = 512 * 1024 * 1024
+    before = shutil.disk_usage(str(data_root))
+    deleted = []
+    freed = 0
+
+    if before.free < 1024 * 1024 * 1024 and backup_root.exists():
+        candidates = []
+        for p in backup_root.rglob("*"):
+            try:
+                if not p.is_file():
+                    continue
+                low = p.name.lower()
+                if low.endswith((".db", ".sqlite", ".sqlite3", ".db-wal", ".db-shm", ".tmp", ".part")):
+                    st = p.stat()
+                    candidates.append((st.st_mtime, st.st_size, p))
+            except Exception:
+                pass
+
+        # Preserve the known-good R100 snapshot. If it is unavailable, preserve
+        # the newest full database-looking backup as an emergency rollback point.
+        protected = set()
+        known = [x for x in candidates if "r100_medical_profile" in str(x[2]) or "pre_r100" in x[2].name.lower()]
+        if known:
+            protected.add(max(known, key=lambda x: x[0])[2])
+        else:
+            full = [x for x in candidates if x[2].suffix.lower() in (".db", ".sqlite", ".sqlite3")]
+            if full:
+                protected.add(max(full, key=lambda x: x[0])[2])
+
+        # Old technical snapshots are disposable once a newer verified snapshot
+        # exists. Business DB/media/user files are outside release_backups and
+        # are never touched here.
+        for mtime, size, p in sorted(candidates, key=lambda x: x[0]):
+            if p in protected:
+                continue
+            try:
+                p.unlink()
+                freed += int(size)
+                deleted.append({"path": str(p), "bytes": int(size)})
+            except Exception as exc:
+                print("[r102-storage] delete-warning " + str(p) + " " + repr(exc), flush=True)
+            if shutil.disk_usage(str(data_root)).free >= target_free:
+                break
+
+        # Remove empty release-backup directories only.
+        try:
+            for d in sorted((x for x in backup_root.rglob("*") if x.is_dir()), key=lambda x: len(str(x)), reverse=True):
+                try:
+                    d.rmdir()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    after = shutil.disk_usage(str(data_root))
+    result = {
+        "before_used_gb": round(before.used / (1024**3), 3),
+        "before_free_gb": round(before.free / (1024**3), 3),
+        "after_used_gb": round(after.used / (1024**3), 3),
+        "after_free_gb": round(after.free / (1024**3), 3),
+        "freed_gb": round(freed / (1024**3), 3),
+        "deleted_files": len(deleted),
+        "protected_backup": next((str(x) for x in protected), ""),
+    }
+    print("[r102-storage] " + json.dumps(result, ensure_ascii=False), flush=True)
+
+    if after.free < hard_floor:
+        raise SystemExit("R102 storage preflight: insufficient free space; refusing SQLite writes")
+
+    if db_path.exists():
+        conn = sqlite3.connect("file:" + str(db_path) + "?mode=ro", uri=True, timeout=20)
+        try:
+            integrity = str(conn.execute("PRAGMA integrity_check").fetchone()[0])
+            fk = len(conn.execute("PRAGMA foreign_key_check").fetchall())
+        finally:
+            conn.close()
+        print(f"[r102-storage-db] integrity={integrity} fk={fk}", flush=True)
+        if integrity.lower() != "ok" or fk:
+            raise SystemExit(f"R102 storage preflight DB check failed: integrity={integrity} fk={fk}")
+
+_bodymind_storage_preflight()
 
 APP = pathlib.Path("/data/top2_app")
 MARKER = APP / ".TOP2_OFFICIAL"
