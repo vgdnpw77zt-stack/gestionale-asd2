@@ -410,26 +410,14 @@ try:
     groups={}
     for r in mu:
         tid=int(r['tesserato_id'])
-        season=''
-        if table(conn,'bodymind_document_semantics'):
-            sem=conn.execute("""SELECT analysis_json FROM bodymind_document_semantics
-                WHERE source_table='documenti' AND source_id=? ORDER BY id DESC LIMIT 1""",(int(r['id']),)).fetchone()
-            if sem:
-                try:
-                    a=json.loads(str(sem[0] or '{}'))
-                    season=str(a.get('season_year') or '').strip()
-                except Exception:
-                    season=''
-        if not season:
-            f=str(r['filename'] or '')
-            m=re.search(r'(20\d{2})[-_/]',f)
-            season=m.group(1) if m else 'current'
-        groups.setdefault((tid,season),[]).append(r)
+        groups.setdefault(tid,[]).append(r)
 
     r75_archived=[]
-    for (tid,season),items in groups.items():
+    for tid,items in groups.items():
         if len(items)<2:
             continue
+        # BodyMind invariant: one active Modulo Unico per athlete.
+        # Historical copies remain on disk and are only hidden/archived.
         items=sorted(items,key=lambda x:int(x['id']),reverse=True)
         keep=int(items[0]['id'])
         for old in items[1:]:
@@ -438,11 +426,11 @@ try:
             if 'visibile' in dc: sets.append('visibile=0')
             if 'status' in dc: sets.append('status=?'); vals.append('mu_duplicate_archived_r75')
             if 'note' in dc:
-                sets.append('note=?'); vals.append('Modulo Unico precedente della stessa stagione archiviato R75; copia attiva ID '+str(keep))
+                sets.append('note=?'); vals.append('Modulo Unico precedente archiviato R75; unica copia attiva ID '+str(keep))
             vals.append(oid)
             cur=conn.execute('UPDATE documenti SET '+','.join(sets)+' WHERE id=? AND coalesce(visibile,1)=1',tuple(vals))
             if int(cur.rowcount or 0)==1:
-                r75_archived.append({'tid':tid,'season':season,'keep':keep,'archived':oid})
+                r75_archived.append({'tid':tid,'keep':keep,'archived':oid})
 
     conn.commit()
     active_mu_dupes=[]
