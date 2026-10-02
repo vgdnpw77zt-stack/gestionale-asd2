@@ -302,6 +302,24 @@ def _r107_fix_visible_mu_metadata():
             try: src.backup(out)
             finally: out.close(); src.close()
             backup_path=str(dst)
+        # Also repair a visible strong-name MU with generic metadata when that athlete
+        # has no other canonical visible MU. This covers manual/template-created MUs
+        # without semantic cache, without creating a second active MU.
+        for d in rows:
+            did=int(d["id"]); tid=int(d["tesserato_id"] or 0)
+            if tid<=0: continue
+            hay=" ".join(str(d[k] or "").strip().lower() for k in ("titolo","original_filename","filename") if k in d.keys())
+            strong_name=("modulo unico" in hay or "modulo_unico" in hay or "modulo iscrizione" in hay or "domanda iscrizione" in hay or "iscrizione manleva" in hay)
+            dtype=str(d["doc_type"] or "").strip().lower() if "doc_type" in d.keys() else ""
+            cat=str(d["categoria"] or "").strip().lower() if "categoria" in d.keys() else ""
+            if not strong_name or (dtype=="modulo_unico_tesseramento" and "modulo iscrizione" in cat):
+                continue
+            other=conn.execute("""SELECT id FROM documenti WHERE tesserato_id=? AND id<>? AND coalesce(visibile,1)=1
+              AND lower(coalesce(doc_type,''))='modulo_unico_tesseramento'
+              AND lower(coalesce(categoria,'')) LIKE '%modulo iscrizione%' LIMIT 1""",(tid,did)).fetchone()
+            if not other and all(int(x[0]["id"])!=did for x in candidates):
+                candidates.append((d,False,False))
+
         for d,semantic_mu,inbound_mu in candidates:
             sets=[]; vals=[]
             if "doc_type" in dcols: sets.append("doc_type=?"); vals.append("modulo_unico_tesseramento")
