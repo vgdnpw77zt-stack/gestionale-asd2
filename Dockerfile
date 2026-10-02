@@ -64,6 +64,7 @@ COPY runtime_annunziato_readonly_r71.py /opt/bodymind/runtime_annunziato_readonl
 COPY release_global_reconcile_r69.py /opt/bodymind/release_global_reconcile_r69.py
 COPY release_complete_mu_cache_r70.py /opt/bodymind/release_complete_mu_cache_r70.py
 COPY release_guardian_refresh_r71.py /opt/bodymind/release_guardian_refresh_r71.py
+COPY release_shared_document_core_r72.py /opt/bodymind/release_shared_document_core_r72.py
 COPY release_handwriting_enrollment_smoke_r65.py /opt/bodymind/release_handwriting_enrollment_smoke_r65.py
 COPY release_operator_upload_smoke_r64.py /opt/bodymind/release_operator_upload_smoke_r64.py
 COPY release_operator_cloud_first_smoke_r63.py /opt/bodymind/release_operator_cloud_first_smoke_r63.py
