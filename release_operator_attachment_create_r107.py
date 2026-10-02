@@ -264,6 +264,74 @@ def _r107_handle_create_from_attachment(conn,message):
 else:
     print('[r107-operator] already applied',flush=True)
 
+# Deterministic canonical-MU metadata repair before the structural audit.
+# Evidence must come from semantic cache or a linked inbound already classified as MU.
+def _r107_fix_visible_mu_metadata():
+    conn=sqlite3.connect(str(DB),timeout=30); conn.row_factory=sqlite3.Row
+    changed=[]; backup_path=""
+    try:
+        dcols={str(r[1]) for r in conn.execute("PRAGMA table_info(documenti)").fetchall()}
+        rows=conn.execute("SELECT * FROM documenti WHERE coalesce(visibile,1)=1 ORDER BY id").fetchall()
+        candidates=[]
+        for d in rows:
+            did=int(d["id"]); semantic_mu=False; inbound_mu=False
+            if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='bodymind_document_semantics'").fetchone():
+                sr=conn.execute("""SELECT document_type,analysis_json FROM bodymind_document_semantics
+                  WHERE source_table='documenti' AND source_id=? ORDER BY id DESC LIMIT 1""",(did,)).fetchone()
+                if sr:
+                    semantic_mu=str(sr["document_type"] or "").strip().lower()=="modulo_unico_tesseramento"
+                    if not semantic_mu:
+                        try:
+                            aj=json.loads(str(sr["analysis_json"] or "{}"))
+                            semantic_mu=str((aj or {}).get("document_type") or "").strip().lower()=="modulo_unico_tesseramento"
+                        except Exception:
+                            pass
+            inbound=None
+            if "inbound_id" in dcols and int(d["inbound_id"] or 0)>0:
+                inbound=conn.execute("SELECT * FROM inbound_documents WHERE id=?",(int(d["inbound_id"]),)).fetchone()
+                inbound_mu=bool(inbound and str(inbound["document_type"] or "").strip().lower()=="modulo_unico_tesseramento")
+            if semantic_mu or inbound_mu:
+                current_type=str(d["doc_type"] or "").strip().lower() if "doc_type" in d.keys() else ""
+                current_cat=str(d["categoria"] or "").strip().lower() if "categoria" in d.keys() else ""
+                if current_type!="modulo_unico_tesseramento" or "modulo iscrizione" not in current_cat:
+                    candidates.append((d,semantic_mu,inbound_mu))
+        if candidates:
+            BACK.mkdir(parents=True,exist_ok=True)
+            dst=BACK/(datetime.now().strftime("%Y%m%d_%H%M%S")+"_pre_r107_mu_metadata.db")
+            src=sqlite3.connect(str(DB),timeout=30); out=sqlite3.connect(str(dst))
+            try: src.backup(out)
+            finally: out.close(); src.close()
+            backup_path=str(dst)
+        for d,semantic_mu,inbound_mu in candidates:
+            sets=[]; vals=[]
+            if "doc_type" in dcols: sets.append("doc_type=?"); vals.append("modulo_unico_tesseramento")
+            if "categoria" in dcols: sets.append("categoria=?"); vals.append("Modulo iscrizione BodyMind")
+            if "status" in dcols and str(d["status"] or "").strip().lower() in ("","da_verificare","needs_review","associato_tipo_da_verificare"):
+                sets.append("status=?"); vals.append("salvato")
+            if sets:
+                vals.append(int(d["id"]))
+                conn.execute("UPDATE documenti SET "+",".join(sets)+" WHERE id=?",tuple(vals))
+                changed.append({"document_id":int(d["id"]),"tesserato_id":int(d["tesserato_id"] or 0),"semantic":semantic_mu,"inbound":inbound_mu})
+                tid=int(d["tesserato_id"] or 0)
+                if tid>0:
+                    try:
+                        from asd_app.onboarding_flow import sync_unified_module_flags,recompute_onboarding_status
+                        sync_unified_module_flags(conn,tid,source="r107_mu_metadata")
+                        recompute_onboarding_status(conn,tid)
+                    except Exception:
+                        pass
+        conn.commit()
+        integrity=str(conn.execute("PRAGMA integrity_check").fetchone()[0])
+        fk=len(conn.execute("PRAGMA foreign_key_check").fetchall())
+    finally:
+        conn.close()
+    print("[r107-mu-metadata] changed="+json.dumps(changed,ensure_ascii=False)+" backup="+backup_path+" integrity="+integrity+" fk="+str(fk),flush=True)
+    if integrity.lower()!="ok" or fk:
+        raise RuntimeError("R107 MU metadata repair integrity failed")
+    return changed
+
+_r107_fix_visible_mu_metadata()
+
 # Read-only production invariants. No hard-coded athlete count.
 conn=sqlite3.connect(str(DB),timeout=30); conn.row_factory=sqlite3.Row
 try:
