@@ -45,6 +45,19 @@ def age_from_birth(value, today=None):
     born=date.fromisoformat(d); today=today or date.today()
     return today.year-born.year-((today.month,today.day)<(born.month,born.day))
 
+def cf_birth_date_consistent(value,birth_value):
+    cf=norm_cf(value)
+    birth=iso_date(birth_value)
+    if not valid_italian_cf(cf) or not birth:
+        return False
+    try:
+        d=date.fromisoformat(birth)
+        months={"A":1,"B":2,"C":3,"D":4,"E":5,"H":6,"L":7,"M":8,"P":9,"R":10,"S":11,"T":12}
+        yy=int(cf[6:8]); mm=months.get(cf[8]); dd=int(cf[9:11]); day=dd-40 if dd>40 else dd
+        return yy==(d.year%100) and mm==d.month and day==d.day
+    except Exception:
+        return False
+
 def enrollment_identity_ready(analysis, require_valid_cf=False):
     a=analysis if isinstance(analysis,dict) else {}
     first=str(a.get("first_name") or "").strip()
@@ -53,13 +66,19 @@ def enrollment_identity_ready(analysis, require_valid_cf=False):
     cf=norm_cf(a.get("codice_fiscale"))
     try: conf=float(a.get("confidence") or 0)
     except Exception: conf=0.0
-    if str(a.get("document_type") or "")!="modulo_unico_tesseramento" or conf<.95:
+    if str(a.get("document_type") or "")!="modulo_unico_tesseramento":
         return False
     if not first or not last:
         return False
+    cf_valid=valid_italian_cf(cf)
+    cf_birth_ok=bool(cf_valid and birth and cf_birth_date_consistent(cf,birth))
+    # High-confidence MU + valid CF is sufficient. For a slightly lower semantic
+    # score, require the stronger checksum + DOB consistency rather than manual assignment.
     if require_valid_cf:
-        return valid_italian_cf(cf)
-    return valid_italian_cf(cf) or bool(birth)
+        if not cf_valid:
+            return False
+        return conf>=.95 or (conf>=.90 and cf_birth_ok)
+    return (conf>=.95 and (cf_valid or bool(birth))) or (conf>=.90 and cf_birth_ok)
 
 def find_existing_athlete(conn,analysis):
     cols={str(r[1]) for r in conn.execute("PRAGMA table_info(tesserati)").fetchall()}

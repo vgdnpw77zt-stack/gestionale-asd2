@@ -72,6 +72,7 @@ runpy.run_path("/opt/bodymind/release_operator_document_core_r78.py", run_name="
 runpy.run_path("/opt/bodymind/release_mu_canonical_r79.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_stabilization_repair_r81.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_guardian_convergence_r82.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_mu_autoenroll_r92.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_stabilization_audit_r80.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mobile_delete_r85.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mobile_athlete_delete_r87.py", run_name="__main__")

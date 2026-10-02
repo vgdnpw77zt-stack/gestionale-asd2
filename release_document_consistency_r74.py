@@ -69,7 +69,7 @@ if 'BODYMIND_R74_AUTOCREATE_STRICT_CF' not in s:
                         # - semantic confidence is very high
                         # - Italian fiscal code is formally valid
                         # - admin is executing the flow
-                        if (production_mode and sem_conf>=.98 and current_role()=="admin"
+                        if (production_mode and current_role()=="admin"
                                 and _enrollment_identity_ready(semantic,require_valid_cf=True)):
                             try:
                                 _operator_db_backup("r74_auto_enrollment")
