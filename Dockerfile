@@ -91,6 +91,7 @@ COPY release_mu_metadata_convergence_r108.py /opt/bodymind/release_mu_metadata_c
 COPY release_payment_simplify_audit_r109.py /opt/bodymind/release_payment_simplify_audit_r109.py
 COPY release_operator_runtime_helper_r112.py /opt/bodymind/release_operator_runtime_helper_r112.py
 COPY release_convergence_smoke_r111.py /opt/bodymind/release_convergence_smoke_r111.py
+COPY release_desktop_post_regression_r113.py /opt/bodymind/release_desktop_post_regression_r113.py
 COPY release_simple_athlete_payment_truth_r110.py /opt/bodymind/release_simple_athlete_payment_truth_r110.py
 COPY release_simple_athlete_payment_smoke_r111.py /opt/bodymind/release_simple_athlete_payment_smoke_r111.py
 COPY release_mu_autoenroll_r92.py /opt/bodymind/release_mu_autoenroll_r92.py
