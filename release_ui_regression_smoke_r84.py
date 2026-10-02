@@ -3,7 +3,7 @@ from __future__ import annotations
 import json, sqlite3, subprocess, sys
 
 code=r'''
-import json, re, sqlite3, sys
+import inspect, json, re, sqlite3, sys
 sys.path.insert(0,"/data/top2_app")
 import app as _full_app
 from asd_app.core import app
@@ -55,6 +55,12 @@ result["delete_routes"]=[
   if ("tesser" in (str(rule.rule)+" "+str(rule.endpoint)).lower())
      and any(x in (str(rule.rule)+" "+str(rule.endpoint)).lower() for x in ("elimina","delete","remove","cancella"))
 ]
+
+for ep in ("fix12_mobile_atlete","tesserati_delete"):
+    try:
+        result[ep+"_source"]=inspect.getsource(app.view_functions[ep])[:12000]
+    except Exception as exc:
+        result[ep+"_source"]="ERR:"+repr(exc)
 
 r=client.get("/operatore-bodymind",headers={"User-Agent":iphone},follow_redirects=True)
 html=r.get_data(as_text=True)
