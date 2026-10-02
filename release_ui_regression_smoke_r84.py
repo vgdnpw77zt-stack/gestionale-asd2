@@ -75,6 +75,12 @@ clean=re.sub(r"(?is)<style id=['\"]BODYMIND_R73_MOBILE_DELETE_VISIBILITY['\"].*?
 actual_delete=bool(re.search(r"(?is)(?:action|href|data-action|onclick)\s*=\s*['\"][^'\"]*(?:elimina|delete|remove|cancella)|>\s*(?:elimina|cancella|rimuovi)\b",clean))
 result["mobile_delete_control"]=actual_delete
 result["mobile_delete"]=(r.status_code==200 and "BODYMIND_R73_MOBILE_DELETE_VISIBILITY" in mhtml and actual_delete)
+
+# Exercise the real delete POST with an invalid id: must reach the route without mutating data.
+rp=client.post("/tesserati/delete",data={"id":"0"},headers={"User-Agent":iphone},follow_redirects=False)
+result["delete_post_status"]=rp.status_code
+result["delete_post_route_reachable"]=(rp.status_code in (302,303))
+result["mobile_delete"]=bool(result["mobile_delete"] and result["delete_post_route_reachable"])
 result["mobile_links"]=[x for x in re.findall(r"(?i)href\\s*=\\s*['\\\"]([^'\\\"]+)['\\\"]",clean) if any(k in x.lower() for k in ("tesser","atlet","scheda","profil"))][:80]
 result["mobile_form_actions"]=re.findall(r"(?i)<form[^>]+action\\s*=\\s*['\\\"]([^'\\\"]+)['\\\"]",clean)[:80]
 result["mobile_data_ids"]=re.findall(r"(?i)data-(?:id|tesserato-id|athlete-id)\\s*=\\s*['\\\"]?([^'\\\" >]+)",clean)[:80]
