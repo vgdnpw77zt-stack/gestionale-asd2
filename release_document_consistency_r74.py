@@ -628,3 +628,143 @@ if not R76_MARKER.exists():
     print('[r76-selftest] PASS backup audit-archive proven-duplicates-only no-media-delete referential-safety db-ok',flush=True)
 else:
     print('[r76-db-cleanup] already applied',flush=True)
+
+
+# ------------------------------------------------------------------
+# R77: finish inbound duplicate cleanup with event archival and safe relinking.
+# ------------------------------------------------------------------
+R77_MARKER=APP/'.BODYMIND_R77_INBOUND_DUPLICATE_CLEANUP'
+if not R77_MARKER.exists():
+    r77_backup=backup_db()
+    conn=sqlite3.connect(str(DB),timeout=60); conn.row_factory=sqlite3.Row
+    deleted77=[]; relinked77=[]; blocked77=[]; event_archived77=0
+    try:
+        dup_status={
+          'duplicate_exact','duplicato_confermato','duplicato_non_importato',
+          'duplicate_confirmed','semantic_duplicate_archived','duplicate_archived'
+        }
+
+        def sem_sig(iid):
+            if not table(conn,'bodymind_document_semantics'):
+                return None
+            rows=conn.execute("""SELECT * FROM bodymind_document_semantics
+                WHERE source_table='inbound_documents' AND source_id=? ORDER BY id DESC""",(int(iid),)).fetchall()
+            if not rows: return None
+            r=rows[0]
+            return {
+              'sha':str(r['sha256'] or '').strip(),
+              'key':str(r['semantic_key'] or '').strip(),
+              'type':str(r['document_type'] or '').strip().lower(),
+              'cf':str(r['codice_fiscale'] or '').strip().upper(),
+              'confidence':float(r['confidence'] or 0),
+            }
+
+        def canonical_for(row):
+            iid=int(row['id']); keys=set(row.keys())
+            tid=int(row['tesserato_id'] or 0) if 'tesserato_id' in keys else 0
+            dtype=str(row['document_type'] or '').strip().lower() if 'document_type' in keys else ''
+            sig=sem_sig(iid)
+            candidates=conn.execute("""SELECT * FROM inbound_documents
+                WHERE id<>? AND coalesce(tesserato_id,0)=?
+                  AND lower(coalesce(document_type,''))=?
+                  AND lower(coalesce(status,'')) NOT IN ('duplicate_exact','duplicato_confermato','duplicato_non_importato','duplicate_confirmed','semantic_duplicate_archived','duplicate_archived')
+                ORDER BY id DESC""",(iid,tid,dtype)).fetchall()
+            strong=[]
+            for c in candidates:
+                cs=sem_sig(int(c['id']))
+                if not sig or not cs:
+                    continue
+                same_sha=bool(sig['sha'] and cs['sha'] and sig['sha']==cs['sha'])
+                same_key=bool(sig['key'] and cs['key'] and sig['key']==cs['key'])
+                same_type=(sig['type']==cs['type']==dtype) if dtype else (sig['type']==cs['type'])
+                cf_ok=(not sig['cf'] or not cs['cf'] or sig['cf']==cs['cf'])
+                if same_type and cf_ok and (same_sha or same_key):
+                    strong.append(c)
+            return strong[0] if len(strong)==1 else None
+
+        rows=conn.execute("SELECT * FROM inbound_documents ORDER BY id").fetchall() if table(conn,'inbound_documents') else []
+        for row in rows:
+            st=str(row['status'] or '').strip().lower() if 'status' in row.keys() else ''
+            if st not in dup_status:
+                continue
+            iid=int(row['id'])
+
+            # Any dossier document pointing at this inbound must be relinked only to a proven canonical sibling.
+            docrefs=[]
+            if table(conn,'documenti') and 'inbound_id' in cols(conn,'documenti'):
+                docrefs=conn.execute("SELECT * FROM documenti WHERE inbound_id=?",(iid,)).fetchall()
+            canonical=canonical_for(row) if docrefs else None
+            if docrefs and not canonical:
+                blocked77.append({'id':iid,'status':st,'reason':'document_reference_without_proven_canonical',
+                                  'document_ids':[int(x['id']) for x in docrefs]})
+                continue
+            if docrefs and canonical:
+                cid=int(canonical['id'])
+                conn.execute("UPDATE documenti SET inbound_id=? WHERE inbound_id=?",(cid,iid))
+                relinked77.append({'from':iid,'to':cid,'document_ids':[int(x['id']) for x in docrefs]})
+
+            # Archive inbound row + all its events inside the audit record before deletion.
+            events=[]
+            if table(conn,'inbound_events') and 'inbound_document_id' in cols(conn,'inbound_events'):
+                events=[dict(x) for x in conn.execute("SELECT * FROM inbound_events WHERE inbound_document_id=? ORDER BY id",(iid,)).fetchall()]
+            sem=[]
+            if table(conn,'bodymind_document_semantics'):
+                sem=[dict(x) for x in conn.execute("SELECT * FROM bodymind_document_semantics WHERE source_table='inbound_documents' AND source_id=? ORDER BY id",(iid,)).fetchall()]
+            payload={'row':dict(row),'inbound_events':events}
+            tid=int(row['tesserato_id'] or 0) if 'tesserato_id' in row.keys() else 0
+            fpath=''
+            for k in ('saved_path','filename','original_filename'):
+                if k in row.keys() and row[k]:
+                    fpath=str(row[k]); break
+            conn.execute("""INSERT OR IGNORE INTO bodymind_duplicate_records_archive
+              (source_table,source_id,tesserato_id,status,reason,payload_json,semantics_json,file_path,archived_at)
+              VALUES(?,?,?,?,?,?,?,?,?)""",
+              ('inbound_documents',iid,tid,st,'R77 proven inbound duplicate cleanup',
+               json.dumps(payload,ensure_ascii=False,default=str),
+               json.dumps(sem,ensure_ascii=False,default=str),fpath,datetime.now().isoformat(timespec='seconds')))
+
+            if events:
+                conn.execute("DELETE FROM inbound_events WHERE inbound_document_id=?",(iid,))
+                event_archived77 += len(events)
+            if table(conn,'bodymind_document_semantics'):
+                conn.execute("DELETE FROM bodymind_document_semantics WHERE source_table='inbound_documents' AND source_id=?",(iid,))
+            conn.execute("DELETE FROM inbound_documents WHERE id=?",(iid,))
+            deleted77.append(iid)
+
+        conn.commit()
+        remaining77=[]
+        if table(conn,'inbound_documents'):
+            qs=','.join('?' for _ in dup_status)
+            remaining77=[dict(x) for x in conn.execute(
+                "SELECT id,status,tesserato_id,document_type,original_filename FROM inbound_documents WHERE lower(coalesce(status,'')) IN ("+qs+") ORDER BY id",
+                tuple(sorted(dup_status))).fetchall()]
+        counts77={
+          'tesserati':int(conn.execute('SELECT COUNT(*) FROM tesserati').fetchone()[0]),
+          'documenti':int(conn.execute('SELECT COUNT(*) FROM documenti').fetchone()[0]),
+          'inbound_documents':int(conn.execute('SELECT COUNT(*) FROM inbound_documents').fetchone()[0]),
+          'duplicate_archive':int(conn.execute('SELECT COUNT(*) FROM bodymind_duplicate_records_archive').fetchone()[0]),
+        }
+        integrity77=str(conn.execute('PRAGMA integrity_check').fetchone()[0])
+        fk77=len(conn.execute('PRAGMA foreign_key_check').fetchall())
+    finally:
+        conn.close()
+
+    print('[r77-inbound-cleanup] deleted='+json.dumps(deleted77)+
+          ' relinked='+json.dumps(relinked77,ensure_ascii=False)+
+          ' events_archived='+str(event_archived77)+
+          ' blocked='+json.dumps(blocked77,ensure_ascii=False)+
+          ' remaining='+json.dumps(remaining77,ensure_ascii=False)+
+          ' counts='+json.dumps(counts77)+
+          ' backup='+r77_backup.name+
+          ' integrity='+integrity77+' fk='+str(fk77),flush=True)
+
+    if counts77['tesserati']!=32:
+        raise RuntimeError('R77 refused: tesserati count changed')
+    if integrity77.lower()!='ok' or fk77:
+        raise RuntimeError('R77 database integrity failed')
+    if remaining77 and not blocked77:
+        raise RuntimeError('R77 unexplained duplicate inbound rows remain')
+    R77_MARKER.write_text('BodyMind R77 inbound duplicate cleanup completed\\n',encoding='utf-8')
+    print('[r77-selftest] PASS events-archived semantic-canonical-relink proven-duplicates-only no-media-delete db-ok',flush=True)
+else:
+    print('[r77-inbound-cleanup] already applied',flush=True)
