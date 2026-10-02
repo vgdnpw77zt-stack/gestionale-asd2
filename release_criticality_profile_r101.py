@@ -201,7 +201,7 @@ with client.session_transaction() as sess:
     sess["logged"]=True; sess["username"]="admin"; sess["display_name"]="R101 QA"; sess["role"]="admin"; sess["tenant_slug"]="default"
 
 ua={"User-Agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1"}
-getr=client.get("/mobile/atleta/"+str(tid),headers=ua,follow_redirects=False)
+getr=client.get("/mobile/atleta/"+str(tid)+"?advanced=1",headers=ua,follow_redirects=False)
 parser=HiddenParser(); parser.feed(getr.get_data(as_text=True))
 payload=dict(parser.hidden)
 sentinel=("R101-QA-"+str(tid))[:80]
