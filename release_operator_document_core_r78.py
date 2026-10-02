@@ -29,6 +29,15 @@ def backup_db(label):
     return str(dst)
 
 s=P.read_text(encoding='utf-8',errors='replace')
+# Recover a partial R78 attempt written to the persistent runtime before a failed deploy.
+if 'BODYMIND_R78_DUPLICATE_RESOLUTION' in s and 'BODYMIND_R78_AUTONOMOUS_SAFE_DOCUMENT_PRODUCTION' not in s:
+    prior=BACK/'asd_app/routes_operator_bodymind.py'
+    if prior.exists():
+        shutil.copy2(prior,P)
+        s=P.read_text(encoding='utf-8',errors='replace')
+        print('[operator-r78] restored partial runtime before reapply',flush=True)
+    else:
+        raise RuntimeError('R78 partial runtime detected but backup missing')
 if 'BODYMIND_R78_DUPLICATE_RESOLUTION' not in s:
     backup_file(P)
 
@@ -164,7 +173,7 @@ def _r78_finalize_duplicate(conn,inbound_id,tid,semantic,dup):
     s=s.replace(old2,new2,1)
 
     # Autonomous safe production: second gate + import in the same upload task for admins.
-    summary_anchor='''    summary={"received":len(results),"source_files":source_file_count,"logical_documents":len(results),
+    summary_anchor='''    summary={"received":len(results),"source_files":physical_file_count,"logical_documents":len(results),"ready":len(ready_ids),"new_athletes":len(new_athletes),"duplicates":len(duplicate_items),"review":len(review_items),"errors":len(errors),"document_type":type_hint}
 '''
     auto=r'''    # BODYMIND_R78_AUTONOMOUS_SAFE_DOCUMENT_PRODUCTION
     auto_imported=[]; auto_blocked=[]; auto_second_duplicates=[]
@@ -215,10 +224,10 @@ def _r78_finalize_duplicate(conn,inbound_id,tid,semantic,dup):
     s=s.replace(summary_anchor,auto+summary_anchor,1)
 
     # Add autonomous outcomes to the persisted summary.
-    oldsum='''             "ready":len(ready_ids),"new_athletes":len(new_athletes),"duplicates":len(duplicate_items),
-             "review":len(review_items),"errors":len(errors),"document_type":type_hint}
+    oldsum='''    summary={"received":len(results),"source_files":physical_file_count,"logical_documents":len(results),"ready":len(ready_ids),"new_athletes":len(new_athletes),"duplicates":len(duplicate_items),"review":len(review_items),"errors":len(errors),"document_type":type_hint}
 '''
-    newsum='''             "ready":len(ready_ids),"imported":len(auto_imported),"new_athletes":len(new_athletes),
+    newsum='''    summary={"received":len(results),"source_files":physical_file_count,"logical_documents":len(results),
+             "ready":len(ready_ids),"imported":len(auto_imported),"new_athletes":len(new_athletes),
              "duplicates":len(duplicate_items)+len(auto_second_duplicates),
              "review":len(review_items),"errors":len(errors),"document_type":type_hint,
              "autonomous_production":bool(production_mode and current_role()=="admin")}
@@ -228,9 +237,9 @@ def _r78_finalize_duplicate(conn,inbound_id,tid,semantic,dup):
     s=s.replace(oldsum,newsum,1)
 
     # Truthful final wording: resolved duplicate is a completed result, not an abandoned file.
-    oldtext='''        text=f"Il server ha ricevuto {source_file_count} file e ha analizzato {len(results)} documenti logici: {len(ready_ids)} documenti nuovi per tesserate già presenti, {len(new_athletes)} moduli di nuove tesserate leggibili, {len(duplicate_items)} duplicati che non importerò, {len(review_items)} da verificare."
+    oldtext='''        text=f"Il server ha ricevuto {physical_file_count} file e ha analizzato {len(results)} documenti logici: {len(ready_ids)} documenti nuovi per tesserate già presenti, {len(new_athletes)} moduli di nuove tesserate leggibili, {len(duplicate_items)} duplicati che non importerò, {len(review_items)} da verificare."
 '''
-    newtext='''        text=f"Il server ha ricevuto {source_file_count} file e ha analizzato {len(results)} documenti logici: {len(auto_imported)} importati e associati automaticamente, {len(new_athletes)} nuove anagrafiche ancora da verificare, {len(duplicate_items)+len(auto_second_duplicates)} duplicati risolti sulla copia già presente, {len(review_items)} da verificare."
+    newtext='''        text=f"Il server ha ricevuto {physical_file_count} file e ha analizzato {len(results)} documenti logici: {len(auto_imported)} importati e associati automaticamente, {len(new_athletes)} nuove anagrafiche ancora da verificare, {len(duplicate_items)+len(auto_second_duplicates)} duplicati risolti sulla copia già presente, {len(review_items)} da verificare."
 '''
     if oldtext not in s:
         raise RuntimeError('R78 final text anchor missing')
