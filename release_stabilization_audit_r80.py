@@ -330,13 +330,17 @@ for name,p in files.items():
       'r74_iphone_composer':'BODYMIND_R74_IPHONE_COMPOSER' in txt,
       'r74_tutela':'BODYMIND_R74_TUTELA_FROM_MU' in txt,
       'r75_hide_archived':'BODYMIND_R75_HIDE_ARCHIVED_DOCS' in txt,
+      'r81_visible_docs':'BODYMIND_R81_VISIBLE_DOCS_ONLY' in txt,
       'r73_cf_gate':'BODYMIND_R73_HARD_CF_CONFLICT_GATE' in txt,
+      'r82_guardian_convergence':'BODYMIND_R82_GUARDIAN_CONVERGENCE' in txt,
     }
 report['runtime_markers']=markers
 
 severity={
  'duplicate_cf':len(report.get('duplicate_cf') or []),
  'duplicate_identity':len(report.get('duplicate_identity') or []),
+ 'multiple_minor_rows':len(report.get('multiple_minor_rows') or []),
+ 'orphan_minor_rows':len(report.get('orphan_minor_rows') or []),
  'visible_mu_duplicates':len(report.get('visible_mu_duplicates') or []),
  'visible_exact_file_duplicates':len(report.get('visible_exact_file_duplicates') or []),
  'visible_mu_metadata_incoherent':len(report.get('visible_mu_metadata_incoherent') or []),
@@ -346,6 +350,10 @@ severity={
  'duplicate_status_remaining':len(report.get('duplicate_status_remaining') or []),
  'onboarding_consistency':len(report.get('onboarding_consistency') or []),
  'mu_replay_30_failures':len(report.get('mu_replay_30_failures') or []),
+ 'stale_operator_confirmations':(
+    len([x for x in (report.get('open_operator_tasks') or []) if str(x.get('status') or '')=='awaiting_confirmation'])
+    if not (report.get('open_operator_actions') or []) else 0
+ ),
 }
 report['severity_counts']=severity
 
@@ -358,4 +366,27 @@ print('[r80-audit-summary] '+json.dumps({
 
 if report.get('integrity','').lower()!='ok' or report.get('foreign_keys'):
     raise RuntimeError('R80 database integrity gate failed')
-print('[r80-selftest] PASS read-only-production-audit temp-db-new-athlete-idempotency 30x-MU-replay route-layer-markers',flush=True)
+
+if sum(int(v or 0) for v in severity.values())!=0:
+    raise RuntimeError('R80 structural regression gate failed: '+json.dumps(severity,ensure_ascii=False))
+
+sim=report.get('new_athlete_temp_simulation') or {}
+first=sim.get('first') or {}; second=sim.get('second') or {}
+if not (first.get('created') is True and second.get('existing') is True and int(sim.get('rows_with_cf') or 0)==1):
+    raise RuntimeError('R80 new-athlete idempotency regression: '+json.dumps(sim,ensure_ascii=False,default=str))
+
+required_markers={
+  'operator_autocreate':bool(markers.get('operator',{}).get('r74_autocreate')),
+  'operator_autonomous':bool(markers.get('operator',{}).get('r78_autonomous')),
+  'operator_self_canonical':bool(markers.get('operator',{}).get('r79_self_canonical')),
+  'iphone_composer':bool(markers.get('operator',{}).get('r74_iphone_composer')),
+  'tutela_from_mu':bool(markers.get('coherence',{}).get('r74_tutela')),
+  'visible_docs_only':bool(markers.get('documents',{}).get('r81_visible_docs')),
+  'hard_cf_conflict':bool(markers.get('mu_core',{}).get('r73_cf_gate')),
+  'guardian_convergence':bool(markers.get('mu_core',{}).get('r82_guardian_convergence')),
+}
+missing=[k for k,v in required_markers.items() if not v]
+if missing:
+    raise RuntimeError('R80 architecture regression gate failed: '+repr(missing))
+
+print('[r80-selftest] PASS HARD-GATE structural-zero temp-db-new-athlete-idempotency 30x-MU-replay shared-markers',flush=True)
