@@ -128,6 +128,7 @@ checks={
  'mobile_200':mobile.status_code==200,
  'mobile_simple':all(x in mhtml for x in labels) and '?advanced=1' in mhtml,
  'mobile_no_dossier_default':'Dossier' not in mhtml,
+ 'payment_link_scoped':('/pagamenti?tesserato_id='+str(tid)) in dhtml and ('/pagamenti?tesserato_id='+str(tid)) in mhtml,
  'advanced_200':advanced.status_code==200 and form is not None,
  'desktop_post_redirect':post is not None and post.status_code in (302,303) and loc.startswith('/tesserati'),
  'desktop_changed':changed,
