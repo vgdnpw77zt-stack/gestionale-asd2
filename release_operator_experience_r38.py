@@ -89,6 +89,7 @@ checks={
     'handwriting_enrollment_r65':'BODYMIND_R65_HANDWRITING_ENROLLMENT' in operator_text and 'process_enrollment_batch' in operator_text and 'nuova_tesserata_pronta' in operator_text,
     'upload_truth_multidoc_r66':'BODYMIND_R66_UPLOAD_TRUTH_MULTIDOC' in operator_text and 'uploadInFlight' in operator_text and 'physical_file_count' in operator_text and 'segment_pdf_documents' in operator_text,
     'guardian_refresh_r71':(APP/'asd_app/verified_mu_sync_core_r68.py').exists() and 'BODYMIND_R71_REFRESH_INCOMPLETE_GUARDIAN_CACHE' in (APP/'asd_app/verified_mu_sync_core_r68.py').read_text(encoding='utf-8',errors='replace'),
+    'shared_doc_core_r72':'BODYMIND_R72_SHARED_MU_CORE_OPERATOR' in operator_text and 'BODYMIND_R72_SHARED_MU_CORE_AUTOPILOT' in (APP/'asd_app/routes_email_documents.py').read_text(encoding='utf-8',errors='replace'),
 
 }
 
