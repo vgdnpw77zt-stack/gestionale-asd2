@@ -264,6 +264,38 @@ def _r107_handle_create_from_attachment(conn,message):
 else:
     print('[r107-operator] already applied',flush=True)
 
+# BODYMIND_R112_R107_BYTES_COMPAT
+# Persistent R107 can outlive the historical _inbound_file_bytes helper.
+# Converge it onto the canonical document reader actually present in runtime.
+_op_now=OP.read_text(encoding='utf-8',errors='replace')
+if '_r107_read_inbound_bytes' not in _op_now:
+    compat=r'''
+def _r107_read_inbound_bytes(row):
+    fn=globals().get("_inbound_file_bytes")
+    if callable(fn):
+        return fn(row)
+    fn=globals().get("_document_bytes_from_row")
+    if callable(fn):
+        return fn(row)
+    return ("",b"","")
+'''
+    marker='# BODYMIND_R107_ATTACHMENT_CREATE_CORE\n'
+    if marker not in _op_now:
+        raise RuntimeError('R112 R107 core marker missing')
+    _op_now=_op_now.replace(marker,marker+compat,1)
+if 'name,data,_=_inbound_file_bytes(inbound)' in _op_now:
+    _op_now=_op_now.replace('name,data,_=_inbound_file_bytes(inbound)','name,data,_=_r107_read_inbound_bytes(inbound)',1)
+tmp=OP.with_name(OP.name+'.r112.tmp')
+try:
+    tmp.write_text(_op_now,encoding='utf-8')
+    py_compile.compile(str(tmp),doraise=True)
+    tmp.replace(OP)
+finally:
+    try:
+        if tmp.exists(): tmp.unlink()
+    except Exception: pass
+print('[r112-r107-bytes] PASS canonical inbound byte-reader compatibility',flush=True)
+
 # Deterministic canonical-MU metadata repair before the structural audit.
 # Evidence must come from semantic cache or a linked inbound already classified as MU.
 def _r107_fix_visible_mu_metadata():
