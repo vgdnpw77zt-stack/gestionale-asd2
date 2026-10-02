@@ -38,13 +38,19 @@ if 'BODYMIND_R87_MOBILE_ATHLETE_DELETE' not in s:
     s=s.replace(css_old,css_new,1)
 
     old="""{% for item in items %}{% set r=item.row %}<a class='card' href='/mobile/atleta/{{r["id"]}}'><div class='name'>{{r['nome']}} {{r['cognome']}}</div><div class='muted'>{{r['corso'] or 'Corso non indicato'}}</div><div class='certline {{item.cert_state}}'>{{item.cert_label}} · {{item.cert_detail}}</div><div class='chips'><span class='chip'>Apri scheda</span>{% if r['email'] %}<span class='chip ok'>Email presente</span>{% endif %}</div></a>{% else %}<div class='card empty'>{{'Nessun certificato richiede controllo.' if cert_filter else 'Nessuna atleta trovata.'}}</div>{% endfor %}"""
-    new="""{% for item in items %}{% set r=item.row %}<div class='card athlete-card'><a class='athlete-open' href='/mobile/atleta/{{r["id"]}}'><div class='name'>{{r['nome']}} {{r['cognome']}}</div><div class='muted'>{{r['corso'] or 'Corso non indicato'}}</div><div class='certline {{item.cert_state}}'>{{item.cert_label}} · {{item.cert_detail}}</div><div class='chips'><span class='chip'>Apri scheda</span>{% if r['email'] %}<span class='chip ok'>Email presente</span>{% endif %}</div></a>{% if not cert_filter %}<form method='POST' action='/tesserati/delete' class='athlete-delete-form' onsubmit="return confirm('Eliminare definitivamente {{r['nome']}} {{r['cognome']}}? Questa operazione richiede conferma.');">{{csrf_input()|safe}}<input type='hidden' name='id' value='{{r["id"]}}'><button type='submit' class='athlete-delete'>Elimina atleta</button></form>{% endif %}</div>{% else %}<div class='card empty'>{{'Nessun certificato richiede controllo.' if cert_filter else 'Nessuna atleta trovata.'}}</div>{% endfor %}"""
+    new="""{% for item in items %}{% set r=item.row %}<div class='card athlete-card'><a class='athlete-open' href='/mobile/atleta/{{r["id"]}}'><div class='name'>{{r['nome']}} {{r['cognome']}}</div><div class='muted'>{{r['corso'] or 'Corso non indicato'}}</div><div class='certline {{item.cert_state}}'>{{item.cert_label}} · {{item.cert_detail}}</div><div class='chips'><span class='chip'>Apri scheda</span>{% if r['email'] %}<span class='chip ok'>Email presente</span>{% endif %}</div></a>{% if not cert_filter %}<form method='POST' action='/tesserati/delete' class='athlete-delete-form' onsubmit="return confirm('Eliminare definitivamente {{r['nome']}} {{r['cognome']}}? Questa operazione richiede conferma.');"><input type='hidden' name='id' value='{{r["id"]}}'><button type='submit' class='athlete-delete'>Elimina atleta</button></form>{% endif %}</div>{% else %}<div class='card empty'>{{'Nessun certificato richiede controllo.' if cert_filter else 'Nessuna atleta trovata.'}}</div>{% endfor %}"""
     if old not in s:
         raise RuntimeError('R87 athlete card anchor missing')
     s=s.replace(old,new,1)
 
     p.write_text(s,encoding='utf-8')
     py_compile.compile(str(p),doraise=True)
-    print('[r87-mobile-athlete-delete] PASS source='+str(rel)+' backend=/tesserati/delete explicit-confirm csrf',flush=True)
+    print('[r87-mobile-athlete-delete] PASS source='+str(rel)+' backend=/tesserati/delete explicit-confirm route-audit',flush=True)
 else:
+    # Self-heal a partial/older R87 write that used a template helper unavailable on this mobile page.
+    if '{{csrf_input()|safe}}' in s:
+        s=s.replace('{{csrf_input()|safe}}','')
+        p.write_text(s,encoding='utf-8')
+        py_compile.compile(str(p),doraise=True)
+        print('[r87-mobile-athlete-delete] repaired legacy mobile template helper',flush=True)
     print('[r87-mobile-athlete-delete] already applied source='+str(p),flush=True)
