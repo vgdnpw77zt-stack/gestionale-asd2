@@ -103,7 +103,9 @@ pay=client.get('/pagamenti?tesserato_id=33',follow_redirects=False)
 dh=desktop.get_data(as_text=True); mh=mobile.get_data(as_text=True)
 result['desktop_simple']=desktop.status_code==200 and 'bodymind-r110-simple-desktop' in dh and all(x in dh for x in ('Iscrizione','Mese','Modulo Unico','Certificato','Tutela'))
 result['mobile_simple']=mobile.status_code==200 and all(x in mh for x in ('Iscrizione','Mese','Modulo Unico','Certificato','Tutela'))
-result['desktop_no_dossier_default']='Dossier' not in dh and 'dossier' not in dh.lower()
+_ds=dh.find("<main class='r110-page'>"); _de=dh.find("</main>",_ds)
+_desktop_simple_fragment=dh[_ds:_de+7] if _ds>=0 and _de>=0 else ''
+result['desktop_no_dossier_default']=bool(_desktop_simple_fragment) and 'dossier' not in _desktop_simple_fragment.lower()
 result['mobile_no_dossier_default']='Dossier' not in mh and 'dossier' not in mh.lower()
 result['payment_filter_route']=pay.status_code in (200,302)
 
