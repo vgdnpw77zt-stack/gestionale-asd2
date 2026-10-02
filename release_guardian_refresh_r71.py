@@ -46,7 +46,9 @@ try:
         if tid in seen:
             continue
         seen.add(tid)
-        r=sync_verified_mu_inbound(conn,row,allow_live=True)
+        # R73 startup safety: do not block /health on cloud/vision enrichment.
+        # Guardian live refresh is performed by the shared document core when explicitly processing a document.
+        r=sync_verified_mu_inbound(conn,row,allow_live=False)
         results.append({'id':int(row['id']),'tid':tid,'result':r})
     conn.commit()
     integrity=str(conn.execute('PRAGMA integrity_check').fetchone()[0])
@@ -90,4 +92,4 @@ summary={
 print('[r71-guardian-refresh] '+json.dumps(summary,ensure_ascii=False),flush=True)
 if integrity.lower()!='ok' or fk:
     raise RuntimeError('R71 database integrity failed')
-print('[operator-r71] PASS stale-guardian-cache visual-refresh empty-only existing-athlete-only db-ok',flush=True)
+print('[operator-r71] PASS cache-only startup guardian-sync empty-only existing-athlete-only db-ok',flush=True)
