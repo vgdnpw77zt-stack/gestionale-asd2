@@ -364,6 +364,106 @@ try:
 finally:
     conn.close()
 
+
+# ------------------------------------------------------------------
+# R75 hardening: one active trusted MU per athlete/season + hide archived rows in dossier.
+# ------------------------------------------------------------------
+DOCS=APP/'asd_app/routes_documenti.py'
+dsrc=DOCS.read_text(encoding='utf-8',errors='replace')
+if 'BODYMIND_R75_HIDE_ARCHIVED_DOCS' not in dsrc:
+    backup_file(DOCS)
+    original=dsrc
+    patterns=[
+      (r'FROM documenti WHERE tesserato_id=\? ORDER BY', 'FROM documenti WHERE tesserato_id=? AND COALESCE(visibile,1)=1 ORDER BY'),
+      (r'FROM documenti WHERE tesserato_id = \? ORDER BY', 'FROM documenti WHERE tesserato_id = ? AND COALESCE(visibile,1)=1 ORDER BY'),
+    ]
+    for pat,repl in patterns:
+        dsrc=re.sub(pat,repl,dsrc)
+    # If the main dossier query aliases the table, cover that exact read pattern too.
+    dsrc=re.sub(r'FROM documenti d WHERE d\.tesserato_id=\? ORDER BY',
+                'FROM documenti d WHERE d.tesserato_id=? AND COALESCE(d.visibile,1)=1 ORDER BY',dsrc)
+    dsrc=re.sub(r'FROM documenti d WHERE d\.tesserato_id = \? ORDER BY',
+                'FROM documenti d WHERE d.tesserato_id = ? AND COALESCE(d.visibile,1)=1 ORDER BY',dsrc)
+    if dsrc!=original:
+        # Safe source marker.
+        dsrc='# BODYMIND_R75_HIDE_ARCHIVED_DOCS\n'+dsrc
+        DOCS.write_text(dsrc,encoding='utf-8')
+        if not compileall.compile_file(str(DOCS),quiet=1):
+            raise RuntimeError('R75 routes_documenti compile failed')
+        print('[r75-dossier-filter] PASS archived visibile=0 excluded from tesserato dossier reads',flush=True)
+    else:
+        print('[r75-dossier-filter] no matching dossier SQL anchor; runtime query unchanged',flush=True)
+
+conn=sqlite3.connect(str(DB),timeout=45); conn.row_factory=sqlite3.Row
+try:
+    dc=cols(conn,'documenti')
+    trusted_status={'salvato','verificato','accepted','manual_accepted','ok'}
+    rows=conn.execute("SELECT * FROM documenti WHERE coalesce(tesserato_id,0)>0 AND coalesce(visibile,1)=1 ORDER BY tesserato_id,id DESC").fetchall()
+    mu=[]
+    for r in rows:
+        hay=' '.join(str(r[k] or '').strip().lower() for k in ('doc_type','categoria','titolo','filename') if k in r.keys())
+        is_mu=('modulo_unico_tesseramento' in hay or 'modulo iscrizione' in hay or 'modulo unico' in hay or 'domanda iscrizione' in hay or 'iscrizione manleva' in hay)
+        st=str(r['status'] or '').strip().lower() if 'status' in r.keys() else ''
+        if is_mu and st in trusted_status:
+            mu.append(r)
+
+    groups={}
+    for r in mu:
+        tid=int(r['tesserato_id'])
+        season=''
+        if table(conn,'bodymind_document_semantics'):
+            sem=conn.execute("""SELECT analysis_json FROM bodymind_document_semantics
+                WHERE source_table='documenti' AND source_id=? ORDER BY id DESC LIMIT 1""",(int(r['id']),)).fetchone()
+            if sem:
+                try:
+                    a=json.loads(str(sem[0] or '{}'))
+                    season=str(a.get('season_year') or '').strip()
+                except Exception:
+                    season=''
+        if not season:
+            f=str(r['filename'] or '')
+            m=re.search(r'(20\d{2})[-_/]',f)
+            season=m.group(1) if m else 'current'
+        groups.setdefault((tid,season),[]).append(r)
+
+    r75_archived=[]
+    for (tid,season),items in groups.items():
+        if len(items)<2:
+            continue
+        items=sorted(items,key=lambda x:int(x['id']),reverse=True)
+        keep=int(items[0]['id'])
+        for old in items[1:]:
+            oid=int(old['id'])
+            sets=[]; vals=[]
+            if 'visibile' in dc: sets.append('visibile=0')
+            if 'status' in dc: sets.append('status=?'); vals.append('mu_duplicate_archived_r75')
+            if 'note' in dc:
+                sets.append('note=?'); vals.append('Modulo Unico precedente della stessa stagione archiviato R75; copia attiva ID '+str(keep))
+            vals.append(oid)
+            cur=conn.execute('UPDATE documenti SET '+','.join(sets)+' WHERE id=? AND coalesce(visibile,1)=1',tuple(vals))
+            if int(cur.rowcount or 0)==1:
+                r75_archived.append({'tid':tid,'season':season,'keep':keep,'archived':oid})
+
+    conn.commit()
+    active_mu_dupes=[]
+    rows=conn.execute("""SELECT tesserato_id,COUNT(*) n FROM documenti
+        WHERE coalesce(tesserato_id,0)>0 AND coalesce(visibile,1)=1
+          AND (lower(coalesce(doc_type,''))='modulo_unico_tesseramento'
+               OR lower(coalesce(categoria,'')) LIKE '%modulo iscrizione%'
+               OR lower(coalesce(titolo,'')) LIKE '%modulo unico%')
+        GROUP BY tesserato_id HAVING COUNT(*)>1 ORDER BY n DESC""").fetchall()
+    active_mu_dupes=[(int(x[0]),int(x[1])) for x in rows]
+    integrity75=str(conn.execute('PRAGMA integrity_check').fetchone()[0])
+    fk75=len(conn.execute('PRAGMA foreign_key_check').fetchall())
+finally:
+    conn.close()
+
+print('[r75-mu-single-active] archived='+json.dumps(r75_archived,ensure_ascii=False)+' remaining='+json.dumps(active_mu_dupes),flush=True)
+if integrity75.lower()!='ok' or fk75:
+    raise RuntimeError('R75 DB integrity failed')
+if active_mu_dupes:
+    raise RuntimeError('R75 still has duplicate active MU '+repr(active_mu_dupes))
+
 print('[r74-target-audit] '+json.dumps(target_audit,ensure_ascii=False),flush=True)
 print('[r74-dedupe] archived='+json.dumps(archived,ensure_ascii=False)+' remaining_groups='+json.dumps(remaining_groups,ensure_ascii=False),flush=True)
 print('[r74-mu-reconcile] '+json.dumps(reconciled,ensure_ascii=False),flush=True)
