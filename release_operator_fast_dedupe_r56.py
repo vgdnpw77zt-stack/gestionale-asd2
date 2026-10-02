@@ -242,6 +242,11 @@ old='''        }}catch(err){{
           addMsg(t,'bot');
           if(voiceStageOpen)setVoiceStage('Connessione non disponibile',t);
         }}finally{{send.disabled=false;input.focus()}}'''
+old_r73='''        }}catch(err){{
+          const t='Non riesco a contattare il motore dell’Operatore in questo momento. Non ho modificato nulla.';
+          addMsg(t,'bot');
+          if(voiceStageOpen)setVoiceStage('Connessione non disponibile',t);
+        }}finally{{send.disabled=false;input.focus();setTimeout(bodymindKeepComposerVisible,80)}}'''
 new='''        }}catch(err){{
           const online=!!navigator.onLine;
           const t=online
@@ -250,9 +255,20 @@ new='''        }}catch(err){{
           addMsg(t,'bot');
           if(voiceStageOpen)setVoiceStage(online?'Richiesta interrotta':'Connessione non disponibile',t);
         }}finally{{askInFlight=false;send.disabled=false;input.focus()}}'''
-if old not in s:
+new_r73='''        }}catch(err){{
+          const online=!!navigator.onLine;
+          const t=online
+            ? 'La richiesta non si è completata correttamente. Il gestionale è raggiungibile, ma questa operazione ha avuto un errore o ha impiegato troppo tempo. Non ho applicato modifiche non confermate.'
+            : 'La connessione del dispositivo è assente. Non ho applicato modifiche non confermate.';
+          addMsg(t,'bot');
+          if(voiceStageOpen)setVoiceStage(online?'Richiesta interrotta':'Connessione non disponibile',t);
+        }}finally{{askInFlight=false;send.disabled=false;input.focus();setTimeout(bodymindKeepComposerVisible,80)}}'''
+if old_r73 in s:
+    s=s.replace(old_r73,new_r73,1)
+elif old in s:
+    s=s.replace(old,new,1)
+else:
     raise RuntimeError('R56 frontend error anchor missing')
-s=s.replace(old,new,1)
 
 P.write_text(s,encoding='utf-8')
 py_compile.compile(str(P),doraise=True)
