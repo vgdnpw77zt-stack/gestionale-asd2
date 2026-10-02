@@ -87,6 +87,7 @@ COPY release_desktop_profile_audit_r104.py /opt/bodymind/release_desktop_profile
 COPY release_desktop_update_source_r105.py /opt/bodymind/release_desktop_update_source_r105.py
 COPY release_desktop_save_convergence_r106.py /opt/bodymind/release_desktop_save_convergence_r106.py
 COPY release_operator_attachment_create_r107.py /opt/bodymind/release_operator_attachment_create_r107.py
+COPY release_mu_metadata_convergence_r108.py /opt/bodymind/release_mu_metadata_convergence_r108.py
 COPY release_mu_autoenroll_r92.py /opt/bodymind/release_mu_autoenroll_r92.py
 COPY release_ui_regression_smoke_r84.py /opt/bodymind/release_ui_regression_smoke_r84.py
 COPY release_stabilization_repair_r81.py /opt/bodymind/release_stabilization_repair_r81.py
