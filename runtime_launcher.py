@@ -213,6 +213,7 @@ runpy.run_path("/opt/bodymind/release_desktop_save_convergence_r106.py", run_nam
 runpy.run_path("/opt/bodymind/release_operator_attachment_create_r107.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mu_metadata_convergence_r108.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_payment_simplify_audit_r109.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_simple_athlete_payment_truth_r110.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_stabilization_audit_r80.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mobile_delete_r85.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mobile_athlete_delete_r87.py", run_name="__main__")
