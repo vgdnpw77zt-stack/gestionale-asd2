@@ -234,6 +234,51 @@ def sync_analysis_to_existing_athlete(conn,tid,analysis,source="verified_mu"):
       "minor_fields_filled":sorted(minor_changed.keys()),
     }
 
+def _profile_needs_guardian_refresh(conn,tid,analysis):
+    try:
+        target=conn.execute("SELECT * FROM tesserati WHERE id=?",(int(tid),)).fetchone()
+    except Exception:
+        target=None
+    if not target:
+        return False
+    keys=set(target.keys())
+    existing_guardian=""
+    for k in ("genitore","nome_genitore"):
+        if k in keys and target[k]:
+            existing_guardian=str(target[k]).strip()
+            if existing_guardian:
+                break
+    if existing_guardian:
+        return False
+    ai_guardian=str((analysis or {}).get("guardian_name") or "").strip()
+    if ai_guardian:
+        return False
+    is_minor=False
+    try:
+        is_minor=int(target["minorenne"] or 0)==1 if "minorenne" in keys else False
+    except Exception:
+        is_minor=False
+    if not is_minor:
+        birth=(analysis or {}).get("birth_date") or (target["data_nascita"] if "data_nascita" in keys else "")
+        age=_age(birth)
+        is_minor=(age is not None and age<18)
+    return bool(is_minor)
+
+def _refresh_semantics_for_missing_guardian(conn,source_table,source_id,row,analysis,record_usage=None):
+    name,data=_row_bytes(row)
+    if not data:
+        return analysis,"refresh_no_file"
+    try:
+        from .operator_doc_semantic_ai_r52 import analyze_bytes
+        from .operator_doc_semantic_core_r52 import cache_put
+        fresh=analyze_bytes(conn,name,data,"","modulo_unico_tesseramento",record_usage)
+        if isinstance(fresh,dict):
+            cache_put(conn,source_table,int(source_id),fresh)
+            return fresh,"live_guardian_refresh"
+    except Exception as exc:
+        return analysis,"refresh_error:"+repr(exc)[:160]
+    return analysis,"refresh_failed"
+
 def sync_verified_mu_inbound(conn,row,record_usage=None,allow_live=True):
     if not row:
         return {"ok":False,"reason":"row_missing"}
@@ -246,6 +291,14 @@ def sync_verified_mu_inbound(conn,row,record_usage=None,allow_live=True):
     if tid<=0:
         return {"ok":False,"reason":"no_athlete"}
     analysis,method=_semantic(conn,"inbound_documents",int(row["id"]),row,record_usage,allow_live=allow_live)
+    # BODYMIND_R71_REFRESH_INCOMPLETE_GUARDIAN_CACHE:
+    # A trusted MU may have an older semantic cache created before handwriting-aware extraction.
+    # If the athlete is a minor, guardian is still missing, and the cached analysis has no guardian,
+    # perform one fresh visual read of the original confirmed document.
+    if allow_live and _profile_needs_guardian_refresh(conn,tid,analysis):
+        analysis,method=_refresh_semantics_for_missing_guardian(
+            conn,"inbound_documents",int(row["id"]),row,analysis,record_usage
+        )
     result=sync_analysis_to_existing_athlete(conn,tid,analysis,source="verified_mu_inbound")
     result["semantic_method"]=method
     return result
@@ -258,6 +311,10 @@ def sync_verified_mu_document(conn,row,tid,record_usage=None,allow_live=True):
     if not any(x in hay for x in ("modulo_unico","modulo unico","modulo iscrizione","iscrizione")):
         return {"ok":False,"reason":"not_mu"}
     analysis,method=_semantic(conn,"documenti",int(row["id"]),row,record_usage,allow_live=allow_live)
+    if allow_live and _profile_needs_guardian_refresh(conn,int(tid),analysis):
+        analysis,method=_refresh_semantics_for_missing_guardian(
+            conn,"documenti",int(row["id"]),row,analysis,record_usage
+        )
     result=sync_analysis_to_existing_athlete(conn,int(tid),analysis,source="verified_mu_document")
     result["semantic_method"]=method
     return result
