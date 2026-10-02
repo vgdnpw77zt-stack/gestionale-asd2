@@ -25,23 +25,23 @@ if 'BODYMIND_R73_MOBILE_COMPOSER_AUTONOMY' not in s:
         raise RuntimeError('R73 composer CSS anchor missing')
     s=s.replace(css,css+'''
     /* BODYMIND_R73_MOBILE_COMPOSER_AUTONOMY */
-    @media(max-width:800px){
-      .bmo-chat{min-height:calc(100dvh - 150px)!important;height:calc(100dvh - 150px)!important;overflow:hidden!important}
-      .bmo-messages{max-height:none!important;min-height:0!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;padding-bottom:18px!important}
-      .bmo-compose-shell{position:sticky!important;bottom:0!important;z-index:80!important;background:rgba(5,12,23,.98)!important;padding-bottom:env(safe-area-inset-bottom)!important}
-      .bmo-compose textarea{resize:none!important;max-height:118px!important}
-    }''',1)
+    @media(max-width:800px){{
+      .bmo-chat{{min-height:calc(100dvh - 150px)!important;height:calc(100dvh - 150px)!important;overflow:hidden!important}}
+      .bmo-messages{{max-height:none!important;min-height:0!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;padding-bottom:18px!important}}
+      .bmo-compose-shell{{position:sticky!important;bottom:0!important;z-index:80!important;background:rgba(5,12,23,.98)!important;padding-bottom:env(safe-area-inset-bottom)!important}}
+      .bmo-compose textarea{{resize:none!important;max-height:118px!important}}
+    }}''',1)
 
     add_anchor="      function addMsg(text,who='bot',data={{}}){{"
-    helper="""      function bodymindKeepComposerVisible(){
-        try{
+    helper="""      function bodymindKeepComposerVisible(){{
+        try{{
           messages.scrollTop=messages.scrollHeight;
-          if(window.matchMedia&&window.matchMedia('(max-width:800px)').matches){
+          if(window.matchMedia&&window.matchMedia('(max-width:800px)').matches){{
             const shell=document.querySelector('.bmo-compose-shell');
-            if(shell) shell.scrollIntoView({block:'end',behavior:'smooth'});
-          }
-        }catch(e){}
-      }
+            if(shell) shell.scrollIntoView({{block:'end',behavior:'smooth'}});
+          }}
+        }}catch(e){{}}
+      }}
 """
     if add_anchor not in s:
         raise RuntimeError('R73 addMsg anchor missing')
