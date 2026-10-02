@@ -17,6 +17,20 @@ def backup_file(p):
     dst=BACK/p.name
     if p.exists() and not dst.exists(): shutil.copy2(p,dst)
 
+# A failed R107 patch may have left the persistent source syntactically broken.
+# Recover deterministically from the pre-R107 source backup before attempting a new patch.
+try:
+    py_compile.compile(str(OP),doraise=True)
+except Exception as compile_exc:
+    current=OP.read_text(encoding='utf-8',errors='replace') if OP.exists() else ''
+    pre=BACK/'routes_operator_bodymind.py'
+    if 'BODYMIND_R107_ATTACHMENT_CREATE_CORE' in current and pre.exists():
+        shutil.copy2(pre,OP)
+        py_compile.compile(str(OP),doraise=True)
+        print('[r107-recover] restored pre-r107 operator source after failed patch',flush=True)
+    else:
+        raise RuntimeError('operator source invalid before R107 and no safe R107 recovery backup: '+repr(compile_exc))
+
 s=OP.read_text(encoding='utf-8',errors='replace')
 if 'BODYMIND_R107_ATTACHMENT_CREATE_CORE' not in s:
     backup_file(OP)
@@ -194,14 +208,14 @@ def _r107_handle_create_from_attachment(conn,message):
         raise RuntimeError('R107 chat anchor missing')
     s=s.replace(anchor,helper+anchor,1)
 
-    # Persist the exact attachment/inbound context at the end of the upload endpoint.
-    up_start=s.index('@app.post("/operatore-bodymind/upload")')
-    up_end=s.index('\n@app.after_request\ndef bodymind_family_logo_override',up_start)
-    block=s[up_start:up_end]
-    pos=block.rfind('    return jsonify({')
-    if pos<0:
-        raise RuntimeError('R107 upload return anchor missing')
-    remember='''    # BODYMIND_R107_PERSIST_LAST_ATTACHMENTS
+    # Persist the exact attachment/inbound context only after the upload endpoint
+    # has closed its DB try/finally.  Never splice into an arbitrary return inside a try.
+    upload_footer='''    finally: conn2.close()
+
+    return jsonify({'''
+    remember_footer='''    finally: conn2.close()
+
+    # BODYMIND_R107_PERSIST_LAST_ATTACHMENTS
     try:
         _r107_remember_upload_results(results)
     except Exception as r107_ctx_exc:
@@ -210,9 +224,10 @@ def _r107_handle_create_from_attachment(conn,message):
         except Exception:
             pass
 
-'''
-    block=block[:pos]+remember+block[pos:]
-    s=s[:up_start]+block+s[up_end:]
+    return jsonify({'''
+    if s.count(upload_footer)!=1:
+        raise RuntimeError('R107 exact upload footer anchor count='+str(s.count(upload_footer)))
+    s=s.replace(upload_footer,remember_footer,1)
 
     chat_start=s.index('@app.post("/operatore-bodymind/chat")')
     chat_end=s.index('\ndef _cloud_user_error',chat_start)
@@ -234,9 +249,18 @@ def _r107_handle_create_from_attachment(conn,message):
     chat=chat.replace(gate,inject,1)
     s=s[:chat_start]+chat+s[chat_end:]
 
-    OP.write_text(s,encoding='utf-8')
-    py_compile.compile(str(OP),doraise=True)
-    print('[r107-operator] PASS persistent-attachment-context explicit-create-before-search shared-enrollment-core',flush=True)
+    tmp=OP.with_name(OP.name+'.r107.tmp')
+    try:
+        tmp.write_text(s,encoding='utf-8')
+        py_compile.compile(str(tmp),doraise=True)
+        tmp.replace(OP)
+        py_compile.compile(str(OP),doraise=True)
+    finally:
+        try:
+            if tmp.exists(): tmp.unlink()
+        except Exception:
+            pass
+    print('[r107-operator] PASS persistent-attachment-context explicit-create-before-search shared-enrollment-core atomic-source-replace',flush=True)
 else:
     print('[r107-operator] already applied',flush=True)
 
