@@ -66,6 +66,7 @@ COPY release_complete_mu_cache_r70.py /opt/bodymind/release_complete_mu_cache_r7
 COPY release_guardian_refresh_r71.py /opt/bodymind/release_guardian_refresh_r71.py
 COPY release_shared_document_core_r72.py /opt/bodymind/release_shared_document_core_r72.py
 COPY release_document_consistency_r74.py /opt/bodymind/release_document_consistency_r74.py
+COPY release_operator_document_core_r78.py /opt/bodymind/release_operator_document_core_r78.py
 COPY release_handwriting_enrollment_smoke_r65.py /opt/bodymind/release_handwriting_enrollment_smoke_r65.py
 COPY release_operator_upload_smoke_r64.py /opt/bodymind/release_operator_upload_smoke_r64.py
 COPY release_operator_cloud_first_smoke_r63.py /opt/bodymind/release_operator_cloud_first_smoke_r63.py
