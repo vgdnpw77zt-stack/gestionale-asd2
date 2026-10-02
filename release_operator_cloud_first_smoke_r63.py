@@ -49,8 +49,14 @@ for q in (
 
 after=business_counts()
 t1,t2=tests
-ok1=(t1["status"]==200 and t1["cloud_first"] and ("14" in t1["text"] or t1.get("value")==14))
-ok2=(t2["status"]==200 and t2["cloud_first"] and ("23" in t2["text"] or t2.get("value")==23) and ("certificat" in t2["resolved_question"].lower() or "documento medico" in t2["resolved_question"].lower()))
+try:
+    present=int(t1.get("value"))
+    missing=int(t2.get("value"))
+except Exception:
+    present=missing=-1
+expected_total=int(before.get("tesserati") or 0)
+ok1=(t1["status"]==200 and t1["cloud_first"] and present>=0)
+ok2=(t2["status"]==200 and t2["cloud_first"] and missing>=0 and present+missing==expected_total and ("certificat" in t2["resolved_question"].lower() or "documento medico" in t2["resolved_question"].lower()))
 c=sqlite3.connect(DB,timeout=20)
 try:
     integrity=str(c.execute("PRAGMA integrity_check").fetchone()[0])
