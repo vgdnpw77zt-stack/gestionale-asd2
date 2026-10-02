@@ -257,3 +257,24 @@ print('[r110-checks] '+repr(checks)+' integrity='+integrity+' fk='+str(fk),flush
 failed=[k for k,v in checks.items() if not v]
 if failed: raise RuntimeError('R110 QA failed '+repr(failed))
 print('[r110-selftest] PASS simple-athlete payment-truth no-dossier-default specific-task-only db-ok',flush=True)
+
+# BODYMIND_R110_PAYMENT_LINK_FOCUS
+# Keep the default athlete sheet contextual: opening Pagamenti from an athlete
+# must retain that athlete as the selected filter.
+for _p in (DESK, MOB):
+    _src=_p.read_text(encoding='utf-8',errors='replace')
+    _before=_src
+    _src=_src.replace("<a href='/pagamenti'>Pagamenti</a>", "<a href='/pagamenti?tesserato_id={int(tesserato_id)}'>Pagamenti</a>" if _p==DESK else "<a href='/pagamenti?tesserato_id={{tid}}'>Pagamenti</a>")
+    if _src!=_before:
+        backup_file(_p)
+        _p.write_text(_src,encoding='utf-8')
+        compile_file(_p)
+        print('[r110-payment-focus] patched '+str(_p),flush=True)
+
+_desk_now=DESK.read_text(encoding='utf-8',errors='replace')
+_mob_now=MOB.read_text(encoding='utf-8',errors='replace')
+if "/pagamenti?tesserato_id={int(tesserato_id)}" not in _desk_now:
+    raise RuntimeError('R110 contextual desktop payment link missing')
+if "/pagamenti?tesserato_id={{tid}}" not in _mob_now:
+    raise RuntimeError('R110 contextual mobile payment link missing')
+print('[r110-payment-focus] PASS athlete-scoped payment navigation',flush=True)
