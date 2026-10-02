@@ -62,6 +62,7 @@ runpy.run_path("/opt/bodymind/release_operator_persistent_upload_r64.py", run_na
 runpy.run_path("/opt/bodymind/release_handwriting_enrollment_r65.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_async_upload_r67.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_verified_mu_profile_sync_r68.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_global_reconcile_r69.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_handwriting_enrollment_smoke_r65.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_upload_smoke_r64.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_cloud_first_smoke_r63.py", run_name="__main__")
