@@ -172,6 +172,7 @@ runpy.run_path("/opt/bodymind/release_medical_save_compact_r98.py", run_name="__
 runpy.run_path("/opt/bodymind/release_active_route_audit_r99.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_medical_profile_convergence_r100.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_criticality_profile_r101.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_desktop_profile_audit_r104.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_stabilization_audit_r80.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mobile_delete_r85.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mobile_athlete_delete_r87.py", run_name="__main__")
