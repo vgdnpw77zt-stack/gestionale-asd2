@@ -15,7 +15,7 @@ def counts():
     c=sqlite3.connect(DB,timeout=20)
     try:
         out={}
-        for t in ("tesserati","documenti","inbound_documents","pagamenti","ricevute"):
+        for t in ("tesserati","documenti","inbound_documents","pagamenti","ricevute","bodymind_operator_tasks","bodymind_operator_actions"):
             if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(t,)).fetchone():
                 out[t]=int(c.execute("SELECT COUNT(*) FROM "+t).fetchone()[0])
         return out
@@ -48,6 +48,10 @@ with app.test_request_context('/operatore-bodymind'):
                 analysis={"document_type":op._canonical_document_kind(row),"semantic_key":"qa","confidence":1.0}
                 dup=op._semantic_key_duplicate(conn,int(row["tesserato_id"]),name,data,analysis)
                 result["duplicate_ok"]=bool(dup.get("duplicate") and dup.get("method")=="sha256")
+        # QA must leave no persistent workflow state behind.
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='bodymind_operator_tasks'").fetchone():
+            conn.execute("DELETE FROM bodymind_operator_tasks WHERE conversation_id=?",(conv,))
+            conn.commit()
     finally:
         conn.close()
 
