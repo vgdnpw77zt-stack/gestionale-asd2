@@ -77,6 +77,7 @@ COPY release_unassigned_mu_audit_r91.py /opt/bodymind/release_unassigned_mu_audi
 COPY release_new_athlete_profile_audit_r93.py /opt/bodymind/release_new_athlete_profile_audit_r93.py
 COPY release_profile_schema_audit_r94.py /opt/bodymind/release_profile_schema_audit_r94.py
 COPY release_mu_residenza_r95.py /opt/bodymind/release_mu_residenza_r95.py
+COPY release_medical_criticality_audit_r96.py /opt/bodymind/release_medical_criticality_audit_r96.py
 COPY release_mu_autoenroll_r92.py /opt/bodymind/release_mu_autoenroll_r92.py
 COPY release_ui_regression_smoke_r84.py /opt/bodymind/release_ui_regression_smoke_r84.py
 COPY release_stabilization_repair_r81.py /opt/bodymind/release_stabilization_repair_r81.py
