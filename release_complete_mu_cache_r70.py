@@ -30,10 +30,9 @@ try:
         tid=int(row['tesserato_id'] or 0)
         if tid in seen: continue
         seen.add(tid)
-        # First try cached path; only invoke vision when this trusted MU genuinely lacks cache.
+        # R73 startup safety: deployment must never wait on external vision calls.
+        # Live re-reading remains available in the interactive/shared document flows.
         r=sync_verified_mu_inbound(conn,row,allow_live=False)
-        if not r.get('ok') and r.get('reason')=='analysis_missing':
-            r=sync_verified_mu_inbound(conn,row,allow_live=True)
         results.append({'id':int(row['id']),'tid':tid,'result':r})
     conn.commit()
     integrity=str(conn.execute('PRAGMA integrity_check').fetchone()[0])
@@ -50,4 +49,4 @@ print('[r70-mu-complete] '+json.dumps({
 },ensure_ascii=False),flush=True)
 if integrity.lower()!='ok' or fk:
     raise RuntimeError('R70 DB integrity failed')
-print('[operator-r70] PASS missing-cache trusted-MU visual-analysis existing-athletes-only db-ok',flush=True)
+print('[operator-r70] PASS cache-only startup trusted-MU existing-athletes-only db-ok',flush=True)
