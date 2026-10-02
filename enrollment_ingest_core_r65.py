@@ -105,6 +105,18 @@ def find_existing_athlete(conn,analysis):
             return rows[0],"nome_cognome_data_nascita" if birth else "nome_cognome"
     return None,""
 
+def residence_from_analysis(analysis):
+    a=analysis if isinstance(analysis,dict) else {}
+    city=str(a.get("city") or "").strip()
+    province=str(a.get("province") or "").strip().upper()
+    postal=str(a.get("postal_code") or "").strip()
+    if not city and not province and not postal:
+        return ""
+    loc=" ".join(x for x in (postal,city) if x).strip()
+    if province:
+        return (loc+" ("+province+")").strip() if loc else province
+    return loc
+
 def athlete_fields_from_analysis(conn,analysis):
     cols={str(r[1]) for r in conn.execute("PRAGMA table_info(tesserati)").fetchall()}
     a=analysis if isinstance(analysis,dict) else {}
@@ -117,6 +129,7 @@ def athlete_fields_from_analysis(conn,analysis):
       "data_nascita":birth,
       "luogo_nascita":str(a.get("birth_place") or "").strip(),
       "indirizzo":str(a.get("address") or "").strip(),
+      "residenza":residence_from_analysis(a),
       "citta":str(a.get("city") or "").strip(),
       "comune":str(a.get("city") or "").strip(),
       "cap":str(a.get("postal_code") or "").strip(),
