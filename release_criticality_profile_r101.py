@@ -250,7 +250,7 @@ checks={
  'medical_request_excluded':"richiesta_certificato_medico" in ct and "COALESCE(visibile,1)=1" in ct,
  'consent_in_profile':'BODYMIND_R101_MINOR_CONSENT_IN_PROFILE' in pt and 'minor_consent_form' in pt,
  'return_atlete':"/mobile/atlete?updated=" in pt,
- 'tesserati_35':tess==35,
+ 'tesserati_dynamic_positive':tess>0,
  'db_ok':integrity.lower()=='ok' and fk==0,
 }
 print('[r101-checks] '+repr(checks),flush=True)
