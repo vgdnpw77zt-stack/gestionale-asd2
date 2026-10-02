@@ -41,20 +41,50 @@ with app.test_request_context('/operatore-bodymind'):
         task2=op._current_upload_task(conn)
         result["summary_ok"]=bool(task2 and (task2.get("summary") or {}).get("received")==21 and task2.get("status")=="awaiting_confirmation")
 
-        # Test the active canonical dossier, not an archived/invisible historical row.
-        # R78/R79 intentionally hide duplicates, so ORDER BY id LIMIT 1 can select a
-        # legitimate archived row that _visible_docs() must exclude.
-        rows=conn.execute("""SELECT * FROM documenti
-          WHERE coalesce(tesserato_id,0)>0 AND coalesce(visibile,1)=1 ORDER BY id""").fetchall()
-        for row in rows:
-            name,data,_=op._document_bytes_from_row(row)
-            if not data:
-                continue
-            analysis={"document_type":op._canonical_document_kind(row),"semantic_key":"qa","confidence":1.0}
-            dup=op._semantic_key_duplicate(conn,int(row["tesserato_id"]),name,data,analysis)
-            if dup.get("duplicate") and dup.get("method")=="sha256":
-                result["duplicate_ok"]=True
-                break
+        # Deterministic dedupe fixture on a temporary database copy only.
+        # Do not depend on production documents still having a locally readable file.
+        import os, tempfile
+        fd,tmpdb=tempfile.mkstemp(prefix="bodymind_r64_",suffix=".db"); os.close(fd)
+        fd,tmpfile=tempfile.mkstemp(prefix="bodymind_r64_doc_",suffix=".pdf")
+        os.write(fd,b"%PDF-1.4\nBODYMIND-R64-DEDUPE-FIXTURE\n%%EOF\n"); os.close(fd)
+        try:
+            src=sqlite3.connect(DB,timeout=20); dst=sqlite3.connect(tmpdb)
+            try: src.backup(dst)
+            finally: dst.close(); src.close()
+            tc=sqlite3.connect(tmpdb,timeout=20); tc.row_factory=sqlite3.Row
+            try:
+                tid=int(tc.execute("SELECT id FROM tesserati ORDER BY id LIMIT 1").fetchone()[0])
+                info=tc.execute("PRAGMA table_info(documenti)").fetchall()
+                desired={
+                  "tesserato_id":tid,"titolo":"R64 dedupe fixture","categoria":"Certificato medico",
+                  "doc_type":"certificato_medico","status":"salvato","visibile":1,
+                  "filename":tmpfile,"original_filename":"r64_fixture.pdf","created_at":"2026-10-02T00:00:00",
+                  "updated_at":"2026-10-02T00:00:00"
+                }
+                fields={}
+                for ci in info:
+                    name=str(ci[1]); typ=str(ci[2] or "").upper(); notnull=bool(ci[3]); default=ci[4]; pk=bool(ci[5])
+                    if pk: continue
+                    if name in desired:
+                        fields[name]=desired[name]
+                    elif notnull and default is None:
+                        fields[name]=0 if any(x in typ for x in ("INT","REAL","NUM","DEC","FLOAT","DOUBLE")) else ""
+                names=list(fields)
+                cur=tc.execute("INSERT INTO documenti ("+",".join(names)+") VALUES ("+",".join("?" for _ in names)+")",
+                               tuple(fields[k] for k in names))
+                did=int(cur.lastrowid); tc.commit()
+                row=tc.execute("SELECT * FROM documenti WHERE id=?",(did,)).fetchone()
+                incoming=open(tmpfile,"rb").read()
+                analysis={"document_type":"certificato_medico","semantic_key":"r64-fixture","confidence":1.0}
+                dup=op._semantic_key_duplicate(tc,tid,"r64_fixture.pdf",incoming,analysis)
+                result["duplicate_ok"]=bool(dup.get("duplicate") and dup.get("method")=="sha256" and int(dup.get("existing_id") or 0)==did)
+            finally:
+                tc.close()
+        finally:
+            try: os.unlink(tmpfile)
+            except Exception: pass
+            try: os.unlink(tmpdb)
+            except Exception: pass
         # QA must leave no persistent workflow state behind.
         if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='bodymind_operator_tasks'").fetchone():
             conn.execute("DELETE FROM bodymind_operator_tasks WHERE conversation_id=?",(conv,))
