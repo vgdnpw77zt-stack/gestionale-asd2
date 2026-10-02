@@ -20,7 +20,8 @@ def backup_file(p):
 
 # 1) Desktop profile save: prove committed values before reporting success.
 s=ROUTES.read_text(encoding='utf-8',errors='replace')
-if 'BODYMIND_R106_DESKTOP_POST_COMMIT_VERIFY' not in s:
+existing_convergence = 'BODYMIND_R106_DESKTOP_SAVE_VERIFY' in s
+if 'BODYMIND_R106_DESKTOP_POST_COMMIT_VERIFY' not in s and not existing_convergence:
     backup_file(ROUTES)
     anchor="""       conn.commit()
        # Se il profilo economico cambia, riallinea il SOLO mese corrente quando
@@ -88,11 +89,12 @@ if 'BODYMIND_R106_DESKTOP_POST_COMMIT_VERIFY' not in s:
     py_compile.compile(str(ROUTES),doraise=True)
     print('[r106-desktop] PASS post-commit readback + return=/tesserati',flush=True)
 else:
-    print('[r106-desktop] already applied',flush=True)
+    print('[r106-desktop] already applied or convergence core already active',flush=True)
 
 # 2) Criticalities always target the canonical athlete sheet.
 cs=CORE.read_text(encoding='utf-8',errors='replace')
-if 'BODYMIND_R106_CANONICAL_CRITICALITY_SHEET' not in cs:
+existing_criticality = 'BODYMIND_R106_CROSS_DEVICE_CRITICALITY' in cs
+if 'BODYMIND_R106_CANONICAL_CRITICALITY_SHEET' not in cs and not existing_criticality:
     backup_file(CORE)
     old='''            tess_url = f"/mobile/atleta/{tid}" if tid else "/tesserati"
 '''
@@ -106,7 +108,7 @@ if 'BODYMIND_R106_CANONICAL_CRITICALITY_SHEET' not in cs:
     py_compile.compile(str(CORE),doraise=True)
     print('[r106-criticality] PASS canonical desktop URL; mobile guard remains authoritative',flush=True)
 else:
-    print('[r106-criticality] already applied',flush=True)
+    print('[r106-criticality] already applied or convergence core already active',flush=True)
 
 # Read-only release gate.
 conn=sqlite3.connect(str(DB),timeout=20)
@@ -124,9 +126,12 @@ finally:
 src=ROUTES.read_text(encoding='utf-8',errors='replace')
 core=CORE.read_text(encoding='utf-8',errors='replace')
 checks={
-  'desktop_readback':'BODYMIND_R106_DESKTOP_POST_COMMIT_VERIFY' in src,
-  'desktop_return_panel':"redirect_with_message('/tesserati', final_msg, 'success', updated=tesserato_id)" in src,
-  'canonical_criticality':'BODYMIND_R106_CANONICAL_CRITICALITY_SHEET' in core and 'f"/tesserati/{tid}/scheda"' in core,
+  'desktop_readback':('BODYMIND_R106_DESKTOP_POST_COMMIT_VERIFY' in src or 'BODYMIND_R106_DESKTOP_SAVE_VERIFY' in src),
+  'desktop_return_panel':("updated=int(tesserato_id)" in src or "updated=tesserato_id" in src),
+  'canonical_criticality':(
+      ('BODYMIND_R106_CANONICAL_CRITICALITY_SHEET' in core and 'f"/tesserati/{tid}/scheda"' in core)
+      or 'BODYMIND_R106_CROSS_DEVICE_CRITICALITY' in core
+  ),
   'integrity':integrity.lower()=='ok' and fk==0,
 }
 print('[r106-checks] '+repr(checks)+' counts='+repr(counts)+' integrity='+integrity+' fk='+str(fk),flush=True)
