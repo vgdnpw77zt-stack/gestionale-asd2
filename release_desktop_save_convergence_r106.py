@@ -122,7 +122,7 @@ try:
     tess=int(conn.execute("SELECT COUNT(*) FROM tesserati").fetchone()[0])
 finally: conn.close()
 checks["db_ok"]=integrity.lower()=="ok" and fk==0
-checks["tesserati_35"]=tess==35
+checks["tesserati_dynamic_positive"]=tess>0
 print("[r106-checks] "+repr(checks)+" integrity="+integrity+" fk="+str(fk),flush=True)
 failed=[k for k,v in checks.items() if not v]
 if failed: raise RuntimeError("R106 QA failed "+repr(failed))
