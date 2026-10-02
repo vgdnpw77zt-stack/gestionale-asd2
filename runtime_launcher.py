@@ -246,6 +246,7 @@ if os.environ.get("BODYMIND_LEGACY_STARTUP_SMOKES","0") == "1":
     runpy.run_path("/opt/bodymind/release_operator_pending_audit_r55e.py", run_name="__main__")
 else:
     print("[r114-startup] legacy operator smoke chain skipped; covered by consolidated hard gates", flush=True)
+runpy.run_path("/opt/bodymind/release_navigation_audit_r115.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_route_guard_r39.py", run_name="__main__")
 incoming = pathlib.Path("/data/incoming")
 for name in ("top2.zip", "backup.zip"):
