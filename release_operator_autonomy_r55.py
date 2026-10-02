@@ -11,6 +11,72 @@ if not APP.joinpath('.TOP2_OFFICIAL').exists():
     raise SystemExit('TOP2_OFFICIAL marker missing')
 
 s=P.read_text(encoding='utf-8',errors='replace')
+
+# BODYMIND_R73_MOBILE_COMPOSER_AUTONOMY
+# Apply before the historical R55 early-exit so persisted installations receive R73 too.
+if 'BODYMIND_R73_MOBILE_COMPOSER_AUTONOMY' not in s:
+    BACK73=Path('/data/release_backups/20261002_r73_operator/routes_operator_bodymind.py')
+    BACK73.parent.mkdir(parents=True,exist_ok=True)
+    if not BACK73.exists():
+        shutil.copy2(P,BACK73)
+
+    css='.bmo-compose textarea{{min-height:48px;max-height:150px;resize:vertical;border-radius:15px;padding:12px 14px;background:#081729;color:#fff;border:1px solid rgba(125,211,252,.19);font:inherit}}'
+    if css not in s:
+        raise RuntimeError('R73 composer CSS anchor missing')
+    s=s.replace(css,css+'''
+    /* BODYMIND_R73_MOBILE_COMPOSER_AUTONOMY */
+    @media(max-width:800px){
+      .bmo-chat{min-height:calc(100dvh - 150px)!important;height:calc(100dvh - 150px)!important;overflow:hidden!important}
+      .bmo-messages{max-height:none!important;min-height:0!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;padding-bottom:18px!important}
+      .bmo-compose-shell{position:sticky!important;bottom:0!important;z-index:80!important;background:rgba(5,12,23,.98)!important;padding-bottom:env(safe-area-inset-bottom)!important}
+      .bmo-compose textarea{resize:none!important;max-height:118px!important}
+    }''',1)
+
+    add_anchor="      function addMsg(text,who='bot',data={{}}){{"
+    helper="""      function bodymindKeepComposerVisible(){
+        try{
+          messages.scrollTop=messages.scrollHeight;
+          if(window.matchMedia&&window.matchMedia('(max-width:800px)').matches){
+            const shell=document.querySelector('.bmo-compose-shell');
+            if(shell) shell.scrollIntoView({block:'end',behavior:'smooth'});
+          }
+        }catch(e){}
+      }
+"""
+    if add_anchor not in s:
+        raise RuntimeError('R73 addMsg anchor missing')
+    s=s.replace(add_anchor,helper+add_anchor,1)
+
+    old_scroll="        requestAnimationFrame(()=>{{messages.scrollTop=messages.scrollHeight}});"
+    if old_scroll not in s:
+        raise RuntimeError('R73 scroll anchor missing')
+    s=s.replace(old_scroll,"        requestAnimationFrame(()=>{{bodymindKeepComposerVisible()}});",1)
+
+    old_finally="        }}finally{{send.disabled=false;input.focus()}}"
+    if old_finally not in s:
+        raise RuntimeError('R73 focus anchor missing')
+    s=s.replace(old_finally,"        }}finally{{send.disabled=false;input.focus();setTimeout(bodymindKeepComposerVisible,80)}}",1)
+
+    if 'for agent_step in range(3):' not in s:
+        raise RuntimeError('R73 agent loop anchor missing')
+    s=s.replace('for agent_step in range(3):','for agent_step in range(5):',1)
+    s=s.replace('if tool in discovery_tools and agent_step<2:','if tool in discovery_tools and agent_step<4:',1)
+
+    old_prompt='"Scegli UNO strumento reale e preferisci direttamente lo strumento operativo corretto. Usa discover_capabilities solo se gli elementi pertinenti non bastano davvero. "'
+    new_prompt=(
+        '"Porta a termine la richiesta nello stesso turno quando gli strumenti disponibili lo consentono. "'
+        '"Puoi concatenare più passaggi: scegli il prossimo strumento realmente utile e usa discover_capabilities solo se serve davvero. "'
+        '"Non chiedere dettagli per letture, controlli, classificazioni, sincronizzazioni sicure o preparazione del lavoro quando il dato è ricavabile dal gestionale o dal contesto. "'
+        '"Chiedi una precisazione solo se manca un dato indispensabile o esistono più identità plausibili. "'
+        '"Mantieni conferma esplicita per cancellazioni, fusioni, denaro, invii esterni e altre operazioni irreversibili o sensibili. "'
+    )
+    if old_prompt not in s:
+        raise RuntimeError('R73 planner prompt anchor missing')
+    s=s.replace(old_prompt,new_prompt,1)
+    P.write_text(s,encoding='utf-8')
+    py_compile.compile(str(P),doraise=True)
+    print('[operator-r73] PASS mobile composer + 5-step autonomous planner',flush=True)
+
 if 'BODYMIND_R55_AUTONOMOUS_SECRETARY' in s:
     print('[operator-r55] already applied',flush=True)
     raise SystemExit(0)
