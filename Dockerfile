@@ -31,6 +31,7 @@ COPY operator_doc_semantic_core_r52.py /opt/bodymind/operator_doc_semantic_core_
 COPY operator_doc_semantic_ai_r52.py /opt/bodymind/operator_doc_semantic_ai_r52.py
 COPY operator_async_upload_core_r67.py /opt/bodymind/operator_async_upload_core_r67.py
 COPY release_operator_r29.py /opt/bodymind/release_operator_r29.py
+COPY release_r92_operator_recover.py /opt/bodymind/release_r92_operator_recover.py
 COPY release_route_cleanup_r31.py /opt/bodymind/release_route_cleanup_r31.py
 COPY release_operator_r30.py /opt/bodymind/release_operator_r30.py
 COPY release_mu_tutela_r34.py /opt/bodymind/release_mu_tutela_r34.py

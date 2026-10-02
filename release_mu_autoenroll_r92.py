@@ -29,24 +29,18 @@ def backup_db():
 
 # Final runtime authority: Operator uses the same strict identity helper as every other ingest path.
 s=OP.read_text(encoding='utf-8',errors='replace')
+bad='''and BODYMIND_R92_SHARED_AUTOENROLL_GATE_MARKER = True
+                        _enrollment_identity_ready(semantic,require_valid_cf=True)'''
+if bad in s:
+    s=s.replace(bad,'and _enrollment_identity_ready(semantic,require_valid_cf=True)',1)
+s=s.replace('sem_conf>=.98 and current_role()=="admin"','current_role()=="admin"')
+if '_enrollment_identity_ready(semantic,require_valid_cf=True)' not in s:
+    raise RuntimeError('R92 operator strict auto-enroll gate missing')
 if 'BODYMIND_R92_SHARED_AUTOENROLL_GATE' not in s:
-    old='''if (production_mode and sem_conf>=.98 and current_role()=="admin"
-                                and _enrollment_identity_ready(semantic,require_valid_cf=True)):'''
-    new='''# BODYMIND_R92_SHARED_AUTOENROLL_GATE
-                        if (production_mode and current_role()=="admin"
-                                and _enrollment_identity_ready(semantic,require_valid_cf=True)):'''
-    if old not in s:
-        # Already normalized source/runtime is acceptable only if the strict helper is still present.
-        if '_enrollment_identity_ready(semantic,require_valid_cf=True)' not in s:
-            raise RuntimeError('R92 operator strict auto-enroll gate missing')
-        # Insert marker next to the helper use without changing semantics.
-        pos=s.find('_enrollment_identity_ready(semantic,require_valid_cf=True)')
-        s=s[:pos]+'BODYMIND_R92_SHARED_AUTOENROLL_GATE_MARKER = True\n                        '+s[pos:]
-    else:
-        s=s.replace(old,new,1)
-    OP.write_text(s,encoding='utf-8')
-    py_compile.compile(str(OP),doraise=True)
-    print('[operator-r92] PASS shared strict auto-enroll gate no 98-percent special case',flush=True)
+    s='# BODYMIND_R92_SHARED_AUTOENROLL_GATE\n'+s
+OP.write_text(s,encoding='utf-8')
+py_compile.compile(str(OP),doraise=True)
+print('[operator-r92] PASS shared strict auto-enroll gate no 98-percent special case',flush=True)
 
 sys.path.insert(0,str(APP))
 from asd_app.enrollment_ingest_core_r65 import (
