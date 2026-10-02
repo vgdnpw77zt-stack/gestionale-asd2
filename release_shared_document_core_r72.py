@@ -111,4 +111,4 @@ if failed:
 print('[r72-shared-doc-core] PASS autopilot+operator+manual converge on verified-MU core; empty-only profile enrichment',flush=True)
 
 # R73 launcher compatibility: real R73 logic is embedded in existing source/release files.
-Path('/opt/bodymind/release_mobile_operator_mu_r73.py').write_text("print('[r73-launcher-stub] source-level R73 active',flush=True)\\n",encoding='utf-8')
+Path('/opt/bodymind/release_mobile_operator_mu_r73.py').write_text("print('[r73-launcher-stub] source-level R73 active',flush=True)\n",encoding='utf-8')
