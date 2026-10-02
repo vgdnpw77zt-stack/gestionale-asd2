@@ -113,3 +113,32 @@ if not MARKER.exists():
     print('[r82-selftest] PASS guardian-bidirectional minor-structure empty-only db-ok',flush=True)
 else:
     print('[r82-guardian] already applied',flush=True)
+
+
+# BODYMIND_R83_SMOKE_TASK_HYGIENE
+# QA smoke conversations must never survive into production workflow state.
+conn83=sqlite3.connect(str(DB),timeout=30)
+try:
+    qa_removed=[]
+    if conn83.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='bodymind_operator_tasks'").fetchone():
+        c83={str(x[1]) for x in conn83.execute("PRAGMA table_info(bodymind_operator_tasks)").fetchall()}
+        if "conversation_id" in c83:
+            rows83=conn83.execute("SELECT id FROM bodymind_operator_tasks WHERE conversation_id LIKE 'r64-smoke-%' ORDER BY id").fetchall()
+            if rows83:
+                backup83=backup_db()
+                qa_removed=[int(x[0]) for x in rows83]
+                conn83.executemany("DELETE FROM bodymind_operator_tasks WHERE id=?",[(x,) for x in qa_removed])
+                conn83.commit()
+            else:
+                backup83=""
+        else:
+            backup83=""
+    else:
+        backup83=""
+    integrity83=str(conn83.execute("PRAGMA integrity_check").fetchone()[0])
+    fk83=len(conn83.execute("PRAGMA foreign_key_check").fetchall())
+finally:
+    conn83.close()
+print("[r83-qa-hygiene] removed_smoke_tasks="+repr(qa_removed)+" backup="+backup83+" integrity="+integrity83+" fk="+str(fk83),flush=True)
+if integrity83.lower()!="ok" or fk83:
+    raise RuntimeError("R83 QA hygiene integrity failed")
