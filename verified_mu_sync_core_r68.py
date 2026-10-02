@@ -186,6 +186,61 @@ def _ensure_minor(conn,tid,target,analysis):
     changed=_fill_empty(conn,"minori",int(existing["id"]),mapping)
     return int(existing["id"]),changed
 
+# BODYMIND_R82_GUARDIAN_CONVERGENCE
+def sync_guardian_bidirectional(conn,tid):
+    """Fill only empty guardian fields between tesserati and minori. Never overwrite."""
+    if not _table(conn,"tesserati"):
+        return {"profile_filled":[],"minor_filled":[],"minor_id":None}
+    target=conn.execute("SELECT * FROM tesserati WHERE id=?",(int(tid),)).fetchone()
+    if not target:
+        return {"profile_filled":[],"minor_filled":[],"minor_id":None}
+    tcols=_cols(conn,"tesserati"); tkeys=set(target.keys())
+    minor=None; minor_id=None
+    if _table(conn,"minori") and "tesserato_id" in _cols(conn,"minori"):
+        minor=conn.execute("SELECT * FROM minori WHERE tesserato_id=? ORDER BY id LIMIT 1",(int(tid),)).fetchone()
+        if minor: minor_id=int(minor["id"])
+    mkeys=set(minor.keys()) if minor else set()
+
+    def first_nonempty(row,keys):
+        if not row: return ""
+        rk=set(row.keys())
+        for k in keys:
+            if k in rk and row[k] is not None and str(row[k]).strip():
+                return str(row[k]).strip()
+        return ""
+
+    p_guard=first_nonempty(target,("genitore","nome_genitore"))
+    p_phone=first_nonempty(target,("telefono_genitore","guardian_phone"))
+    p_email=first_nonempty(target,("email_genitore","guardian_email"))
+    m_guard=first_nonempty(minor,("genitore","nome_genitore"))
+    m_phone=first_nonempty(minor,("telefono_genitore","guardian_phone"))
+    m_email=first_nonempty(minor,("email_genitore","guardian_email"))
+
+    profile_map={}
+    if not p_guard and m_guard:
+        profile_map["genitore"]=m_guard; profile_map["nome_genitore"]=m_guard
+    if not p_phone and m_phone:
+        profile_map["telefono_genitore"]=m_phone
+    if not p_email and m_email:
+        profile_map["email_genitore"]=m_email
+    profile_changed=_fill_empty(conn,"tesserati",int(tid),profile_map)
+
+    minor_changed={}
+    if minor:
+        minor_map={}
+        if not m_guard and p_guard:
+            minor_map["genitore"]=p_guard; minor_map["nome_genitore"]=p_guard
+        if not m_phone and p_phone:
+            minor_map["telefono_genitore"]=p_phone
+        if not m_email and p_email:
+            minor_map["email_genitore"]=p_email
+        minor_changed=_fill_empty(conn,"minori",minor_id,minor_map)
+    return {
+      "profile_filled":sorted(profile_changed.keys()),
+      "minor_filled":sorted(minor_changed.keys()),
+      "minor_id":minor_id,
+    }
+
 def sync_analysis_to_existing_athlete(conn,tid,analysis,source="verified_mu"):
     if not isinstance(analysis,dict):
         return {"ok":False,"reason":"analysis_missing"}
@@ -226,6 +281,7 @@ def sync_analysis_to_existing_athlete(conn,tid,analysis,source="verified_mu"):
     }
     changed=_fill_empty(conn,"tesserati",int(tid),mapping)
     minor_id,minor_changed=_ensure_minor(conn,int(tid),target,analysis)
+    guardian_convergence=sync_guardian_bidirectional(conn,int(tid))
 
     try:
         from .onboarding_flow import sync_unified_module_flags, recompute_onboarding_status
@@ -237,6 +293,7 @@ def sync_analysis_to_existing_athlete(conn,tid,analysis,source="verified_mu"):
       "ok":True,"tesserato_id":int(tid),"confidence":conf,"identity_check":why,
       "fields_filled":sorted(changed.keys()),"minor_id":minor_id,
       "minor_fields_filled":sorted(minor_changed.keys()),
+      "guardian_convergence":guardian_convergence,
     }
 
 def _profile_needs_guardian_refresh(conn,tid,analysis):
