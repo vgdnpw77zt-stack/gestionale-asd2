@@ -15,7 +15,7 @@ if not target.exists():
     raise RuntimeError('R42 coherence module missing')
 
 s=target.read_text(encoding='utf-8')
-if 'BODYMIND_R42_INBOUND_PRIORITY' not in s:
+if 'BODYMIND_R73_GLOBAL_MU_PRESENCE' not in s and 'BODYMIND_R42_INBOUND_PRIORITY' not in s:
     old=r'''def _mu_state(tid):
     if tid<=0:
         return None
@@ -104,10 +104,11 @@ finally:
     conn.close()
 
 text=target.read_text(encoding='utf-8',errors='replace')
+r73='BODYMIND_R73_GLOBAL_MU_PRESENCE' in text
 checks={
-    'inbound-priority':'BODYMIND_R42_INBOUND_PRIORITY' in text,
-    'pending-wins':"if status in _PENDING:" in text and "return 'pending'" in text,
-    'document-fallback':"if any(x in _TRUSTED for x in statuses):" in text,
+    'inbound-priority':r73 or 'BODYMIND_R42_INBOUND_PRIORITY' in text,
+    'pending-wins':(("if states:" in text and "return 'pending'" in text) if r73 else ("if status in _PENDING:" in text and "return 'pending'" in text)),
+    'document-fallback':(("if 'verified' in states:" in text and "return 'verified'" in text) if r73 else "if any(x in _TRUSTED for x in statuses):" in text),
     'db-integrity':integrity.lower()=='ok' and fk==0,
 }
 failed=[k for k,v in checks.items() if not v]
@@ -116,4 +117,4 @@ print('[document-coherence-r42] pending_inbound_mu='+repr(pending[:20]),flush=Tr
 if failed:
     raise RuntimeError('R42 coherence failed '+repr(failed))
 MARKER.write_text('BodyMind document coherence R42 inbound-priority applied\n',encoding='utf-8')
-print('[document-coherence-r42-selftest] PASS inbound-pending-priority no-premature-verified db-ok',flush=True)
+print('[document-coherence-r42-selftest] PASS inbound-presence-priority R73-compatible db-ok',flush=True)
