@@ -469,3 +469,162 @@ if 'BODYMIND_R74_TUTELA_FROM_MU' not in COH.read_text(encoding='utf-8',errors='r
 
 MARKER.write_text('BodyMind R74 consistency active\n',encoding='utf-8')
 print('[r74-selftest] PASS strict-CF-autocreate trusted-MU-tutela semantic-dedupe no-file-delete iphone-visualViewport db-ok',flush=True)
+
+
+# ------------------------------------------------------------------
+# R76: physically clean proven duplicate rows from operational tables.
+# Full payload + semantic cache is retained in an audit archive table.
+# Physical media files are NEVER deleted here.
+# ------------------------------------------------------------------
+R76_MARKER=APP/'.BODYMIND_R76_DUPLICATE_DB_CLEANUP'
+if not R76_MARKER.exists():
+    r76_backup=backup_db()
+    conn=sqlite3.connect(str(DB),timeout=60); conn.row_factory=sqlite3.Row
+    deleted_docs=[]; deleted_inbound=[]; blocked76=[]
+    try:
+        conn.execute("""CREATE TABLE IF NOT EXISTS bodymind_duplicate_records_archive(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          source_table TEXT NOT NULL,
+          source_id INTEGER NOT NULL,
+          tesserato_id INTEGER,
+          status TEXT,
+          reason TEXT NOT NULL,
+          payload_json TEXT NOT NULL,
+          semantics_json TEXT,
+          file_path TEXT,
+          archived_at TEXT NOT NULL,
+          UNIQUE(source_table,source_id)
+        )""")
+
+        doc_dup_status={
+          'semantic_duplicate_archived','semantic_duplicate_archived_r74',
+          'mu_duplicate_archived_r75','duplicate_exact','duplicato_confermato',
+          'duplicato_non_importato','duplicate_confirmed','duplicate_archived'
+        }
+        inbound_dup_status={
+          'duplicate_exact','duplicato_confermato','duplicato_non_importato',
+          'duplicate_confirmed','semantic_duplicate_archived','duplicate_archived'
+        }
+
+        def semantics_for(source_table,source_id):
+            if not table(conn,'bodymind_document_semantics'):
+                return []
+            rows=conn.execute("SELECT * FROM bodymind_document_semantics WHERE source_table=? AND source_id=? ORDER BY id",
+                              (source_table,int(source_id))).fetchall()
+            return [dict(x) for x in rows]
+
+        def reference_hits(source_table,source_id):
+            hits=[]
+            tables=[str(x[0]) for x in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").fetchall()]
+            obvious={'documenti':{'document_id','doc_id','documento_id'},
+                     'inbound_documents':{'inbound_id','inbound_document_id'}}[source_table]
+            for tn in tables:
+                if tn in {source_table,'bodymind_document_semantics','bodymind_duplicate_records_archive'}:
+                    continue
+                tcols={str(x[1]) for x in conn.execute("PRAGMA table_info("+tn+")").fetchall()}
+                refs=set(obvious & tcols)
+                try:
+                    for fkrow in conn.execute("PRAGMA foreign_key_list("+tn+")").fetchall():
+                        if str(fkrow[2])==source_table:
+                            refs.add(str(fkrow[3]))
+                except Exception:
+                    pass
+                for col in refs:
+                    try:
+                        n=int(conn.execute("SELECT COUNT(*) FROM "+tn+" WHERE "+col+"=?",(int(source_id),)).fetchone()[0])
+                    except Exception:
+                        n=0
+                    if n:
+                        hits.append((tn,col,n))
+            return hits
+
+        def archive_row(source_table,row,reason):
+            keys=set(row.keys())
+            sid=int(row['id'])
+            tid=int(row['tesserato_id'] or 0) if 'tesserato_id' in keys else 0
+            status=str(row['status'] or '') if 'status' in keys else ''
+            fpath=''
+            for k in ('filename','saved_path','original_filename'):
+                if k in keys and row[k]:
+                    fpath=str(row[k]); break
+            sem=semantics_for(source_table,sid)
+            conn.execute("""INSERT OR IGNORE INTO bodymind_duplicate_records_archive
+              (source_table,source_id,tesserato_id,status,reason,payload_json,semantics_json,file_path,archived_at)
+              VALUES(?,?,?,?,?,?,?,?,?)""",
+              (source_table,sid,tid,status,reason,json.dumps(dict(row),ensure_ascii=False,default=str),
+               json.dumps(sem,ensure_ascii=False,default=str),fpath,datetime.now().isoformat(timespec='seconds')))
+            if table(conn,'bodymind_document_semantics'):
+                conn.execute("DELETE FROM bodymind_document_semantics WHERE source_table=? AND source_id=?",(source_table,sid))
+
+        # Documents first: this can free inbound rows that were referenced only by a duplicate dossier row.
+        if table(conn,'documenti'):
+            rows=conn.execute("SELECT * FROM documenti ORDER BY id").fetchall()
+            for row in rows:
+                st=str(row['status'] or '').strip().lower() if 'status' in row.keys() else ''
+                if st not in doc_dup_status:
+                    continue
+                sid=int(row['id'])
+                hits=reference_hits('documenti',sid)
+                if hits:
+                    blocked76.append({'table':'documenti','id':sid,'status':st,'references':hits})
+                    continue
+                archive_row('documenti',row,'R76 proven duplicate cleanup')
+                conn.execute("DELETE FROM documenti WHERE id=?",(sid,))
+                deleted_docs.append(sid)
+
+        if table(conn,'inbound_documents'):
+            rows=conn.execute("SELECT * FROM inbound_documents ORDER BY id").fetchall()
+            for row in rows:
+                st=str(row['status'] or '').strip().lower() if 'status' in row.keys() else ''
+                if st not in inbound_dup_status:
+                    continue
+                sid=int(row['id'])
+                hits=reference_hits('inbound_documents',sid)
+                if hits:
+                    blocked76.append({'table':'inbound_documents','id':sid,'status':st,'references':hits})
+                    continue
+                archive_row('inbound_documents',row,'R76 proven duplicate cleanup')
+                conn.execute("DELETE FROM inbound_documents WHERE id=?",(sid,))
+                deleted_inbound.append(sid)
+
+        conn.commit()
+        remaining_doc_dups=0
+        remaining_inbound_dups=0
+        if table(conn,'documenti'):
+            qs=','.join('?' for _ in doc_dup_status)
+            remaining_doc_dups=int(conn.execute("SELECT COUNT(*) FROM documenti WHERE lower(coalesce(status,'')) IN ("+qs+")",tuple(sorted(doc_dup_status))).fetchone()[0])
+        if table(conn,'inbound_documents'):
+            qs=','.join('?' for _ in inbound_dup_status)
+            remaining_inbound_dups=int(conn.execute("SELECT COUNT(*) FROM inbound_documents WHERE lower(coalesce(status,'')) IN ("+qs+")",tuple(sorted(inbound_dup_status))).fetchone()[0])
+        counts76={
+          'tesserati':int(conn.execute('SELECT COUNT(*) FROM tesserati').fetchone()[0]),
+          'documenti':int(conn.execute('SELECT COUNT(*) FROM documenti').fetchone()[0]),
+          'inbound_documents':int(conn.execute('SELECT COUNT(*) FROM inbound_documents').fetchone()[0]),
+          'duplicate_archive':int(conn.execute('SELECT COUNT(*) FROM bodymind_duplicate_records_archive').fetchone()[0]),
+        }
+        integrity76=str(conn.execute('PRAGMA integrity_check').fetchone()[0])
+        fk76=len(conn.execute('PRAGMA foreign_key_check').fetchall())
+    finally:
+        conn.close()
+
+    print('[r76-db-cleanup] deleted_documenti='+json.dumps(deleted_docs)+
+          ' deleted_inbound='+json.dumps(deleted_inbound)+
+          ' blocked='+json.dumps(blocked76,ensure_ascii=False)+
+          ' remaining_doc_dups='+str(remaining_doc_dups)+
+          ' remaining_inbound_dups='+str(remaining_inbound_dups)+
+          ' counts='+json.dumps(counts76)+
+          ' backup='+r76_backup.name+
+          ' integrity='+integrity76+' fk='+str(fk76),flush=True)
+
+    if counts76['tesserati']!=32:
+        raise RuntimeError('R76 refused: tesserati count changed')
+    if integrity76.lower()!='ok' or fk76:
+        raise RuntimeError('R76 database integrity failed')
+    if remaining_doc_dups or remaining_inbound_dups:
+        # Referenced duplicate rows remain operationally hidden rather than breaking links.
+        if not blocked76:
+            raise RuntimeError('R76 unexplained duplicate rows remain')
+    R76_MARKER.write_text('BodyMind R76 duplicate DB cleanup completed\\n',encoding='utf-8')
+    print('[r76-selftest] PASS backup audit-archive proven-duplicates-only no-media-delete referential-safety db-ok',flush=True)
+else:
+    print('[r76-db-cleanup] already applied',flush=True)
