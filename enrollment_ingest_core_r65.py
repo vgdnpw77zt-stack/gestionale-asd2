@@ -11,6 +11,9 @@ _ODD={
 _EVEN={str(i):i for i in range(10)}
 _EVEN.update({chr(ord("A")+i):i for i in range(26)})
 
+def _yes_value(value):
+    return str(value or "").strip().lower() in ("1","true","yes","si","sì","consento","accepted","signed")
+
 def norm_cf(value):
     return re.sub(r"[^A-Z0-9]","",str(value or "").upper())
 
@@ -137,6 +140,8 @@ def athlete_fields_from_analysis(conn,analysis):
       "telefono":str(a.get("phone") or "").strip(),
       "cellulare":str(a.get("phone") or "").strip(),
       "email":str(a.get("email") or "").strip(),
+      "corso":str(a.get("course_requested") or a.get("course") or a.get("discipline_requested") or "").strip(),
+      "disciplina":str(a.get("discipline") or a.get("course_requested") or "").strip(),
       "genitore":str(a.get("guardian_name") or "").strip(),
       "nome_genitore":str(a.get("guardian_name") or "").strip(),
       "telefono_genitore":str(a.get("guardian_phone") or "").strip(),
@@ -144,6 +149,12 @@ def athlete_fields_from_analysis(conn,analysis):
       "nazionalita":str(a.get("nationality") or "").strip(),
       "sesso":str(a.get("gender") or "").strip(),
       "note":str(a.get("notes") or "").strip(),
+      # Only explicit YES values are promoted to positive consent flags.
+      # Explicit NO/unknown remain 0; nothing is invented.
+      "consenso_informato":1 if _yes_value(a.get("privacy_consent")) else 0,
+      "privacy_ok":1 if _yes_value(a.get("privacy_consent")) else 0,
+      "liberatoria_immagini":1 if _yes_value(a.get("image_consent")) else 0,
+      "iscrizione_firmata":1 if (_yes_value(a.get("athlete_signature")) or _yes_value(a.get("guardian_signature"))) else 0,
       "attivo":1,
       "minorenne":1 if age is not None and age<18 else 0,
       "created_at":datetime.now().isoformat(timespec="seconds"),
