@@ -119,6 +119,7 @@ COPY runtime_timeline_inspect_r35.py /opt/bodymind/runtime_timeline_inspect_r35.
 COPY release_navigation_audit_r115.py /opt/bodymind/release_navigation_audit_r115.py
 COPY release_mu_nomatch_audit_r116.py /opt/bodymind/release_mu_nomatch_audit_r116.py
 COPY release_mu_nomatch_create_r117.py /opt/bodymind/release_mu_nomatch_create_r117.py
+COPY release_mu_nomatch_create_smoke_r118.py /opt/bodymind/release_mu_nomatch_create_smoke_r118.py
 COPY release_route_guard_r39.py /opt/bodymind/release_route_guard_r39.py
 COPY build_preflight_r39.py /opt/bodymind/build_preflight_r39.py
 COPY runtime_launcher.py /opt/bodymind/runtime_launcher.py
