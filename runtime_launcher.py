@@ -248,6 +248,39 @@ def _bodymind_final_data_convergence():
                         conn.execute("UPDATE tesserati SET "+','.join(sets)+" WHERE id=?",(tid,))
                         actions.append('onboarding_truth_reset:tid='+str(tid))
 
+        # 3c) Historical payment requests for intentionally deleted athletes are
+        # not accounting truth. Preserve them in the explicit orphan audit archive,
+        # then remove them from the operational request table so they cannot create
+        # future false tasks/alerts.
+        if has_table('payment_requests') and has_table('tesserati'):
+            pc=cols('payment_requests')
+            if 'tesserato_id' in pc:
+                conn.execute("""CREATE TABLE IF NOT EXISTS bodymind_orphan_records_archive(
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  source_table TEXT NOT NULL,
+                  source_id INTEGER NOT NULL,
+                  former_tesserato_id INTEGER,
+                  reason TEXT NOT NULL,
+                  payload_json TEXT NOT NULL,
+                  semantics_json TEXT,
+                  events_json TEXT,
+                  archived_at TEXT NOT NULL,
+                  UNIQUE(source_table,source_id)
+                )""")
+                orphan_reqs=conn.execute("""SELECT p.* FROM payment_requests p
+                  LEFT JOIN tesserati t ON t.id=p.tesserato_id
+                  WHERE p.tesserato_id IS NOT NULL AND t.id IS NULL
+                  ORDER BY p.id""").fetchall()
+                for pr in orphan_reqs:
+                    pid=int(pr['id']); former=int(pr['tesserato_id'] or 0)
+                    conn.execute("""INSERT OR IGNORE INTO bodymind_orphan_records_archive
+                      (source_table,source_id,former_tesserato_id,reason,payload_json,semantics_json,events_json,archived_at)
+                      VALUES(?,?,?,?,?,'[]','[]',datetime('now'))""",
+                      ('payment_requests',pid,former,'deleted-athlete historical payment request',
+                       json.dumps(dict(pr),ensure_ascii=False,default=str)))
+                    conn.execute("DELETE FROM payment_requests WHERE id=?",(pid,))
+                    actions.append('payment_request_archived:'+str(pid)+':former_tid='+str(former))
+
         # 4) Exact duplicate visible files: same athlete + same semantic/type bucket + SHA.
         # Archive only the extra DB row; never delete the physical file.
         if has_table('documenti'):
