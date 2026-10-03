@@ -118,6 +118,7 @@ COPY release_operator_mobile_r33.py /opt/bodymind/release_operator_mobile_r33.py
 COPY release_cleanup_r2.py /opt/bodymind/release_cleanup_r2.py
 COPY runtime_timeline_inspect_r35.py /opt/bodymind/runtime_timeline_inspect_r35.py
 COPY release_navigation_audit_r115.py /opt/bodymind/release_navigation_audit_r115.py
+COPY release_ui_audit_r122.py /opt/bodymind/release_ui_audit_r122.py
 COPY release_mu_nomatch_audit_r116.py /opt/bodymind/release_mu_nomatch_audit_r116.py
 COPY release_mu_nomatch_create_r117.py /opt/bodymind/release_mu_nomatch_create_r117.py
 COPY release_mu_nomatch_create_smoke_r118.py /opt/bodymind/release_mu_nomatch_create_smoke_r118.py
