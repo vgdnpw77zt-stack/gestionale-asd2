@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
-import importlib, py_compile, shutil, sqlite3, sys
+import importlib, importlib.util, py_compile, shutil, sqlite3, sys
 from pathlib import Path
 
 APP=Path('/data/top2_app')
@@ -80,8 +80,20 @@ if marker not in ap:
     py_compile.compile(str(APP_PY),doraise=True)
 
 # Register it also in the pre-Gunicorn QA process.
+# asd_app is already imported at this point, so load the freshly-created module
+# directly from its file path rather than relying on package cache discovery.
 sys.path.insert(0,str(APP))
-mod=importlib.import_module('asd_app.routes_mu_nomatch_r119')
+importlib.invalidate_caches()
+_mod_name='asd_app.routes_mu_nomatch_r119'
+if _mod_name in sys.modules:
+    mod=sys.modules[_mod_name]
+else:
+    spec=importlib.util.spec_from_file_location(_mod_name,str(DST))
+    if spec is None or spec.loader is None:
+        raise RuntimeError('R119 cannot create module spec for '+str(DST))
+    mod=importlib.util.module_from_spec(spec)
+    sys.modules[_mod_name]=mod
+    spec.loader.exec_module(mod)
 
 from asd_app.core import app
 rules=[(str(r.rule),str(r.endpoint),set(r.methods)) for r in app.url_map.iter_rules()]
