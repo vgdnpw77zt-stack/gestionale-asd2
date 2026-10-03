@@ -4,6 +4,9 @@ import hashlib, re
 from datetime import date, datetime
 from pathlib import Path
 
+def _yes_value(value):
+    return str(value or "").strip().lower() in ("1","true","yes","si","sì","consento","accepted","signed")
+
 def _norm(v):
     s=str(v or "").strip().lower()
     s=re.sub(r"\s+"," ",s)
@@ -133,7 +136,8 @@ def _fill_empty(conn,table,row_id,mapping):
         if isinstance(val,str): val=val.strip()
         if val in ("",None): continue
         current=row[col]
-        empty=(current is None or str(current).strip()=="" or (isinstance(current,(int,float)) and current==0 and col=="minorenne"))
+        _zero_fill_flags={"minorenne","consenso_informato","privacy_ok","liberatoria_immagini","iscrizione_firmata"}
+        empty=(current is None or str(current).strip()=="" or (isinstance(current,(int,float)) and current==0 and col in _zero_fill_flags))
         if not empty:
             continue
         sets.append(col+"=?"); vals.append(val); changed[col]=val
@@ -273,10 +277,16 @@ def sync_analysis_to_existing_athlete(conn,tid,analysis,source="verified_mu"):
       "telefono":str(analysis.get("phone") or "").strip(),
       "cellulare":str(analysis.get("phone") or "").strip(),
       "email":str(analysis.get("email") or "").strip(),
+      "corso":str(analysis.get("course_requested") or analysis.get("course") or analysis.get("discipline_requested") or "").strip(),
+      "disciplina":str(analysis.get("discipline") or analysis.get("course_requested") or "").strip(),
       "genitore":str(analysis.get("guardian_name") or "").strip(),
       "nome_genitore":str(analysis.get("guardian_name") or "").strip(),
       "telefono_genitore":str(analysis.get("guardian_phone") or "").strip(),
       "email_genitore":str(analysis.get("guardian_email") or "").strip(),
+      "consenso_informato":1 if _yes_value(analysis.get("privacy_consent")) else None,
+      "privacy_ok":1 if _yes_value(analysis.get("privacy_consent")) else None,
+      "liberatoria_immagini":1 if _yes_value(analysis.get("image_consent")) else None,
+      "iscrizione_firmata":1 if (_yes_value(analysis.get("athlete_signature")) or _yes_value(analysis.get("guardian_signature"))) else None,
       "minorenne":1 if age is not None and age<18 else None,
     }
     changed=_fill_empty(conn,"tesserati",int(tid),mapping)
