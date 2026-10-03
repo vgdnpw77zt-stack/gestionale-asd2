@@ -14,13 +14,16 @@ sys.path.insert(0,"/data/top2_app")
 import app as _full_app
 from asd_app.core import app
 rules=[(str(r.rule),str(r.endpoint),set(r.methods)) for r in app.url_map.iter_rules()]
-out={"queue_create_route":False,"operator_upload_wrapped":False,"operator_chat_wrapped":False}
+out={"queue_create_route":False,"operator_upload_wrapped":False,"operator_chat_wrapped":False,"async_dispatches_wrapped_upload":False}
 out["queue_create_route"]=any(rule=="/documenti-automatici/<int:inbound_id>/crea-tesserato" and "POST" in methods for rule,ep,methods in rules)
 for rule,ep,methods in rules:
     if rule=="/operatore-bodymind/upload" and "POST" in methods:
         out["operator_upload_wrapped"]=bool(getattr(app.view_functions.get(ep),"_bodymind_r119_wrapped",False))
     if rule=="/operatore-bodymind/chat" and "POST" in methods:
         out["operator_chat_wrapped"]=bool(getattr(app.view_functions.get(ep),"_bodymind_r119_wrapped",False))
+import inspect
+from asd_app import operator_async_upload_core_r67 as async_core
+out["async_dispatches_wrapped_upload"]="BODYMIND_ASYNC_WRAPPED_UPLOAD_DISPATCH" in inspect.getsource(async_core.run_job)
 print(json.dumps(out))
 '''
 fp=subprocess.run([sys.executable,"-c",fresh_code],cwd="/data/top2_app",capture_output=True,text=True,timeout=45)
@@ -49,6 +52,10 @@ try:
     first=create_athlete_from_analysis(c,analysis,source='r118_fixture',require_valid_cf=False); c.commit()
     tid=int(first.get('tesserato_id') or 0)
     second=create_athlete_from_analysis(c,analysis,source='r118_fixture_replay',require_valid_cf=False); c.commit()
+    replay_ids=[]
+    for replay_n in range(30):
+        again=create_athlete_from_analysis(c,analysis,source='r118_fixture_replay_'+str(replay_n),require_valid_cf=False); c.commit()
+        replay_ids.append(int(again.get('tesserato_id') or 0))
     after=int(c.execute('SELECT COUNT(*) FROM tesserati').fetchone()[0])
     sync=sync_analysis_to_existing_athlete(c,tid,analysis,source='r118_sync') if tid else {'ok':False}; c.commit()
     t=c.execute('SELECT * FROM tesserati WHERE id=?',(tid,)).fetchone() if tid else None
@@ -56,6 +63,7 @@ try:
     tk=set(t.keys()) if t else set(); mk=set(m.keys()) if m else set()
     checks['temp_create']=bool(first.get('created') and tid>0 and after==before+1)
     checks['temp_idempotent']=bool(not second.get('created') and int(second.get('tesserato_id') or 0)==tid)
+    checks['replay_30_idempotent']=bool(len(replay_ids)==30 and all(x==tid for x in replay_ids) and after==before+1)
     checks['course_filled']=bool(t and 'corso' in tk and str(t['corso'] or '')=='Cerchio Base')
     checks['guardian_profile']=bool(t and 'genitore' in tk and str(t['genitore'] or '')=='Genitore QA')
     checks['minor_row']=bool(m and 'genitore' in mk and str(m['genitore'] or '')=='Genitore QA')
@@ -75,4 +83,4 @@ checks['ok']=all(checks.values())
 print('[r118-mu-confirm-create-smoke] '+json.dumps({'checks':checks,'integrity':integrity,'fk':fk},ensure_ascii=False),flush=True)
 if not checks['ok']:
     raise RuntimeError('R118 generic MU confirmation regression failed '+json.dumps(checks,ensure_ascii=False))
-print('[r118-selftest] PASS persistent queue/operator create flow temp-create-idempotent full-profile guardian-course-explicit-consents db-ok',flush=True)
+print('[r118-selftest] PASS persistent queue/operator create flow async-wrapped-dispatch temp-create-idempotent replay30 full-profile guardian-course-explicit-consents db-ok',flush=True)

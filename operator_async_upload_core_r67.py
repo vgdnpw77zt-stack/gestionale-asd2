@@ -97,7 +97,21 @@ def run_job(app,db,upload_func,job_id):
               "bodymind_operator_conversation":str(meta.get("conversation_id") or ""),
               "bodymind_operator_identity":str(meta.get("display_name") or meta.get("username") or ""),
             })
-            response=upload_func()
+            # BODYMIND_ASYNC_WRAPPED_UPLOAD_DISPATCH
+            # Resolve the live Flask view instead of calling the stale function object
+            # captured by /upload-async.  Runtime wrappers (notably the canonical
+            # no-match MU flow) must run identically for foreground and background uploads.
+            effective_upload=upload_func
+            try:
+                for rule in app.url_map.iter_rules():
+                    if str(rule.rule)=="/operatore-bodymind/upload" and "POST" in rule.methods:
+                        candidate=app.view_functions.get(str(rule.endpoint))
+                        if callable(candidate):
+                            effective_upload=candidate
+                        break
+            except Exception:
+                effective_upload=upload_func
+            response=effective_upload()
             if isinstance(response,tuple):
                 flask_response,status=response[0],int(response[1])
             else:

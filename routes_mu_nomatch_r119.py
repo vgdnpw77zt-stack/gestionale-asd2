@@ -243,6 +243,78 @@ def r119_mu_create_cta(resp):
     except Exception:pass
     return resp
 
+def _latest_job_exact_inbound(c):
+    """Recover the file the user actually just uploaded, even when the async
+    pipeline summarized it as already present/resolved instead of returning a
+    fresh inbound id.  Exact SHA only: no filename-only attachment guessing."""
+    if not _table(c,'bodymind_operator_upload_jobs') or not _table(c,'inbound_documents'):
+        return None,None,None
+    try:
+        job=c.execute("""SELECT * FROM bodymind_operator_upload_jobs
+          WHERE conversation_id=? AND status IN ('processing','completed')
+          ORDER BY created_at DESC,id DESC LIMIT 1""",(op._conv_id(),)).fetchone()
+    except Exception:
+        return None,None,None
+    if not job:return None,None,None
+    try:specs=json.loads(str(job['files_json'] or '[]'))
+    except Exception:specs=[]
+    for spec in reversed(specs if isinstance(specs,list) else []):
+        p=Path(str((spec or {}).get('path') or ''))
+        try:
+            if not p.is_file():continue
+            data=p.read_bytes()
+        except Exception:
+            continue
+        if not data or len(data)>40*1024*1024:continue
+        wanted=hashlib.sha256(data).hexdigest()
+        try:
+            rows=c.execute("SELECT * FROM inbound_documents ORDER BY id DESC LIMIT 300").fetchall()
+        except Exception:
+            rows=[]
+        for row in rows:
+            other=_file_bytes(row)
+            if not other or hashlib.sha256(other).hexdigest()!=wanted:continue
+            a,_=_analysis(c,row,allow_live=False)
+            if not isinstance(a,dict):
+                try:
+                    from .operator_doc_semantic_ai_r52 import analyze_bytes
+                    from .operator_doc_semantic_core_r52 import cache_put
+                    name=str((spec or {}).get('name') or row['original_filename'] or 'documento')
+                    a=analyze_bytes(c,name,data,'','',None)
+                    if isinstance(a,dict):
+                        cache_put(c,'inbound_documents',int(row['id']),a)
+                except Exception:
+                    a=None
+            return row,(a if isinstance(a,dict) else None),spec
+    return None,None,None
+
+def _offer_for_row(c,row,a,source):
+    if not row or not isinstance(a,dict):return None
+    if int(row['tesserato_id'] or 0)>0:
+        return None
+    # A duplicate staging status must not suppress creation of the PERSON.
+    # The document may be a duplicate; an unrepresented strong identity is not.
+    dtype=str(a.get('document_type') or '').strip().lower()
+    if dtype!='modulo_unico_tesseramento':
+        return None
+    iid=int(row['id'])
+    if enrollment_identity_ready(a,require_valid_cf=True):
+        backup=_backup_db('operator_auto_'+str(iid))
+        res=_execute(c,row,a,source)
+        if res.get('ok'):
+            tid=int(res['tesserato_id']);nm=_name(a) or ('#'+str(tid))
+            return {'text':('Creato automaticamente il tesserato ' if res.get('created') else 'Tesserato esistente riconosciuto: ')+nm+
+                    '. Ho associato il Modulo Unico e sincronizzato scheda, minore/genitore, consensi espliciti, tutela e onboarding.',
+                    'mode':'action','created':bool(res.get('created')),'tesserato_id':tid,'backup':backup,
+                    'links':[{'label':'Apri scheda','href':'/tesserati/'+str(tid)+'/scheda'}]}
+    ok,why=_confirmable(a)
+    if ok:
+        _save_pending(c,iid,a);nm=_name(a) or 'la persona letta nel modulo'
+        return {'text':'Modulo Unico / iscrizione riconosciuto per '+nm+', ma non trovo un tesserato associabile. Vuoi creare il tesserato usando i dati letti dal modulo? Rispondi Sì o No.',
+                'mode':'confirm_create_tesserato','pending_create':True,'inbound_id':iid,'document_name':nm}
+    return {'text':'Modulo Unico riconosciuto, ma i dati identificativi non sono abbastanza certi per creare una persona senza rischio ('+why+'). Lo lascio in verifica senza inventare dati.',
+            'mode':'identity_review','pending_create':False,'inbound_id':iid,'reason':why}
+
 def _upload_offer(payload):
     if not isinstance(payload,dict):return None
     results=payload.get('results') if isinstance(payload.get('results'),list) else []
@@ -255,24 +327,62 @@ def _upload_offer(payload):
             row=c.execute("SELECT * FROM inbound_documents WHERE id=?",(iid,)).fetchone()
             if not row or int(row['tesserato_id'] or 0)>0:continue
             a,_=_analysis(c,row,allow_live=False)
-            if not _candidate(row,a) or not isinstance(a,dict):continue
-            if enrollment_identity_ready(a,require_valid_cf=True):
-                backup=_backup_db('operator_auto_'+str(iid));res=_execute(c,row,a,'operator_r119_strict_auto')
-                if res.get('ok'):
-                    tid=int(res['tesserato_id']);nm=_name(a) or ('#'+str(tid))
-                    return {'text':('Creato automaticamente il tesserato ' if res.get('created') else 'Tesserato esistente riconosciuto: ')+nm+
-                            '. Ho associato il Modulo Unico e sincronizzato scheda, minore/genitore, consensi espliciti, tutela e onboarding.',
-                            'mode':'action','created':bool(res.get('created')),'tesserato_id':tid,'backup':backup,
-                            'links':[{'label':'Apri scheda','href':'/tesserati/'+str(tid)+'/scheda'}]}
-            ok,why=_confirmable(a)
-            if ok:
-                _save_pending(c,iid,a);nm=_name(a) or 'la persona letta nel modulo'
-                return {'text':'Modulo Unico / iscrizione riconosciuto per '+nm+', ma non trovo un tesserato associabile. Vuoi creare il tesserato usando i dati letti dal modulo? Rispondi Sì o No.',
-                        'mode':'confirm_create_tesserato','pending_create':True,'inbound_id':iid,'document_name':nm}
-            return {'text':'Modulo Unico riconosciuto, ma i dati identificativi non sono abbastanza certi per creare una persona senza rischio ('+why+'). Lo lascio in verifica senza inventare dati.',
-                    'mode':'identity_review','pending_create':False,'inbound_id':iid,'reason':why}
+            if not isinstance(a,dict):continue
+            out=_offer_for_row(c,row,a,'operator_r119_upload')
+            if isinstance(out,dict):return out
+
+        # Async/dedupe fallback: the result can truthfully say "already present /
+        # resolved" and omit a fresh inbound id. Recover only by exact bytes within
+        # the same conversation's latest upload job; never by filename or name alone.
+        row,a,spec=_latest_job_exact_inbound(c)
+        if row and isinstance(a,dict):
+            out=_offer_for_row(c,row,a,'operator_r119_async_exact_sha')
+            if isinstance(out,dict):return out
     finally:c.close()
     return None
+
+def _explicit_attachment_create_message(message):
+    try:n=op._norm(message)
+    except Exception:n=' '.join(str(message or '').lower().split())
+    explicit=bool(__import__('re').search(r"\b(crea|creare|nuov[oa])\b",n)) and ('tesserat' in n or 'atlet' in n)
+    attached=any(x in n for x in ('allegat','appena caricat','modulo appena','file appena','usa il modulo','aggiungi il modulo'))
+    return bool(explicit and attached)
+
+def _recover_chat_attachment_create():
+    try:
+        body=request.get_json(silent=True) or {}
+        message=str(body.get('message') or body.get('text') or '')
+    except Exception:
+        return None
+    if not _explicit_attachment_create_message(message):return None
+    c=db()
+    try:
+        row,a,spec=_latest_job_exact_inbound(c)
+        if not row or not isinstance(a,dict):return None
+        requested=''
+        try:
+            if callable(getattr(op,'_r107_requested_name',None)):
+                requested=op._r107_requested_name(message)
+            if requested and callable(getattr(op,'_r107_name_conflict',None)) and op._r107_name_conflict(requested,a):
+                return {'text':'Il nome scritto nel comando ('+requested+') non coincide con l’identità letta dal Modulo Unico ('+(_name(a) or 'non determinata')+'). Non ho creato nulla: conferma quale identità è corretta.',
+                        'mode':'identity_conflict','requested_name':requested,'document_name':_name(a)}
+        except Exception:
+            pass
+        ok,why=_confirmable(a)
+        if not ok:
+            return {'text':'Il file appena caricato è stato recuperato, ma non supera il controllo identità sicuro ('+why+'). Non creo una persona incerta.',
+                    'mode':'identity_review','attachment_context':True,'reason':why}
+        backup=_backup_db('operator_chat_recover_'+str(int(row['id'])))
+        res=_execute(c,row,a,'operator_r119_chat_exact_sha')
+        if not res.get('ok'):
+            return {'text':'Ho recuperato il file appena caricato ma non ho creato il tesserato: '+str(res.get('reason') or 'verifica necessaria')+'.',
+                    'mode':'warning','attachment_context':True,'result':res}
+        tid=int(res['tesserato_id']);nm=_name(a) or ('#'+str(tid))
+        return {'text':('Creato' if res.get('created') else 'Tesserato già esistente riconosciuto')+': '+nm+
+                '. Ho usato il file appena caricato, associato il Modulo Unico e sincronizzato scheda, minore/genitore, consensi, tutela e onboarding.',
+                'mode':'action','attachment_context':True,'created':bool(res.get('created')),'tesserato_id':tid,'backup':backup,
+                'links':[{'label':'Apri scheda','href':'/tesserati/'+str(tid)+'/scheda'}]}
+    finally:c.close()
 
 def _norm_answer(v):
     return ' '.join(str(v or '').strip().lower().replace('ì','i').split())
@@ -330,6 +440,10 @@ if _chat_ep:
             except Exception:role=''
             if role in ('admin','manager'):
                 out=_pending_answer()
+                if isinstance(out,dict):return jsonify(out)
+                # If an async upload was summarized/deduplicated, R107 may have no
+                # fresh inbound context. Recover the same conversation's file by exact SHA.
+                out=_recover_chat_attachment_create()
                 if isinstance(out,dict):return jsonify(out)
             return _orig_chat(*args,**kwargs)
         _r119_chat_wrapper._bodymind_r119_wrapped=True
