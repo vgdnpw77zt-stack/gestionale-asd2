@@ -64,36 +64,40 @@ def bodymind_r123_presenze_semplici():
 
         athletes=conn.execute("""SELECT id,nome,cognome,corso FROM tesserati
             ORDER BY TRIM(cognome) COLLATE NOCASE,TRIM(nome) COLLATE NOCASE""").fetchall()
-        selected=[r for r in athletes if _r123_course_group(r['corso'])==group]
+        # BODYMIND_R123_DIRECT_ATHLETE_SELECTION
+        # Every operational group can choose directly from the whole athlete list.
+        # The legacy tesserati.corso text is not a roster truth and must not hide people.
+        selected=list(athletes)
         ids=[int(r['id']) for r in selected]
+        course_rows=conn.execute('SELECT id,nome FROM corsi ORDER BY id').fetchall()
+        course_id=next((int(c['id']) for c in course_rows if _r123_course_group(c['nome'])==group),None)
 
         if request.method=='POST':
             checked={parse_int(x,0) for x in request.form.getlist('presente_id')}
+            checked={x for x in checked if x in set(ids)}
             try:
-                if ids:
-                    marks=','.join('?' for _ in ids)
-                    conn.execute('DELETE FROM presenze WHERE data=? AND tesserato_id IN ('+marks+')',[day]+ids)
-                # Preserve a useful course_id when an existing course clearly
-                # belongs to the same group; otherwise NULL is valid.
-                course_rows=conn.execute('SELECT id,nome FROM corsi ORDER BY id').fetchall()
-                course_id=next((int(c['id']) for c in course_rows if _r123_course_group(c['nome'])==group),None)
+                if course_id is None:
+                    conn.execute('DELETE FROM presenze WHERE data=? AND corso_id IS NULL',(day,))
+                else:
+                    conn.execute('DELETE FROM presenze WHERE data=? AND corso_id=?',(day,course_id))
                 now=__import__('datetime').datetime.now().isoformat(timespec='seconds')
-                for r in selected:
-                    tid=int(r['id'])
-                    stato='presente' if tid in checked else 'assente'
+                # Keep the register minimal: store only actual presences.
+                for tid in sorted(checked):
                     conn.execute("""INSERT INTO presenze(tesserato_id,corso_id,data,stato,note,created_at,updated_at)
-                        VALUES(?,?,?,?,?,?,?)""",(tid,course_id,day,stato,'',now,now))
+                        VALUES(?,?,?,'presente','',?,?)""",(tid,course_id,day,now,now))
                 conn.commit()
             except Exception as exc:
                 conn.rollback()
                 return redirect_with_message('/presenze-semplici?gruppo='+group+'&data='+day,'Errore nel salvataggio presenze: '+str(exc),'error')
-            return redirect_with_message('/presenze-semplici?gruppo='+group+'&data='+day,'Presenze salvate.','success')
+            return redirect_with_message('/presenze-semplici?gruppo='+group+'&data='+day,'Presenze salvate: '+str(len(checked))+'.','success')
 
         existing={}
-        if ids:
-            marks=','.join('?' for _ in ids)
-            for p in conn.execute('SELECT * FROM presenze WHERE data=? AND tesserato_id IN ('+marks+')',[day]+ids).fetchall():
-                existing[int(p['tesserato_id'])]=str(p['stato'] or '')
+        if course_id is None:
+            q=conn.execute("SELECT * FROM presenze WHERE data=? AND corso_id IS NULL AND stato='presente'",(day,)).fetchall()
+        else:
+            q=conn.execute("SELECT * FROM presenze WHERE data=? AND corso_id=? AND stato='presente'",(day,course_id)).fetchall()
+        for p in q:
+            existing[int(p['tesserato_id'])]=str(p['stato'] or '')
     finally:
         conn.close()
 
@@ -107,10 +111,10 @@ def bodymind_r123_presenze_semplici():
           <span class='r123-course'>{e(r['corso'] or _r123_group_label(group))}</span>
           <span class='r123-state'>{'Presente' if is_present else 'Assente'}</span>
         </label>""")
-    rows=''.join(cards) or "<div class='r123-empty'>Nessuna allieva in questo gruppo. Assegna il corso dalla scheda atleta.</div>"
+    rows=''.join(cards) or "<div class='r123-empty'>Nessuna allieva presente in anagrafica.</div>"
     html=f"""<!-- BODYMIND_R123_PRESENZE_SIMPLE -->
     <main class='r123-page'>
-      <header class='r123-head'><div><small>PRESENZE</small><h1>Registro rapido</h1><p>Scegli il gruppo, tocca le allieve presenti e salva.</p></div>
+      <header class='r123-head'><div><small>PRESENZE</small><h1>Registro rapido</h1><p>Scegli Base, Kids, Adult o Pro / Agoniste, poi tocca direttamente le allieve presenti e salva.</p></div>
       <a class='r123-back' href='/mobile'>Home</a></header>
       <nav class='r123-tabs'>{tabs}</nav>
       <form method='post' id='r123-presence-form'>
@@ -189,7 +193,10 @@ conn=sqlite3.connect("/data/tenants/default/asd.db",timeout=20)
 try:
     integrity=str(conn.execute("PRAGMA integrity_check").fetchone()[0]); fk=len(conn.execute("PRAGMA foreign_key_check").fetchall())
 finally: conn.close()
-ok=(p.status_code==200 and "BODYMIND_R123_PAYMENT_MOBILE" in ph and a.status_code in (301,302,307,308) and "/presenze-semplici" in str(a.headers.get("Location","")) and b.status_code==200 and "BODYMIND_R123_PRESENZE_SIMPLE" in bh and "Giornata operativa" not in bh and all(x in bh for x in ("Base","Kids","Adult","Pro / Agoniste")) and integrity.lower()=="ok" and fk==0)
+ath_count=conn2=None
+# direct list should include a known athlete regardless of legacy course assignment
+direct_ok=("BODYMIND_R123_PRESENZE_SIMPLE" in bh and "r123-athlete" in bh)
+ok=(p.status_code==200 and "BODYMIND_R123_PAYMENT_MOBILE" in ph and a.status_code in (301,302,307,308) and "/presenze-semplici" in str(a.headers.get("Location","")) and b.status_code==200 and direct_ok and "Giornata operativa" not in bh and all(x in bh for x in ("Base","Kids","Adult","Pro / Agoniste")) and integrity.lower()=="ok" and fk==0)
 print("[r123-selftest] status_payment=%s presence_redirect=%s simple=%s db=%s fk=%s ok=%s"%(p.status_code,a.status_code,b.status_code,integrity,fk,ok),flush=True)
 if not ok: raise RuntimeError("R123 QA failed")
 '''
