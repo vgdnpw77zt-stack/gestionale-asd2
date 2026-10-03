@@ -23,7 +23,9 @@ py_compile.compile(str(DST),doraise=True)
 
 # Persist semantic analysis when a recognized MU has no athlete match.
 s=EMAIL.read_text(encoding='utf-8',errors='replace')
-if 'BODYMIND_R119_PERSIST_UNRESOLVED_MU' not in s:
+_r119_persist='BODYMIND_R119_PERSIST_UNRESOLVED_MU' in s
+_r117_persist='BODYMIND_R117_PERSIST_UNRESOLVED_MU' in s
+if not _r119_persist and not _r117_persist:
     b=BACK/'routes_email_documents.py'
     if not b.exists(): shutil.copy2(EMAIL,b)
     old='''            if tid<=0:
@@ -66,7 +68,10 @@ if 'BODYMIND_R119_PERSIST_UNRESOLVED_MU' not in s:
     s=s.replace(old,new,1)
     tmp=EMAIL.with_name(EMAIL.name+'.r119.tmp')
     tmp.write_text(s,encoding='utf-8'); py_compile.compile(str(tmp),doraise=True); tmp.replace(EMAIL)
-print('[r119-source] PASS unresolved MU semantic persistence')
+if _r117_persist and not _r119_persist:
+    print('[r119-source] PASS adopted existing R117 unresolved-MU semantic persistence',flush=True)
+else:
+    print('[r119-source] PASS unresolved MU semantic persistence',flush=True)
 
 # Ensure actual app import loads the persistent module after all normal routes.
 ap=APP_PY.read_text(encoding='utf-8',errors='replace')
