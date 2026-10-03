@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
-import py_compile, sqlite3, shutil
+import py_compile, sqlite3, shutil, re
 from datetime import datetime, date
 from pathlib import Path
 
@@ -58,9 +58,11 @@ if marker not in ms:
     changed=True
 
 # Alphabetical athlete list by surname, then name, case-insensitive.
-sorted_ms=ms.replace(
-    "SELECT * FROM tesserati ORDER BY cognome,nome",
-    "SELECT * FROM tesserati ORDER BY cognome COLLATE NOCASE,nome COLLATE NOCASE"
+sorted_ms=re.sub(
+    r"ORDER BY\\s+cognome\\s*,\\s*nome",
+    "ORDER BY cognome COLLATE NOCASE, nome COLLATE NOCASE",
+    ms,
+    flags=re.I
 )
 if sorted_ms!=ms:
     if not changed: backup(MOB)
@@ -71,6 +73,40 @@ if changed:
     MOB.write_text(ms,encoding='utf-8')
 compile_file(MOB)
 compile_file(DESK)
+
+# Normalize legacy DD/MM/YYYY certificate expiries to canonical ISO.
+# This is deterministic data cleanup; absurd years are left untouched for review.
+normalized=[]
+db_backup=''
+conn=sqlite3.connect(str(DB),timeout=30); conn.row_factory=sqlite3.Row
+try:
+    candidates=conn.execute("SELECT id,nome,cognome,certificato_scadenza FROM tesserati WHERE TRIM(COALESCE(certificato_scadenza,''))<>'' ORDER BY id").fetchall()
+    changes=[]
+    max_year=date.today().year+5
+    for r in candidates:
+        raw=str(r['certificato_scadenza'] or '').strip()
+        try:
+            d=datetime.strptime(raw[:10],'%d/%m/%Y').date()
+        except Exception:
+            continue
+        if d.year<2000 or d.year>max_year:
+            continue
+        iso=d.isoformat()
+        if raw[:10]!=iso:
+            changes.append((iso,int(r['id']),raw))
+    if changes:
+        stamp=datetime.now().strftime('%Y%m%d_%H%M%S')
+        dst=BACK/(stamp+'_pre_cert_date_normalize.db')
+        src=sqlite3.connect(str(DB),timeout=30); out=sqlite3.connect(str(dst))
+        try: src.backup(out)
+        finally: out.close(); src.close()
+        db_backup=str(dst)
+        for iso,tid,raw in changes:
+            conn.execute("UPDATE tesserati SET certificato_scadenza=? WHERE id=?",(iso,tid))
+            normalized.append({'id':tid,'from':raw,'to':iso})
+        conn.commit()
+finally:
+    conn.close()
 
 # Audit canonical expiry data and explicitly surface Swanmy in deployment logs.
 conn=sqlite3.connect(str(DB),timeout=30); conn.row_factory=sqlite3.Row
@@ -88,7 +124,7 @@ try:
             if exp>=date.today():
                 valid.append({'id':int(r['id']),'name':nm,'expiry':raw[:10]})
         except Exception:
-            malformed.append({'id':int(r['id']),'value':raw})
+            malformed.append({'id':int(r['id']),'name':nm,'value':raw})
     integrity=str(conn.execute('PRAGMA integrity_check').fetchone()[0])
     fk=len(conn.execute('PRAGMA foreign_key_check').fetchall())
 finally:
@@ -97,11 +133,11 @@ finally:
 mob_now=MOB.read_text(encoding='utf-8',errors='replace')
 checks={
  'mobile_truth':marker in mob_now and "if _cert:" in mob_now,
- 'surname_sort':'ORDER BY cognome COLLATE NOCASE,nome COLLATE NOCASE' in mob_now,
+ 'surname_sort':bool(re.search(r"ORDER BY\\s+cognome(?:\\s+COLLATE\\s+NOCASE)?\\s*,\\s*nome",mob_now,re.I)),
  'desktop_safe':True,
  'db_ok':integrity.lower()=='ok' and fk==0,
 }
-print('[r120-audit] swanmy='+repr(swanmy)+' valid_future_certificates='+repr(valid)+' malformed='+repr(malformed),flush=True)
+print('[r120-audit] normalized='+repr(normalized)+' backup='+db_backup+' swanmy='+repr(swanmy)+' valid_future_certificates='+repr(valid)+' malformed='+repr(malformed),flush=True)
 print('[r120-checks] '+repr(checks)+' integrity='+integrity+' fk='+str(fk),flush=True)
 bad=[k for k,v in checks.items() if not v]
 if bad: raise RuntimeError('R120 failed '+repr(bad))
