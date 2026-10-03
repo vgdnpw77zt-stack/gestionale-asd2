@@ -477,6 +477,7 @@ if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
 else:
     print("[startup-convergence] R109 read-only payment audit skipped; R110/R111 canonical payment gates remain active", flush=True)
 runpy.run_path("/opt/bodymind/release_simple_athlete_payment_truth_r110.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_certificate_truth_r120.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_runtime_helper_r112.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_convergence_smoke_r111.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_desktop_post_regression_r113.py", run_name="__main__")
