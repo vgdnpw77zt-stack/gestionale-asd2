@@ -74,8 +74,18 @@ if changed:
 compile_file(MOB)
 compile_file(DESK)
 
-# Athlete list is already surname-first in the canonical mobile route
-# (ORDER BY cognome,nome). Do not rewrite generated route source here.
+# Athlete list is already surname-first in the canonical mobile route.
+# Verify the generated route rather than rewriting it.
+list_matches=[]
+for p in (APP/'asd_app').rglob('*.py'):
+    try: _src=p.read_text(encoding='utf-8',errors='replace')
+    except Exception: continue
+    if 'def fix24_mobile_atlete' in _src:
+        list_matches.append((p,_src))
+if len(list_matches)!=1:
+    raise RuntimeError('R120 expected one mobile athlete list source, got '+repr([str(x[0]) for x in list_matches]))
+LISTP,list_now=list_matches[0]
+surname_sort_ok=bool(re.search(r"ORDER BY\\s+cognome(?:\\s+COLLATE\\s+NOCASE)?\\s*,\\s*nome",list_now,re.I))
 
 # Normalize legacy DD/MM/YYYY certificate expiries to canonical ISO.
 # This is deterministic data cleanup; absurd years are left untouched for review.
@@ -119,7 +129,7 @@ try:
     for r in rows:
         raw=str(r['certificato_scadenza'] or '').strip()
         nm=(str(r['nome'] or '')+' '+str(r['cognome'] or '')).strip()
-        if 'swanmy' in nm.lower():
+        if 'swanmy' in nm.lower() or 'swamy' in nm.lower():
             swanmy.append({'id':int(r['id']),'name':nm,'expiry':raw})
         if not raw: continue
         try:
@@ -136,7 +146,7 @@ finally:
 mob_now=MOB.read_text(encoding='utf-8',errors='replace')
 checks={
  'mobile_truth':marker in mob_now and "if _cert:" in mob_now,
- 'surname_sort':sort_marker in list_now,
+ 'surname_sort':surname_sort_ok,
  'desktop_safe':True,
  'db_ok':integrity.lower()=='ok' and fk==0,
 }
