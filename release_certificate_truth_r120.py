@@ -18,24 +18,41 @@ def backup(p):
 def compile_file(p):
     py_compile.compile(str(p),doraise=True)
 
-# Recovery from the previous failed R120 attempt: never leave a persistent
-# runtime source syntactically damaged.
-DESK=APP/'asd_app/routes_tesserati.py'
-try:
-    compile_file(DESK)
-except Exception:
-    candidate=BACK/'routes_tesserati.py'
-    if not candidate.exists():
-        raise
-    shutil.copy2(candidate,DESK)
-    compile_file(DESK)
-    print('[r120-recovery] restored routes_tesserati.py from pre-R120 backup',flush=True)
+def patch_med_assignment(src, conn_name, id_expr):
+    # Do not rewrite control flow/indentation. Only make the existing _med
+    # predicate true when the canonical profile already has an expiry date.
+    # This preserves the proven R110 rendering code and avoids false "Manca".
+    marker='BODYMIND_R120_CERTIFICATE_TRUTH'
+    if marker in src:
+        return src, False
+    needle="_med=bool("+conn_name+".execute("
+    pos=src.find(needle)
+    if pos<0:
+        return src, False
+    end=src.find(").fetchone())",pos)
+    if end<0:
+        return src, False
+    end += len(").fetchone())")
+    original=src[pos:end]
+    # Keep document evidence, but OR it with the canonical profile expiry.
+    replacement=(
+        "# "+marker+"\n"
+        + original
+        + " or bool("+conn_name+".execute(\"SELECT 1 FROM tesserati WHERE id=? "
+          "AND TRIM(COALESCE(certificato_scadenza,''))<>'' LIMIT 1\",("+id_expr+",)).fetchone())"
+    )
+    return src[:pos]+replacement+src[end:], True
 
-# Mobile athlete sheet is the screen shown to staff. Its old logic required
-# BOTH a visible doc_type=certificato_medico and a valid expiry. That produced
-# the contradiction "18/12/2026" + "Manca". The persisted canonical expiry is
-# already the profile truth used by the certificate workflow: if it is valid
-# and not expired, the card must be OK.
+# Desktop canonical sheet.
+DESK=APP/'asd_app/routes_tesserati.py'
+ds=DESK.read_text(encoding='utf-8',errors='replace')
+ds2,changed=patch_med_assignment(ds,'c','tesserato_id')
+if changed:
+    backup(DESK); DESK.write_text(ds2,encoding='utf-8'); compile_file(DESK)
+elif 'BODYMIND_R120_CERTIFICATE_TRUTH' not in ds:
+    raise RuntimeError('R120 desktop certificate assignment not found')
+
+# Mobile canonical sheet + presentation-only surname ordering.
 matches=[]
 for p in (APP/'asd_app').rglob('*.py'):
     try: s=p.read_text(encoding='utf-8',errors='replace')
@@ -45,47 +62,26 @@ for p in (APP/'asd_app').rglob('*.py'):
 if len(matches)!=1:
     raise RuntimeError('R120 expected one mobile athlete source, got '+repr([str(x[0]) for x in matches]))
 MOB,ms=matches[0]
-changed=False
-marker='# BODYMIND_R120_CERTIFICATE_TRUTH'
-if marker not in ms:
-    old="            if _med and _cert:\n                try:_certok=datetime.strptime(_cert[:10],'%Y-%m-%d').date()>=_today"
-    new="            "+marker+"\n            if _cert:\n                try:_certok=datetime.strptime(_cert[:10],'%Y-%m-%d').date()>=_today"
-    if old not in ms:
-        raise RuntimeError('R120 mobile certificate condition missing')
-    backup(MOB)
-    ms=ms.replace(old,new,1)
-    changed=True
+ms2,mchanged=patch_med_assignment(ms,'conn','tid')
+ms2=ms2.replace("SELECT * FROM tesserati ORDER BY cognome,nome",
+                "SELECT * FROM tesserati ORDER BY cognome COLLATE NOCASE,nome COLLATE NOCASE")
+if ms2!=ms:
+    backup(MOB); MOB.write_text(ms2,encoding='utf-8'); compile_file(MOB)
+elif 'BODYMIND_R120_CERTIFICATE_TRUTH' not in ms:
+    raise RuntimeError('R120 mobile certificate assignment not found')
 
-# Alphabetical list by surname, then name; case-insensitive. Presentation only.
-sorted_ms=ms.replace(
-    "SELECT * FROM tesserati ORDER BY cognome,nome",
-    "SELECT * FROM tesserati ORDER BY cognome COLLATE NOCASE,nome COLLATE NOCASE"
-)
-if sorted_ms!=ms:
-    if not changed: backup(MOB)
-    ms=sorted_ms
-    changed=True
-
-if changed:
-    MOB.write_text(ms,encoding='utf-8')
-compile_file(MOB)
-compile_file(DESK)
-
-# Audit all canonical expiry values, including the reported Swanmy case.
+# Data/format audit. Do not change certificate dates here.
 conn=sqlite3.connect(str(DB),timeout=30); conn.row_factory=sqlite3.Row
 try:
     rows=conn.execute("SELECT id,nome,cognome,certificato_scadenza FROM tesserati ORDER BY cognome COLLATE NOCASE,nome COLLATE NOCASE").fetchall()
-    valid=[]; malformed=[]; swanmy=[]
+    valid=[]; malformed=[]
     for r in rows:
         raw=str(r['certificato_scadenza'] or '').strip()
-        nm=(str(r['nome'] or '')+' '+str(r['cognome'] or '')).strip()
-        if 'swanmy' in nm.lower():
-            swanmy.append({'id':int(r['id']),'name':nm,'expiry':raw})
         if not raw: continue
         try:
             exp=datetime.strptime(raw[:10],'%Y-%m-%d').date()
             if exp>=date.today():
-                valid.append({'id':int(r['id']),'name':nm,'expiry':raw[:10]})
+                valid.append({'id':int(r['id']),'name':(str(r['cognome'] or '')+' '+str(r['nome'] or '')).strip(),'expiry':raw[:10]})
         except Exception:
             malformed.append({'id':int(r['id']),'value':raw})
     integrity=str(conn.execute('PRAGMA integrity_check').fetchone()[0])
@@ -93,15 +89,16 @@ try:
 finally:
     conn.close()
 
+desk_now=DESK.read_text(encoding='utf-8',errors='replace')
 mob_now=MOB.read_text(encoding='utf-8',errors='replace')
 checks={
- 'mobile_truth':marker in mob_now and "if _cert:" in mob_now,
+ 'desktop_truth':'BODYMIND_R120_CERTIFICATE_TRUTH' in desk_now,
+ 'mobile_truth':'BODYMIND_R120_CERTIFICATE_TRUTH' in mob_now,
  'surname_sort':'ORDER BY cognome COLLATE NOCASE,nome COLLATE NOCASE' in mob_now,
- 'desktop_compiles':True,
  'db_ok':integrity.lower()=='ok' and fk==0,
 }
-print('[r120-audit] swanmy='+repr(swanmy)+' valid_future_certificates='+repr(valid)+' malformed='+repr(malformed),flush=True)
+print('[r120-audit] valid_future_certificates='+repr(valid)+' malformed='+repr(malformed),flush=True)
 print('[r120-checks] '+repr(checks)+' integrity='+integrity+' fk='+str(fk),flush=True)
 bad=[k for k,v in checks.items() if not v]
 if bad: raise RuntimeError('R120 failed '+repr(bad))
-print('[r120-selftest] PASS mobile certificate-expiry truth surname-sort desktop-safe db-ok',flush=True)
+print('[r120-selftest] PASS certificate-profile-truth desktop+mobile surname-sort db-ok',flush=True)
