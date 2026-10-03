@@ -68,7 +68,7 @@ try:
     counts={}
     for tn in ('tesserati','documenti','inbound_documents','minori','bodymind_document_semantics',
                'bodymind_duplicate_records_archive','bodymind_operator_tasks','bodymind_operator_actions',
-               'pagamenti','payments','ricevute','receipts'):
+               'pagamenti','payments','ricevute','receipts','quote_mensili','payment_requests','payment_notifications'):
         if table(conn,tn):
             counts[tn]=int(conn.execute('SELECT COUNT(*) FROM '+tn).fetchone()[0])
     report['counts']=counts
@@ -230,10 +230,22 @@ try:
             stale_actions=[dict(x) for x in rows]
     report['open_operator_tasks']=stale_tasks
     report['open_operator_actions']=stale_actions
+    stale_active_batch=[]
+    if table(conn,'bodymind_operator_tasks'):
+        try:
+            rows=conn.execute("""SELECT id,conversation_id,task_type,status,created_at,updated_at
+              FROM bodymind_operator_tasks
+              WHERE task_type='batch_upload' AND status='active'
+                AND julianday(updated_at) < julianday('now','-6 hours')
+              ORDER BY id""").fetchall()
+            stale_active_batch=[dict(x) for x in rows]
+        except Exception:
+            stale_active_batch=[]
+    report['stale_active_batch_uploads']=stale_active_batch
 
-    # Payments/receipts basic referential checks.
+    # Payments/receipts/competence tables basic referential checks.
     finance={}
-    for tn in ('pagamenti','payments','ricevute','receipts'):
+    for tn in ('pagamenti','payments','ricevute','receipts','quote_mensili','payment_requests','payment_notifications'):
         if not table(conn,tn): continue
         tc=cols(conn,tn)
         entry={'count':int(conn.execute('SELECT COUNT(*) FROM '+tn).fetchone()[0])}
@@ -354,6 +366,7 @@ severity={
     len([x for x in (report.get('open_operator_tasks') or []) if str(x.get('status') or '')=='awaiting_confirmation'])
     if not (report.get('open_operator_actions') or []) else 0
  ),
+ 'stale_active_batch_uploads':len(report.get('stale_active_batch_uploads') or []),
 }
 report['severity_counts']=severity
 
