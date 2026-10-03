@@ -74,6 +74,28 @@ if changed:
 compile_file(MOB)
 compile_file(DESK)
 
+# The athlete-list route can live in a different generated runtime module.
+# Apply surname-first ordering there too; this only changes presentation order.
+list_matches=[]
+for p in (APP/'asd_app').rglob('*.py'):
+    try: src=p.read_text(encoding='utf-8',errors='replace')
+    except Exception: continue
+    if 'def fix24_mobile_atlete' in src:
+        list_matches.append((p,src))
+if len(list_matches)!=1:
+    raise RuntimeError('R120 expected one mobile athlete list source, got '+repr([str(x[0]) for x in list_matches]))
+LISTP,listsrc=list_matches[0]
+new_list=re.sub(
+    r"ORDER BY\\s+cognome(?:\\s+COLLATE\\s+NOCASE)?\\s*,\\s*nome(?:\\s+COLLATE\\s+NOCASE)?",
+    "ORDER BY cognome COLLATE NOCASE, nome COLLATE NOCASE",
+    listsrc,
+    flags=re.I
+)
+if new_list!=listsrc:
+    backup(LISTP)
+    LISTP.write_text(new_list,encoding='utf-8')
+compile_file(LISTP)
+
 # Normalize legacy DD/MM/YYYY certificate expiries to canonical ISO.
 # This is deterministic data cleanup; absurd years are left untouched for review.
 normalized=[]
@@ -131,9 +153,10 @@ finally:
     conn.close()
 
 mob_now=MOB.read_text(encoding='utf-8',errors='replace')
+list_now=LISTP.read_text(encoding='utf-8',errors='replace')
 checks={
  'mobile_truth':marker in mob_now and "if _cert:" in mob_now,
- 'surname_sort':bool(re.search(r"ORDER BY\\s+cognome(?:\\s+COLLATE\\s+NOCASE)?\\s*,\\s*nome",mob_now,re.I)),
+ 'surname_sort':bool(re.search(r"ORDER BY\\s+cognome(?:\\s+COLLATE\\s+NOCASE)?\\s*,\\s*nome",list_now,re.I)),
  'desktop_safe':True,
  'db_ok':integrity.lower()=='ok' and fk==0,
 }
