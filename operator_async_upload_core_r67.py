@@ -56,6 +56,28 @@ def update_job(db,job_id,status,result=None,error=""):
     finally:
         conn.close()
 
+def _reconcile_upload_task(db, conversation_id, result=None, failed=False):
+    """Close the persistent batch task when its async job is actually finished.
+    Keep it awaiting_confirmation only when the upload produced a real pending action."""
+    conn=db()
+    try:
+        # Older databases may not have the task table yet.
+        if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='bodymind_operator_tasks'").fetchone():
+            return
+        now=datetime.now().isoformat(timespec="seconds")
+        action_id=int((result or {}).get("action_id") or 0) if isinstance(result,dict) else 0
+        status="failed" if failed else ("awaiting_confirmation" if action_id else "completed")
+        row=conn.execute("""SELECT id FROM bodymind_operator_tasks
+          WHERE conversation_id=? AND task_type='batch_upload'
+            AND status IN ('active','awaiting_confirmation')
+          ORDER BY id DESC LIMIT 1""",(str(conversation_id or ""),)).fetchone()
+        if row:
+            conn.execute("UPDATE bodymind_operator_tasks SET status=?,updated_at=? WHERE id=?",
+                         (status,now,int(row[0])))
+            conn.commit()
+    finally:
+        conn.close()
+
 def run_job(app,db,upload_func,job_id):
     conn=db()
     try:
@@ -120,8 +142,13 @@ def run_job(app,db,upload_func,job_id):
             if status>=400:
                 raise RuntimeError(str(result.get("text") or ("upload HTTP "+str(status))))
             update_job(db,job_id,"completed",result=result)
+            _reconcile_upload_task(db,meta.get("conversation_id"),result=result,failed=False)
     except Exception as exc:
         update_job(db,job_id,"failed",error=repr(exc))
+        try:
+            _reconcile_upload_task(db,meta.get("conversation_id") if 'meta' in locals() else "",result=None,failed=True)
+        except Exception:
+            pass
         try: app.logger.exception("R67 upload job failed id=%s",job_id)
         except Exception: pass
     finally:
