@@ -119,6 +119,7 @@ COPY release_cleanup_r2.py /opt/bodymind/release_cleanup_r2.py
 COPY runtime_timeline_inspect_r35.py /opt/bodymind/runtime_timeline_inspect_r35.py
 COPY release_navigation_audit_r115.py /opt/bodymind/release_navigation_audit_r115.py
 COPY release_ui_audit_r122.py /opt/bodymind/release_ui_audit_r122.py
+COPY release_secretary_ui_r123.py /opt/bodymind/release_secretary_ui_r123.py
 COPY release_ui_target_audit_r123.py /opt/bodymind/release_ui_target_audit_r123.py
 COPY release_mu_nomatch_audit_r116.py /opt/bodymind/release_mu_nomatch_audit_r116.py
 COPY release_mu_nomatch_create_r117.py /opt/bodymind/release_mu_nomatch_create_r117.py
