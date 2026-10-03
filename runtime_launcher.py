@@ -218,6 +218,7 @@ runpy.run_path("/opt/bodymind/release_operator_runtime_helper_r112.py", run_name
 runpy.run_path("/opt/bodymind/release_convergence_smoke_r111.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_desktop_post_regression_r113.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_simple_athlete_payment_smoke_r111.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_mu_nomatch_audit_r116.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_stabilization_audit_r80.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mobile_delete_r85.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mobile_athlete_delete_r87.py", run_name="__main__")
@@ -247,7 +248,6 @@ if os.environ.get("BODYMIND_LEGACY_STARTUP_SMOKES","0") == "1":
 else:
     print("[r114-startup] legacy operator smoke chain skipped; covered by consolidated hard gates", flush=True)
 runpy.run_path("/opt/bodymind/release_navigation_audit_r115.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_mu_nomatch_audit_r116.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_route_guard_r39.py", run_name="__main__")
 incoming = pathlib.Path("/data/incoming")
 for name in ("top2.zip", "backup.zip"):
