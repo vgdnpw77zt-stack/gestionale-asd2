@@ -85,12 +85,33 @@ for p in (APP/'asd_app').rglob('*.py'):
 if len(list_matches)!=1:
     raise RuntimeError('R120 expected one mobile athlete list source, got '+repr([str(x[0]) for x in list_matches]))
 LISTP,listsrc=list_matches[0]
+sort_marker='BODYMIND_R120_SURNAME_SORT'
+new_list=listsrc
+# First normalize any existing SQL order if present.
 new_list=re.sub(
     r"ORDER BY\\s+cognome(?:\\s+COLLATE\\s+NOCASE)?\\s*,\\s*nome(?:\\s+COLLATE\\s+NOCASE)?",
     "ORDER BY cognome COLLATE NOCASE, nome COLLATE NOCASE",
-    listsrc,
+    new_list,
     flags=re.I
 )
+# The current mobile list builds a Python 'items' collection. Sort it immediately
+# before rendering, so presentation order is deterministic regardless of legacy SQL.
+if sort_marker not in new_list:
+    fn=new_list.find('def fix24_mobile_atlete')
+    fn_end=new_list.find('\\n@app.',fn)
+    if fn_end<0: fn_end=len(new_list)
+    block=new_list[fn:fn_end]
+    render_pos=block.rfind('return render_template_string(')
+    if render_pos<0:
+        raise RuntimeError('R120 mobile list render anchor missing')
+    line_start=block.rfind('\\n',0,render_pos)+1
+    indent=block[line_start:render_pos]
+    sort_code=(
+        indent+"# "+sort_marker+"\\n"+
+        indent+"items=sorted(items,key=lambda _it:(str(_it['row']['cognome'] or '').casefold(),str(_it['row']['nome'] or '').casefold()))\\n"
+    )
+    block=block[:line_start]+sort_code+block[line_start:]
+    new_list=new_list[:fn]+block+new_list[fn_end:]
 if new_list!=listsrc:
     backup(LISTP)
     LISTP.write_text(new_list,encoding='utf-8')
@@ -156,7 +177,7 @@ mob_now=MOB.read_text(encoding='utf-8',errors='replace')
 list_now=LISTP.read_text(encoding='utf-8',errors='replace')
 checks={
  'mobile_truth':marker in mob_now and "if _cert:" in mob_now,
- 'surname_sort':bool(re.search(r"ORDER BY\\s+cognome(?:\\s+COLLATE\\s+NOCASE)?\\s*,\\s*nome",list_now,re.I)),
+ 'surname_sort':sort_marker in list_now,
  'desktop_safe':True,
  'db_ok':integrity.lower()=='ok' and fk==0,
 }
