@@ -100,6 +100,46 @@ def _bodymind_storage_preflight():
 
 _bodymind_storage_preflight()
 
+# BODYMIND_OPERATOR_TASK_LIFECYCLE_CLEANUP
+def _bodymind_operator_task_cleanup():
+    db_path=pathlib.Path("/data/tenants/default/asd.db")
+    if not db_path.exists():
+        return
+    conn=sqlite3.connect(str(db_path),timeout=20)
+    conn.row_factory=sqlite3.Row
+    try:
+        has_tasks=conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='bodymind_operator_tasks'").fetchone()
+        if not has_tasks:
+            return
+        has_jobs=conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='bodymind_operator_upload_jobs'").fetchone()
+        has_actions=conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='bodymind_operator_actions'").fetchone()
+        where=["t.task_type='batch_upload'","t.status='active'","julianday(t.updated_at) < julianday('now','-6 hours')"]
+        if has_jobs:
+            where.append("NOT EXISTS (SELECT 1 FROM bodymind_operator_upload_jobs j WHERE j.conversation_id=t.conversation_id AND j.status IN ('queued','processing'))")
+        if has_actions:
+            where.append("NOT EXISTS (SELECT 1 FROM bodymind_operator_actions a WHERE a.conversation_id=t.conversation_id AND a.status IN ('proposed','pending','awaiting_confirmation'))")
+        sql="SELECT t.id,t.conversation_id,t.updated_at FROM bodymind_operator_tasks t WHERE "+" AND ".join(where)
+        rows=conn.execute(sql).fetchall()
+        if not rows:
+            print("[operator-task-cleanup] stale_active=0",flush=True)
+            return
+        backup_root=pathlib.Path("/data/release_backups/20261003_operator_task_lifecycle")
+        backup_root.mkdir(parents=True,exist_ok=True)
+        stamp=__import__("datetime").datetime.now().strftime("%Y%m%d_%H%M%S")
+        dst=backup_root/(stamp+"_pre_stale_task_close.db")
+        src=sqlite3.connect(str(db_path),timeout=30); out=sqlite3.connect(str(dst))
+        try: src.backup(out)
+        finally: out.close(); src.close()
+        ids=[int(r["id"]) for r in rows]
+        marks=",".join("?" for _ in ids)
+        conn.execute("UPDATE bodymind_operator_tasks SET status='completed_stale',updated_at=datetime('now') WHERE id IN ("+marks+")",ids)
+        conn.commit()
+        print("[operator-task-cleanup] closed="+str(ids)+" backup="+str(dst),flush=True)
+    finally:
+        conn.close()
+
+_bodymind_operator_task_cleanup()
+
 def _bodymind_neutralize_static_count_guards():
     patches={
       "/opt/bodymind/release_medical_profile_convergence_r100.py":[
@@ -186,11 +226,15 @@ runpy.run_path("/opt/bodymind/release_operator_cloud_first_r63.py", run_name="__
 runpy.run_path("/opt/bodymind/release_operator_persistent_upload_r64.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_handwriting_enrollment_r65.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_async_upload_r67.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_verified_mu_profile_sync_r68.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/runtime_annunziato_readonly_r71.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_global_reconcile_r69.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_complete_mu_cache_r70.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_guardian_refresh_r71.py", run_name="__main__")
+if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
+    print("[startup-convergence] historical MU/profile backfills enabled",flush=True)
+    runpy.run_path("/opt/bodymind/release_verified_mu_profile_sync_r68.py", run_name="__main__")
+    runpy.run_path("/opt/bodymind/runtime_annunziato_readonly_r71.py", run_name="__main__")
+    runpy.run_path("/opt/bodymind/release_global_reconcile_r69.py", run_name="__main__")
+    runpy.run_path("/opt/bodymind/release_complete_mu_cache_r70.py", run_name="__main__")
+    runpy.run_path("/opt/bodymind/release_guardian_refresh_r71.py", run_name="__main__")
+else:
+    print("[startup-convergence] R68-R71 historical backfills skipped; runtime cores + R80/R84 gates remain active",flush=True)
 runpy.run_path("/opt/bodymind/release_shared_document_core_r72.py", run_name="__main__")
 # R119 supersedes the dynamic R117 route registration; one canonical no-match MU flow only.
 runpy.run_path("/opt/bodymind/release_document_consistency_r74.py", run_name="__main__")
@@ -240,7 +284,10 @@ runpy.run_path("/opt/bodymind/release_simple_athlete_payment_truth_r110.py", run
 runpy.run_path("/opt/bodymind/release_operator_runtime_helper_r112.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_convergence_smoke_r111.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_desktop_post_regression_r113.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_simple_athlete_payment_smoke_r111.py", run_name="__main__")
+if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
+    runpy.run_path("/opt/bodymind/release_simple_athlete_payment_smoke_r111.py", run_name="__main__")
+else:
+    print("[startup-convergence] mutating R111 UI smoke skipped; R113 real POST + R111 read-only UI gate remain active",flush=True)
 if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
     runpy.run_path("/opt/bodymind/release_mu_nomatch_audit_r116.py", run_name="__main__")
 else:
@@ -261,7 +308,10 @@ runpy.run_path("/opt/bodymind/release_ui_regression_smoke_r84.py", run_name="__m
 # The current hard gates above (R80/R84/R90/R107/R110/R111/R113) cover those invariants.
 runpy.run_path("/opt/bodymind/release_mobile_operator_mu_r73.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_experience_r38.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_operator_dinicola_r55f.py", run_name="__main__")
+if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
+    runpy.run_path("/opt/bodymind/release_operator_dinicola_r55f.py", run_name="__main__")
+else:
+    print("[startup-convergence] historical Di Nicola fixture skipped",flush=True)
 runpy.run_path("/opt/bodymind/release_cleanup_r2.py", run_name="__main__")
 if os.environ.get("BODYMIND_LEGACY_STARTUP_SMOKES","0") == "1":
     print("[r114-startup] legacy operator smoke chain enabled", flush=True)
