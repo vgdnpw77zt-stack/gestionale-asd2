@@ -20,7 +20,7 @@ ALIASES={'modulo_unico_tesseramento','modulo_unico','modulo iscrizione','domanda
 HINTS=('modulo unico','modulo_unico','modulo iscrizione','iscrizione','domanda adesione','domanda di adesione')
 YES={'si','sì','yes','ok','confermo','procedi','crealo','creala','crea'}
 NO={'no','annulla','annullo','lascia stare','non creare'}
-R119_VERSION = "R119.1-async-exact-sha"
+R119_VERSION = "R119.2-job-file-materialize"
 
 def _table(c,n):
     return bool(c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(n,)).fetchone())
@@ -244,19 +244,26 @@ def r119_mu_create_cta(resp):
     except Exception:pass
     return resp
 
-def _latest_job_exact_inbound(c):
-    """Recover the file the user actually just uploaded, even when the async
-    pipeline summarized it as already present/resolved instead of returning a
-    fresh inbound id.  Exact SHA only: no filename-only attachment guessing."""
-    if not _table(c,'bodymind_operator_upload_jobs') or not _table(c,'inbound_documents'):
-        return None,None,None
+def _latest_job_file(c,max_age_minutes=20):
+    """Return the newest real file from the same conversation's upload job.
+    This is the canonical attachment context even when the older upload parser
+    produced zero logical documents."""
+    if not _table(c,'bodymind_operator_upload_jobs'):
+        return None,None,b'',None
     try:
         job=c.execute("""SELECT * FROM bodymind_operator_upload_jobs
-          WHERE conversation_id=? AND status IN ('processing','completed')
+          WHERE conversation_id=? AND status IN ('queued','processing','completed')
           ORDER BY created_at DESC,id DESC LIMIT 1""",(op._conv_id(),)).fetchone()
     except Exception:
-        return None,None,None
-    if not job:return None,None,None
+        return None,None,b'',None
+    if not job:return None,None,b'',None
+    try:
+        raw=str(job['created_at'] or '')
+        created=datetime.fromisoformat(raw)
+        if (datetime.now()-created).total_seconds()>int(max_age_minutes)*60:
+            return None,None,b'',None
+    except Exception:
+        pass
     try:specs=json.loads(str(job['files_json'] or '[]'))
     except Exception:specs=[]
     for spec in reversed(specs if isinstance(specs,list) else []):
@@ -266,28 +273,94 @@ def _latest_job_exact_inbound(c):
             data=p.read_bytes()
         except Exception:
             continue
-        if not data or len(data)>40*1024*1024:continue
-        wanted=hashlib.sha256(data).hexdigest()
-        try:
-            rows=c.execute("SELECT * FROM inbound_documents ORDER BY id DESC LIMIT 300").fetchall()
-        except Exception:
-            rows=[]
-        for row in rows:
-            other=_file_bytes(row)
-            if not other or hashlib.sha256(other).hexdigest()!=wanted:continue
-            a,_=_analysis(c,row,allow_live=False)
-            if not isinstance(a,dict):
-                try:
-                    from .operator_doc_semantic_ai_r52 import analyze_bytes
-                    from .operator_doc_semantic_core_r52 import cache_put
-                    name=str((spec or {}).get('name') or row['original_filename'] or 'documento')
-                    a=analyze_bytes(c,name,data,'','',None)
-                    if isinstance(a,dict):
-                        cache_put(c,'inbound_documents',int(row['id']),a)
-                except Exception:
-                    a=None
-            return row,(a if isinstance(a,dict) else None),spec
-    return None,None,None
+        if data and len(data)<=40*1024*1024:
+            return job,spec,data,p
+    return job,None,b'',None
+
+def _latest_job_exact_inbound(c):
+    """Recover the exact file from the current conversation by SHA-256."""
+    if not _table(c,'inbound_documents'):
+        return None,None,None
+    job,spec,data,p=_latest_job_file(c)
+    if not job or not spec or not data:return None,None,None
+    wanted=hashlib.sha256(data).hexdigest()
+    try:
+        rows=c.execute("SELECT * FROM inbound_documents ORDER BY id DESC LIMIT 500").fetchall()
+    except Exception:
+        rows=[]
+    for row in rows:
+        other=_file_bytes(row)
+        if not other or hashlib.sha256(other).hexdigest()!=wanted:continue
+        a,_=_analysis(c,row,allow_live=False)
+        if not isinstance(a,dict):
+            try:
+                from .operator_doc_semantic_ai_r52 import analyze_bytes
+                from .operator_doc_semantic_core_r52 import cache_put
+                name=str((spec or {}).get('name') or row['original_filename'] or 'documento')
+                a=analyze_bytes(c,name,data,'','modulo_unico_tesseramento',None)
+                if isinstance(a,dict):
+                    cache_put(c,'inbound_documents',int(row['id']),a)
+                    c.commit()
+            except Exception:
+                a=None
+        return row,(a if isinstance(a,dict) else None),spec
+    return None,None,spec
+
+def _materialize_latest_job_mu(c):
+    """If the async parser returned zero logical documents, the file must not
+    disappear. Read the same-conversation staging file, classify it semantically,
+    and create one inbound row only when it is genuinely a Modulo Unico."""
+    if not _table(c,'inbound_documents'):
+        return None,None,None,'inbound_table_missing'
+    row,a,spec=_latest_job_exact_inbound(c)
+    if row:
+        return row,a,spec,'existing_exact_sha'
+    job,spec,data,p=_latest_job_file(c)
+    if not job or not spec or not data:
+        return None,None,spec,'recent_job_file_missing'
+    try:
+        from .operator_doc_semantic_ai_r52 import analyze_bytes
+        from .operator_doc_semantic_core_r52 import cache_put
+        name=str((spec or {}).get('name') or (p.name if p else '') or 'documento')
+        a=analyze_bytes(c,name,data,'','modulo_unico_tesseramento',None)
+    except Exception as exc:
+        return None,None,spec,'semantic_error:'+repr(exc)[:120]
+    if not isinstance(a,dict):
+        return None,None,spec,'semantic_missing'
+    if str(a.get('document_type') or '').strip().lower()!='modulo_unico_tesseramento':
+        return None,a,spec,'not_mu'
+    now=datetime.now().isoformat(timespec='seconds')
+    cols=_cols(c,'inbound_documents')
+    values={}
+    candidates={
+      'tesserato_id':None,
+      'suggested_tesserato_id':None,
+      'matched_tesserato_id':None,
+      'original_filename':str((spec or {}).get('name') or (p.name if p else '') or 'modulo'),
+      'saved_path':str(p or ''),
+      'stored_path':str(p or ''),
+      'filename':str(p or ''),
+      'document_type':'modulo_unico_tesseramento',
+      'document_label':'Modulo iscrizione / Modulo Unico',
+      'document_confidence':int(round(float(a.get('confidence') or 0)*100)),
+      'match_score':0,
+      'match_action':'review',
+      'status':'needs_manual_match',
+      'source_note':'operator_r119_job_file_materialized',
+      'created_at':now,
+      'updated_at':now,
+    }
+    for k,v in candidates.items():
+        if k in cols: values[k]=v
+    if not values:
+        return None,a,spec,'no_insertable_columns'
+    keys=list(values)
+    cur=c.execute("INSERT INTO inbound_documents("+','.join(keys)+") VALUES("+','.join('?' for _ in keys)+")",[values[k] for k in keys])
+    iid=int(cur.lastrowid)
+    cache_put(c,'inbound_documents',iid,a)
+    c.commit()
+    row=c.execute("SELECT * FROM inbound_documents WHERE id=?",(iid,)).fetchone()
+    return row,a,spec,'materialized_from_job_file'
 
 def _offer_for_row(c,row,a,source):
     if not row or not isinstance(a,dict):return None
@@ -339,15 +412,25 @@ def _upload_offer(payload):
         if row and isinstance(a,dict):
             out=_offer_for_row(c,row,a,'operator_r119_async_exact_sha')
             if isinstance(out,dict):return out
+        # Zero logical docs is not a final state. Recover the actual job file,
+        # classify it, materialize a single inbound row, then run the same gate.
+        row,a,spec,materialized=_materialize_latest_job_mu(c)
+        if row and isinstance(a,dict):
+            out=_offer_for_row(c,row,a,'operator_r119_async_job_file')
+            if isinstance(out,dict):
+                out['attachment_recovery']=materialized
+                return out
     finally:c.close()
     return None
 
 def _explicit_attachment_create_message(message):
     try:n=op._norm(message)
     except Exception:n=' '.join(str(message or '').lower().split())
+    # "Crea tesserato" immediately after an upload is already unambiguous:
+    # the current conversation's latest upload is the source. Do not force the
+    # secretary to repeat "dal file appena caricato".
     explicit=bool(__import__('re').search(r"\b(crea|creare|nuov[oa])\b",n)) and ('tesserat' in n or 'atlet' in n)
-    attached=any(x in n for x in ('allegat','appena caricat','modulo appena','file appena','usa il modulo','aggiungi il modulo'))
-    return bool(explicit and attached)
+    return bool(explicit)
 
 def _recover_chat_attachment_create():
     try:
@@ -359,6 +442,12 @@ def _recover_chat_attachment_create():
     c=db()
     try:
         row,a,spec=_latest_job_exact_inbound(c)
+        recovery='existing_exact_sha'
+        if not row or not isinstance(a,dict):
+            # The previous parser may have returned all-zero counts without ever
+            # creating inbound_documents. Recover the real uploaded file itself.
+            backup_pre_materialize=_backup_db('operator_job_materialize')
+            row,a,spec,recovery=_materialize_latest_job_mu(c)
         if not row or not isinstance(a,dict):return None
         requested=''
         try:
@@ -381,7 +470,7 @@ def _recover_chat_attachment_create():
         tid=int(res['tesserato_id']);nm=_name(a) or ('#'+str(tid))
         return {'text':('Creato' if res.get('created') else 'Tesserato già esistente riconosciuto')+': '+nm+
                 '. Ho usato il file appena caricato, associato il Modulo Unico e sincronizzato scheda, minore/genitore, consensi, tutela e onboarding.',
-                'mode':'action','attachment_context':True,'created':bool(res.get('created')),'tesserato_id':tid,'backup':backup,
+                'mode':'action','attachment_context':True,'attachment_recovery':recovery,'created':bool(res.get('created')),'tesserato_id':tid,'backup':backup,
                 'links':[{'label':'Apri scheda','href':'/tesserati/'+str(tid)+'/scheda'}]}
     finally:c.close()
 
