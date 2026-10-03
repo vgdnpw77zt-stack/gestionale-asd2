@@ -687,6 +687,7 @@ else:
 # entry points from normal navigation.
 runpy.run_path("/opt/bodymind/release_navigation_audit_r115.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_ui_audit_r122.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_ui_target_audit_r123.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_route_guard_r39.py", run_name="__main__")
 incoming = pathlib.Path("/data/incoming")
 for name in ("top2.zip", "backup.zip"):
