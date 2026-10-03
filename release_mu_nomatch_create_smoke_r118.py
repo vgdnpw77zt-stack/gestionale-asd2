@@ -1,24 +1,33 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
-import json, os, sqlite3, tempfile
+import json, os, sqlite3, subprocess, sys, tempfile
 from pathlib import Path
 
 DB=Path('/data/tenants/default/asd.db')
-from asd_app.core import app
 from asd_app.enrollment_ingest_core_r65 import create_athlete_from_analysis
 from asd_app.verified_mu_sync_core_r68 import sync_analysis_to_existing_athlete
-import asd_app.routes_mu_nomatch_r119 as r119
 
 checks={}
+fresh_code=r'''
+import json,sys
+sys.path.insert(0,"/data/top2_app")
+import app as _full_app
+from asd_app.core import app
 rules=[(str(r.rule),str(r.endpoint),set(r.methods)) for r in app.url_map.iter_rules()]
-checks['queue_create_route']=any(rule=='/documenti-automatici/<int:inbound_id>/crea-tesserato' and 'POST' in methods for rule,ep,methods in rules)
-checks['operator_upload_wrapped']=False
-checks['operator_chat_wrapped']=False
+out={"queue_create_route":False,"operator_upload_wrapped":False,"operator_chat_wrapped":False}
+out["queue_create_route"]=any(rule=="/documenti-automatici/<int:inbound_id>/crea-tesserato" and "POST" in methods for rule,ep,methods in rules)
 for rule,ep,methods in rules:
-    if rule=='/operatore-bodymind/upload' and 'POST' in methods:
-        checks['operator_upload_wrapped']=bool(getattr(app.view_functions.get(ep),'_bodymind_r119_wrapped',False))
-    if rule=='/operatore-bodymind/chat' and 'POST' in methods:
-        checks['operator_chat_wrapped']=bool(getattr(app.view_functions.get(ep),'_bodymind_r119_wrapped',False))
+    if rule=="/operatore-bodymind/upload" and "POST" in methods:
+        out["operator_upload_wrapped"]=bool(getattr(app.view_functions.get(ep),"_bodymind_r119_wrapped",False))
+    if rule=="/operatore-bodymind/chat" and "POST" in methods:
+        out["operator_chat_wrapped"]=bool(getattr(app.view_functions.get(ep),"_bodymind_r119_wrapped",False))
+print(json.dumps(out))
+'''
+fp=subprocess.run([sys.executable,"-c",fresh_code],cwd="/data/top2_app",capture_output=True,text=True,timeout=45)
+if fp.returncode!=0:
+    raise RuntimeError("R118 fresh app route check failed: "+(fp.stderr or fp.stdout)[-1600:])
+fresh=json.loads((fp.stdout or "").strip().splitlines()[-1])
+checks.update(fresh)
 
 fd,tmp=tempfile.mkstemp(prefix='bodymind_r118_',suffix='.db'); os.close(fd)
 src=sqlite3.connect(str(DB),timeout=30); dst=sqlite3.connect(tmp)
