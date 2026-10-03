@@ -20,6 +20,7 @@ ALIASES={'modulo_unico_tesseramento','modulo_unico','modulo iscrizione','domanda
 HINTS=('modulo unico','modulo_unico','modulo iscrizione','iscrizione','domanda adesione','domanda di adesione')
 YES={'si','sì','yes','ok','confermo','procedi','crealo','creala','crea'}
 NO={'no','annulla','annullo','lascia stare','non creare'}
+R119_VERSION = "R119.1-async-exact-sha"
 
 def _table(c,n):
     return bool(c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(n,)).fetchone())
