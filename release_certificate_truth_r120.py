@@ -43,8 +43,18 @@ def patch_med_assignment(src, conn_name, id_expr):
     )
     return src[:pos]+replacement+src[end:], True
 
-# Desktop canonical sheet.
+# Desktop canonical sheet. Recover a valid pre-R120 source first if a previous
+# failed deployment left the persistent volume with a syntax-damaged file.
 DESK=APP/'asd_app/routes_tesserati.py'
+try:
+    compile_file(DESK)
+except Exception:
+    candidate=BACK/'routes_tesserati.py'
+    if not candidate.exists():
+        raise
+    shutil.copy2(candidate,DESK)
+    compile_file(DESK)
+    print('[r120-recovery] restored valid routes_tesserati.py from pre-R120 backup',flush=True)
 ds=DESK.read_text(encoding='utf-8',errors='replace')
 ds2,changed=patch_med_assignment(ds,'c','tesserato_id')
 if changed:
