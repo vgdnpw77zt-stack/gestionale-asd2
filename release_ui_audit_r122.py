@@ -29,3 +29,21 @@ try:
 finally: conn.close()
 print('[r122-audit-routes] '+json.dumps(routes,ensure_ascii=False,default=str),flush=True)
 print('[r122-audit-tables] '+json.dumps(tables,ensure_ascii=False,default=str),flush=True)
+
+# Rendered-page audit for exact UI surgery (read-only).
+app.config['TESTING']=True
+client=app.test_client()
+with client.session_transaction() as sess:
+    sess.update({'logged':True,'username':'admin','display_name':'R122 Audit','role':'admin','tenant_slug':'default'})
+for path,needles in [
+    ('/pagamenti',['Tesseramento / iscrizione','Seleziona periodo e tesserato','OPERATIVITÀ IMMEDIATA','Tesserati senza quota iscrizione/tesseramento']),
+    ('/presenze',['Giornata operativa','Presenze','corso']),
+    ('/presenze-rapide',['Registro veloce','Filtro rapido','Registro del giorno'])
+]:
+    rr=client.get(path,follow_redirects=False)
+    body=rr.get_data(as_text=True)
+    out={'path':path,'status':rr.status_code,'snippets':{}}
+    for n in needles:
+        i=body.lower().find(n.lower())
+        if i>=0: out['snippets'][n]=body[max(0,i-1200):i+2600]
+    print('[r122-render] '+json.dumps(out,ensure_ascii=False),flush=True)
