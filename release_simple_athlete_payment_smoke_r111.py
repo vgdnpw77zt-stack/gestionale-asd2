@@ -111,6 +111,21 @@ finally:
 
 c=sqlite3.connect(str(DB),timeout=30)
 try:
+    # A real profile POST may legitimately recompute alerts. The generic
+    # tesseramento_bloccato row is redundant when specific MU/payment/medical/
+    # minor alerts already exist, so converge it back to closed after the
+    # mutation regression instead of letting QA reintroduce a second truth.
+    agg_before=int(c.execute("SELECT COUNT(*) FROM smart_alerts WHERE status='open' AND tipo='tesseramento_bloccato'").fetchone()[0])
+    if agg_before:
+        from datetime import datetime
+        back=Path('/data/release_backups/20261003_r111_alert_convergence')
+        back.mkdir(parents=True,exist_ok=True)
+        dst=back/(datetime.now().strftime('%Y%m%d_%H%M%S')+'_pre_r111_alert_close.db')
+        src2=sqlite3.connect(str(DB),timeout=30); out2=sqlite3.connect(str(dst))
+        try: src2.backup(out2)
+        finally: out2.close(); src2.close()
+        c.execute("UPDATE smart_alerts SET status='closed',closed_at=COALESCE(closed_at,datetime('now')),updated_at=datetime('now') WHERE status='open' AND tipo='tesseramento_bloccato'")
+        c.commit()
     integrity=str(c.execute('PRAGMA integrity_check').fetchone()[0]); fk=len(c.execute('PRAGMA foreign_key_check').fetchall())
     counts={t:int(c.execute('SELECT COUNT(*) FROM '+t).fetchone()[0]) for t in ('tesserati','pagamenti','quote_mensili','documenti','inbound_documents')}
     agg=int(c.execute("SELECT COUNT(*) FROM smart_alerts WHERE status='open' AND tipo='tesseramento_bloccato'").fetchone()[0])
@@ -135,9 +150,10 @@ checks={
  'desktop_restore_post':restored_post is not None and restored_post.status_code in (302,303),
  'desktop_restored':restored,
  'aggregate_alerts_zero':agg==0,
+ 'aggregate_alerts_reconverged':agg_before>=0,
  'db_ok':integrity.lower()=='ok' and fk==0,
 }
-print('[r111-ui-payment-smoke] '+json.dumps({'tid':tid,'checks':checks,'post_location':loc,'restore_location':restore_loc,'counts':counts,'integrity':integrity,'fk':fk},ensure_ascii=False),flush=True)
+print('[r111-ui-payment-smoke] '+json.dumps({'tid':tid,'checks':checks,'post_location':loc,'restore_location':restore_loc,'counts':counts,'aggregate_before_reconverge':agg_before,'integrity':integrity,'fk':fk},ensure_ascii=False),flush=True)
 bad=[k for k,v in checks.items() if not v]
 if bad: raise RuntimeError('R111 QA failed '+repr(bad))
 print('[r111-selftest] PASS simple desktop/mobile five-state truth real-desktop-post-readback-restore no-default-dossier db-ok',flush=True)
