@@ -406,6 +406,69 @@ def _bodymind_r125_payment_premium_status(resp):
     py_compile.compile(str(CORE),doraise=True)
     print('[r125-payment-board] PASS premium red/green monthly board installed',flush=True)
 
+# BODYMIND_R126_HISTORY_NAMES
+# Historical payment cards must always show the linked athlete identity prominently.
+core_hist=CORE.read_text(encoding='utf-8',errors='replace')
+if 'BODYMIND_R126_HISTORY_NAMES' not in core_hist:
+    dst=BACK/'core_pre_r126_history_names.py'
+    if not dst.exists(): shutil.copy2(CORE,dst)
+    core_hist += r'''
+
+# BODYMIND_R126_HISTORY_NAMES
+@app.after_request
+def _bodymind_r126_payment_history_names(resp):
+    try:
+        if request.method!='GET' or request.path!='/pagamenti' or int(getattr(resp,'status_code',200) or 200)!=200:
+            return resp
+        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
+            return resp
+        html=resp.get_data(as_text=True)
+        if 'NOME / STATO' not in html.upper() or 'r126-history-name' in html:
+            return resp
+
+        c=db(); c.row_factory=sqlite3.Row
+        try:
+            rows=[dict(x) for x in c.execute("""SELECT p.id,p.tesserato_id,p.data,p.importo,p.causale,p.mese,p.anno,
+                     t.nome,t.cognome
+                FROM pagamenti p
+                LEFT JOIN tesserati t ON t.id=p.tesserato_id
+                ORDER BY CASE WHEN p.data IS NULL OR TRIM(p.data)='' THEN 1 ELSE 0 END,
+                         p.data DESC,p.id DESC""").fetchall()]
+        finally:
+            c.close()
+
+        # The legacy payment history renders one NOME / STATO heading per payment card.
+        # Inject identity directly after that heading, in the same order as the
+        # canonical history query. If an athlete was intentionally deleted, keep a
+        # transparent fallback instead of inventing a name.
+        import re as _r126_re
+        idx={'n':0}
+        def _inject(match):
+            n=idx['n']; idx['n']+=1
+            if n>=len(rows):
+                return match.group(0)
+            r=rows[n]
+            name=((str(r.get('cognome') or '')+' '+str(r.get('nome') or '')).strip()
+                  or ('Tesserata #'+str(int(r.get('tesserato_id') or 0))))
+            return match.group(0)+"<div class='r126-history-name'>"+e(name)+"</div>"
+
+        pattern=_r126_re.compile(r'(?is)(<[^>]+>\s*NOME\s*/\s*STATO\s*</[^>]+>)')
+        html,count=pattern.subn(_inject,html)
+        if count:
+            css="""<style>
+            .r126-history-name{margin:8px 0 10px;font-size:20px;line-height:1.15;font-weight:950;letter-spacing:.01em;color:#f8fafc}
+            @media(max-width:600px){.r126-history-name{font-size:18px;margin-top:7px}}
+            </style>"""
+            html=html.replace('</body>',css+'</body>',1) if '</body>' in html else html+css
+            resp.set_data(html)
+    except Exception as exc:
+        print('[r126-history-name-warning] '+repr(exc),flush=True)
+    return resp
+'''
+    CORE.write_text(core_hist,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+    print('[r126-history-name] PASS payment history identity overlay installed',flush=True)
+
 # Fresh import/UI gate.
 qa=r'''
 import sqlite3,sys
@@ -437,8 +500,11 @@ ath_count=conn2=None
 # direct list should include a known athlete regardless of legacy course assignment
 direct_ok=("BODYMIND_R123_PRESENZE_SIMPLE" in bh and "r123-athlete" in bh)
 premium_pay_ok=("BODYMIND_R125_PAYMENT_BOARD" in ph and "DA PAGARE" in ph and "PAGATO" in ph)
-ok=(p.status_code==200 and "BODYMIND_R123_PAYMENT_MOBILE" in ph and premium_pay_ok and _identity_ok and a.status_code in (301,302,307,308) and "/presenze-semplici" in str(a.headers.get("Location","")) and b.status_code==200 and direct_ok and "Giornata operativa" not in bh and all(x in bh for x in ("Base","Kids","Adult","Pro / Agoniste")) and integrity.lower()=="ok" and fk==0)
-print("[r123-selftest] status_payment=%s premium_pay_ok=%s identity_ok=%s presence_redirect=%s simple=%s db=%s fk=%s ok=%s"%(p.status_code,premium_pay_ok,_identity_ok,a.status_code,b.status_code,integrity,fk,ok),flush=True)
+history_labels=ph.upper().count("NOME / STATO")
+history_names=ph.count("r126-history-name")
+history_name_ok=(history_labels==0 or history_names>=history_labels)
+ok=(p.status_code==200 and "BODYMIND_R123_PAYMENT_MOBILE" in ph and premium_pay_ok and history_name_ok and _identity_ok and a.status_code in (301,302,307,308) and "/presenze-semplici" in str(a.headers.get("Location","")) and b.status_code==200 and direct_ok and "Giornata operativa" not in bh and all(x in bh for x in ("Base","Kids","Adult","Pro / Agoniste")) and integrity.lower()=="ok" and fk==0)
+print("[r123-selftest] status_payment=%s premium_pay_ok=%s history_name_ok=%s identity_ok=%s presence_redirect=%s simple=%s db=%s fk=%s ok=%s"%(p.status_code,premium_pay_ok,history_name_ok,_identity_ok,a.status_code,b.status_code,integrity,fk,ok),flush=True)
 if not ok: raise RuntimeError("R123 QA failed")
 '''
 proc=subprocess.run([sys.executable,'-c',qa],capture_output=True,text=True,timeout=120)
