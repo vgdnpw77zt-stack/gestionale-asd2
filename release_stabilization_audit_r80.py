@@ -369,6 +369,7 @@ severity={
     if not (report.get('open_operator_actions') or []) else 0
  ),
  'stale_active_batch_uploads':len(report.get('stale_active_batch_uploads') or []),
+ 'orphan_payment_requests':len(((report.get('finance') or {}).get('payment_requests') or {}).get('orphan_tesserato_ids') or []),
 }
 report['severity_counts']=severity
 
