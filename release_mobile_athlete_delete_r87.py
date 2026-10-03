@@ -53,11 +53,19 @@ else:
         s=s.replace('{{csrf_input()|safe}}','')
         changed=True
     # BODYMIND_R87_SURNAME_FIRST_LABEL
-    # Keep the already surname-sorted list visually consistent: show COGNOME NOME.
+    # Keep the list visually consistent: show COGNOME NOME.
     old_name="<div class='name'>{{r['nome']}} {{r['cognome']}}</div>"
     new_name="<div class='name'>{{r['cognome']}} {{r['nome']}}</div>"
     if old_name in s:
         s=s.replace(old_name,new_name)
+        changed=True
+    # BODYMIND_R87_SURNAME_SORT_NORMALIZED
+    # SQLite BINARY collation can split TESTA / Testa / values with stray spaces.
+    # Normalize only for presentation order; stored surnames are not modified.
+    old_order="SELECT * FROM tesserati ORDER BY cognome,nome"
+    new_order="SELECT * FROM tesserati ORDER BY TRIM(cognome) COLLATE NOCASE, TRIM(nome) COLLATE NOCASE"
+    if old_order in s:
+        s=s.replace(old_order,new_order)
         changed=True
     if changed:
         p.write_text(s,encoding='utf-8')
