@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
-import importlib, importlib.util, py_compile, shutil, sqlite3, sys
+import json, py_compile, shutil, sqlite3, subprocess, sys
 from pathlib import Path
 
 APP=Path('/data/top2_app')
@@ -84,41 +84,45 @@ if marker not in ap:
     APP_PY.write_text(ap,encoding='utf-8')
     py_compile.compile(str(APP_PY),doraise=True)
 
-# Register it also in the pre-Gunicorn QA process.
-# asd_app is already imported at this point, so load the freshly-created module
-# directly from its file path rather than relying on package cache discovery.
-sys.path.insert(0,str(APP))
-importlib.invalidate_caches()
-_mod_name='asd_app.routes_mu_nomatch_r119'
-if _mod_name in sys.modules:
-    mod=sys.modules[_mod_name]
-else:
-    spec=importlib.util.spec_from_file_location(_mod_name,str(DST))
-    if spec is None or spec.loader is None:
-        raise RuntimeError('R119 cannot create module spec for '+str(DST))
-    mod=importlib.util.module_from_spec(spec)
-    sys.modules[_mod_name]=mod
-    spec.loader.exec_module(mod)
-
+# Validate the actual post-restart application in a fresh Python process.
+# The current migration process has already handled Flask test requests, so adding
+# routes to it would correctly trigger Flask's setup-finished protection.
+check_code = r'''
+import json, sys
+sys.path.insert(0,"/data/top2_app")
+import app as _full_app
 from asd_app.core import app
 rules=[(str(r.rule),str(r.endpoint),set(r.methods)) for r in app.url_map.iter_rules()]
-create_route=any(rule=='/documenti-automatici/<int:inbound_id>/crea-tesserato' and 'POST' in methods for rule,ep,methods in rules)
-upload_wrapped=False;chat_wrapped=False
+create_route=any(rule=="/documenti-automatici/<int:inbound_id>/crea-tesserato" and "POST" in methods for rule,ep,methods in rules)
+upload_wrapped=False; chat_wrapped=False
 for rule,ep,methods in rules:
-    if rule=='/operatore-bodymind/upload' and 'POST' in methods:
-        upload_wrapped=bool(getattr(app.view_functions.get(ep),'_bodymind_r119_wrapped',False))
-    if rule=='/operatore-bodymind/chat' and 'POST' in methods:
-        chat_wrapped=bool(getattr(app.view_functions.get(ep),'_bodymind_r119_wrapped',False))
+    if rule=="/operatore-bodymind/upload" and "POST" in methods:
+        upload_wrapped=bool(getattr(app.view_functions.get(ep),"_bodymind_r119_wrapped",False))
+    if rule=="/operatore-bodymind/chat" and "POST" in methods:
+        chat_wrapped=bool(getattr(app.view_functions.get(ep),"_bodymind_r119_wrapped",False))
+print(json.dumps({"create_route":create_route,"upload_wrapped":upload_wrapped,"chat_wrapped":chat_wrapped}))
+'''
+p=subprocess.run([sys.executable,"-c",check_code],cwd=str(APP),capture_output=True,text=True,timeout=45)
+if p.returncode!=0:
+    raise RuntimeError("R119 fresh-app import failed: "+(p.stderr or p.stdout)[-1800:])
+try:
+    fresh=json.loads((p.stdout or "").strip().splitlines()[-1])
+except Exception as exc:
+    raise RuntimeError("R119 fresh-app check parse failed: "+repr(exc)+" stdout="+(p.stdout or "")[-1200:])
 
 conn=sqlite3.connect(str(DB),timeout=30)
 try:
     integrity=str(conn.execute('PRAGMA integrity_check').fetchone()[0])
     fk=len(conn.execute('PRAGMA foreign_key_check').fetchall())
 finally: conn.close()
-checks={'create_route':create_route,'upload_wrapped':upload_wrapped,'chat_wrapped':chat_wrapped,
-        'app_import':marker in APP_PY.read_text(encoding='utf-8',errors='replace'),
-        'db_ok':integrity.lower()=='ok' and fk==0}
-print('[r119-persistent-registration] '+repr(checks)+' integrity='+integrity+' fk='+str(fk),flush=True)
+checks={
+  'create_route':bool(fresh.get('create_route')),
+  'upload_wrapped':bool(fresh.get('upload_wrapped')),
+  'chat_wrapped':bool(fresh.get('chat_wrapped')),
+  'app_import':marker in APP_PY.read_text(encoding='utf-8',errors='replace'),
+  'db_ok':integrity.lower()=='ok' and fk==0,
+}
+print('[r119-persistent-registration] '+json.dumps(checks,ensure_ascii=False)+' integrity='+integrity+' fk='+str(fk),flush=True)
 if not all(checks.values()):
     raise RuntimeError('R119 persistent registration failed '+repr(checks))
-print('[r119-selftest] PASS persistent-Gunicorn-import queue-create operator-pending-yes-no db-ok',flush=True)
+print('[r119-selftest] PASS fresh-Gunicorn-import queue-create operator-pending-yes-no db-ok',flush=True)
