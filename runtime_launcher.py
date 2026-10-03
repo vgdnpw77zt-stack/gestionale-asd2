@@ -1,5 +1,5 @@
 # R39 build and route guards - autodeploy trigger 2
-import os, sys, pathlib, runpy, sqlite3, shutil, json, time, hashlib
+import os, sys, pathlib, runpy, sqlite3, shutil, json, time, hashlib, py_compile
 
 # BODYMIND_R102_STORAGE_PREFLIGHT
 def _bodymind_storage_preflight():
@@ -99,6 +99,27 @@ def _bodymind_storage_preflight():
             raise SystemExit(f"Storage preflight DB check failed: integrity={integrity} fk={fk}")
 
 _bodymind_storage_preflight()
+
+# BODYMIND_EARLY_SOURCE_RECOVERY_R120
+def _bodymind_early_source_recovery():
+    target=pathlib.Path("/data/top2_app/asd_app/routes_tesserati.py")
+    if not target.exists():
+        return
+    try:
+        py_compile.compile(str(target),doraise=True)
+        return
+    except Exception as exc:
+        backup=pathlib.Path("/data/release_backups/20261003_r120_certificate_truth/routes_tesserati.py")
+        if not backup.exists():
+            raise SystemExit("Persistent routes_tesserati.py is invalid and recovery backup is missing: "+repr(exc))
+        shutil.copy2(backup,target)
+        try:
+            py_compile.compile(str(target),doraise=True)
+        except Exception as exc2:
+            raise SystemExit("R120 source recovery failed: "+repr(exc2))
+        print("[r120-early-recovery] restored routes_tesserati.py before app imports",flush=True)
+
+_bodymind_early_source_recovery()
 
 # BODYMIND_OPERATOR_TASK_LIFECYCLE_CLEANUP
 def _bodymind_operator_task_cleanup():
