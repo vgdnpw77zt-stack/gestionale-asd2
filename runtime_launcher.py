@@ -98,6 +98,39 @@ def _bodymind_storage_preflight():
         if integrity.lower()!="ok" or fk:
             raise SystemExit(f"Storage preflight DB check failed: integrity={integrity} fk={fk}")
 
+# BODYMIND_EARLY_DB_FK_RECOVERY_R121_PREPREFLIGHT
+def _bodymind_early_db_fk_recovery_preflight():
+    db_path=pathlib.Path("/data/tenants/default/asd.db")
+    if not db_path.exists():
+        return
+    conn=sqlite3.connect(str(db_path),timeout=20)
+    try:
+        integrity=str(conn.execute("PRAGMA integrity_check").fetchone()[0])
+        fk=conn.execute("PRAGMA foreign_key_check").fetchall()
+    finally: conn.close()
+    if integrity.lower()=="ok" and not fk:
+        return
+    candidates=sorted(pathlib.Path("/data/release_backups/20261002_r81_stabilization").glob("*_pre_r81.db"),reverse=True)
+    for src in candidates:
+        chk=sqlite3.connect(str(src),timeout=20)
+        try:
+            ok=str(chk.execute("PRAGMA integrity_check").fetchone()[0]).lower()=="ok"
+            fk2=chk.execute("PRAGMA foreign_key_check").fetchall()
+        finally: chk.close()
+        if ok and not fk2:
+            q=pathlib.Path("/data/release_backups/20261003_r121_fk_recovery")
+            q.mkdir(parents=True,exist_ok=True)
+            stamp=__import__("datetime").datetime.now().strftime("%Y%m%d_%H%M%S")
+            shutil.copy2(db_path,q/(stamp+"_broken_fk.db"))
+            tmp=db_path.with_suffix(".r121_restore_tmp")
+            shutil.copy2(src,tmp)
+            os.replace(tmp,db_path)
+            print("[r121-preflight-recovery] restored="+str(src),flush=True)
+            return
+    raise SystemExit("R121 preflight recovery failed: no verified pre-R81 backup")
+
+_bodymind_early_db_fk_recovery_preflight()
+
 _bodymind_storage_preflight()
 
 # BODYMIND_EARLY_SOURCE_RECOVERY_R120
