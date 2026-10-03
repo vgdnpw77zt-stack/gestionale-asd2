@@ -20,42 +20,27 @@ def compile_file(p):
 
 DESK=APP/'asd_app/routes_tesserati.py'
 ds=DESK.read_text(encoding='utf-8',errors='replace')
-old_d="""   _med=bool(c.execute(\"\"\"SELECT 1 FROM documenti WHERE tesserato_id=? AND COALESCE(visibile,1)=1
-       AND LOWER(COALESCE(doc_type,''))='certificato_medico'
-       AND LOWER(COALESCE(titolo,'')) NOT LIKE '%richiesta%' LIMIT 1\"\"\",(tesserato_id,)).fetchone())
-   _cert_raw=str(r.get('certificato_scadenza') or '')
-   _cert_ok=False; _cert_warn=False
-   if _med:
-       try:
-           _exp=datetime.strptime(_cert_raw[:10],'%Y-%m-%d').date() if _cert_raw else None
-           _cert_ok=bool(_exp and _exp>=_today)
-           _cert_warn=not bool(_exp)
-       except Exception:
-           _cert_warn=True
-"""
-new_d="""   # BODYMIND_R120_CERTIFICATE_TRUTH
-   _med=bool(c.execute(\"\"\"SELECT 1 FROM documenti WHERE tesserato_id=? AND COALESCE(visibile,1)=1
-       AND LOWER(COALESCE(titolo,'')) NOT LIKE '%richiesta%'
-       AND LOWER(COALESCE(categoria,'')) NOT LIKE '%richiesta%'
-       AND (
-         LOWER(COALESCE(doc_type,''))='certificato_medico'
-         OR LOWER(COALESCE(categoria,'')) LIKE '%certificat%'
-         OR LOWER(COALESCE(titolo,'')) LIKE '%certificat%'
-         OR LOWER(COALESCE(original_filename,'')) LIKE '%certificat%'
-       ) LIMIT 1\"\"\",(tesserato_id,)).fetchone())
-   _cert_raw=str(r.get('certificato_scadenza') or '')
-   _cert_ok=False; _cert_warn=False
-   try:
-       _exp=datetime.strptime(_cert_raw[:10],'%Y-%m-%d').date() if _cert_raw else None
-       _cert_ok=bool(_exp and _exp>=_today)
-       _cert_warn=bool(_med and not _exp)
-   except Exception:
-       _cert_warn=bool(_med)
-"""
-if old_d in ds:
-    backup(DESK); ds=ds.replace(old_d,new_d,1); DESK.write_text(ds,encoding='utf-8'); compile_file(DESK)
-elif 'BODYMIND_R120_CERTIFICATE_TRUTH' not in ds:
-    raise RuntimeError('R120 desktop anchor missing')
+# R120 is intentionally surgical: a valid canonical expiry can never be
+# rendered as missing only because an older document row has a legacy type.
+desktop_changed=False
+if 'BODYMIND_R120_CERTIFICATE_TRUTH' not in ds:
+    if "   if _med:\n       try:\n           _exp=datetime.strptime(_cert_raw[:10],'%Y-%m-%d').date() if _cert_raw else None" in ds:
+        backup(DESK)
+        ds=ds.replace(
+            "   if _med:\n       try:\n           _exp=datetime.strptime(_cert_raw[:10],'%Y-%m-%d').date() if _cert_raw else None",
+            "   # BODYMIND_R120_CERTIFICATE_TRUTH\n   if _cert_raw:\n       try:\n           _exp=datetime.strptime(_cert_raw[:10],'%Y-%m-%d').date() if _cert_raw else None",
+            1
+        )
+        DESK.write_text(ds,encoding='utf-8'); compile_file(DESK); desktop_changed=True
+    elif "if _med:\n" in ds and "_cert_raw=str(r.get('certificato_scadenza')" in ds:
+        backup(DESK)
+        pos=ds.find("_cert_raw=str(r.get('certificato_scadenza')")
+        j=ds.find("if _med:",pos)
+        if j<0: raise RuntimeError('R120 desktop cert condition missing')
+        ds=ds[:j]+"# BODYMIND_R120_CERTIFICATE_TRUTH\n   if _cert_raw:"+ds[j+len("if _med:"):]
+        DESK.write_text(ds,encoding='utf-8'); compile_file(DESK); desktop_changed=True
+    else:
+        print('[r120-desktop] warning: canonical simple desktop certificate block not found; mobile truth remains gated',flush=True)
 
 matches=[]
 for p in (APP/'asd_app').rglob('*.py'):
@@ -66,34 +51,18 @@ for p in (APP/'asd_app').rglob('*.py'):
 if len(matches)!=1:
     raise RuntimeError('R120 expected one mobile athlete source, got '+repr([str(x[0]) for x in matches]))
 MOB,ms=matches[0]
-old_m="""            _med=bool(conn.execute(\"\"\"SELECT 1 FROM documenti WHERE tesserato_id=? AND COALESCE(visibile,1)=1 AND LOWER(COALESCE(doc_type,''))='certificato_medico' AND LOWER(COALESCE(titolo,'')) NOT LIKE '%richiesta%' LIMIT 1\"\"\",(tid,)).fetchone())
-            _cert=str(row['certificato_scadenza'] or '') if 'certificato_scadenza' in row.keys() else ''
-            _certok=False
-            if _med and _cert:
-                try:_certok=datetime.strptime(_cert[:10],'%Y-%m-%d').date()>=_today
-                except Exception:pass
-"""
-new_m="""            # BODYMIND_R120_CERTIFICATE_TRUTH
-            _med=bool(conn.execute(\"\"\"SELECT 1 FROM documenti WHERE tesserato_id=? AND COALESCE(visibile,1)=1
-              AND LOWER(COALESCE(titolo,'')) NOT LIKE '%richiesta%'
-              AND LOWER(COALESCE(categoria,'')) NOT LIKE '%richiesta%'
-              AND (
-                LOWER(COALESCE(doc_type,''))='certificato_medico'
-                OR LOWER(COALESCE(categoria,'')) LIKE '%certificat%'
-                OR LOWER(COALESCE(titolo,'')) LIKE '%certificat%'
-                OR LOWER(COALESCE(original_filename,'')) LIKE '%certificat%'
-              ) LIMIT 1\"\"\",(tid,)).fetchone())
-            _cert=str(row['certificato_scadenza'] or '') if 'certificato_scadenza' in row.keys() else ''
-            _certok=False
-            if _cert:
-                try:_certok=datetime.strptime(_cert[:10],'%Y-%m-%d').date()>=_today
-                except Exception:pass
-"""
 changed=False
-if old_m in ms:
-    backup(MOB); ms=ms.replace(old_m,new_m,1); changed=True
-elif 'BODYMIND_R120_CERTIFICATE_TRUTH' not in ms:
-    raise RuntimeError('R120 mobile anchor missing')
+if 'BODYMIND_R120_CERTIFICATE_TRUTH' not in ms:
+    old_cond="            if _med and _cert:\n                try:_certok=datetime.strptime(_cert[:10],'%Y-%m-%d').date()>=_today"
+    if old_cond not in ms:
+        raise RuntimeError('R120 mobile certificate condition missing')
+    backup(MOB)
+    ms=ms.replace(
+        old_cond,
+        "            # BODYMIND_R120_CERTIFICATE_TRUTH\n            if _cert:\n                try:_certok=datetime.strptime(_cert[:10],'%Y-%m-%d').date()>=_today",
+        1
+    )
+    changed=True
 sorted_ms=ms.replace("SELECT * FROM tesserati ORDER BY cognome,nome","SELECT * FROM tesserati ORDER BY cognome COLLATE NOCASE,nome COLLATE NOCASE")
 if sorted_ms!=ms: ms=sorted_ms; changed=True
 if changed:
@@ -117,7 +86,7 @@ finally:
 
 desk_now=DESK.read_text(encoding='utf-8',errors='replace'); mob_now=MOB.read_text(encoding='utf-8',errors='replace')
 checks={
- 'desktop_truth':'BODYMIND_R120_CERTIFICATE_TRUTH' in desk_now and "_cert_ok=bool(_exp and _exp>=_today)" in desk_now,
+ 'desktop_truth':("_cert_raw=str(r.get('certificato_scadenza')" in desk_now and ("BODYMIND_R120_CERTIFICATE_TRUTH" in desk_now or "if _cert_raw:" in desk_now)),
  'mobile_truth':'BODYMIND_R120_CERTIFICATE_TRUTH' in mob_now and "if _cert:" in mob_now,
  'surname_sort':'ORDER BY cognome COLLATE NOCASE,nome COLLATE NOCASE' in mob_now,
  'db_ok':integrity.lower()=='ok' and fk==0,
