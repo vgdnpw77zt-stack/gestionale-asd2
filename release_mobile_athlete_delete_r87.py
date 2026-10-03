@@ -48,9 +48,19 @@ if 'BODYMIND_R87_MOBILE_ATHLETE_DELETE' not in s:
     print('[r87-mobile-athlete-delete] PASS source='+str(rel)+' backend=/tesserati/delete explicit-confirm route-audit',flush=True)
 else:
     # Self-heal a partial/older R87 write that used a template helper unavailable on this mobile page.
+    changed=False
     if '{{csrf_input()|safe}}' in s:
         s=s.replace('{{csrf_input()|safe}}','')
+        changed=True
+    # BODYMIND_R87_SURNAME_FIRST_LABEL
+    # Keep the already surname-sorted list visually consistent: show COGNOME NOME.
+    old_name="<div class='name'>{{r['nome']}} {{r['cognome']}}</div>"
+    new_name="<div class='name'>{{r['cognome']}} {{r['nome']}}</div>"
+    if old_name in s:
+        s=s.replace(old_name,new_name)
+        changed=True
+    if changed:
         p.write_text(s,encoding='utf-8')
         py_compile.compile(str(p),doraise=True)
-        print('[r87-mobile-athlete-delete] repaired legacy mobile template helper',flush=True)
+        print('[r87-mobile-athlete-delete] repaired mobile template / surname-first label',flush=True)
     print('[r87-mobile-athlete-delete] already applied source='+str(p),flush=True)
