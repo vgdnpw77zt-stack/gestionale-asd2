@@ -258,25 +258,29 @@ if 'BODYMIND_R123_SECRETARY_UI' in core_now and 'BODYMIND_R123_DIRECT_ATHLETE_SE
     print('[r123-core-upgrade] PASS direct athlete selection for all groups',flush=True)
 
 # BODYMIND_R124_PAYMENT_IDENTITY_FIX
-# Fix the canonical immediate-payment rows themselves, not only the R123 overlay.
-# Show COGNOME NOME and keep athlete phone, falling back to guardian phone.
-core_pay=CORE.read_text(encoding='utf-8',errors='replace')
-old_pay="""<td><b>{e(row['nome'])} {e(row['cognome'])}</b><div class='small-muted'>{e(row['telefono'] or 'Telefono non indicato')}</div><div class='small-muted'>{state['badges']} {render_member_status_badge(compute_member_status(row.get('id'), selected_mese, selected_anno, payment_status_alerts))}</div></td>"""
-new_pay="""<td><b>{e((row.get('cognome') or '')+' '+(row.get('nome') or ''))}</b><div class='small-muted'>{e(row.get('telefono') or row.get('telefono_genitore') or 'Telefono non indicato')}</div><div class='small-muted'>{state['badges']} {render_member_status_badge(compute_member_status(row.get('id'), selected_mese, selected_anno, payment_status_alerts))}</div></td>"""
-if old_pay in core_pay:
-    dst=BACK/'core_pre_payment_identity_fix.py'
-    if not dst.exists(): shutil.copy2(CORE,dst)
-    core_pay=core_pay.replace(old_pay,new_pay)
-    CORE.write_text(core_pay,encoding='utf-8')
-    py_compile.compile(str(CORE),doraise=True)
-    print('[r124-payment-identity] PASS canonical quick rows surname-name + phone fallback',flush=True)
-elif "row.get('telefono_genitore')" in core_pay and "row.get('cognome')" in core_pay:
-    print('[r124-payment-identity] already applied',flush=True)
-else:
-    # The canonical quick-row source may have been superseded by another
-    # payment UI layer. The R123/R124 overlay below is the user-facing truth
-    # and its fresh-process QA verifies actual rendered name + phone.
-    print('[r124-payment-identity] canonical anchor changed; rendered overlay remains authoritative',flush=True)
+# Patch both possible runtime sources. Keep it surgical and idempotent.
+_patched_payment_identity=False
+for _pay_src in (CORE, APP/'asd_app/routes_pagamenti.py'):
+    if not _pay_src.exists():
+        continue
+    _txt=_pay_src.read_text(encoding='utf-8',errors='replace')
+    _before=_txt
+    _txt=_txt.replace("e(row['nome'])} {e(row['cognome'])","e((row.get('cognome') or '')+' '+(row.get('nome') or ''))")
+    _txt=_txt.replace("e(row['telefono'] or 'Telefono non indicato')","e(row.get('telefono') or row.get('telefono_genitore') or 'Telefono non indicato')")
+    if _txt!=_before:
+        dst=BACK/('pre_r124_'+_pay_src.name)
+        if not dst.exists(): shutil.copy2(_pay_src,dst)
+        _pay_src.write_text(_txt,encoding='utf-8')
+        py_compile.compile(str(_pay_src),doraise=True)
+        _patched_payment_identity=True
+        print('[r124-payment-identity] patched '+str(_pay_src),flush=True)
+    elif ("row.get('telefono_genitore')" in _txt and "row.get('cognome')" in _txt):
+        _patched_payment_identity=True
+        print('[r124-payment-identity] already applied '+str(_pay_src),flush=True)
+if not _patched_payment_identity:
+    # R123 overlay still renders identity/contact itself; do not take production
+    # down merely because the historical quick-row source changed shape.
+    print('[r124-payment-identity] canonical source shape changed; overlay remains authoritative',flush=True)
 
 # Fresh import/UI gate.
 qa=r'''
