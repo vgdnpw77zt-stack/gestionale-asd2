@@ -286,6 +286,44 @@ def _bodymind_final_data_convergence():
                 conn.execute("UPDATE bodymind_operator_tasks SET status='completed_stale',updated_at=datetime('now') WHERE id=?",(int(r['id']),))
                 actions.append('stale_task:'+str(int(r['id'])))
 
+        # 2b) Inbound rows that still point to deliberately deleted athletes are
+        # historical audit records, not live operational associations. Preserve a
+        # full JSON copy, then detach them from the missing athlete so FK/business
+        # invariants remain true. Never recreate the deleted athlete.
+        if has_table('inbound_documents') and has_table('tesserati'):
+            ic=cols('inbound_documents')
+            orphans=conn.execute("""SELECT i.* FROM inbound_documents i
+              LEFT JOIN tesserati t ON t.id=i.tesserato_id
+              WHERE i.tesserato_id IS NOT NULL AND t.id IS NULL
+              ORDER BY i.id""").fetchall()
+            if orphans:
+                conn.execute("""CREATE TABLE IF NOT EXISTS bodymind_orphan_records_archive(
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  source_table TEXT NOT NULL,
+                  source_id INTEGER NOT NULL,
+                  former_tesserato_id INTEGER,
+                  reason TEXT NOT NULL,
+                  payload_json TEXT NOT NULL,
+                  semantics_json TEXT,
+                  events_json TEXT,
+                  archived_at TEXT NOT NULL,
+                  UNIQUE(source_table,source_id)
+                )""")
+                for r in orphans:
+                    iid=int(r['id']); former=int(r['tesserato_id'] or 0)
+                    conn.execute("""INSERT OR IGNORE INTO bodymind_orphan_records_archive
+                      (source_table,source_id,former_tesserato_id,reason,payload_json,semantics_json,events_json,archived_at)
+                      VALUES(?,?,?,?,?,'[]','[]',datetime('now'))""",
+                      ('inbound_documents',iid,former,'deleted-athlete historical inbound',
+                       json.dumps(dict(r),ensure_ascii=False,default=str)))
+                    sets=['tesserato_id=NULL']
+                    if 'matched_tesserato_id' in ic: sets.append('matched_tesserato_id=NULL')
+                    if 'suggested_tesserato_id' in ic: sets.append('suggested_tesserato_id=NULL')
+                    if 'status' in ic: sets.append("status='archived_orphan'")
+                    if 'updated_at' in ic: sets.append("updated_at=datetime('now')")
+                    conn.execute("UPDATE inbound_documents SET "+','.join(sets)+" WHERE id=?",(iid,))
+                    actions.append('inbound_orphan_archived:'+str(iid)+':former_tid='+str(former))
+
         # 3) Trusted MU inbound with no visible dossier MU: materialize the canonical
         # document row from the existing file. Never invent data or duplicate a visible MU.
         if has_table('inbound_documents') and has_table('documenti') and has_table('tesserati'):
