@@ -545,7 +545,13 @@ runpy.run_path("/opt/bodymind/release_shared_document_core_r72.py", run_name="__
 runpy.run_path("/opt/bodymind/release_document_consistency_r74.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_document_core_r78.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mu_canonical_r79.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_stabilization_repair_r81.py", run_name="__main__")
+# R81 is a historical repair script and is no longer safe to run on every boot:
+# it can materialize a MU for a deliberately deleted athlete (observed tid=37),
+# creating an FK violation. Modern R80/R84/R118 gates cover the invariants.
+if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
+    runpy.run_path("/opt/bodymind/release_stabilization_repair_r81.py", run_name="__main__")
+else:
+    print("[startup-convergence] R81 historical repair skipped; modern invariant gates remain active",flush=True)
 runpy.run_path("/opt/bodymind/release_guardian_convergence_r82.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mu_autoenroll_r92.py", run_name="__main__")
 # BODYMIND_STARTUP_CONSOLIDATION_P1
