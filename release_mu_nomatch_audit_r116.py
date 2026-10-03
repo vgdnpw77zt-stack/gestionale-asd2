@@ -29,6 +29,25 @@ sources=[
 ]
 conn=sqlite3.connect(str(DB),timeout=30); conn.row_factory=sqlite3.Row
 try:
+    latest_all=[]
+    if table(conn,'inbound_documents'):
+        for _r in conn.execute("SELECT * FROM inbound_documents ORDER BY id DESC LIMIT 15").fetchall():
+            _d=dict(_r); _iid=int(_d.get('id') or 0); _sem=None
+            if table(conn,'bodymind_document_semantics'):
+                _sr=conn.execute("""SELECT analysis_json FROM bodymind_document_semantics
+                    WHERE source_table='inbound_documents' AND source_id=? ORDER BY id DESC LIMIT 1""",(_iid,)).fetchone()
+                if _sr:
+                    try: _sem=json.loads(str(_sr['analysis_json'] or '{}'))
+                    except Exception: _sem=None
+            latest_all.append({
+              'id':_iid,'original_filename':_d.get('original_filename'),'status':_d.get('status'),
+              'document_type':_d.get('document_type'),'document_confidence':_d.get('document_confidence'),
+              'match_score':_d.get('match_score'),'match_action':_d.get('match_action'),
+              'tesserato_id':_d.get('tesserato_id'),'suggested_tesserato_id':_d.get('suggested_tesserato_id'),
+              'semantic_type':(_sem or {}).get('document_type'),'semantic_person':(_sem or {}).get('person_name'),
+              'semantic_cf':(_sem or {}).get('codice_fiscale'),'semantic_birth':(_sem or {}).get('birth_date'),
+              'semantic_confidence':(_sem or {}).get('confidence')
+            })
     recent=[]
     if table(conn,'inbound_documents'):
         rows=conn.execute("SELECT * FROM inbound_documents ORDER BY id DESC LIMIT 80").fetchall()
@@ -56,7 +75,7 @@ try:
     fk=len(conn.execute('PRAGMA foreign_key_check').fetchall())
 finally: conn.close()
 
-print('[r116-mu-no-match-audit] '+json.dumps({'recent_mu':recent[:20],'sources':sources,'integrity':integrity,'fk':fk},ensure_ascii=False,default=str),flush=True)
+print('[r116-mu-no-match-audit] '+json.dumps({'latest_inbound':latest_all,'recent_mu':recent[:20],'sources':sources,'integrity':integrity,'fk':fk},ensure_ascii=False,default=str),flush=True)
 if integrity.lower()!='ok' or fk:
     raise RuntimeError('R116 DB guard failed')
 print('[r116-selftest] PASS read-only no-match-MU audit db-ok',flush=True)
