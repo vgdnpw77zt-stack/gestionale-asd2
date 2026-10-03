@@ -199,34 +199,62 @@ runpy.run_path("/opt/bodymind/release_mu_canonical_r79.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_stabilization_repair_r81.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_guardian_convergence_r82.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mu_autoenroll_r92.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_new_athlete_profile_audit_r93.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_profile_schema_audit_r94.py", run_name="__main__")
+# BODYMIND_STARTUP_CONSOLIDATION_P1
+# Deep read-only audits are useful diagnostically but no longer belong to every boot.
+# The mutating convergence scripts and modern hard gates below remain mandatory.
+if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
+    print("[startup-convergence] deep read-only audits enabled", flush=True)
+    runpy.run_path("/opt/bodymind/release_new_athlete_profile_audit_r93.py", run_name="__main__")
+    runpy.run_path("/opt/bodymind/release_profile_schema_audit_r94.py", run_name="__main__")
+else:
+    print("[startup-convergence] R93/R94 read-only audits skipped; hard gates remain active", flush=True)
+
 runpy.run_path("/opt/bodymind/release_mu_residenza_r95.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_medical_criticality_audit_r96.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_medical_save_audit_r97.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_medical_save_compact_r98.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_active_route_audit_r99.py", run_name="__main__")
+
+if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
+    runpy.run_path("/opt/bodymind/release_medical_criticality_audit_r96.py", run_name="__main__")
+    runpy.run_path("/opt/bodymind/release_medical_save_audit_r97.py", run_name="__main__")
+    runpy.run_path("/opt/bodymind/release_medical_save_compact_r98.py", run_name="__main__")
+    runpy.run_path("/opt/bodymind/release_active_route_audit_r99.py", run_name="__main__")
+else:
+    print("[startup-convergence] R96-R99 superseded read-only audits skipped; R100 is canonical medical convergence", flush=True)
+
 runpy.run_path("/opt/bodymind/release_medical_profile_convergence_r100.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_criticality_profile_r101.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_desktop_profile_audit_r104.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_desktop_update_source_r105.py", run_name="__main__")
+
+if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
+    runpy.run_path("/opt/bodymind/release_desktop_profile_audit_r104.py", run_name="__main__")
+    runpy.run_path("/opt/bodymind/release_desktop_update_source_r105.py", run_name="__main__")
+else:
+    print("[startup-convergence] R104/R105 read-only source audits skipped; R106/R113 remain hard gates", flush=True)
+
 runpy.run_path("/opt/bodymind/release_desktop_save_convergence_r106.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_attachment_create_r107.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mu_metadata_convergence_r108.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_payment_simplify_audit_r109.py", run_name="__main__")
+
+if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
+    runpy.run_path("/opt/bodymind/release_payment_simplify_audit_r109.py", run_name="__main__")
+else:
+    print("[startup-convergence] R109 read-only payment audit skipped; R110/R111 canonical payment gates remain active", flush=True)
 runpy.run_path("/opt/bodymind/release_simple_athlete_payment_truth_r110.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_runtime_helper_r112.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_convergence_smoke_r111.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_desktop_post_regression_r113.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_simple_athlete_payment_smoke_r111.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_mu_nomatch_audit_r116.py", run_name="__main__")
+if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
+    runpy.run_path("/opt/bodymind/release_mu_nomatch_audit_r116.py", run_name="__main__")
+else:
+    print("[startup-convergence] R116 read-only MU audit skipped; R118/R119 live gates remain active", flush=True)
 runpy.run_path("/opt/bodymind/release_mu_nomatch_operator_r119.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mu_nomatch_create_smoke_r118.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_stabilization_audit_r80.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mobile_delete_r85.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mobile_athlete_delete_r87.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_ios_keyboard_r90.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_unassigned_mu_audit_r91.py", run_name="__main__")
+if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
+    runpy.run_path("/opt/bodymind/release_unassigned_mu_audit_r91.py", run_name="__main__")
+else:
+    print("[startup-convergence] R91 read-only MU audit skipped", flush=True)
 runpy.run_path("/opt/bodymind/release_ui_regression_smoke_r84.py", run_name="__main__")
 # R114 startup convergence: keep source/migration guards in the critical path, but
 # do not re-run the superseded R32-R65 read-only/operator smoke chain on every deploy.
@@ -250,7 +278,10 @@ if os.environ.get("BODYMIND_LEGACY_STARTUP_SMOKES","0") == "1":
     runpy.run_path("/opt/bodymind/release_operator_pending_audit_r55e.py", run_name="__main__")
 else:
     print("[r114-startup] legacy operator smoke chain skipped; covered by consolidated hard gates", flush=True)
-runpy.run_path("/opt/bodymind/release_navigation_audit_r115.py", run_name="__main__")
+if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
+    runpy.run_path("/opt/bodymind/release_navigation_audit_r115.py", run_name="__main__")
+else:
+    print("[startup-convergence] R115 read-only navigation audit skipped", flush=True)
 runpy.run_path("/opt/bodymind/release_route_guard_r39.py", run_name="__main__")
 incoming = pathlib.Path("/data/incoming")
 for name in ("top2.zip", "backup.zip"):
