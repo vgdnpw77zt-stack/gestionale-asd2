@@ -1,5 +1,5 @@
 # R39 build and route guards - autodeploy trigger 2
-import os, sys, pathlib, runpy, sqlite3, shutil, json, time
+import os, sys, pathlib, runpy, sqlite3, shutil, json, time, hashlib
 
 # BODYMIND_R102_STORAGE_PREFLIGHT
 def _bodymind_storage_preflight():
@@ -139,6 +139,145 @@ def _bodymind_operator_task_cleanup():
         conn.close()
 
 _bodymind_operator_task_cleanup()
+
+# BODYMIND_FINAL_DATA_CONVERGENCE
+def _bodymind_final_data_convergence():
+    db_path=pathlib.Path("/data/tenants/default/asd.db")
+    if not db_path.exists():
+        return
+    conn=sqlite3.connect(str(db_path),timeout=30); conn.row_factory=sqlite3.Row
+    actions=[]
+    try:
+        def has_table(n):
+            return bool(conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(n,)).fetchone())
+        def cols(n):
+            return {str(x[1]) for x in conn.execute("PRAGMA table_info("+n+")").fetchall()} if has_table(n) else set()
+
+        # 1) Truly stale async jobs cannot remain "processing" forever.
+        if has_table('bodymind_operator_upload_jobs'):
+            stale=conn.execute("""SELECT id,conversation_id,status FROM bodymind_operator_upload_jobs
+              WHERE status IN ('queued','processing')
+                AND julianday(updated_at) < julianday('now','-6 hours')""").fetchall()
+            for r in stale:
+                conn.execute("""UPDATE bodymind_operator_upload_jobs
+                  SET status='failed',error='stale async job closed by final convergence',updated_at=datetime('now')
+                  WHERE id=?""",(str(r['id']),))
+                actions.append('stale_job:'+str(r['id']))
+
+        # 2) Close active batch tasks older than 6h when there is no live job/action.
+        if has_table('bodymind_operator_tasks'):
+            has_jobs=has_table('bodymind_operator_upload_jobs'); has_actions=has_table('bodymind_operator_actions')
+            where=["t.task_type='batch_upload'","t.status='active'","julianday(t.updated_at) < julianday('now','-6 hours')"]
+            if has_jobs:
+                where.append("NOT EXISTS (SELECT 1 FROM bodymind_operator_upload_jobs j WHERE j.conversation_id=t.conversation_id AND j.status IN ('queued','processing'))")
+            if has_actions:
+                where.append("NOT EXISTS (SELECT 1 FROM bodymind_operator_actions a WHERE a.conversation_id=t.conversation_id AND a.status IN ('proposed','pending','awaiting_confirmation'))")
+            rows=conn.execute("SELECT t.id FROM bodymind_operator_tasks t WHERE "+" AND ".join(where)).fetchall()
+            for r in rows:
+                conn.execute("UPDATE bodymind_operator_tasks SET status='completed_stale',updated_at=datetime('now') WHERE id=?",(int(r['id']),))
+                actions.append('stale_task:'+str(int(r['id'])))
+
+        # 3) Trusted MU inbound with no visible dossier MU: materialize the canonical
+        # document row from the existing file. Never invent data or duplicate a visible MU.
+        if has_table('inbound_documents') and has_table('documenti') and has_table('tesserati'):
+            dc=cols('documenti'); ic=cols('inbound_documents'); tc=cols('tesserati')
+            rows=conn.execute("""SELECT i.* FROM inbound_documents i
+              JOIN tesserati t ON t.id=i.tesserato_id
+              WHERE lower(coalesce(i.document_type,''))='modulo_unico_tesseramento'
+                AND coalesce(i.tesserato_id,0)>0
+                AND coalesce(i.document_confidence,0)>=95
+                AND coalesce(i.match_score,0)>=95
+              ORDER BY i.id""").fetchall()
+            for r in rows:
+                tid=int(r['tesserato_id'])
+                exists=conn.execute("""SELECT 1 FROM documenti WHERE tesserato_id=? AND coalesce(visibile,1)=1 AND (
+                  lower(coalesce(doc_type,''))='modulo_unico_tesseramento'
+                  OR lower(coalesce(categoria,'')) LIKE '%modulo iscrizione%'
+                  OR lower(coalesce(titolo,'')) LIKE '%modulo unico%'
+                  OR lower(coalesce(titolo,'')) LIKE '%domanda iscrizione%') LIMIT 1""",(tid,)).fetchone()
+                if exists: continue
+                path=''
+                for k in ('saved_path','stored_path','filename'):
+                    if k in ic and r[k]:
+                        path=str(r[k]); break
+                if not path or not pathlib.Path(path).is_file():
+                    continue
+                vals={
+                  'tesserato_id':tid,
+                  'titolo':str(r['original_filename'] or 'Modulo Unico') if 'original_filename' in ic else 'Modulo Unico',
+                  'categoria':'Modulo iscrizione BodyMind',
+                  'filename':path,
+                  'original_filename':str(r['original_filename'] or pathlib.Path(path).name) if 'original_filename' in ic else pathlib.Path(path).name,
+                  'data_caricamento':__import__('datetime').date.today().isoformat(),
+                  'visibile':1,'doc_type':'modulo_unico_tesseramento',
+                  'confidence':100,'match_score':100,'source':'final_convergence',
+                  'status':'salvato','inbound_id':int(r['id'])
+                }
+                vals={k:v for k,v in vals.items() if k in dc}
+                required={'tesserato_id','titolo','categoria','filename','original_filename'}
+                if required.issubset(vals):
+                    keys=list(vals)
+                    conn.execute("INSERT INTO documenti("+','.join(keys)+") VALUES("+','.join('?' for _ in keys)+")",[vals[k] for k in keys])
+                    if 'iscrizione_firmata' in tc:
+                        conn.execute("UPDATE tesserati SET iscrizione_firmata=1 WHERE id=?",(tid,))
+                    if 'documenti_onboarding_ok' in tc:
+                        conn.execute("UPDATE tesserati SET documenti_onboarding_ok=1 WHERE id=?",(tid,))
+                    actions.append('mu_materialized:inbound='+str(int(r['id']))+':tid='+str(tid))
+
+        # 4) Exact duplicate visible files: same athlete + same semantic/type bucket + SHA.
+        # Archive only the extra DB row; never delete the physical file.
+        if has_table('documenti'):
+            dc=cols('documenti')
+            rows=conn.execute("SELECT * FROM documenti WHERE coalesce(visibile,1)=1 ORDER BY id").fetchall()
+            groups={}
+            for r in rows:
+                tid=int(r['tesserato_id'] or 0) if 'tesserato_id' in dc else 0
+                if tid<=0: continue
+                path=str(r['filename'] or '') if 'filename' in dc else ''
+                p=pathlib.Path(path)
+                if not p.is_file(): continue
+                try: sha=hashlib.sha256(p.read_bytes()).hexdigest()
+                except Exception: continue
+                dtype=str(r['doc_type'] or '').strip().lower() if 'doc_type' in dc else ''
+                cat=str(r['categoria'] or '').strip().lower() if 'categoria' in dc else ''
+                kind=dtype or cat or 'altro'
+                groups.setdefault((tid,kind,sha),[]).append(r)
+            for key,items in groups.items():
+                if len(items)<2: continue
+                keep=min(int(x['id']) for x in items)
+                for r in items:
+                    did=int(r['id'])
+                    if did==keep: continue
+                    sets=[]; vals=[]
+                    if 'visibile' in dc: sets.append('visibile=0')
+                    if 'status' in dc: sets.append('status=?'); vals.append('duplicate_exact_archived')
+                    if 'note' in dc:
+                        sets.append('note=?'); vals.append('Duplicato SHA identico archiviato; canonico ID '+str(keep))
+                    if sets:
+                        vals.append(did)
+                        conn.execute("UPDATE documenti SET "+','.join(sets)+" WHERE id=?",vals)
+                        actions.append('exact_duplicate_archived:'+str(did)+'->'+str(keep))
+
+        if actions:
+            # Backup is created before committing the convergence.
+            backup_root=pathlib.Path("/data/release_backups/20261003_final_convergence")
+            backup_root.mkdir(parents=True,exist_ok=True)
+            stamp=__import__('datetime').datetime.now().strftime("%Y%m%d_%H%M%S")
+            dst=backup_root/(stamp+"_pre_final_convergence.db")
+            src=sqlite3.connect(str(db_path),timeout=30); out=sqlite3.connect(str(dst))
+            try: src.backup(out)
+            finally: out.close(); src.close()
+            conn.commit()
+            print("[final-data-convergence] actions="+json.dumps(actions,ensure_ascii=False)+" backup="+str(dst),flush=True)
+        else:
+            print("[final-data-convergence] no-op",flush=True)
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+_bodymind_final_data_convergence()
 
 def _bodymind_neutralize_static_count_guards():
     patches={
