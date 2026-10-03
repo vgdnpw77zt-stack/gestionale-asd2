@@ -6,44 +6,33 @@ APP=Path('/data/top2_app'); DB=Path('/data/tenants/default/asd.db')
 sys.path.insert(0,str(APP))
 import app as _full_app
 from asd_app.core import app
-routes=[]
-for rule in sorted(app.url_map.iter_rules(),key=lambda r:str(r.rule)):
-    route=str(rule.rule); ep=str(rule.endpoint)
-    if any(k in route.lower() or k in ep.lower() for k in ('pagament','presenz','attendance','lezion','corso')):
-        fn=app.view_functions.get(ep); src=''
-        try: src=inspect.getsource(fn)[:14000]
-        except Exception: pass
-        routes.append({'route':route,'endpoint':ep,'methods':sorted(rule.methods or []),'source':src})
+
+def fn_detail(endpoint):
+    fn=app.view_functions.get(endpoint); out={'endpoint':endpoint}
+    if not fn:return out
+    out['name']=getattr(fn,'__name__','')
+    try: out['file']=inspect.getsourcefile(fn)
+    except Exception: out['file']=''
+    try: out['source']=inspect.getsource(fn)[:24000]
+    except Exception: out['source']=''
+    closure=[]
+    for cell in (getattr(fn,'__closure__',None) or []):
+        try: obj=cell.cell_contents
+        except Exception: continue
+        if callable(obj):
+            try:
+                src=inspect.getsource(obj)
+                closure.append({'name':getattr(obj,'__name__',''),'file':inspect.getsourcefile(obj),'source':src[:30000]})
+            except Exception: pass
+    out['closure']=closure
+    return out
+
+print('[r122-detail-pagamenti] '+json.dumps(fn_detail('pagamenti'),ensure_ascii=False,default=str),flush=True)
+print('[r122-detail-presenze] '+json.dumps(fn_detail('presenze'),ensure_ascii=False,default=str),flush=True)
+print('[r122-detail-corsi] '+json.dumps(fn_detail('corsi'),ensure_ascii=False,default=str),flush=True)
 conn=sqlite3.connect(str(DB),timeout=20); conn.row_factory=sqlite3.Row
 try:
-    tables=[]
-    for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").fetchall():
-        n=str(r[0])
-        if any(k in n.lower() for k in ('pag','quot','pres','attend','lez','cors')):
-            cols=[{'name':x[1],'type':x[2]} for x in conn.execute('PRAGMA table_info('+n+')').fetchall()]
-            count=int(conn.execute('SELECT COUNT(*) FROM '+n).fetchone()[0])
-            sample=[]
-            try: sample=[dict(x) for x in conn.execute('SELECT * FROM '+n+' LIMIT 5').fetchall()]
-            except Exception: pass
-            tables.append({'table':n,'count':count,'columns':cols,'sample':sample})
+    vals=[{'corso':str(r['corso'] or ''),'n':int(r['n'])} for r in conn.execute("SELECT corso,COUNT(*) n FROM tesserati GROUP BY corso ORDER BY LOWER(TRIM(COALESCE(corso,'')))").fetchall()]
+    courses=[dict(r) for r in conn.execute("SELECT * FROM corsi ORDER BY id").fetchall()]
+    print('[r122-course-values] '+json.dumps({'tesserati':vals,'corsi':courses},ensure_ascii=False,default=str),flush=True)
 finally: conn.close()
-print('[r122-audit-routes] '+json.dumps(routes,ensure_ascii=False,default=str),flush=True)
-print('[r122-audit-tables] '+json.dumps(tables,ensure_ascii=False,default=str),flush=True)
-
-# Rendered-page audit for exact UI surgery (read-only).
-app.config['TESTING']=True
-client=app.test_client()
-with client.session_transaction() as sess:
-    sess.update({'logged':True,'username':'admin','display_name':'R122 Audit','role':'admin','tenant_slug':'default'})
-for path,needles in [
-    ('/pagamenti',['Tesseramento / iscrizione','Seleziona periodo e tesserato','OPERATIVITÀ IMMEDIATA','Tesserati senza quota iscrizione/tesseramento']),
-    ('/presenze',['Giornata operativa','Presenze','corso']),
-    ('/presenze-rapide',['Registro veloce','Filtro rapido','Registro del giorno'])
-]:
-    rr=client.get(path,follow_redirects=False)
-    body=rr.get_data(as_text=True)
-    out={'path':path,'status':rr.status_code,'snippets':{}}
-    for n in needles:
-        i=body.lower().find(n.lower())
-        if i>=0: out['snippets'][n]=body[max(0,i-1200):i+2600]
-    print('[r122-render] '+json.dumps(out,ensure_ascii=False),flush=True)
