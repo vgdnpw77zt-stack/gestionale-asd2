@@ -224,6 +224,30 @@ def _bodymind_final_data_convergence():
                         conn.execute("UPDATE tesserati SET documenti_onboarding_ok=1 WHERE id=?",(tid,))
                     actions.append('mu_materialized:inbound='+str(int(r['id']))+':tid='+str(tid))
 
+        # 3b) Operational truth wins over stale onboarding flags. If no visible
+        # MU exists after the safe materialization attempt, do not claim enrollment
+        # documents are complete. Historical rows remain untouched.
+        if has_table('documenti') and has_table('tesserati'):
+            tc=cols('tesserati')
+            if 'iscrizione_firmata' in tc or 'documenti_onboarding_ok' in tc:
+                athletes=conn.execute("SELECT * FROM tesserati ORDER BY id").fetchall()
+                for a in athletes:
+                    tid=int(a['id'])
+                    has_mu=bool(conn.execute("""SELECT 1 FROM documenti WHERE tesserato_id=? AND coalesce(visibile,1)=1 AND (
+                      lower(coalesce(doc_type,''))='modulo_unico_tesseramento'
+                      OR lower(coalesce(categoria,'')) LIKE '%modulo iscrizione%'
+                      OR lower(coalesce(titolo,'')) LIKE '%modulo unico%'
+                      OR lower(coalesce(titolo,'')) LIKE '%domanda iscrizione%') LIMIT 1""",(tid,)).fetchone())
+                    if has_mu: continue
+                    sets=[]
+                    if 'iscrizione_firmata' in tc and int(a['iscrizione_firmata'] or 0):
+                        sets.append('iscrizione_firmata=0')
+                    if 'documenti_onboarding_ok' in tc and int(a['documenti_onboarding_ok'] or 0):
+                        sets.append('documenti_onboarding_ok=0')
+                    if sets:
+                        conn.execute("UPDATE tesserati SET "+','.join(sets)+" WHERE id=?",(tid,))
+                        actions.append('onboarding_truth_reset:tid='+str(tid))
+
         # 4) Exact duplicate visible files: same athlete + same semantic/type bucket + SHA.
         # Archive only the extra DB row; never delete the physical file.
         if has_table('documenti'):
