@@ -175,6 +175,88 @@ def _bodymind_r123_payment_simplify(resp):
 else:
     print('[r123-core] already applied',flush=True)
 
+# Upgrade an already-installed R123 presence flow so every group can select
+# directly from the full athlete list. Do not depend on legacy tesserati.corso.
+core_now=CORE.read_text(encoding='utf-8',errors='replace')
+if 'BODYMIND_R123_SECRETARY_UI' in core_now and 'BODYMIND_R123_DIRECT_ATHLETE_SELECTION' not in core_now:
+    old="""        athletes=conn.execute(\"\"\"SELECT id,nome,cognome,corso FROM tesserati
+            ORDER BY TRIM(cognome) COLLATE NOCASE,TRIM(nome) COLLATE NOCASE\"\"\").fetchall()
+        selected=[r for r in athletes if _r123_course_group(r['corso'])==group]
+        ids=[int(r['id']) for r in selected]
+
+        if request.method=='POST':
+            checked={parse_int(x,0) for x in request.form.getlist('presente_id')}
+            try:
+                if ids:
+                    marks=','.join('?' for _ in ids)
+                    conn.execute('DELETE FROM presenze WHERE data=? AND tesserato_id IN ('+marks+')',[day]+ids)
+                # Preserve a useful course_id when an existing course clearly
+                # belongs to the same group; otherwise NULL is valid.
+                course_rows=conn.execute('SELECT id,nome FROM corsi ORDER BY id').fetchall()
+                course_id=next((int(c['id']) for c in course_rows if _r123_course_group(c['nome'])==group),None)
+                now=__import__('datetime').datetime.now().isoformat(timespec='seconds')
+                for r in selected:
+                    tid=int(r['id'])
+                    stato='presente' if tid in checked else 'assente'
+                    conn.execute(\"\"\"INSERT INTO presenze(tesserato_id,corso_id,data,stato,note,created_at,updated_at)
+                        VALUES(?,?,?,?,?,?,?)\"\"\",(tid,course_id,day,stato,'',now,now))
+                conn.commit()
+            except Exception as exc:
+                conn.rollback()
+                return redirect_with_message('/presenze-semplici?gruppo='+group+'&data='+day,'Errore nel salvataggio presenze: '+str(exc),'error')
+            return redirect_with_message('/presenze-semplici?gruppo='+group+'&data='+day,'Presenze salvate.','success')
+
+        existing={}
+        if ids:
+            marks=','.join('?' for _ in ids)
+            for p in conn.execute('SELECT * FROM presenze WHERE data=? AND tesserato_id IN ('+marks+')',[day]+ids).fetchall():
+                existing[int(p['tesserato_id'])]=str(p['stato'] or '')
+"""
+    new="""        athletes=conn.execute(\"\"\"SELECT id,nome,cognome,corso FROM tesserati
+            ORDER BY TRIM(cognome) COLLATE NOCASE,TRIM(nome) COLLATE NOCASE\"\"\").fetchall()
+        # BODYMIND_R123_DIRECT_ATHLETE_SELECTION
+        selected=list(athletes)
+        ids=[int(r['id']) for r in selected]
+        course_rows=conn.execute('SELECT id,nome FROM corsi ORDER BY id').fetchall()
+        course_id=next((int(c['id']) for c in course_rows if _r123_course_group(c['nome'])==group),None)
+
+        if request.method=='POST':
+            checked={parse_int(x,0) for x in request.form.getlist('presente_id')}
+            checked={x for x in checked if x in set(ids)}
+            try:
+                if course_id is None:
+                    conn.execute('DELETE FROM presenze WHERE data=? AND corso_id IS NULL',(day,))
+                else:
+                    conn.execute('DELETE FROM presenze WHERE data=? AND corso_id=?',(day,course_id))
+                now=__import__('datetime').datetime.now().isoformat(timespec='seconds')
+                for tid in sorted(checked):
+                    conn.execute(\"\"\"INSERT INTO presenze(tesserato_id,corso_id,data,stato,note,created_at,updated_at)
+                        VALUES(?,?,?,'presente','',?,?)\"\"\",(tid,course_id,day,now,now))
+                conn.commit()
+            except Exception as exc:
+                conn.rollback()
+                return redirect_with_message('/presenze-semplici?gruppo='+group+'&data='+day,'Errore nel salvataggio presenze: '+str(exc),'error')
+            return redirect_with_message('/presenze-semplici?gruppo='+group+'&data='+day,'Presenze salvate: '+str(len(checked))+'.','success')
+
+        existing={}
+        if course_id is None:
+            _rows=conn.execute(\"SELECT * FROM presenze WHERE data=? AND corso_id IS NULL AND stato='presente'\",(day,)).fetchall()
+        else:
+            _rows=conn.execute(\"SELECT * FROM presenze WHERE data=? AND corso_id=? AND stato='presente'\",(day,course_id)).fetchall()
+        for p in _rows:
+            existing[int(p['tesserato_id'])]=str(p['stato'] or '')
+"""
+    if old not in core_now:
+        raise RuntimeError('R123 direct-selection migration anchor missing')
+    dst=BACK/'core_pre_direct_selection.py'
+    if not dst.exists(): shutil.copy2(CORE,dst)
+    core_now=core_now.replace(old,new,1)
+    core_now=core_now.replace('Nessuna allieva in questo gruppo. Assegna il corso dalla scheda atleta.','Nessuna allieva presente in anagrafica.')
+    core_now=core_now.replace('Scegli il gruppo, tocca le allieve presenti e salva.','Scegli Base, Kids, Adult o Pro / Agoniste, poi tocca direttamente le allieve presenti e salva.')
+    CORE.write_text(core_now,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+    print('[r123-core-upgrade] PASS direct athlete selection for all groups',flush=True)
+
 # Fresh import/UI gate.
 qa=r'''
 import sqlite3,sys
@@ -187,7 +269,7 @@ with c.session_transaction() as s:
     s.update({"logged":True,"username":"admin","display_name":"R123 QA","role":"admin","tenant_slug":"default"})
 p=c.get("/pagamenti")
 a=c.get("/presenze",follow_redirects=False)
-b=c.get("/presenze-semplici")
+b=c.get("/presenze-semplici?gruppo=pro")
 ph=p.get_data(as_text=True); bh=b.get_data(as_text=True)
 conn=sqlite3.connect("/data/tenants/default/asd.db",timeout=20)
 try:
