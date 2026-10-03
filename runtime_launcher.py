@@ -192,8 +192,7 @@ runpy.run_path("/opt/bodymind/release_global_reconcile_r69.py", run_name="__main
 runpy.run_path("/opt/bodymind/release_complete_mu_cache_r70.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_guardian_refresh_r71.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_shared_document_core_r72.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_mu_nomatch_create_r117.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_mu_nomatch_create_smoke_r118.py", run_name="__main__")
+# R119 supersedes the dynamic R117 route registration; one canonical no-match MU flow only.
 runpy.run_path("/opt/bodymind/release_document_consistency_r74.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_document_core_r78.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mu_canonical_r79.py", run_name="__main__")
