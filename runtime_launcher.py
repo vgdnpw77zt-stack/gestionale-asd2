@@ -126,6 +126,56 @@ def _bodymind_early_source_recovery():
 
 _bodymind_early_source_recovery()
 
+# BODYMIND_EARLY_DB_FK_RECOVERY_R121
+def _bodymind_early_db_fk_recovery():
+    db_path=pathlib.Path("/data/tenants/default/asd.db")
+    if not db_path.exists():
+        return
+    conn=sqlite3.connect(str(db_path),timeout=20)
+    try:
+        integrity=str(conn.execute("PRAGMA integrity_check").fetchone()[0])
+        fk=conn.execute("PRAGMA foreign_key_check").fetchall()
+    finally:
+        conn.close()
+    if integrity.lower()=="ok" and not fk:
+        print("[r121-db-recovery] DB already healthy",flush=True)
+        return
+    # The failed deployment log proves R81 introduced the FK violation immediately
+    # after creating document 215 for deleted athlete id 37. Restore the newest
+    # pre-R81 verified snapshot only; never guess or rebuild data.
+    candidates=sorted(pathlib.Path("/data/release_backups/20261002_r81_stabilization").glob("*_pre_r81.db"),reverse=True)
+    restored=False
+    for src in candidates:
+        chk=sqlite3.connect(str(src),timeout=20)
+        try:
+            ok=str(chk.execute("PRAGMA integrity_check").fetchone()[0]).lower()=="ok"
+            fk2=chk.execute("PRAGMA foreign_key_check").fetchall()
+        finally:
+            chk.close()
+        if ok and not fk2:
+            quarantine=pathlib.Path("/data/release_backups/20261003_r121_fk_recovery")
+            quarantine.mkdir(parents=True,exist_ok=True)
+            bad=quarantine/(__import__("datetime").datetime.now().strftime("%Y%m%d_%H%M%S")+"_broken_fk.db")
+            shutil.copy2(db_path,bad)
+            tmp=db_path.with_suffix(".r121_restore_tmp")
+            shutil.copy2(src,tmp)
+            os.replace(tmp,db_path)
+            restored=True
+            print("[r121-db-recovery] restored="+str(src)+" quarantined="+str(bad),flush=True)
+            break
+    if not restored:
+        raise SystemExit("R121 could not find a verified pre-R81 DB backup")
+    conn=sqlite3.connect(str(db_path),timeout=20)
+    try:
+        integrity=str(conn.execute("PRAGMA integrity_check").fetchone()[0])
+        fk=conn.execute("PRAGMA foreign_key_check").fetchall()
+    finally: conn.close()
+    if integrity.lower()!="ok" or fk:
+        raise SystemExit("R121 restore verification failed")
+    print("[r121-db-recovery] PASS integrity=ok fk=0",flush=True)
+
+_bodymind_early_db_fk_recovery()
+
 # BODYMIND_OPERATOR_TASK_LIFECYCLE_CLEANUP
 def _bodymind_operator_task_cleanup():
     db_path=pathlib.Path("/data/tenants/default/asd.db")
