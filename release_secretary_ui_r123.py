@@ -282,6 +282,130 @@ if not _patched_payment_identity:
     # down merely because the historical quick-row source changed shape.
     print('[r124-payment-identity] canonical source shape changed; overlay remains authoritative',flush=True)
 
+# BODYMIND_R125_PAYMENT_PREMIUM_STATUS
+# Premium operational payment board: current month truth from canonical pagamenti.
+core_pay=CORE.read_text(encoding='utf-8',errors='replace')
+if 'BODYMIND_R125_PAYMENT_PREMIUM_STATUS' not in core_pay:
+    dst=BACK/'core_pre_r125_payment_premium.py'
+    if not dst.exists(): shutil.copy2(CORE,dst)
+    core_pay += r'''
+
+# BODYMIND_R125_PAYMENT_PREMIUM_STATUS
+@app.after_request
+def _bodymind_r125_payment_premium_status(resp):
+    try:
+        if request.method!='GET' or request.path!='/pagamenti' or int(getattr(resp,'status_code',200) or 200)!=200:
+            return resp
+        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
+            return resp
+        html=resp.get_data(as_text=True)
+        if 'BODYMIND_R125_PAYMENT_BOARD' in html:
+            return resp
+
+        mese,anno=current_month_year()
+        mese=parse_int(request.args.get('mese',mese),mese)
+        anno=parse_int(request.args.get('anno',anno),anno)
+
+        c=db(); c.row_factory=sqlite3.Row
+        try:
+            tcols={str(x[1]) for x in c.execute('PRAGMA table_info(tesserati)').fetchall()}
+            athletes=[dict(x) for x in c.execute("SELECT * FROM tesserati ORDER BY TRIM(cognome) COLLATE NOCASE,TRIM(nome) COLLATE NOCASE").fetchall()]
+            pays=[dict(x) for x in c.execute("SELECT * FROM pagamenti WHERE mese=? AND anno=? ORDER BY id DESC",(mese,anno)).fetchall()]
+        finally:
+            c.close()
+
+        def _paid_row(p):
+            st=(str(p.get('stato') or '')+' '+str(p.get('online_status') or '')).lower()
+            bad=any(x in st for x in ('pending','attesa','cancel','annull','failed','fallit','refunded','rimbors'))
+            good=any(x in st for x in ('paid','pagat','saldat','complet','incassat'))
+            try: amount=float(p.get('importo') or 0)
+            except Exception: amount=0
+            cause=str(p.get('causale') or '').lower()
+            monthly=('mensil' in cause) or cause in ('quota','quota_mensile','mensile')
+            return monthly and (not bad) and (good or (bool(p.get('data')) and amount>0))
+
+        paid_by={}
+        for p in pays:
+            tid=int(p.get('tesserato_id') or 0)
+            if tid>0 and tid not in paid_by and _paid_row(p):
+                paid_by[tid]=p
+
+        red=[]; green=[]
+        for a in athletes:
+            tid=int(a.get('id') or 0)
+            name=((str(a.get('cognome') or '')+' '+str(a.get('nome') or '')).strip()) or ('Tesserata #'+str(tid))
+            phone=str(a.get('telefono') or a.get('telefono_genitore') or '').strip()
+            pay=paid_by.get(tid)
+            item={'id':tid,'name':name,'phone':phone,'pay':pay}
+            (green if pay else red).append(item)
+
+        def _card(item,ok):
+            tid=item['id']; name=e(item['name']); phone=e(item['phone'] or 'Telefono non indicato')
+            href='/pagamenti?tesserato_id='+str(tid)+'&mese='+str(mese)+'&anno='+str(anno)
+            if ok:
+                p=item['pay'] or {}
+                try: amount=float(p.get('importo') or 0)
+                except Exception: amount=0
+                detail=('€ %.2f' % amount).replace('.',',') if amount>0 else 'Pagamento registrato'
+                if p.get('data'): detail+=' · '+e(str(p.get('data')))
+                return "<a class='r125-pay-card is-paid' href='"+href+"'><span class='r125-dot'>✓</span><div class='r125-id'><b>"+name+"</b><small>"+phone+"</small></div><div class='r125-side'><strong>PAGATO</strong><small>"+detail+"</small></div></a>"
+            return "<a class='r125-pay-card is-unpaid' href='"+href+"'><span class='r125-dot'>!</span><div class='r125-id'><b>"+name+"</b><small>"+phone+"</small></div><div class='r125-side'><strong>DA PAGARE</strong><small>Registra pagamento</small></div></a>"
+
+        red_html=''.join(_card(x,False) for x in red) or "<div class='r125-empty ok'>Nessuna quota mensile da recuperare.</div>"
+        green_html=''.join(_card(x,True) for x in green) or "<div class='r125-empty'>Nessun pagamento mensile registrato.</div>"
+        month_names=['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
+        month_label=(month_names[mese] if 1<=mese<=12 else str(mese))+' '+str(anno)
+
+        board=f"""<!-- BODYMIND_R125_PAYMENT_BOARD -->
+        <section class='r125-board'>
+          <div class='r125-head'>
+            <div><span class='r125-kicker'>STATO PAGAMENTI</span><h2>{e(month_label)}</h2><p>Rosso = da pagare · Verde = pagato</p></div>
+            <div class='r125-counts'><span class='bad'>{len(red)} da pagare</span><span class='good'>{len(green)} pagati</span></div>
+          </div>
+          <div class='r125-tabs'>
+            <button type='button' class='active' data-r125='all'>Tutti</button>
+            <button type='button' data-r125='unpaid'>Da pagare <b>{len(red)}</b></button>
+            <button type='button' data-r125='paid'>Pagati <b>{len(green)}</b></button>
+          </div>
+          <div class='r125-grid' data-r125-group='unpaid'>
+            <div class='r125-section-title'><span class='red-dot'></span> Da pagare</div>{red_html}
+          </div>
+          <div class='r125-grid' data-r125-group='paid'>
+            <div class='r125-section-title'><span class='green-dot'></span> Pagati</div>{green_html}
+          </div>
+        </section>
+        <style>
+        .r125-board{{margin:14px 0 18px;padding:16px;border-radius:22px;background:linear-gradient(145deg,#08111f,#0d1d31 52%,#10263f);border:1px solid rgba(148,163,184,.16);box-shadow:0 22px 55px rgba(0,0,0,.28);color:#f8fafc}}
+        .r125-head{{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:14px}}.r125-kicker{{font-size:11px;letter-spacing:.14em;font-weight:950;color:#7dd3fc}}.r125-head h2{{margin:3px 0 3px;font-size:24px}}.r125-head p{{margin:0;color:#94a3b8;font-size:13px}}.r125-counts{{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}}.r125-counts span{{padding:8px 10px;border-radius:999px;font-size:12px;font-weight:950}}.r125-counts .bad{{background:rgba(220,38,38,.18);color:#fecaca;border:1px solid rgba(248,113,113,.35)}}.r125-counts .good{{background:rgba(22,163,74,.18);color:#bbf7d0;border:1px solid rgba(74,222,128,.35)}}.r125-tabs{{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:14px}}.r125-tabs button{{border:1px solid rgba(148,163,184,.18);background:#0b1728;color:#cbd5e1;border-radius:12px;padding:10px 8px;font-weight:900}}.r125-tabs button.active{{background:#1d4ed8;color:white;border-color:#60a5fa}}.r125-grid{{display:grid;gap:8px;margin-top:10px}}.r125-section-title{{display:flex;align-items:center;gap:8px;margin:4px 2px 2px;font-size:12px;font-weight:950;letter-spacing:.06em;text-transform:uppercase;color:#cbd5e1}}.red-dot,.green-dot{{width:9px;height:9px;border-radius:50%}}.red-dot{{background:#ef4444;box-shadow:0 0 12px rgba(239,68,68,.65)}}.green-dot{{background:#22c55e;box-shadow:0 0 12px rgba(34,197,94,.65)}}.r125-pay-card{{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:10px;align-items:center;padding:12px 13px;border-radius:16px;text-decoration:none!important;color:white!important;transition:transform .15s ease,border-color .15s ease}}.r125-pay-card:active{{transform:scale(.99)}}.r125-pay-card.is-unpaid{{background:linear-gradient(135deg,rgba(127,29,29,.84),rgba(69,10,10,.72));border:1px solid rgba(248,113,113,.4)}}.r125-pay-card.is-paid{{background:linear-gradient(135deg,rgba(20,83,45,.86),rgba(5,46,22,.74));border:1px solid rgba(74,222,128,.4)}}.r125-dot{{display:grid;place-items:center;width:32px;height:32px;border-radius:50%;font-weight:950;font-size:16px}}.is-unpaid .r125-dot{{background:#dc2626}}.is-paid .r125-dot{{background:#16a34a}}.r125-id{{display:grid;gap:3px;min-width:0}}.r125-id b{{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}.r125-id small{{font-size:12px;color:#cbd5e1}}.r125-side{{display:grid;justify-items:end;gap:2px;text-align:right}}.r125-side strong{{font-size:11px;letter-spacing:.06em}}.is-unpaid .r125-side strong{{color:#fecaca}}.is-paid .r125-side strong{{color:#bbf7d0}}.r125-side small{{font-size:11px;color:#cbd5e1}}.r125-empty{{padding:14px;border-radius:14px;background:#0b1728;color:#cbd5e1}}.r125-empty.ok{{color:#86efac}}@media(max-width:600px){{.r125-board{{margin:10px 0 14px;padding:12px;border-radius:18px}}.r125-head{{display:grid}}.r125-counts{{justify-content:flex-start}}.r125-pay-card{{grid-template-columns:34px minmax(0,1fr);grid-template-areas:'dot id' 'dot side'}}.r125-dot{{grid-area:dot}}.r125-id{{grid-area:id}}.r125-side{{grid-area:side;justify-items:start;text-align:left}}.r125-tabs button{{font-size:12px;padding:9px 5px}}}}
+        </style>
+        <script>(function(){{
+          var board=document.querySelector('.r125-board'); if(!board) return;
+          var buttons=board.querySelectorAll('[data-r125]');
+          buttons.forEach(function(btn){{btn.addEventListener('click',function(){{
+            buttons.forEach(function(b){{b.classList.remove('active')}}); btn.classList.add('active');
+            var v=btn.getAttribute('data-r125');
+            board.querySelectorAll('[data-r125-group]').forEach(function(g){{
+              g.style.display=(v==='all'||g.getAttribute('data-r125-group')===v)?'grid':'none';
+            }});
+          }})}});
+        }})();</script>"""
+        # Place this before the rest of payment operations whenever possible.
+        if '<main' in html:
+            pos=html.find('>',html.find('<main'))
+            html=html[:pos+1]+board+html[pos+1:]
+        elif '</body>' in html:
+            html=html.replace('</body>',board+'</body>',1)
+        else:
+            html+=board
+        resp.set_data(html)
+    except Exception as exc:
+        print('[r125-payment-board-warning] '+repr(exc),flush=True)
+    return resp
+'''
+    CORE.write_text(core_pay,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+    print('[r125-payment-board] PASS premium red/green monthly board installed',flush=True)
+
 # Fresh import/UI gate.
 qa=r'''
 import sqlite3,sys
@@ -312,8 +436,9 @@ finally: conn.close()
 ath_count=conn2=None
 # direct list should include a known athlete regardless of legacy course assignment
 direct_ok=("BODYMIND_R123_PRESENZE_SIMPLE" in bh and "r123-athlete" in bh)
-ok=(p.status_code==200 and "BODYMIND_R123_PAYMENT_MOBILE" in ph and _identity_ok and a.status_code in (301,302,307,308) and "/presenze-semplici" in str(a.headers.get("Location","")) and b.status_code==200 and direct_ok and "Giornata operativa" not in bh and all(x in bh for x in ("Base","Kids","Adult","Pro / Agoniste")) and integrity.lower()=="ok" and fk==0)
-print("[r123-selftest] status_payment=%s identity_ok=%s presence_redirect=%s simple=%s db=%s fk=%s ok=%s"%(p.status_code,_identity_ok,a.status_code,b.status_code,integrity,fk,ok),flush=True)
+premium_pay_ok=("BODYMIND_R125_PAYMENT_BOARD" in ph and "DA PAGARE" in ph and "PAGATO" in ph)
+ok=(p.status_code==200 and "BODYMIND_R123_PAYMENT_MOBILE" in ph and premium_pay_ok and _identity_ok and a.status_code in (301,302,307,308) and "/presenze-semplici" in str(a.headers.get("Location","")) and b.status_code==200 and direct_ok and "Giornata operativa" not in bh and all(x in bh for x in ("Base","Kids","Adult","Pro / Agoniste")) and integrity.lower()=="ok" and fk==0)
+print("[r123-selftest] status_payment=%s premium_pay_ok=%s identity_ok=%s presence_redirect=%s simple=%s db=%s fk=%s ok=%s"%(p.status_code,premium_pay_ok,_identity_ok,a.status_code,b.status_code,integrity,fk,ok),flush=True)
 if not ok: raise RuntimeError("R123 QA failed")
 '''
 proc=subprocess.run([sys.executable,'-c',qa],capture_output=True,text=True,timeout=120)
