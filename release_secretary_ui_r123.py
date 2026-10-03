@@ -146,11 +146,11 @@ def _bodymind_r123_payment_simplify(resp):
         rows=[dict(x) for x in get_missing_iscrizione_rows(anno,mese)]
         rows=sorted(rows,key=lambda r:((str(r.get('cognome') or '')).strip().lower(),(str(r.get('nome') or '')).strip().lower()))
         if rows:
-            items=''.join("<a class='r123-pay-person' href='/pagamenti?tesserato_id="+str(int(r.get('id') or 0))+"&mese="+str(mese)+"&anno="+str(anno)+"'><b>"+e((str(r.get('cognome') or '')+' '+str(r.get('nome') or '')).strip())+"</b><span>Registra quota iscrizione</span></a>" for r in rows)
+            items=''.join("<a class='r123-pay-person' href='/pagamenti?tesserato_id="+str(int(r.get('id') or 0))+"&mese="+str(mese)+"&anno="+str(anno)+"'><div class='r123-pay-id'><b>"+e((str(r.get('cognome') or '')+' '+str(r.get('nome') or '')).strip())+"</b><small>"+e(str(r.get('telefono') or r.get('telefono_genitore') or 'Telefono non indicato'))+"</small></div><span>Registra quota iscrizione</span></a>" for r in rows)
         else:
             items="<div class='r123-pay-empty'>Tutte le tesserate risultano in regola con la quota iscrizione.</div>"
         box=f"""<!-- BODYMIND_R123_PAYMENT_MOBILE --><section class='r123-pay-box'><div class='r123-pay-kicker'>OPERATIVITÀ IMMEDIATA</div><h3>Tesserate senza quota iscrizione · stagione {e(season['label'])}</h3><div class='r123-pay-list'>{items}</div></section>
-        <style>.r123-pay-box{{margin:12px 0;padding:15px;border-radius:16px;background:#0d1d31;border:1px solid rgba(148,163,184,.18)}}.r123-pay-kicker{{font-size:11px;font-weight:950;letter-spacing:.1em;color:#93c5fd}}.r123-pay-box h3{{margin:5px 0 10px}}.r123-pay-list{{display:grid;gap:7px}}.r123-pay-person{{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 12px;border-radius:12px;background:#12283f;color:white!important;text-decoration:none}}.r123-pay-person span{{font-size:11px;color:#93c5fd}}.r123-pay-empty{{color:#86efac;font-weight:800}}@media(max-width:560px){{.r123-pay-person{{align-items:flex-start;flex-direction:column}}}}</style>
+        <style>.r123-pay-box{{margin:12px 0;padding:15px;border-radius:16px;background:#0d1d31;border:1px solid rgba(148,163,184,.18)}}.r123-pay-kicker{{font-size:11px;font-weight:950;letter-spacing:.1em;color:#93c5fd}}.r123-pay-box h3{{margin:5px 0 10px}}.r123-pay-list{{display:grid;gap:7px}}.r123-pay-person{{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 12px;border-radius:12px;background:#12283f;color:white!important;text-decoration:none}}.r123-pay-id{{display:grid;gap:3px;min-width:0}}.r123-pay-id b{{font-size:14px;line-height:1.2}}.r123-pay-id small{{color:#cbd5e1;font-size:12px}}.r123-pay-person span{{font-size:11px;color:#93c5fd}}.r123-pay-empty{{color:#86efac;font-weight:800}}@media(max-width:560px){{.r123-pay-person{{align-items:flex-start;flex-direction:column}}}}</style>
         <script>(function(){{
           var targets=['tesseramento / iscrizione','seleziona periodo e tesserato','tesserati senza quota iscrizione/tesseramento'];
           function hideByText(txt){{
@@ -257,6 +257,24 @@ if 'BODYMIND_R123_SECRETARY_UI' in core_now and 'BODYMIND_R123_DIRECT_ATHLETE_SE
     py_compile.compile(str(CORE),doraise=True)
     print('[r123-core-upgrade] PASS direct athlete selection for all groups',flush=True)
 
+# BODYMIND_R124_PAYMENT_IDENTITY_FIX
+# Fix the canonical immediate-payment rows themselves, not only the R123 overlay.
+# Show COGNOME NOME and keep athlete phone, falling back to guardian phone.
+core_pay=CORE.read_text(encoding='utf-8',errors='replace')
+old_pay="""<td><b>{e(row['nome'])} {e(row['cognome'])}</b><div class='small-muted'>{e(row['telefono'] or 'Telefono non indicato')}</div><div class='small-muted'>{state['badges']} {render_member_status_badge(compute_member_status(row.get('id'), selected_mese, selected_anno, payment_status_alerts))}</div></td>"""
+new_pay="""<td><b>{e((row.get('cognome') or '')+' '+(row.get('nome') or ''))}</b><div class='small-muted'>{e(row.get('telefono') or row.get('telefono_genitore') or 'Telefono non indicato')}</div><div class='small-muted'>{state['badges']} {render_member_status_badge(compute_member_status(row.get('id'), selected_mese, selected_anno, payment_status_alerts))}</div></td>"""
+if old_pay in core_pay:
+    dst=BACK/'core_pre_payment_identity_fix.py'
+    if not dst.exists(): shutil.copy2(CORE,dst)
+    core_pay=core_pay.replace(old_pay,new_pay)
+    CORE.write_text(core_pay,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+    print('[r124-payment-identity] PASS canonical quick rows surname-name + phone fallback',flush=True)
+elif "row.get('telefono_genitore')" in core_pay and "row.get('cognome')" in core_pay:
+    print('[r124-payment-identity] already applied',flush=True)
+else:
+    raise RuntimeError('R124 canonical payment identity anchor missing')
+
 # Fresh import/UI gate.
 qa=r'''
 import sqlite3,sys
@@ -271,6 +289,15 @@ p=c.get("/pagamenti")
 a=c.get("/presenze",follow_redirects=False)
 b=c.get("/presenze-semplici?gruppo=pro")
 ph=p.get_data(as_text=True); bh=b.get_data(as_text=True)
+from asd_app.core import get_missing_iscrizione_rows,current_month_year
+_mm,_yy=current_month_year()
+_missing=[dict(x) for x in get_missing_iscrizione_rows(_yy,_mm)]
+_identity_ok=True
+if _missing:
+    _r=_missing[0]
+    _nm=((str(_r.get('cognome') or '')+' '+str(_r.get('nome') or '')).strip())
+    _tel=str(_r.get('telefono') or _r.get('telefono_genitore') or 'Telefono non indicato')
+    _identity_ok=bool(_nm and _nm in ph and _tel in ph)
 conn=sqlite3.connect("/data/tenants/default/asd.db",timeout=20)
 try:
     integrity=str(conn.execute("PRAGMA integrity_check").fetchone()[0]); fk=len(conn.execute("PRAGMA foreign_key_check").fetchall())
@@ -278,8 +305,8 @@ finally: conn.close()
 ath_count=conn2=None
 # direct list should include a known athlete regardless of legacy course assignment
 direct_ok=("BODYMIND_R123_PRESENZE_SIMPLE" in bh and "r123-athlete" in bh)
-ok=(p.status_code==200 and "BODYMIND_R123_PAYMENT_MOBILE" in ph and a.status_code in (301,302,307,308) and "/presenze-semplici" in str(a.headers.get("Location","")) and b.status_code==200 and direct_ok and "Giornata operativa" not in bh and all(x in bh for x in ("Base","Kids","Adult","Pro / Agoniste")) and integrity.lower()=="ok" and fk==0)
-print("[r123-selftest] status_payment=%s presence_redirect=%s simple=%s db=%s fk=%s ok=%s"%(p.status_code,a.status_code,b.status_code,integrity,fk,ok),flush=True)
+ok=(p.status_code==200 and "BODYMIND_R123_PAYMENT_MOBILE" in ph and _identity_ok and a.status_code in (301,302,307,308) and "/presenze-semplici" in str(a.headers.get("Location","")) and b.status_code==200 and direct_ok and "Giornata operativa" not in bh and all(x in bh for x in ("Base","Kids","Adult","Pro / Agoniste")) and integrity.lower()=="ok" and fk==0)
+print("[r123-selftest] status_payment=%s identity_ok=%s presence_redirect=%s simple=%s db=%s fk=%s ok=%s"%(p.status_code,_identity_ok,a.status_code,b.status_code,integrity,fk,ok),flush=True)
 if not ok: raise RuntimeError("R123 QA failed")
 '''
 proc=subprocess.run([sys.executable,'-c',qa],capture_output=True,text=True,timeout=120)
