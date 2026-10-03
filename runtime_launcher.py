@@ -102,22 +102,27 @@ _bodymind_storage_preflight()
 
 # BODYMIND_EARLY_SOURCE_RECOVERY_R120
 def _bodymind_early_source_recovery():
-    target=pathlib.Path("/data/top2_app/asd_app/routes_tesserati.py")
-    if not target.exists():
-        return
-    try:
-        py_compile.compile(str(target),doraise=True)
-        return
-    except Exception as exc:
-        backup=pathlib.Path("/data/release_backups/20261003_r120_certificate_truth/routes_tesserati.py")
-        if not backup.exists():
-            raise SystemExit("Persistent routes_tesserati.py is invalid and recovery backup is missing: "+repr(exc))
-        shutil.copy2(backup,target)
+    pairs=[
+      ("routes_tesserati.py","/data/top2_app/asd_app/routes_tesserati.py"),
+      ("routes_bodymind_fix24.py","/data/top2_app/asd_app/routes_bodymind_fix24.py"),
+    ]
+    for backup_name,target_name in pairs:
+        target=pathlib.Path(target_name)
+        if not target.exists():
+            continue
         try:
             py_compile.compile(str(target),doraise=True)
-        except Exception as exc2:
-            raise SystemExit("R120 source recovery failed: "+repr(exc2))
-        print("[r120-early-recovery] restored routes_tesserati.py before app imports",flush=True)
+            continue
+        except Exception as exc:
+            backup=pathlib.Path("/data/release_backups/20261003_r120_certificate_truth")/backup_name
+            if not backup.exists():
+                raise SystemExit("Persistent source is invalid and recovery backup is missing for "+backup_name+": "+repr(exc))
+            shutil.copy2(backup,target)
+            try:
+                py_compile.compile(str(target),doraise=True)
+            except Exception as exc2:
+                raise SystemExit("R120 source recovery failed for "+backup_name+": "+repr(exc2))
+            print("[r120-early-recovery] restored "+backup_name+" before app imports",flush=True)
 
 _bodymind_early_source_recovery()
 
