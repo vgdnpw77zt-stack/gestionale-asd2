@@ -233,11 +233,13 @@ try:
     stale_active_batch=[]
     if table(conn,'bodymind_operator_tasks'):
         try:
-            rows=conn.execute("""SELECT id,conversation_id,task_type,status,created_at,updated_at
-              FROM bodymind_operator_tasks
-              WHERE task_type='batch_upload' AND status='active'
-                AND julianday(updated_at) < julianday('now','-6 hours')
-              ORDER BY id""").fetchall()
+            clauses=["t.task_type='batch_upload'","t.status='active'","julianday(t.updated_at) < julianday('now','-6 hours')"]
+            if table(conn,'bodymind_operator_upload_jobs'):
+                clauses.append("NOT EXISTS (SELECT 1 FROM bodymind_operator_upload_jobs j WHERE j.conversation_id=t.conversation_id AND j.status IN ('queued','processing'))")
+            if table(conn,'bodymind_operator_actions'):
+                clauses.append("NOT EXISTS (SELECT 1 FROM bodymind_operator_actions a WHERE a.conversation_id=t.conversation_id AND a.status IN ('proposed','pending','awaiting_confirmation'))")
+            rows=conn.execute("""SELECT t.id,t.conversation_id,t.task_type,t.status,t.created_at,t.updated_at
+              FROM bodymind_operator_tasks t WHERE """+" AND ".join(clauses)+" ORDER BY t.id").fetchall()
             stale_active_batch=[dict(x) for x in rows]
         except Exception:
             stale_active_batch=[]
