@@ -522,8 +522,37 @@ def _bodymind_r127_history_card_names_nav(resp):
         addon=f"""<!-- BODYMIND_R127_HISTORY_SCRIPT -->
         <style>
         .r127-history-name{{font-size:20px;font-weight:950;line-height:1.15;color:#f8fafc;margin:8px 0 12px;letter-spacing:.01em}}
-        .r127-nav-current{{background:linear-gradient(180deg,rgba(16,185,129,.26),rgba(5,150,105,.18))!important;border-color:rgba(52,211,153,.5)!important;color:#fff!important}}
-        .r127-nav-clear{{background:transparent!important}}
+        .r127-nav-current{{background:linear-gradient(180deg,rgba(14,165,233,.24),rgba(3,105,161,.20))!important;border-color:rgba(56,189,248,.62)!important;color:#fff!important;box-shadow:inset 0 0 0 1px rgba(56,189,248,.18)!important}}
+        .r127-nav-clear{{background:transparent!important;border-color:transparent!important;box-shadow:none!important}}
+        /* BODYMIND_R129_PAYMENT_MOBILE_VISIBILITY
+           The payment HTML already contains the athlete name inside the first
+           table cell. Legacy responsive CSS was hiding the strong/b tag while
+           leaving badges visible. Force the actual identity to remain visible. */
+        @media(max-width:900px){{
+          body .card table tr td:first-child>strong,
+          body .card table tr td:first-child>b,
+          body .table-wrap table tr td:first-child>strong,
+          body .table-wrap table tr td:first-child>b{{
+            display:block!important;visibility:visible!important;opacity:1!important;
+            position:static!important;clip:auto!important;clip-path:none!important;
+            width:auto!important;height:auto!important;overflow:visible!important;
+            font-size:18px!important;line-height:1.2!important;font-weight:950!important;
+            color:#f8fafc!important;margin:0 0 9px!important;text-indent:0!important;
+          }}
+          nav.nav a[href^="/presenze"],
+          .nav a[href^="/presenze"],
+          [class*="bottom"] a[href^="/presenze"]{{
+            background:transparent!important;border-color:transparent!important;
+            box-shadow:none!important;color:#dbe7f5!important;
+          }}
+          nav.nav a[href^="/pagamenti"],
+          .nav a[href^="/pagamenti"],
+          [class*="bottom"] a[href^="/pagamenti"]{{
+            background:linear-gradient(180deg,rgba(14,165,233,.28),rgba(3,105,161,.22))!important;
+            border:1px solid rgba(56,189,248,.68)!important;color:#fff!important;
+            box-shadow:inset 0 0 0 1px rgba(56,189,248,.16)!important;
+          }}
+        }}
         @media(max-width:600px){{.r127-history-name{{font-size:18px}}}}
         </style>
         <script>
@@ -663,8 +692,9 @@ history_labels=ph.upper().count("NOME / STATO")
 history_names=ph.count("r126-history-name")
 history_name_ok=(history_labels==0 or history_names>=history_labels)
 r127_script_ok=("BODYMIND_R127_HISTORY_SCRIPT" in ph and "r127-nav-current" in ph and "paymentNames=" in ph)
-ok=(p.status_code==200 and "BODYMIND_R123_PAYMENT_MOBILE" in ph and premium_pay_ok and r127_script_ok and _identity_ok and a.status_code in (301,302,307,308) and "/presenze-semplici" in str(a.headers.get("Location","")) and b.status_code==200 and direct_ok and "Giornata operativa" not in bh and all(x in bh for x in ("Base","Kids","Adult","Pro / Agoniste")) and integrity.lower()=="ok" and fk==0)
-print("[r123-selftest] status_payment=%s premium_pay_ok=%s legacy_history_name_ok=%s r127_script_ok=%s identity_ok=%s presence_redirect=%s simple=%s db=%s fk=%s ok=%s"%(p.status_code,premium_pay_ok,history_name_ok,r127_script_ok,_identity_ok,a.status_code,b.status_code,integrity,fk,ok),flush=True)
+r129_css_ok=("BODYMIND_R129_PAYMENT_MOBILE_VISIBILITY" in ph and 'a[href^="/pagamenti"]' in ph and 'td:first-child>strong' in ph)
+ok=(p.status_code==200 and "BODYMIND_R123_PAYMENT_MOBILE" in ph and premium_pay_ok and r127_script_ok and r129_css_ok and _identity_ok and a.status_code in (301,302,307,308) and "/presenze-semplici" in str(a.headers.get("Location","")) and b.status_code==200 and direct_ok and "Giornata operativa" not in bh and all(x in bh for x in ("Base","Kids","Adult","Pro / Agoniste")) and integrity.lower()=="ok" and fk==0)
+print("[r123-selftest] status_payment=%s premium_pay_ok=%s legacy_history_name_ok=%s r127_script_ok=%s r129_css_ok=%s identity_ok=%s presence_redirect=%s simple=%s db=%s fk=%s ok=%s"%(p.status_code,premium_pay_ok,history_name_ok,r127_script_ok,r129_css_ok,_identity_ok,a.status_code,b.status_code,integrity,fk,ok),flush=True)
 if not ok: raise RuntimeError("R123 QA failed")
 '''
 proc=subprocess.run([sys.executable,'-c',qa],capture_output=True,text=True,timeout=120)
