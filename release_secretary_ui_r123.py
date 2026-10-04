@@ -852,6 +852,63 @@ def _bodymind_r131_history_name_visible_div(resp):
 else:
     print('[r131-history-name] already present',flush=True)
 
+# BODYMIND_R133_PRESENCE_TABS_FIX
+# Safari-safe course-group switching with a distinct register for each group.
+core_r133=CORE.read_text(encoding='utf-8',errors='replace')
+if 'BODYMIND_R133_PRESENCE_TABS_FIX' not in core_r133:
+    conn=sqlite3.connect(str(DB),timeout=30); conn.row_factory=sqlite3.Row
+    try:
+        courses=conn.execute("SELECT id,nome FROM corsi ORDER BY id").fetchall()
+        def _grp(v):
+            z=' '.join(str(v or '').strip().lower().replace('_',' ').split())
+            if any(x in z for x in ('pro','agon','elite','advanced')): return 'pro'
+            if any(x in z for x in ('kid','baby','bambin','junior')): return 'kids'
+            if any(x in z for x in ('adult','adulti')): return 'adult'
+            if 'base' in z: return 'base'
+            return ''
+        if not any(_grp(r['nome'])=='base' for r in courses):
+            bdir=BACK/'r133_pre_base_course.db'
+            if not bdir.exists():
+                srcdb=sqlite3.connect(str(DB),timeout=30); outdb=sqlite3.connect(str(bdir))
+                try: srcdb.backup(outdb)
+                finally: outdb.close(); srcdb.close()
+            cols={str(x[1]) for x in conn.execute("PRAGMA table_info(corsi)").fetchall()}
+            vals={'nome':'BASE','descrizione':'Registro presenze Base','orario':'','max_iscritti':0,'tenant_id':'default'}
+            vals={k:v for k,v in vals.items() if k in cols}
+            ks=list(vals)
+            conn.execute("INSERT INTO corsi("+','.join(ks)+") VALUES("+','.join('?' for _ in ks)+")",[vals[k] for k in ks])
+            conn.commit()
+            print('[r133-presence] created BASE course',flush=True)
+    finally:
+        conn.close()
+
+    old_tabs="""    tabs=''.join("<a class='r123-tab "+('active' if group==k else '')+"' href='/presenze-semplici?gruppo="+k+"&data="+e(day)+"'>"+label+"</a>" for k,label in [('base','Base'),('kids','Kids'),('adult','Adult'),('pro','Pro / Agoniste')])"""
+    new_tabs="""    tabs=''.join("<form class='r123-tab-form' method='get' action='/presenze-semplici'><input type='hidden' name='data' value='"+e(day)+"'><button type='submit' name='gruppo' value='"+k+"' class='r123-tab "+('active' if group==k else '')+"' aria-pressed='"+('true' if group==k else 'false')+"'>"+label+"</button></form>" for k,label in [('base','Base'),('kids','Kids'),('adult','Adult'),('pro','Pro / Agoniste')])"""
+    if old_tabs not in core_r133:
+        raise RuntimeError('R133 tabs source anchor missing')
+    core_r133=core_r133.replace(old_tabs,new_tabs,1)
+
+    old_nav="""      <nav class='r123-tabs'>{tabs}</nav>
+      <form method='post' id='r123-presence-form'>"""
+    new_nav="""      <nav class='r123-tabs'>{tabs}</nav>
+      <div class='r133-selected'>Registro selezionato: <strong>{e(_r123_group_label(group))}</strong></div>
+      <form method='post' id='r123-presence-form'>"""
+    if old_nav not in core_r133:
+        raise RuntimeError('R133 selected banner anchor missing')
+    core_r133=core_r133.replace(old_nav,new_nav,1)
+
+    old_css=""".r123-tabs{{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0}}.r123-tab{{padding:11px 6px;border-radius:12px;background:#12243a;color:#cbd5e1!important;text-decoration:none;text-align:center;font-weight:900;font-size:12px}}.r123-tab.active{{background:#2563eb;color:white!important}}"""
+    new_css=""".r123-tabs{{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0;position:relative;z-index:20;pointer-events:auto}}.r123-tab-form{{margin:0;padding:0;display:block;position:relative;z-index:21;pointer-events:auto}}.r123-tab{{appearance:none;-webkit-appearance:none;width:100%;min-height:48px;padding:11px 6px;border:1px solid rgba(148,163,184,.22);border-radius:12px;background:#12243a;color:#cbd5e1!important;text-align:center;font-weight:900;font-size:12px;position:relative;z-index:22;pointer-events:auto;touch-action:manipulation;cursor:pointer}}.r123-tab.active{{background:#2563eb!important;border-color:#60a5fa!important;color:white!important;box-shadow:0 0 0 2px rgba(96,165,250,.18)}}.r133-selected{{margin:8px 0 10px;padding:10px 12px;border-radius:12px;background:rgba(37,99,235,.14);border:1px solid rgba(96,165,250,.28);color:#dbeafe;font-size:13px}}.r133-selected strong{{color:#fff;font-size:15px}}"""
+    if old_css not in core_r133:
+        raise RuntimeError('R133 tabs css anchor missing')
+    core_r133=core_r133.replace(old_css,new_css,1)
+
+    CORE.write_text(core_r133,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+    print('[r133-presence] PASS native group buttons + selected banner + distinct base course',flush=True)
+else:
+    print('[r133-presence] already present',flush=True)
+
 # Fresh import/UI gate.
 qa=r'''
 import sqlite3,sys
@@ -866,6 +923,12 @@ p=c.get("/pagamenti")
 a=c.get("/presenze",follow_redirects=False)
 b=c.get("/presenze-semplici?gruppo=pro")
 ph=p.get_data(as_text=True); bh=b.get_data(as_text=True)
+_group_pages={}
+for _g in ("base","kids","adult","pro"):
+    _rr=c.get("/presenze-semplici?gruppo="+_g)
+    _tx=_rr.get_data(as_text=True)
+    _group_pages[_g]=(_rr.status_code==200 and ("value='"+_g+"' class='r123-tab active'") in _tx and "r133-selected" in _tx)
+group_switch_ok=all(_group_pages.values())
 from asd_app.core import get_missing_iscrizione_rows,current_month_year
 _mm,_yy=current_month_year()
 _missing=[dict(x) for x in get_missing_iscrizione_rows(_yy,_mm)]
@@ -889,8 +952,8 @@ history_name_ok=(history_labels==0 or history_names>=history_labels)
 r127_script_ok=("BODYMIND_R127_HISTORY_SCRIPT" in ph and "r127-nav-current" in ph and "paymentNames=" in ph)
 r129_css_ok=("bodymind-r130-payment-fix" in ph and 'a[href^="/pagamenti"]' in ph and 'td:first-child>strong' in ph)
 r131_history_ok=("r131-history-name" in ph)
-ok=(p.status_code==200 and "BODYMIND_R123_PAYMENT_MOBILE" in ph and premium_pay_ok and r127_script_ok and r129_css_ok and r131_history_ok and _identity_ok and a.status_code in (301,302,307,308) and "/presenze-semplici" in str(a.headers.get("Location","")) and b.status_code==200 and direct_ok and "Giornata operativa" not in bh and all(x in bh for x in ("Base","Kids","Adult","Pro / Agoniste")) and integrity.lower()=="ok" and fk==0)
-print("[r123-selftest] status_payment=%s premium_pay_ok=%s legacy_history_name_ok=%s r127_script_ok=%s r129_css_ok=%s r131_history_ok=%s identity_ok=%s presence_redirect=%s simple=%s db=%s fk=%s ok=%s"%(p.status_code,premium_pay_ok,history_name_ok,r127_script_ok,r129_css_ok,r131_history_ok,_identity_ok,a.status_code,b.status_code,integrity,fk,ok),flush=True)
+ok=(p.status_code==200 and group_switch_ok and "BODYMIND_R123_PAYMENT_MOBILE" in ph and premium_pay_ok and r127_script_ok and r129_css_ok and r131_history_ok and _identity_ok and a.status_code in (301,302,307,308) and "/presenze-semplici" in str(a.headers.get("Location","")) and b.status_code==200 and direct_ok and "Giornata operativa" not in bh and all(x in bh for x in ("Base","Kids","Adult","Pro / Agoniste")) and integrity.lower()=="ok" and fk==0)
+print("[r123-selftest] group_switch_ok=%s groups=%s status_payment=%s premium_pay_ok=%s legacy_history_name_ok=%s r127_script_ok=%s r129_css_ok=%s r131_history_ok=%s identity_ok=%s presence_redirect=%s simple=%s db=%s fk=%s ok=%s"%(group_switch_ok,_group_pages,p.status_code,premium_pay_ok,history_name_ok,r127_script_ok,r129_css_ok,r131_history_ok,_identity_ok,a.status_code,b.status_code,integrity,fk,ok),flush=True)
 if not ok: raise RuntimeError("R123 QA failed")
 '''
 proc=subprocess.run([sys.executable,'-c',qa],capture_output=True,text=True,timeout=120)
