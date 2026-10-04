@@ -652,6 +652,7 @@ runpy.run_path("/opt/bodymind/release_mu_nomatch_create_smoke_r118.py", run_name
 # upload tasks can become safely closable only after their async job/actions
 # have completed during startup.
 _bodymind_operator_task_cleanup()
+runpy.run_path("/opt/bodymind/release_upload_state_probe_r142.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_stabilization_audit_r80.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mobile_delete_r85.py", run_name="__main__")
 if os.environ.get("BODYMIND_LEGACY_STARTUP_SMOKES","0") == "1":
@@ -706,7 +707,6 @@ else:
     print("[startup-convergence] R140 source rewrite skipped; R141 is the final rendered mobile athlete truth surface",flush=True)
 runpy.run_path("/opt/bodymind/release_secretary_ui_r123.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mobile_truth_surface_r141.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_upload_state_probe_r142.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_route_guard_r39.py", run_name="__main__")
 incoming = pathlib.Path("/data/incoming")
 for name in ("top2.zip", "backup.zip"):
