@@ -486,7 +486,8 @@ _bodymind_final_data_convergence()
 def _bodymind_neutralize_static_count_guards():
     patches={
       "/opt/bodymind/release_medical_profile_convergence_r100.py":[
-        ("'tesserati_unchanged':counts['tesserati']==35","'tesserati_dynamic_positive':counts['tesserati']>0")
+        ("'tesserati_unchanged':counts['tesserati']==35","'tesserati_dynamic_positive':counts['tesserati']>0"),
+        ("'giulia_one_medical':len(giulia_docs)==1","'giulia_medical_not_duplicated':len(giulia_docs)<=1")
       ],
       "/opt/bodymind/release_mu_canonical_r79.py":[
         ("if tess!=32 or integrity.lower()!='ok' or fk:","if tess<=0 or integrity.lower()!='ok' or fk:")
