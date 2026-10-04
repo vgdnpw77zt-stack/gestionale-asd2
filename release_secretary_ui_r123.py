@@ -657,6 +657,67 @@ def _bodymind_r127_history_card_names_nav(resp):
     py_compile.compile(str(CORE),doraise=True)
     print('[r127-history-nav] PASS per-card names + payment nav state installed',flush=True)
 
+# R129 upgrade existing R127 runtime: prior deployments already contain the
+# R127 marker, so update its CSS in-place before the fresh-process QA.
+_core_r129=CORE.read_text(encoding='utf-8',errors='replace')
+if 'BODYMIND_R127_HISTORY_CARD_NAMES_NAV' in _core_r129 and 'BODYMIND_R129_PAYMENT_MOBILE_VISIBILITY' not in _core_r129:
+    _old=""".r127-history-name{font-size:20px;font-weight:950;line-height:1.15;color:#f8fafc;margin:8px 0 12px;letter-spacing:.01em}
+        .r127-nav-current{background:linear-gradient(180deg,rgba(16,185,129,.26),rgba(5,150,105,.18))!important;border-color:rgba(52,211,153,.5)!important;color:#fff!important}
+        .r127-nav-clear{background:transparent!important}
+        @media(max-width:600px){.r127-history-name{font-size:18px}}"""
+    _new=""".r127-history-name{font-size:20px;font-weight:950;line-height:1.15;color:#f8fafc;margin:8px 0 12px;letter-spacing:.01em}
+        .r127-nav-current{background:linear-gradient(180deg,rgba(14,165,233,.24),rgba(3,105,161,.20))!important;border-color:rgba(56,189,248,.62)!important;color:#fff!important;box-shadow:inset 0 0 0 1px rgba(56,189,248,.18)!important}
+        .r127-nav-clear{background:transparent!important;border-color:transparent!important;box-shadow:none!important}
+        /* BODYMIND_R129_PAYMENT_MOBILE_VISIBILITY */
+        @media(max-width:900px){
+          body .card table tr td:first-child>strong,
+          body .card table tr td:first-child>b,
+          body .table-wrap table tr td:first-child>strong,
+          body .table-wrap table tr td:first-child>b{
+            display:block!important;visibility:visible!important;opacity:1!important;
+            position:static!important;clip:auto!important;clip-path:none!important;
+            width:auto!important;height:auto!important;overflow:visible!important;
+            font-size:18px!important;line-height:1.2!important;font-weight:950!important;
+            color:#f8fafc!important;margin:0 0 9px!important;text-indent:0!important;
+          }
+          nav.nav a[href^="/presenze"],.nav a[href^="/presenze"],[class*="bottom"] a[href^="/presenze"]{
+            background:transparent!important;border-color:transparent!important;box-shadow:none!important;color:#dbe7f5!important;
+          }
+          nav.nav a[href^="/pagamenti"],.nav a[href^="/pagamenti"],[class*="bottom"] a[href^="/pagamenti"]{
+            background:linear-gradient(180deg,rgba(14,165,233,.28),rgba(3,105,161,.22))!important;
+            border:1px solid rgba(56,189,248,.68)!important;color:#fff!important;
+            box-shadow:inset 0 0 0 1px rgba(56,189,248,.16)!important;
+          }
+        }
+        @media(max-width:600px){.r127-history-name{font-size:18px}}"""
+    if _old in _core_r129:
+        _core_r129=_core_r129.replace(_old,_new,1)
+    else:
+        # Fallback: inject the override immediately before the R127 closing style.
+        _needle="@media(max-width:600px){.r127-history-name{font-size:18px}}"
+        if _needle in _core_r129:
+            _core_r129=_core_r129.replace(_needle,_new.splitlines()[-1],1)
+            _core_r129=_core_r129.replace("</style>","""/* BODYMIND_R129_PAYMENT_MOBILE_VISIBILITY */
+        @media(max-width:900px){
+          body .card table tr td:first-child>strong,body .card table tr td:first-child>b,
+          body .table-wrap table tr td:first-child>strong,body .table-wrap table tr td:first-child>b{
+            display:block!important;visibility:visible!important;opacity:1!important;position:static!important;
+            clip:auto!important;clip-path:none!important;width:auto!important;height:auto!important;overflow:visible!important;
+            font-size:18px!important;line-height:1.2!important;font-weight:950!important;color:#f8fafc!important;margin:0 0 9px!important;text-indent:0!important}
+          nav.nav a[href^="/presenze"],.nav a[href^="/presenze"],[class*="bottom"] a[href^="/presenze"]{
+            background:transparent!important;border-color:transparent!important;box-shadow:none!important;color:#dbe7f5!important}
+          nav.nav a[href^="/pagamenti"],.nav a[href^="/pagamenti"],[class*="bottom"] a[href^="/pagamenti"]{
+            background:linear-gradient(180deg,rgba(14,165,233,.28),rgba(3,105,161,.22))!important;
+            border:1px solid rgba(56,189,248,.68)!important;color:#fff!important;box-shadow:inset 0 0 0 1px rgba(56,189,248,.16)!important}
+        }</style>""",1)
+        else:
+            raise RuntimeError('R129 existing R127 CSS anchor missing')
+    CORE.write_text(_core_r129,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+    print('[r129-upgrade] PASS existing R127 runtime CSS upgraded',flush=True)
+else:
+    print('[r129-upgrade] already present or R127 not installed yet',flush=True)
+
 # Fresh import/UI gate.
 qa=r'''
 import sqlite3,sys
