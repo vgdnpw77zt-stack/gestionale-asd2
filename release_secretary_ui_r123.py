@@ -884,24 +884,27 @@ if 'BODYMIND_R133_PRESENCE_TABS_FIX' not in core_r133:
 
     old_tabs="""    tabs=''.join("<a class='r123-tab "+('active' if group==k else '')+"' href='/presenze-semplici?gruppo="+k+"&data="+e(day)+"'>"+label+"</a>" for k,label in [('base','Base'),('kids','Kids'),('adult','Adult'),('pro','Pro / Agoniste')])"""
     new_tabs="""    tabs=''.join("<form class='r123-tab-form' method='get' action='/presenze-semplici'><input type='hidden' name='data' value='"+e(day)+"'><button type='submit' name='gruppo' value='"+k+"' class='r123-tab "+('active' if group==k else '')+"' aria-pressed='"+('true' if group==k else 'false')+"'>"+label+"</button></form>" for k,label in [('base','Base'),('kids','Kids'),('adult','Adult'),('pro','Pro / Agoniste')])"""
-    if old_tabs not in core_r133:
+    if old_tabs in core_r133:
+        core_r133=core_r133.replace(old_tabs,new_tabs,1)
+    elif "r123-tab-form" not in core_r133:
         raise RuntimeError('R133 tabs source anchor missing')
-    core_r133=core_r133.replace(old_tabs,new_tabs,1)
 
     old_nav="""      <nav class='r123-tabs'>{tabs}</nav>
       <form method='post' id='r123-presence-form'>"""
     new_nav="""      <nav class='r123-tabs'>{tabs}</nav>
       <div class='r133-selected'>Registro selezionato: <strong>{e(_r123_group_label(group))}</strong></div>
       <form method='post' id='r123-presence-form'>"""
-    if old_nav not in core_r133:
+    if old_nav in core_r133:
+        core_r133=core_r133.replace(old_nav,new_nav,1)
+    elif "r133-selected" not in core_r133:
         raise RuntimeError('R133 selected banner anchor missing')
-    core_r133=core_r133.replace(old_nav,new_nav,1)
 
     old_css=""".r123-tabs{{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0}}.r123-tab{{padding:11px 6px;border-radius:12px;background:#12243a;color:#cbd5e1!important;text-decoration:none;text-align:center;font-weight:900;font-size:12px}}.r123-tab.active{{background:#2563eb;color:white!important}}"""
     new_css=""".r123-tabs{{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0;position:relative;z-index:20;pointer-events:auto}}.r123-tab-form{{margin:0;padding:0;display:block;position:relative;z-index:21;pointer-events:auto}}.r123-tab{{appearance:none;-webkit-appearance:none;width:100%;min-height:48px;padding:11px 6px;border:1px solid rgba(148,163,184,.22);border-radius:12px;background:#12243a;color:#cbd5e1!important;text-align:center;font-weight:900;font-size:12px;position:relative;z-index:22;pointer-events:auto;touch-action:manipulation;cursor:pointer}}.r123-tab.active{{background:#2563eb!important;border-color:#60a5fa!important;color:white!important;box-shadow:0 0 0 2px rgba(96,165,250,.18)}}.r133-selected{{margin:8px 0 10px;padding:10px 12px;border-radius:12px;background:rgba(37,99,235,.14);border:1px solid rgba(96,165,250,.28);color:#dbeafe;font-size:13px}}.r133-selected strong{{color:#fff;font-size:15px}}"""
-    if old_css not in core_r133:
+    if old_css in core_r133:
+        core_r133=core_r133.replace(old_css,new_css,1)
+    elif "touch-action:manipulation" not in core_r133:
         raise RuntimeError('R133 tabs css anchor missing')
-    core_r133=core_r133.replace(old_css,new_css,1)
 
     CORE.write_text(core_r133,encoding='utf-8')
     py_compile.compile(str(CORE),doraise=True)
