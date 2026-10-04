@@ -660,7 +660,7 @@ def _bodymind_r127_history_card_names_nav(resp):
 # R129 upgrade existing R127 runtime: prior deployments already contain the
 # R127 marker, so update its CSS in-place before the fresh-process QA.
 _core_r129=CORE.read_text(encoding='utf-8',errors='replace')
-if 'BODYMIND_R127_HISTORY_CARD_NAMES_NAV' in _core_r129 and 'BODYMIND_R129_PAYMENT_MOBILE_VISIBILITY' not in _core_r129:
+if False and 'BODYMIND_R127_HISTORY_CARD_NAMES_NAV' in _core_r129 and 'BODYMIND_R129_PAYMENT_MOBILE_VISIBILITY' not in _core_r129:
     _old=""".r127-history-name{font-size:20px;font-weight:950;line-height:1.15;color:#f8fafc;margin:8px 0 12px;letter-spacing:.01em}
         .r127-nav-current{background:linear-gradient(180deg,rgba(16,185,129,.26),rgba(5,150,105,.18))!important;border-color:rgba(52,211,153,.5)!important;color:#fff!important}
         .r127-nav-clear{background:transparent!important}
@@ -718,6 +718,83 @@ if 'BODYMIND_R127_HISTORY_CARD_NAMES_NAV' in _core_r129 and 'BODYMIND_R129_PAYME
 else:
     print('[r129-upgrade] already present or R127 not installed yet',flush=True)
 
+# BODYMIND_R130_PAYMENT_MOBILE_HARD_FIX
+# Independent hard fix: do not depend on any prior R126/R127 markup migration.
+core_r130=CORE.read_text(encoding='utf-8',errors='replace')
+if 'BODYMIND_R130_PAYMENT_MOBILE_HARD_FIX' not in core_r130:
+    core_r130 += r'''
+
+# BODYMIND_R130_PAYMENT_MOBILE_HARD_FIX
+@app.after_request
+def _bodymind_r130_payment_mobile_hard_fix(resp):
+    try:
+        if request.method!='GET' or request.path!='/pagamenti' or int(getattr(resp,'status_code',200) or 200)!=200:
+            return resp
+        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
+            return resp
+        html=resp.get_data(as_text=True)
+        css="""<style id='bodymind-r130-payment-fix'>
+        @media(max-width:900px){
+          /* Historical payments already contain the athlete identity in the first
+             td. Legacy responsive CSS hid only the strong/b name and left badges. */
+          .card table tr td:first-child>strong,
+          .card table tr td:first-child>b,
+          .table-wrap table tr td:first-child>strong,
+          .table-wrap table tr td:first-child>b{
+            display:block!important;
+            visibility:visible!important;
+            opacity:1!important;
+            position:static!important;
+            transform:none!important;
+            clip:auto!important;
+            clip-path:none!important;
+            width:auto!important;
+            max-width:none!important;
+            height:auto!important;
+            max-height:none!important;
+            overflow:visible!important;
+            white-space:normal!important;
+            font-size:18px!important;
+            line-height:1.2!important;
+            font-weight:950!important;
+            color:#f8fafc!important;
+            margin:0 0 9px!important;
+            text-indent:0!important;
+          }
+
+          /* On /pagamenti the bottom navigation must visually select Pagamenti,
+             never Presenze. These selectors override older page/theme rules. */
+          nav.nav a[href^="/presenze"],
+          .nav a[href^="/presenze"],
+          [class*="bottom"] a[href^="/presenze"]{
+            background:transparent!important;
+            background-image:none!important;
+            border-color:transparent!important;
+            box-shadow:none!important;
+            color:#dbe7f5!important;
+          }
+          nav.nav a[href^="/pagamenti"],
+          .nav a[href^="/pagamenti"],
+          [class*="bottom"] a[href^="/pagamenti"]{
+            background:linear-gradient(180deg,rgba(14,165,233,.30),rgba(3,105,161,.24))!important;
+            border:1px solid rgba(56,189,248,.70)!important;
+            box-shadow:inset 0 0 0 1px rgba(56,189,248,.18)!important;
+            color:#fff!important;
+          }
+        }</style>"""
+        if "id='bodymind-r130-payment-fix'" not in html:
+            html=html.replace('</head>',css+'</head>',1) if '</head>' in html else css+html
+        resp.set_data(html)
+    except Exception as exc:
+        print('[r130-payment-fix-warning] '+repr(exc),flush=True)
+    return resp
+'''
+    CORE.write_text(core_r130,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+    print('[r130-payment-fix] PASS mobile historical names/nav hard fix installed',flush=True)
+else:
+    print('[r130-payment-fix] already present',flush=True)
+
 # Fresh import/UI gate.
 qa=r'''
 import sqlite3,sys
@@ -753,7 +830,7 @@ history_labels=ph.upper().count("NOME / STATO")
 history_names=ph.count("r126-history-name")
 history_name_ok=(history_labels==0 or history_names>=history_labels)
 r127_script_ok=("BODYMIND_R127_HISTORY_SCRIPT" in ph and "r127-nav-current" in ph and "paymentNames=" in ph)
-r129_css_ok=("BODYMIND_R129_PAYMENT_MOBILE_VISIBILITY" in ph and 'a[href^="/pagamenti"]' in ph and 'td:first-child>strong' in ph)
+r129_css_ok=("bodymind-r130-payment-fix" in ph and 'a[href^="/pagamenti"]' in ph and 'td:first-child>strong' in ph)
 ok=(p.status_code==200 and "BODYMIND_R123_PAYMENT_MOBILE" in ph and premium_pay_ok and r127_script_ok and r129_css_ok and _identity_ok and a.status_code in (301,302,307,308) and "/presenze-semplici" in str(a.headers.get("Location","")) and b.status_code==200 and direct_ok and "Giornata operativa" not in bh and all(x in bh for x in ("Base","Kids","Adult","Pro / Agoniste")) and integrity.lower()=="ok" and fk==0)
 print("[r123-selftest] status_payment=%s premium_pay_ok=%s legacy_history_name_ok=%s r127_script_ok=%s r129_css_ok=%s identity_ok=%s presence_redirect=%s simple=%s db=%s fk=%s ok=%s"%(p.status_code,premium_pay_ok,history_name_ok,r127_script_ok,r129_css_ok,_identity_ok,a.status_code,b.status_code,integrity,fk,ok),flush=True)
 if not ok: raise RuntimeError("R123 QA failed")
