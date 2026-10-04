@@ -286,6 +286,16 @@ alist=c.get("/mobile/atlete",follow_redirects=False)
 ah=alist.get_data(as_text=True)
 dash=c.get("/mobile",follow_redirects=False)
 dh=dash.get_data(as_text=True)
+try:
+    rule_info=[(str(r.rule),r.endpoint,sorted(r.methods or [])) for r in app.url_map.iter_rules() if str(r.rule)=="/mobile/atlete"]
+    src_info=[]
+    import inspect
+    for _,ep,_ in rule_info:
+        try: src_info.append((ep,inspect.getsource(app.view_functions[ep])[:5000]))
+        except Exception as exc: src_info.append((ep,"ERR:"+repr(exc)))
+except Exception as exc:
+    rule_info=[]; src_info=[("ERR",repr(exc))]
+print("[r141-diag] athletes_status="+str(alist.status_code)+" location="+str(alist.headers.get("Location",""))+" body="+repr(ah[:1200])+" rules="+repr(rule_info)+" src="+repr(src_info),flush=True)
 checks={
  "athletes_200":alist.status_code==200,
  "truth_surface":"Stato reale di documenti e pagamenti." in ah and "Modulo Unico" in ah and "Mensile" in ah and "Tesseramento" in ah,
