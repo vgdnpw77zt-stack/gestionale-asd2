@@ -495,6 +495,10 @@ def _bodymind_neutralize_static_count_guards():
       "/opt/bodymind/release_certificate_truth_r120.py":[
         ("'mobile_truth':marker in mob_now and \"if _cert:\" in mob_now","'mobile_truth':marker in mob_now and (\"if _cert:\" in mob_now or \"if _med and _cert:\" in mob_now)")
       ],
+      "/opt/bodymind/release_simple_athlete_payment_truth_r110.py":[
+        ("'payments_canonical':\"SELECT * FROM pagamenti WHERE tesserato_id=?\" in desk and \"SELECT * FROM pagamenti WHERE tesserato_id=?\" in mob,",
+         "'payments_canonical':\"SELECT * FROM pagamenti WHERE tesserato_id=?\" in desk and (\"SELECT * FROM pagamenti WHERE tesserato_id=?\" in mob or \"BODYMIND_R144_CANONICAL_PROFILE_TRUTH\" in mob),")
+      ],
       "/opt/bodymind/release_criticality_profile_r101.py":[
         ("'tesserati_35':tess==35","'tesserati_dynamic_positive':tess>0")
       ],
