@@ -690,6 +690,7 @@ runpy.run_path("/opt/bodymind/release_document_file_resolver_r135.py", run_name=
 runpy.run_path("/opt/bodymind/release_document_truth_cleanup_r137.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mobile_document_ui_r138.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mobile_truth_r139.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_mobile_athlete_truth_r140.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_secretary_ui_r123.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_route_guard_r39.py", run_name="__main__")
 incoming = pathlib.Path("/data/incoming")
