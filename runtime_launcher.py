@@ -654,7 +654,10 @@ runpy.run_path("/opt/bodymind/release_mu_nomatch_create_smoke_r118.py", run_name
 _bodymind_operator_task_cleanup()
 runpy.run_path("/opt/bodymind/release_stabilization_audit_r80.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mobile_delete_r85.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_mobile_athlete_delete_r87.py", run_name="__main__")
+if os.environ.get("BODYMIND_LEGACY_STARTUP_SMOKES","0") == "1":
+    runpy.run_path("/opt/bodymind/release_mobile_athlete_delete_r87.py", run_name="__main__")
+else:
+    print("[startup-convergence] R87 mobile athlete source patch skipped; superseded by R140/R141 final mobile truth UI",flush=True)
 runpy.run_path("/opt/bodymind/release_operator_ios_keyboard_r90.py", run_name="__main__")
 if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
     runpy.run_path("/opt/bodymind/release_unassigned_mu_audit_r91.py", run_name="__main__")
