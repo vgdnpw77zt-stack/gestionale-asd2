@@ -469,6 +469,165 @@ def _bodymind_r126_payment_history_names(resp):
     py_compile.compile(str(CORE),doraise=True)
     print('[r126-history-name] PASS payment history identity overlay installed',flush=True)
 
+# BODYMIND_R127_HISTORY_CARD_NAMES_NAV
+# Fix two mobile payment UX defects without changing payment data:
+# 1) every historical payment card gets its own athlete name;
+# 2) bottom navigation highlights Pagamenti, not Presenze, on /pagamenti.
+core_r127=CORE.read_text(encoding='utf-8',errors='replace')
+if 'BODYMIND_R127_HISTORY_CARD_NAMES_NAV' not in core_r127:
+    dst=BACK/'core_pre_r127_history_nav.py'
+    if not dst.exists(): shutil.copy2(CORE,dst)
+    core_r127 += r'''
+
+# BODYMIND_R127_HISTORY_CARD_NAMES_NAV
+@app.after_request
+def _bodymind_r127_history_card_names_nav(resp):
+    try:
+        if request.method!='GET' or request.path!='/pagamenti' or int(getattr(resp,'status_code',200) or 200)!=200:
+            return resp
+        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
+            return resp
+        html=resp.get_data(as_text=True)
+        if 'BODYMIND_R127_HISTORY_SCRIPT' in html:
+            return resp
+
+        c=db(); c.row_factory=sqlite3.Row
+        try:
+            prow=[dict(x) for x in c.execute("""SELECT p.id AS payment_id,p.tesserato_id,
+                       t.nome,t.cognome
+                  FROM pagamenti p
+                  LEFT JOIN tesserati t ON t.id=p.tesserato_id
+                  ORDER BY p.id""").fetchall()]
+            arows=[dict(x) for x in c.execute("SELECT id,nome,cognome FROM tesserati").fetchall()]
+        finally:
+            c.close()
+
+        pay_names={}
+        for r in prow:
+            pid=int(r.get('payment_id') or 0)
+            tid=int(r.get('tesserato_id') or 0)
+            nm=((str(r.get('cognome') or '')+' '+str(r.get('nome') or '')).strip()
+                or ('Tesserata #'+str(tid)))
+            if pid>0: pay_names[str(pid)]=nm
+        athlete_names={}
+        for r in arows:
+            tid=int(r.get('id') or 0)
+            nm=(str(r.get('cognome') or '')+' '+str(r.get('nome') or '')).strip()
+            if tid>0 and nm: athlete_names[str(tid)]=nm
+
+        _json=__import__('json')
+        pjson=_json.dumps(pay_names,ensure_ascii=False)
+        ajson=_json.dumps(athlete_names,ensure_ascii=False)
+
+        addon=f"""<!-- BODYMIND_R127_HISTORY_SCRIPT -->
+        <style>
+        .r127-history-name{{font-size:20px;font-weight:950;line-height:1.15;color:#f8fafc;margin:8px 0 12px;letter-spacing:.01em}}
+        .r127-nav-current{{background:linear-gradient(180deg,rgba(16,185,129,.26),rgba(5,150,105,.18))!important;border-color:rgba(52,211,153,.5)!important;color:#fff!important}}
+        .r127-nav-clear{{background:transparent!important}}
+        @media(max-width:600px){{.r127-history-name{{font-size:18px}}}}
+        </style>
+        <script>
+        (function(){{
+          var paymentNames={pjson};
+          var athleteNames={ajson};
+
+          function exactText(el,txt){{
+            return ((el.textContent||'').replace(/\s+/g,' ').trim().toUpperCase()===txt);
+          }}
+          function findCard(label){{
+            var p=label.parentElement,depth=0;
+            while(p && depth<9){{
+              var tx=(p.innerText||'').toUpperCase();
+              var causes=(tx.match(/CAUSALE/g)||[]).length;
+              if(tx.indexOf('CAUSALE')>=0 && tx.indexOf('IMPORTO')>=0 && tx.indexOf('DATA')>=0 && causes===1) return p;
+              p=p.parentElement; depth++;
+            }}
+            return label.parentElement;
+          }}
+          function numberFrom(v,patterns){{
+            v=String(v||'');
+            for(var i=0;i<patterns.length;i++){{var m=v.match(patterns[i]); if(m) return m[1];}}
+            return '';
+          }}
+          function identify(card){{
+            var el=card.querySelector('input[name="pagamento_id"],input[name="payment_id"],input[name="id"]');
+            if(el && el.value && paymentNames[String(el.value)]) return {{name:paymentNames[String(el.value)],kind:'payment'}};
+            var tid=card.querySelector('input[name="tesserato_id"]');
+            if(tid && tid.value && athleteNames[String(tid.value)]) return {{name:athleteNames[String(tid.value)],kind:'athlete'}};
+            var nodes=card.querySelectorAll('a[href],form[action],[data-payment-id],[data-id],[data-tesserato-id]');
+            for(var i=0;i<nodes.length;i++){{
+              var n=nodes[i];
+              var raw=(n.getAttribute('href')||'')+' '+(n.getAttribute('action')||'')+' '+(n.getAttribute('data-payment-id')||'')+' '+(n.getAttribute('data-id')||'');
+              var pid=numberFrom(raw,[/(?:pagamento_id|payment_id|[?&]id)=([0-9]+)/i,/\/pagamenti\/(?:elimina|delete|promemoria|ricevuta)\/?([0-9]+)/i]);
+              if(pid && paymentNames[String(pid)]) return {{name:paymentNames[String(pid)],kind:'payment'}};
+              var rt=(n.getAttribute('data-tesserato-id')||'')+' '+raw;
+              var at=numberFrom(rt,[/(?:tesserato_id|tesserato)=([0-9]+)/i,/\/tesserati\/([0-9]+)/i,/\/mobile\/atleta\/([0-9]+)/i]);
+              if(at && athleteNames[String(at)]) return {{name:athleteNames[String(at)],kind:'athlete'}};
+            }}
+            return null;
+          }}
+
+          // Remove the old one-off R126 label that could appear only above the first record.
+          document.querySelectorAll('.r126-history-name').forEach(function(x){{x.remove();}});
+
+          var labels=[];
+          document.querySelectorAll('h1,h2,h3,h4,h5,h6,div,span,dt,th,strong').forEach(function(el){{
+            if(exactText(el,'NOME / STATO')) labels.push(el);
+          }});
+          var seen=[];
+          labels.forEach(function(label){{
+            var card=findCard(label);
+            if(!card || seen.indexOf(card)>=0) return;
+            seen.push(card);
+            var id=identify(card);
+            if(!id || !id.name) return;
+            if(card.querySelector('.r127-history-name')) return;
+            var name=document.createElement('div');
+            name.className='r127-history-name';
+            name.textContent=id.name;
+            label.insertAdjacentElement('afterend',name);
+          }});
+
+          // If a legacy card has no NOME / STATO label, still identify it from
+          // its own payment/tesserato id and put the name at the top of that card.
+          document.querySelectorAll('form[action],a[href]').forEach(function(node){{
+            var card=node.closest('.card,[class*="payment"],[class*="row"],article,section');
+            if(!card || card.querySelector('.r127-history-name')) return;
+            var tx=(card.innerText||'').toUpperCase();
+            if(tx.indexOf('CAUSALE')<0 || tx.indexOf('IMPORTO')<0) return;
+            var id=identify(card); if(!id || !id.name) return;
+            var name=document.createElement('div'); name.className='r127-history-name'; name.textContent=id.name;
+            card.insertBefore(name,card.firstChild);
+          }});
+
+          // Correct bottom-navigation active state on the payment page.
+          var navCandidates=document.querySelectorAll('nav a,nav button,[class*="bottom"] a,[class*="nav"] a');
+          navCandidates.forEach(function(el){{
+            var txt=(el.textContent||'').replace(/\s+/g,' ').trim().toLowerCase();
+            var href=(el.getAttribute&&el.getAttribute('href'))||'';
+            if(txt.indexOf('presenze')>=0 || href.indexOf('/presenze')===0){{
+              el.classList.remove('active','current','selected');
+              el.classList.add('r127-nav-clear');
+              el.removeAttribute('aria-current');
+            }}
+            if(txt.indexOf('pagamenti')>=0 || href.indexOf('/pagamenti')===0){{
+              el.classList.remove('r127-nav-clear');
+              el.classList.add('active','r127-nav-current');
+              el.setAttribute('aria-current','page');
+            }}
+          }});
+        }})();
+        </script>"""
+        html=html.replace('</body>',addon+'</body>',1) if '</body>' in html else html+addon
+        resp.set_data(html)
+    except Exception as exc:
+        print('[r127-history-nav-warning] '+repr(exc),flush=True)
+    return resp
+'''
+    CORE.write_text(core_r127,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+    print('[r127-history-nav] PASS per-card names + payment nav state installed',flush=True)
+
 # Fresh import/UI gate.
 qa=r'''
 import sqlite3,sys
@@ -503,8 +662,9 @@ premium_pay_ok=("BODYMIND_R125_PAYMENT_BOARD" in ph and "DA PAGARE" in ph and "P
 history_labels=ph.upper().count("NOME / STATO")
 history_names=ph.count("r126-history-name")
 history_name_ok=(history_labels==0 or history_names>=history_labels)
-ok=(p.status_code==200 and "BODYMIND_R123_PAYMENT_MOBILE" in ph and premium_pay_ok and history_name_ok and _identity_ok and a.status_code in (301,302,307,308) and "/presenze-semplici" in str(a.headers.get("Location","")) and b.status_code==200 and direct_ok and "Giornata operativa" not in bh and all(x in bh for x in ("Base","Kids","Adult","Pro / Agoniste")) and integrity.lower()=="ok" and fk==0)
-print("[r123-selftest] status_payment=%s premium_pay_ok=%s history_name_ok=%s identity_ok=%s presence_redirect=%s simple=%s db=%s fk=%s ok=%s"%(p.status_code,premium_pay_ok,history_name_ok,_identity_ok,a.status_code,b.status_code,integrity,fk,ok),flush=True)
+r127_script_ok=("BODYMIND_R127_HISTORY_SCRIPT" in ph and "r127-nav-current" in ph and "paymentNames=" in ph)
+ok=(p.status_code==200 and "BODYMIND_R123_PAYMENT_MOBILE" in ph and premium_pay_ok and history_name_ok and r127_script_ok and _identity_ok and a.status_code in (301,302,307,308) and "/presenze-semplici" in str(a.headers.get("Location","")) and b.status_code==200 and direct_ok and "Giornata operativa" not in bh and all(x in bh for x in ("Base","Kids","Adult","Pro / Agoniste")) and integrity.lower()=="ok" and fk==0)
+print("[r123-selftest] status_payment=%s premium_pay_ok=%s history_name_ok=%s r127_script_ok=%s identity_ok=%s presence_redirect=%s simple=%s db=%s fk=%s ok=%s"%(p.status_code,premium_pay_ok,history_name_ok,r127_script_ok,_identity_ok,a.status_code,b.status_code,integrity,fk,ok),flush=True)
 if not ok: raise RuntimeError("R123 QA failed")
 '''
 proc=subprocess.run([sys.executable,'-c',qa],capture_output=True,text=True,timeout=120)
