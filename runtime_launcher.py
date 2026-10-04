@@ -636,6 +636,7 @@ else:
 runpy.run_path("/opt/bodymind/release_simple_athlete_payment_truth_r110.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_certificate_truth_r120.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_runtime_helper_r112.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_upload_state_probe_r142.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_document_association_sync_r143.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_convergence_smoke_r111.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_desktop_post_regression_r113.py", run_name="__main__")
@@ -649,7 +650,6 @@ else:
     print("[startup-convergence] R116 read-only MU audit skipped; R118/R119 live gates remain active", flush=True)
 runpy.run_path("/opt/bodymind/release_mu_nomatch_operator_r119.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mu_nomatch_create_smoke_r118.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_upload_state_probe_r142.py", run_name="__main__")
 # Re-run stale task cleanup after operator/document convergence, because old
 # upload tasks can become safely closable only after their async job/actions
 # have completed during startup.
