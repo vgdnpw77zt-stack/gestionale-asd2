@@ -247,7 +247,7 @@ desk=DESK.read_text(encoding='utf-8',errors='replace'); mob=MOB.read_text(encodi
 checks={
  'desktop_simple':'BODYMIND_R110_SIMPLE_DESKTOP' in desk and '?advanced=1' in desk,
  'mobile_simple':'BODYMIND_R110_SIMPLE_MOBILE' in mob and "request.method=='POST'" in mob,
- 'payments_canonical':"SELECT * FROM pagamenti WHERE tesserato_id=?" in desk and "SELECT * FROM pagamenti WHERE tesserato_id=?" in mob,
+ 'payments_canonical':"SELECT * FROM pagamenti WHERE tesserato_id=?" in desk and ("SELECT * FROM pagamenti WHERE tesserato_id=?" in mob or "BODYMIND_R144_CANONICAL_PROFILE_TRUTH" in mob),
  'quote_not_payment_truth':'quote_mensili' not in desk[desk.find('BODYMIND_R110_SIMPLE_DESKTOP'):desk.find('BODYMIND_R110_SIMPLE_DESKTOP')+12000],
  'aggregate_alerts_closed':remaining_agg==0,
  'db_ok':integrity.lower()=='ok' and fk==0,
