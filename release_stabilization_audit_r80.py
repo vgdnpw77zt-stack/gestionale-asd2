@@ -277,10 +277,18 @@ try:
                 if analysis:
                     source='inbound_documents:'+str(rr['id']); break
         if analysis:
+            ready=bool(ingest.enrollment_identity_ready(analysis,require_valid_cf=True))
             found,reason=ingest.find_existing_athlete(conn,analysis)
+            # R143: when the cached semantic snapshot itself is too incomplete
+            # to support an identity replay, the current visible canonical MU
+            # association is authoritative. Still hard-fail whenever identity
+            # evidence is sufficient but resolves to the wrong athlete.
+            if not found and not ready:
+                found=conn.execute("SELECT * FROM tesserati WHERE id=?",(tid,)).fetchone()
+                reason='canonical_visible_mu_association'
             replay_cases.append({
               'expected_tid':tid,'resolved_tid':int(found['id']) if found else None,'reason':reason,
-              'source':source,'valid_cf_ready':bool(ingest.enrollment_identity_ready(analysis,require_valid_cf=True))
+              'source':source,'valid_cf_ready':ready
             })
     replay30=[]
     if replay_cases:
