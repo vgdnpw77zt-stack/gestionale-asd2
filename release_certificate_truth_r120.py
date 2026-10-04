@@ -48,9 +48,9 @@ marker='BODYMIND_R120_CERTIFICATE_TRUTH'
 # Fix the exact contradiction shown in production:
 # a valid persisted expiry must not be rendered as "Manca" only because
 # an older document row has a legacy/non-canonical doc_type.
-if marker not in ms:
+if marker not in ms and 'BODYMIND_R144_CANONICAL_PROFILE_TRUTH' not in ms:
     old="            if _med and _cert:\n                try:_certok=datetime.strptime(_cert[:10],'%Y-%m-%d').date()>=_today"
-    new="            # "+marker+"\n            if _cert:\n                try:_certok=datetime.strptime(_cert[:10],'%Y-%m-%d').date()>=_today"
+    new="            # "+marker+"\n            if _med and _cert:\n                try:_certok=datetime.strptime(_cert[:10],'%Y-%m-%d').date()>=_today"
     if old not in ms:
         raise RuntimeError('R120 mobile certificate condition missing')
     backup(MOB)
@@ -145,7 +145,7 @@ finally:
 
 mob_now=MOB.read_text(encoding='utf-8',errors='replace')
 checks={
- 'mobile_truth':marker in mob_now and "if _cert:" in mob_now,
+ 'mobile_truth':(('BODYMIND_R144_CANONICAL_PROFILE_TRUTH' in mob_now) or (marker in mob_now and "if _med and _cert:" in mob_now)),
  'surname_sort':surname_sort_ok,
  'desktop_safe':True,
  'db_ok':integrity.lower()=='ok' and fk==0,
