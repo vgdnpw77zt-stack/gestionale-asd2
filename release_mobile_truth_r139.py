@@ -57,10 +57,12 @@ block=block.replace('            if _cert:\n                try:_certok=', '    
 # Minor tutela must not be green without a real MU.
 block=block.replace('            _tut=(not _minor) or _guard','            _tut=(not _minor) or bool(_mu and _guard)',1)
 
-if block==before or n_mu!=1 or n_med!=1:
+already_ok=('def _r139_doc_exists' in before and '_mu_rows=conn.execute' in before and '_med_rows=conn.execute' in before and 'if _med and _cert:' in before)
+if not already_ok and (block==before or n_mu!=1 or n_med!=1):
     raise RuntimeError('R139 mobile patch incomplete n_mu='+str(n_mu)+' n_med='+str(n_med))
-shutil.copy2(p,BACK/p.name)
-s=s[:start]+block+s[end:]
-p.write_text(s,encoding='utf-8')
+if block!=before:
+    shutil.copy2(p,BACK/p.name)
+    s=s[:start]+block+s[end:]
+    p.write_text(s,encoding='utf-8')
 py_compile.compile(str(p),doraise=True)
-print('[r139-mobile-profile] PASS real-file MU+medical truth source='+str(p),flush=True)
+print('[r139-mobile-profile] PASS real-file MU+medical truth source='+str(p)+' already='+str(already_ok),flush=True)
