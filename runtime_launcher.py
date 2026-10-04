@@ -638,7 +638,10 @@ if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
 else:
     print("[startup-convergence] R109 read-only payment audit skipped; R110/R111 canonical payment gates remain active", flush=True)
 runpy.run_path("/opt/bodymind/release_simple_athlete_payment_truth_r110.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_certificate_truth_r120.py", run_name="__main__")
+if os.environ.get("BODYMIND_LEGACY_STARTUP_SMOKES","0") == "1":
+    runpy.run_path("/opt/bodymind/release_certificate_truth_r120.py", run_name="__main__")
+else:
+    print("[startup-convergence] R120 expiry-only certificate patch skipped; superseded by R144 file+expiry canonical truth",flush=True)
 runpy.run_path("/opt/bodymind/release_operator_runtime_helper_r112.py", run_name="__main__")
 if os.environ.get("BODYMIND_LEGACY_STARTUP_SMOKES","0") == "1":
     runpy.run_path("/opt/bodymind/release_document_association_sync_r143.py", run_name="__main__")
