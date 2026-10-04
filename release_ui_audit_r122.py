@@ -36,3 +36,20 @@ try:
     courses=[dict(r) for r in conn.execute("SELECT * FROM corsi ORDER BY id").fetchall()]
     print('[r122-course-values] '+json.dumps({'tesserati':vals,'corsi':courses},ensure_ascii=False,default=str),flush=True)
 finally: conn.close()
+
+# R127 focused read-only audit: active payment route source + rendered history structure.
+import inspect as _r127_inspect
+for _rule in app.url_map.iter_rules():
+    if str(_rule.rule)=='/pagamenti' and 'GET' in (_rule.methods or set()):
+        _fn=app.view_functions.get(str(_rule.endpoint))
+        try:
+            print('[r127-payment-fn] '+_r127_inspect.getsource(_fn),flush=True)
+        except Exception as _exc:
+            print('[r127-payment-fn] source-unavailable '+repr(_exc),flush=True)
+        break
+_rr=client.get('/pagamenti',follow_redirects=False)
+_body=_rr.get_data(as_text=True)
+for _needle in ('NOME / STATO','AZIONI','STORICO INCASSI'):
+    _i=_body.upper().find(_needle)
+    if _i>=0:
+        print('[r127-render-'+_needle.replace(' ','_').replace('/','_')+'] '+_body[max(0,_i-2500):_i+9000],flush=True)
