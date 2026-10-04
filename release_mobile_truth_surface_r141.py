@@ -279,7 +279,58 @@ def _bodymind_r141_mobile_truth_surface(resp):
     py_compile.compile(str(CORE),doraise=True)
     print('[r141-install] PASS mobile athlete truth + dashboard truth panels installed',flush=True)
 else:
-    print('[r141-install] already present',flush=True)
+    # Upgrade an already-installed R141 block on the persistent runtime. Failed
+    # deploys can leave generated source on /data, so the release must converge
+    # existing code instead of treating the marker as sufficient.
+    _orig=s
+    _old_head="""        path=request.path or ''
+        if request.method!='GET' or int(getattr(resp,'status_code',200) or 200)!=200:
+            return resp
+        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
+            return resp
+
+        if path=='/mobile/atlete':"""
+    _new_head="""        path=request.path or ''
+        _status=int(getattr(resp,'status_code',200) or 200)
+        if request.method!='GET':
+            return resp
+        _mobile_athlete_redirect=(
+            path=='/mobile/atlete'
+            and _status in (301,302,303,307,308)
+            and str(resp.headers.get('Location','')).startswith('/tesserati')
+            and bool(session.get('logged'))
+            and str(session.get('role') or '').lower()=='admin'
+        )
+        if _status!=200 and not _mobile_athlete_redirect:
+            return resp
+        if _status==200 and 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
+            return resp
+
+        if path=='/mobile/atlete':"""
+    if '_mobile_athlete_redirect' not in s:
+        if _old_head not in s:
+            raise RuntimeError('R141 persistent runtime header anchor missing')
+        s=s.replace(_old_head,_new_head,1)
+    _old_resp="""            resp.set_data(html)
+            resp.headers['Content-Type']='text/html; charset=utf-8'
+            return resp"""
+    _new_resp="""            resp.set_data(html)
+            resp.status_code=200
+            resp.headers.pop('Location',None)
+            resp.headers['Content-Type']='text/html; charset=utf-8'
+            return resp"""
+    # Only the athlete-list branch needs to convert the canonical redirect.
+    if 'resp.status_code=200' not in s[s.find('BODYMIND_R141_MOBILE_TRUTH_SURFACE'):]:
+        if _old_resp not in s:
+            raise RuntimeError('R141 persistent runtime athlete response anchor missing')
+        s=s.replace(_old_resp,_new_resp,1)
+    if s!=_orig:
+        shutil.copy2(CORE,BACK/'core_pre_upgrade.py')
+        CORE.write_text(s,encoding='utf-8')
+        py_compile.compile(str(CORE),doraise=True)
+        print('[r141-install] upgraded persistent R141 runtime',flush=True)
+    else:
+        print('[r141-install] already current',flush=True)
 
 
 # Fresh-process QA: verify the final rendered mobile surfaces, not only source text.
