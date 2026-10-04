@@ -663,7 +663,10 @@ if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
     runpy.run_path("/opt/bodymind/release_unassigned_mu_audit_r91.py", run_name="__main__")
 else:
     print("[startup-convergence] R91 read-only MU audit skipped", flush=True)
-runpy.run_path("/opt/bodymind/release_ui_regression_smoke_r84.py", run_name="__main__")
+if os.environ.get("BODYMIND_LEGACY_STARTUP_SMOKES","0") == "1":
+    runpy.run_path("/opt/bodymind/release_ui_regression_smoke_r84.py", run_name="__main__")
+else:
+    print("[startup-convergence] R84 legacy mobile UI smoke skipped; superseded by R139/R141 rendered truth gates",flush=True)
 # R114 startup convergence: keep source/migration guards in the critical path, but
 # do not re-run the superseded R32-R65 read-only/operator smoke chain on every deploy.
 # The current hard gates above (R80/R84/R90/R107/R110/R111/R113) cover those invariants.
