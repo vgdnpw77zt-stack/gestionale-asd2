@@ -102,7 +102,7 @@ mobile=client.get('/mobile/atleta/33',headers={'User-Agent':'Mozilla/5.0 (iPhone
 pay=client.get('/pagamenti?tesserato_id=33',follow_redirects=False)
 dh=desktop.get_data(as_text=True); mh=mobile.get_data(as_text=True)
 result['desktop_simple']=desktop.status_code==200 and 'bodymind-r110-simple-desktop' in dh and all(x in dh for x in ('Iscrizione','Mese','Modulo Unico','Certificato','Tutela'))
-result['mobile_simple']=mobile.status_code==200 and all(x in mh for x in ('Iscrizione','Mese','Modulo Unico','Certificato','Tutela'))
+result['mobile_simple']=mobile.status_code==200 and all(x in mh for x in ('Modulo Unico','Certificato','Mensile','Tesseramento','Carica documento'))
 _marker=dh.find('r110-page')
 _ds=dh.rfind('<main',0,_marker+1) if _marker>=0 else -1
 _de=dh.find('</main>',_marker) if _marker>=0 else -1
