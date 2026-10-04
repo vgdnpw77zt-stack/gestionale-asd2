@@ -186,9 +186,19 @@ def _bodymind_r141_mobile_truth_surface(resp):
     try:
         from html import escape as _e
         path=request.path or ''
-        if request.method!='GET' or int(getattr(resp,'status_code',200) or 200)!=200:
+        _status=int(getattr(resp,'status_code',200) or 200)
+        if request.method!='GET':
             return resp
-        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
+        _mobile_athlete_redirect=(
+            path=='/mobile/atlete'
+            and _status in (301,302,303,307,308)
+            and str(resp.headers.get('Location','')).startswith('/tesserati')
+            and bool(session.get('logged'))
+            and str(session.get('role') or '').lower()=='admin'
+        )
+        if _status!=200 and not _mobile_athlete_redirect:
+            return resp
+        if _status==200 and 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
             return resp
 
         if path=='/mobile/atlete':
@@ -221,6 +231,8 @@ def _bodymind_r141_mobile_truth_surface(resp):
             qv=_e(request.args.get('q') or '')
             html="<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'><title>Atlete</title>"+_r141_style()+"</head><body><main class='r141-page'><div class='r141-top'><div><h1>Atlete</h1><p>Stato reale di documenti e pagamenti.</p></div><a class='r141-home' href='/mobile'>⌂ Home</a></div><form class='r141-search' method='get'><input name='q' value='"+qv+"' placeholder='Cerca nome, corso o email'><button>Cerca</button></form><a class='r141-new' href='/mobile/atleta/nuova'>＋ Nuova atleta</a>"+''.join(cards)+"</main>"+_r141_nav('atlete')+"</body></html>"
             resp.set_data(html)
+            resp.status_code=200
+            resp.headers.pop('Location',None)
             resp.headers['Content-Type']='text/html; charset=utf-8'
             return resp
 
@@ -281,7 +293,7 @@ from asd_app.core import app
 app.config["TESTING"]=True
 c=app.test_client()
 with c.session_transaction() as sess:
-    sess.update({"logged":True,"username":"admin","display_name":"R141 QA","role":"admin","tenant_slug":"default"})
+    sess.update({"logged":True,"logged_in":True,"username":"admin","display_name":"R141 QA","role":"admin","tenant_slug":"default","user_id":1,"is_admin":True,"admin":True,"_csrf_token":"r141"})
 alist=c.get("/mobile/atlete",follow_redirects=False)
 ah=alist.get_data(as_text=True)
 dash=c.get("/mobile",follow_redirects=False)
