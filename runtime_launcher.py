@@ -636,8 +636,11 @@ else:
 runpy.run_path("/opt/bodymind/release_simple_athlete_payment_truth_r110.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_certificate_truth_r120.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_runtime_helper_r112.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_upload_state_probe_r142.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_document_association_sync_r143.py", run_name="__main__")
+if os.environ.get("BODYMIND_LEGACY_STARTUP_SMOKES","0") == "1":
+    runpy.run_path("/opt/bodymind/release_document_association_sync_r143.py", run_name="__main__")
+else:
+    print("[startup-convergence] R143 broad association sync skipped; R144 recent-only canonical sync active",flush=True)
+runpy.run_path("/opt/bodymind/release_document_association_fix_r144.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_convergence_smoke_r111.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_desktop_post_regression_r113.py", run_name="__main__")
 if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
