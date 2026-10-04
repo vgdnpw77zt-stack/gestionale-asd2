@@ -120,6 +120,7 @@ COPY runtime_timeline_inspect_r35.py /opt/bodymind/runtime_timeline_inspect_r35.
 COPY release_navigation_audit_r115.py /opt/bodymind/release_navigation_audit_r115.py
 COPY release_ui_audit_r122.py /opt/bodymind/release_ui_audit_r122.py
 COPY release_secretary_ui_r123.py /opt/bodymind/release_secretary_ui_r123.py
+COPY release_document_deadlink_probe_r134.py /opt/bodymind/release_document_deadlink_probe_r134.py
 COPY release_presence_probe_r132.py /opt/bodymind/release_presence_probe_r132.py
 COPY release_payment_history_probe_r128.py /opt/bodymind/release_payment_history_probe_r128.py
 COPY release_ui_target_audit_r123.py /opt/bodymind/release_ui_target_audit_r123.py
