@@ -492,6 +492,9 @@ def _bodymind_neutralize_static_count_guards():
       "/opt/bodymind/release_mu_canonical_r79.py":[
         ("if tess!=32 or integrity.lower()!='ok' or fk:","if tess<=0 or integrity.lower()!='ok' or fk:")
       ],
+      "/opt/bodymind/release_certificate_truth_r120.py":[
+        ("'mobile_truth':marker in mob_now and \"if _cert:\" in mob_now","'mobile_truth':marker in mob_now and (\"if _cert:\" in mob_now or \"if _med and _cert:\" in mob_now)")
+      ],
       "/opt/bodymind/release_criticality_profile_r101.py":[
         ("'tesserati_35':tess==35","'tesserati_dynamic_positive':tess>0")
       ],
