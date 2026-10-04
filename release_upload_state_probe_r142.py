@@ -81,3 +81,18 @@ try:
     print('[r142-targeted-current] '+json.dumps(out,ensure_ascii=False,default=str),flush=True)
 finally:
     c.close()
+
+
+c=sqlite3.connect(str(DB),timeout=30); c.row_factory=sqlite3.Row
+try:
+    out={}
+    if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='bodymind_duplicate_records_archive'").fetchone():
+        rr=[dict(x) for x in c.execute("SELECT * FROM bodymind_duplicate_records_archive WHERE source_table='inbound_documents' AND source_id IN (143,204) ORDER BY id DESC").fetchall()]
+        for x in rr:
+            fp=str(x.get('file_path') or '')
+            x['file_exists']=Path(fp).is_file() if fp else False
+        out['archive']=rr
+    jobdir=Path('/data/operator_upload_jobs/6e50bff771b64fac86f2db1654e0dcab')
+    out['job_files']=[{'path':str(p),'exists':p.is_file(),'size':p.stat().st_size if p.is_file() else 0} for p in jobdir.glob('*')] if jobdir.exists() else []
+    print('[r142-duplicate-204] '+json.dumps(out,ensure_ascii=False,default=str),flush=True)
+finally:c.close()
