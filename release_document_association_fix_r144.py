@@ -584,6 +584,45 @@ def _bodymind_r144_post_association_sync(resp):
     CORE.write_text(core,encoding='utf-8');py_compile.compile(str(CORE),doraise=True)
     print('[r144-post-sync] installed',flush=True)
 
+# BODYMIND_R145_UPLOAD_LINK_SURFACE
+# Make direct per-athlete upload reachable from the actual mobile profile and
+# document page, regardless of which historical route renderer serves them.
+core=CORE.read_text(encoding='utf-8',errors='replace')
+if 'BODYMIND_R145_UPLOAD_LINK_SURFACE' not in core:
+    core += r'''
+
+# BODYMIND_R145_UPLOAD_LINK_SURFACE
+@app.after_request
+def _bodymind_r145_upload_link_surface(resp):
+    try:
+        import re as _r145_re
+        if request.method!='GET' or int(getattr(resp,'status_code',200) or 200)!=200:
+            return resp
+        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
+            return resp
+        m=_r145_re.fullmatch(r'/mobile/atleta/(\d+)(?:/documenti)?/?',request.path or '')
+        if not m:
+            return resp
+        tid=int(m.group(1));html=resp.get_data(as_text=True)
+        if '/documenti/carica' in html:
+            return resp
+        btn="<div style='margin:12px 14px'><a href='/mobile/atleta/"+str(tid)+"/documenti/carica' style='display:block;padding:13px;border-radius:13px;background:#166534;color:#fff;text-align:center;text-decoration:none;font-weight:950'>＋ Carica documento</a></div>"
+        if '</main>' in html:
+            html=html.replace('</main>',btn+'</main>',1)
+        elif '</body>' in html:
+            html=html.replace('</body>',btn+'</body>',1)
+        else:
+            html+=btn
+        resp.set_data(html)
+    except Exception as exc:
+        print('[r145-upload-link-warning] '+repr(exc),flush=True)
+    return resp
+'''
+    CORE.write_text(core,encoding='utf-8');py_compile.compile(str(CORE),doraise=True)
+    print('[r145-upload-link] installed',flush=True)
+else:
+    print('[r145-upload-link] already present',flush=True)
+
 # Final rendered QA against current production data.
 qa=r'''
 import sqlite3,sys
