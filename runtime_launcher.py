@@ -712,7 +712,10 @@ runpy.run_path("/opt/bodymind/release_navigation_audit_r115.py", run_name="__mai
 runpy.run_path("/opt/bodymind/release_document_file_resolver_r135.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_document_truth_cleanup_r137.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mobile_document_ui_r138.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_mobile_truth_r139.py", run_name="__main__")
+if os.environ.get("BODYMIND_LEGACY_STARTUP_SMOKES","0") == "1":
+    runpy.run_path("/opt/bodymind/release_mobile_truth_r139.py", run_name="__main__")
+else:
+    print("[startup-convergence] R139 source patch skipped; R144/R145 canonical document truth supersedes it",flush=True)
 if os.environ.get("BODYMIND_LEGACY_STARTUP_SMOKES","0") == "1":
     runpy.run_path("/opt/bodymind/release_mobile_athlete_truth_r140.py", run_name="__main__")
 else:
