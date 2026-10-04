@@ -600,6 +600,12 @@ try:
         p=c.get("/mobile/atleta/"+str(int(g["id"])),follow_redirects=False);ph=p.get_data(as_text=True)
         u=c.get("/mobile/atleta/"+str(int(g["id"]))+"/documenti/carica",follow_redirects=False);uh=u.get_data(as_text=True)
         checks["profile"]=p.status_code==200 and "Modulo Unico" in ph and "Certificato" in ph and "Carica documento" in ph and "Certificato medico mancante" not in ph
+        if not checks["profile"]:
+            try:
+                rules=[(str(r.rule),r.endpoint,sorted(r.methods or [])) for r in app.url_map.iter_rules() if str(r.rule).startswith("/mobile/atleta/")]
+            except Exception:
+                rules=[]
+            print("[r144-profile-diag] status="+str(p.status_code)+" location="+str(p.headers.get("Location",""))+" body="+repr(ph[:2500])+" rules="+repr(rules),flush=True)
         checks["upload"]=u.status_code==200 and "Certificato medico" in uh and "Modulo Unico" in uh
     checks["db"]=str(conn.execute("PRAGMA integrity_check").fetchone()[0]).lower()=="ok" and len(conn.execute("PRAGMA foreign_key_check").fetchall())==0
 finally:conn.close()
