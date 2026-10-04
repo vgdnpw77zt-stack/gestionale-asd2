@@ -123,6 +123,8 @@ COPY release_secretary_ui_r123.py /opt/bodymind/release_secretary_ui_r123.py
 COPY release_document_deadlink_probe_r134.py /opt/bodymind/release_document_deadlink_probe_r134.py
 COPY release_document_file_resolver_r135.py /opt/bodymind/release_document_file_resolver_r135.py
 COPY release_document_consistency_probe_r136.py /opt/bodymind/release_document_consistency_probe_r136.py
+COPY release_document_truth_cleanup_r137.py /opt/bodymind/release_document_truth_cleanup_r137.py
+COPY release_mobile_document_ui_r138.py /opt/bodymind/release_mobile_document_ui_r138.py
 COPY release_presence_probe_r132.py /opt/bodymind/release_presence_probe_r132.py
 COPY release_payment_history_probe_r128.py /opt/bodymind/release_payment_history_probe_r128.py
 COPY release_ui_target_audit_r123.py /opt/bodymind/release_ui_target_audit_r123.py
