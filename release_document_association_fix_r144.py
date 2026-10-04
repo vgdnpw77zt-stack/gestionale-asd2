@@ -275,8 +275,8 @@ def materialize_inbound(conn,inbound_id,allow_old=False):
         if 'inbound_id' in _cols(conn,'documenti') and not int(old['inbound_id'] or 0):
             conn.execute("UPDATE documenti SET inbound_id=? WHERE id=?",(int(inbound_id),int(old['id'])))
         return sync_document(conn,int(old['id']))
-    if _hidden_exact_exists(conn,tid,dtype,sh):
-        return {'ok':False,'reason':'user_archived_exact_copy'}
+    # Recent trusted re-upload is explicit user intent: hidden history must not
+    # block creating a new active canonical row with the same bytes.
     dc=_cols(conn,'documenti');cat,label=TYPE_META[dtype]
     values={'tesserato_id':tid,'titolo':str(r['original_filename'] or label) if 'original_filename' in r.keys() else label,
       'categoria':cat,'filename':str(persistent),'original_filename':str(r['original_filename'] or persistent.name) if 'original_filename' in r.keys() else persistent.name,
@@ -295,6 +295,15 @@ def recover_duplicate_archives(conn):
       WHERE source_table='inbound_documents' AND lower(reason) LIKE '%duplicate resolved%'
       ORDER BY id DESC LIMIT 300""").fetchall()
     for a in rows:
+        # Never resurrect old archive history. Duplicate recovery is only for a
+        # just-finished upload whose canonical row disappeared.
+        try:
+            ats=str(a['archived_at'] or '')
+            adt=datetime.fromisoformat(ats.replace('Z','+00:00')).replace(tzinfo=None)
+            if (datetime.now()-adt).total_seconds()>21600:
+                continue
+        except Exception:
+            continue
         try:
             payload=json.loads(a['payload_json'] or '{}'); original=payload.get('row') or {}
             sems=json.loads(a['semantics_json'] or '[]')
