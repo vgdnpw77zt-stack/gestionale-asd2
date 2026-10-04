@@ -268,3 +268,60 @@ def _bodymind_r141_mobile_truth_surface(resp):
     print('[r141-install] PASS mobile athlete truth + dashboard truth panels installed',flush=True)
 else:
     print('[r141-install] already present',flush=True)
+
+
+# Fresh-process QA: verify the final rendered mobile surfaces, not only source text.
+import subprocess, sys
+qa=r'''
+import re,sqlite3,sys
+from pathlib import Path
+sys.path.insert(0,"/data/top2_app")
+import app as _full
+from asd_app.core import app
+app.config["TESTING"]=True
+c=app.test_client()
+with c.session_transaction() as sess:
+    sess.update({"logged":True,"username":"admin","display_name":"R141 QA","role":"admin","tenant_slug":"default"})
+alist=c.get("/mobile/atlete",follow_redirects=False)
+ah=alist.get_data(as_text=True)
+dash=c.get("/mobile",follow_redirects=False)
+dh=dash.get_data(as_text=True)
+checks={
+ "athletes_200":alist.status_code==200,
+ "truth_surface":"Stato reale di documenti e pagamenti." in ah and "Modulo Unico" in ah and "Mensile" in ah and "Tesseramento" in ah,
+ "dashboard_200":dash.status_code==200,
+ "dashboard_mu":"BODYMIND_R141_DASHBOARD_TRUTH" in dh and "Modulo Unico mancante" in dh,
+ "dashboard_cert":"Certificato medico mancante/non valido" in dh,
+ "dashboard_names":"r141-dash-name" in dh,
+}
+# Specific regression: if Balbinetti has no visible physical medical file,
+# the rendered athlete card must not be globally green because of expiry alone.
+conn=sqlite3.connect("/data/tenants/default/asd.db",timeout=20);conn.row_factory=sqlite3.Row
+try:
+    b=conn.execute("SELECT * FROM tesserati WHERE lower(cognome) LIKE 'balbinetti%' LIMIT 1").fetchone()
+    if b:
+        docs=conn.execute("SELECT * FROM documenti WHERE tesserato_id=? AND coalesce(visibile,1)=1",(int(b["id"]),)).fetchall()
+        roots=[Path("/data/tenants/default/media"),Path("/data/top2_app/user_static"),Path("/data/top2_app/static"),Path("/data/top2_app"),Path("/data/tenants/default")]
+        def exists(fn):
+            raw=Path(str(fn or "").strip()); cs=[raw] if raw.is_absolute() else [r/raw for r in roots]
+            return any(x.is_file() for x in cs)
+        def med(d):
+            hay=" ".join(str(d[k] or "").lower() for k in ("doc_type","categoria","titolo","original_filename","filename") if k in d.keys())
+            return ("richiesta certificato" not in hay and "richiesta_certificato" not in hay and ("certificato_medico" in hay or ("certificat" in hay and "medic" in hay)))
+        has_med=any(med(d) and exists(d["filename"]) for d in docs)
+        if not has_med:
+            name=(str(b["cognome"] or "")+" "+str(b["nome"] or "")).strip()
+            pos=ah.find(name)
+            frag=ah[pos:pos+5000] if pos>=0 else ""
+            checks["balbinetti_missing_cert_red"]=("Certificato medico mancante" in frag or "file certificato assente" in frag.lower()) and "DA COMPLETARE" in frag
+    integ=str(conn.execute("PRAGMA integrity_check").fetchone()[0]); fk=len(conn.execute("PRAGMA foreign_key_check").fetchall())
+finally:conn.close()
+checks["db_ok"]=(integ.lower()=="ok" and fk==0)
+print("[r141-selftest] "+repr(checks)+" integrity="+integ+" fk="+str(fk),flush=True)
+if not all(checks.values()):
+    raise RuntimeError("R141 QA failed "+repr(checks))
+'''
+proc=subprocess.run([sys.executable,'-c',qa],capture_output=True,text=True,timeout=120)
+print((proc.stdout or '').strip(),flush=True)
+if proc.returncode!=0:
+    raise RuntimeError('R141 child QA failed '+((proc.stderr or '')+(proc.stdout or ''))[-5000:])
