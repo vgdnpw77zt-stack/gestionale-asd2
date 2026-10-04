@@ -48,3 +48,36 @@ try:
     print('[r142-db] integrity='+str(c.execute('PRAGMA integrity_check').fetchone()[0])+' fk='+str(len(c.execute('PRAGMA foreign_key_check').fetchall())),flush=True)
 finally:
     c.close()
+
+
+# Compact targeted current-state summary for latest operator/autopilot activity.
+c=sqlite3.connect(str(DB),timeout=30); c.row_factory=sqlite3.Row
+try:
+    out={}
+    if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='documenti'").fetchone():
+        out['docs_168_233']=[dict(x) for x in c.execute("SELECT * FROM documenti WHERE id IN (168,233) ORDER BY id").fetchall()]
+    if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='inbound_documents'").fetchone():
+        out['inbound_143']=[dict(x) for x in c.execute("SELECT * FROM inbound_documents WHERE id=143").fetchall()]
+        out['inbound_recent']=[dict(x) for x in c.execute("""SELECT id,tesserato_id,original_filename,saved_path,document_type,document_confidence,match_score,status,created_at,updated_at
+          FROM inbound_documents WHERE created_at>='2026-10-04 18:00:00' ORDER BY id DESC LIMIT 50""").fetchall()]
+    if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='bodymind_operator_upload_jobs'").fetchone():
+        jobs=[]
+        for r in c.execute("SELECT * FROM bodymind_operator_upload_jobs ORDER BY created_at DESC LIMIT 15").fetchall():
+            d=dict(r)
+            try:
+                rr=json.loads(d.get('result_json') or '{}')
+                d['result_summary']={'status':d.get('status'),'text':rr.get('text'),'summary':rr.get('summary'),'results':rr.get('results')}
+            except Exception: pass
+            for k in list(d):
+                if k not in ('id','conversation_id','status','created_at','updated_at','document_type_hint','result_summary','error'):
+                    d.pop(k,None)
+            jobs.append(d)
+        out['recent_jobs']=jobs
+    if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='bodymind_document_semantics'").fetchone():
+        out['sem_143_168_233']=[dict(x) for x in c.execute("""SELECT * FROM bodymind_document_semantics
+          WHERE (source_table='inbound_documents' AND source_id=143)
+             OR (source_table='documenti' AND source_id IN (168,233))
+          ORDER BY id DESC""").fetchall()]
+    print('[r142-targeted-current] '+json.dumps(out,ensure_ascii=False,default=str),flush=True)
+finally:
+    c.close()
