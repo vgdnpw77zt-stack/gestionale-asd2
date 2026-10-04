@@ -137,20 +137,35 @@ finally: conn.close()
 print('[r135-audit] '+json.dumps(report,ensure_ascii=False),flush=True)
 print('[r135-ludovica] '+json.dumps(lud,ensure_ascii=False),flush=True)
 
-# Fresh import test: Ludovica's known MU must open if its file exists.
+# Fresh import test: verify the resolver against any CURRENT visible document
+# whose physical file exists. Do not pin QA to a specific athlete/document that
+# the user may legitimately archive or delete from the operational view.
 qa=r'''
-import sys
+import sqlite3,sys
+from pathlib import Path
 sys.path.insert(0,"/data/top2_app")
 import app as _full
 from asd_app.core import app
 app.config["TESTING"]=True
+roots=[Path("/data/tenants/default/media"),Path("/data/top2_app/user_static"),Path("/data/top2_app/static"),Path("/data/top2_app"),Path("/data/tenants/default")]
+conn=sqlite3.connect("/data/tenants/default/asd.db",timeout=20); conn.row_factory=sqlite3.Row
+try:
+    target=None
+    for row in conn.execute("SELECT id,filename FROM documenti WHERE coalesce(visibile,1)=1 ORDER BY id DESC").fetchall():
+        raw=Path(str(row["filename"] or "").strip())
+        cands=[raw] if raw.is_absolute() else [r/raw for r in roots]
+        if any(p.is_file() for p in cands):
+            target=int(row["id"]); break
+finally: conn.close()
+if target is None:
+    raise RuntimeError("R135 no visible document with a physical file available for resolver QA")
 c=app.test_client()
-with c.session_transaction() as s:
-    s.update({"logged":True,"username":"admin","display_name":"R135 QA","role":"admin","tenant_slug":"default"})
-rr=c.get("/documenti/file/102",follow_redirects=False)
-print("[r135-open-test] status="+str(rr.status_code)+" type="+str(rr.headers.get("Content-Type","")),flush=True)
+with c.session_transaction() as sess:
+    sess.update({"logged":True,"username":"admin","display_name":"R135 QA","role":"admin","tenant_slug":"default"})
+rr=c.get("/documenti/file/"+str(target),follow_redirects=False)
+print("[r135-open-test] id="+str(target)+" status="+str(rr.status_code)+" type="+str(rr.headers.get("Content-Type","")),flush=True)
 if rr.status_code!=200:
-    raise RuntimeError("R135 Ludovica document open failed")
+    raise RuntimeError("R135 current visible document open failed id="+str(target))
 '''
 proc=subprocess.run([sys.executable,'-c',qa],capture_output=True,text=True,timeout=120)
 print((proc.stdout or '').strip(),flush=True)
