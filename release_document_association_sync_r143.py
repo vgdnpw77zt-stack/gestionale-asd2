@@ -206,8 +206,33 @@ def materialize_inbound(conn,inbound_id):
     if tid<=0:return {'ok':False,'reason':'no_athlete'}
     dtype=canonical_type(r)
     if dtype=='altro':return {'ok':False,'reason':'unsupported_type'}
+
+    # Never resurrect a document the user already archived/deleted. An inbound row
+    # linked to ANY documenti row has already been materialized historically.
+    linked=conn.execute("SELECT * FROM documenti WHERE inbound_id=? ORDER BY visibile DESC,id DESC",(int(inbound_id),)).fetchall()
+    if linked:
+        visible=[d for d in linked if int(d['visibile'] or 0)==1]
+        if visible:
+            res=sync_document(conn,int(visible[0]['id']))
+            res.update({'linked_existing':True,'inbound_id':int(inbound_id)})
+            return res
+        return {'ok':False,'reason':'linked_document_archived','inbound_id':int(inbound_id)}
+
     fp=resolve_file(r['saved_path'] if 'saved_path' in r.keys() else '')
     if not fp:return {'ok':False,'reason':'missing_file'}
+
+    # Strong safety gate: a canonical saved path under tesserati/<id>/ must agree
+    # with the athlete association. This blocks historical wrong-person links.
+    parts=list(fp.parts)
+    if 'tesserati' in parts:
+        try:
+            pos=parts.index('tesserati')
+            folder_tid=int(parts[pos+1])
+            if folder_tid!=tid:
+                return {'ok':False,'reason':'path_athlete_mismatch','folder_tid':folder_tid,'tesserato_id':tid}
+        except Exception:
+            pass
+
     persistent=_ensure_persistent(tid,fp,r['original_filename'] if 'original_filename' in r.keys() else fp.name)
     sh=sha256_file(persistent)
 
@@ -338,13 +363,35 @@ sys.path.insert(0,str(APP))
 from asd_app.document_sync_core_r143 import reconcile_all,truth
 conn=sqlite3.connect(str(DB),timeout=60);conn.row_factory=sqlite3.Row
 try:
+    # A failed R143 candidate may have written technical materializations to the
+    # persistent DB before Railway rejected the release. Remove ONLY those rows;
+    # never touch user-created or pre-existing documents.
+    cleanup=[]
+    dc={str(x[1]) for x in conn.execute("PRAGMA table_info(documenti)").fetchall()}
+    if 'source' in dc:
+        bad=conn.execute("SELECT id,filename FROM documenti WHERE source='association_sync_r143' ORDER BY id").fetchall()
+        for b in bad:
+            did=int(b['id']); path=str(b['filename'] or '')
+            if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='bodymind_document_semantics'").fetchone():
+                conn.execute("DELETE FROM bodymind_document_semantics WHERE source_table='documenti' AND source_id=?",(did,))
+            conn.execute("DELETE FROM documenti WHERE id=?",(did,))
+            cleanup.append({'id':did,'path':path})
+        conn.commit()
+        for item in cleanup:
+            p=Path(item['path'])
+            if '_R143_' not in p.name: continue
+            refs=int(conn.execute("SELECT COUNT(*) FROM documenti WHERE filename=?",(str(p),)).fetchone()[0])
+            if refs==0:
+                try:
+                    if p.is_file(): p.unlink()
+                except Exception: pass
     actions=reconcile_all(conn)
     giulia=conn.execute("SELECT * FROM tesserati WHERE lower(cognome)='di francia' AND lower(nome)='giulia' LIMIT 1").fetchone()
     giulia_truth=truth(conn,giulia) if giulia else {}
     giulia_docs=[dict(x) for x in conn.execute("SELECT id,doc_type,categoria,titolo,filename,data_scadenza,visibile,status,inbound_id FROM documenti WHERE tesserato_id=? ORDER BY id",(int(giulia['id']),)).fetchall()] if giulia else []
     integrity=str(conn.execute('PRAGMA integrity_check').fetchone()[0]);fk=len(conn.execute('PRAGMA foreign_key_check').fetchall())
 finally:conn.close()
-print('[r143-reconcile] backup='+str(backup)+' actions='+str(len(actions))+' giulia_truth='+json.dumps(giulia_truth,ensure_ascii=False)+' giulia_docs='+json.dumps(giulia_docs,ensure_ascii=False),flush=True)
+print('[r143-reconcile] backup='+str(backup)+' cleanup='+json.dumps(cleanup,ensure_ascii=False)+' actions='+str(len(actions))+' giulia_truth='+json.dumps(giulia_truth,ensure_ascii=False)+' giulia_docs='+json.dumps(giulia_docs,ensure_ascii=False),flush=True)
 if integrity.lower()!='ok' or fk:raise RuntimeError('R143 DB integrity failed')
 
 # Append canonical manual upload + immediate post-association reconcile + authoritative mobile profile.
@@ -446,7 +493,11 @@ def _bodymind_r143_mobile_profile_truth(resp):
         from html import escape as _e
         from .document_sync_core_r143 import truth as _truth
         m=_re.fullmatch(r'/mobile/atleta/(\d+)/?',request.path or '')
-        if request.method!='GET' or not m or request.args.get('advanced')=='1' or int(getattr(resp,'status_code',200) or 200)!=200:
+        status=int(getattr(resp,'status_code',200) or 200)
+        if request.method!='GET' or not m or request.args.get('advanced')=='1':
+            return resp
+        redirect_ok=(status in (301,302,303,307,308) and bool(session.get('logged')) and str(session.get('role') or '').lower()=='admin')
+        if status!=200 and not redirect_ok:
             return resp
         tid=int(m.group(1));conn=db();conn.row_factory=sqlite3.Row
         try:
@@ -467,7 +518,7 @@ def _bodymind_r143_mobile_profile_truth(resp):
         cards=''.join("<div class='st "+tone+"'><i></i><div><b>"+_e(label)+"</b><small>"+_e(detail)+"</small></div><strong>"+_e(state)+"</strong></div>" for label,state,detail,tone in states)
         overall='REGOLARE' if tr['overall'] else 'DA COMPLETARE'
         html=f"""<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'><title>{_e(nm)}</title><style>body{{margin:0;background:#071426;color:#eef6ff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}}main{{max-width:650px;margin:auto;padding:16px 14px 95px}}.head{{padding:18px;border-radius:20px;background:#0d2036;border:1px solid #203b57}}.head h1{{margin:4px 0}}.head p{{margin:0;color:#9fb3ca}}.overall{{display:inline-block;margin-top:10px;padding:8px 11px;border-radius:999px;background:{'#14532d' if tr['overall'] else '#7f1d1d'};font-weight:950}}.st{{display:grid;grid-template-columns:12px 1fr auto;gap:10px;align-items:center;padding:14px;margin-top:9px;border-radius:15px;background:#0b1b2e;border:1px solid #1d3651}}.st i{{width:11px;height:11px;border-radius:50%;background:#dc2626}}.st.ok i{{background:#16a34a}}.st.warn i{{background:#f59e0b}}.st small{{display:block;color:#91a6bd;margin-top:3px}}.st strong{{color:#fca5a5}}.st.ok strong{{color:#86efac}}.st.warn strong{{color:#fde68a}}.actions{{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}}.actions a{{padding:12px;border-radius:13px;background:#163b5f;color:white;text-decoration:none;text-align:center;font-weight:900}}</style></head><body><main><section class='head'><small>ATLETA</small><h1>{_e(nm)}</h1><p>{_e(course)}</p><span class='overall'>{overall}</span></section>{cards}<div class='actions'><a href='/mobile/atleta/{tid}?advanced=1'>Modifica dati</a><a href='/mobile/atleta/{tid}/documenti'>Documenti</a><a href='/mobile/atleta/{tid}/documenti/carica'>Carica documento</a><a href='/pagamenti?tesserato_id={tid}'>Pagamenti</a><a href='/mobile/atlete'>Atlete</a><a href='/mobile'>Home</a></div></main></body></html>"""
-        resp.set_data(html);resp.headers['Content-Type']='text/html; charset=utf-8'
+        resp.set_data(html);resp.status_code=200;resp.headers.pop('Location',None);resp.headers['Content-Type']='text/html; charset=utf-8'
     except Exception as exc:
         print('[r143-profile-warning] '+repr(exc),flush=True)
     return resp
