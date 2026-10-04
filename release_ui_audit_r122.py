@@ -53,3 +53,24 @@ for _needle in ('NOME / STATO','AZIONI','STORICO INCASSI'):
     _i=_body.upper().find(_needle)
     if _i>=0:
         print('[r127-render-'+_needle.replace(' ','_').replace('/','_')+'] '+_body[max(0,_i-2500):_i+9000],flush=True)
+
+# R128 focused source scan for the exact live payment history/nav markup.
+for _p in (APP/'asd_app').rglob('*.py'):
+    try:
+        _src=_p.read_text(encoding='utf-8',errors='replace')
+    except Exception:
+        continue
+    _hits=[x for x in ('I profili con alert tutela','NOME / STATO','STORICO INCASSI','Elenco pagamenti','Apri promemoria') if x in _src]
+    if _hits:
+        for _needle in _hits:
+            _i=_src.find(_needle)
+            print('[r128-runtime-source-hit] file='+str(_p)+' needle='+_needle+'\n'+_src[max(0,_i-5000):_i+14000],flush=True)
+# Find mobile nav constant/source containing both Presenze and Pagamenti.
+for _p in (APP/'asd_app').rglob('*.py'):
+    try:
+        _src=_p.read_text(encoding='utf-8',errors='replace')
+    except Exception:
+        continue
+    if 'Presenze' in _src and 'Pagamenti' in _src and ('ATHLETE_NAV' in _src or 'bottom' in _src.lower() or '/presenze' in _src):
+        _i=min([x for x in (_src.find('Presenze'),_src.find('Pagamenti')) if x>=0])
+        print('[r128-nav-source-hit] file='+str(_p)+'\n'+_src[max(0,_i-5000):_i+12000],flush=True)
