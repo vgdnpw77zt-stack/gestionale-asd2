@@ -129,6 +129,7 @@ COPY release_mobile_truth_r139.py /opt/bodymind/release_mobile_truth_r139.py
 COPY release_mobile_athlete_truth_r140.py /opt/bodymind/release_mobile_athlete_truth_r140.py
 COPY release_mobile_truth_surface_r141.py /opt/bodymind/release_mobile_truth_surface_r141.py
 COPY release_upload_state_probe_r142.py /opt/bodymind/release_upload_state_probe_r142.py
+COPY release_document_association_sync_r143.py /opt/bodymind/release_document_association_sync_r143.py
 COPY release_presence_probe_r132.py /opt/bodymind/release_presence_probe_r132.py
 COPY release_payment_history_probe_r128.py /opt/bodymind/release_payment_history_probe_r128.py
 COPY release_ui_target_audit_r123.py /opt/bodymind/release_ui_target_audit_r123.py
