@@ -96,3 +96,26 @@ try:
     out['job_files']=[{'path':str(p),'exists':p.is_file(),'size':p.stat().st_size if p.is_file() else 0} for p in jobdir.glob('*')] if jobdir.exists() else []
     print('[r142-duplicate-204] '+json.dumps(out,ensure_ascii=False,default=str),flush=True)
 finally:c.close()
+
+
+c=sqlite3.connect(str(DB),timeout=30); c.row_factory=sqlite3.Row
+try:
+    out={}
+    out['docs_by_name']=[dict(x) for x in c.execute("""SELECT * FROM documenti
+      WHERE lower(coalesce(filename,'')) LIKE '%di_francia%' OR lower(coalesce(original_filename,'')) LIKE '%di francia%' OR lower(coalesce(titolo,'')) LIKE '%di francia%'
+      ORDER BY id""").fetchall()]
+    for tn in ('document_deletion_tombstones','audit_log','system_logs','operational_events'):
+        if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(tn,)).fetchone():
+            cols=[str(x[1]) for x in c.execute("PRAGMA table_info("+tn+")").fetchall()]
+            rows=[]
+            try:
+                if tn=='document_deletion_tombstones':
+                    rows=[dict(x) for x in c.execute("SELECT * FROM "+tn+" WHERE document_id IN (233,148) OR lower(coalesce(payload_json,'')) LIKE '%di francia%' ORDER BY rowid DESC LIMIT 30").fetchall()]
+                else:
+                    expr=" || ' ' || ".join(["coalesce(cast("+k+" as text),'')" for k in cols])
+                    rows=[dict(x) for x in c.execute("SELECT * FROM "+tn+" WHERE lower("+expr+") LIKE '%di francia%' OR "+expr+" LIKE '%233%' ORDER BY rowid DESC LIMIT 30").fetchall()]
+            except Exception as exc:
+                rows=[{'error':repr(exc),'cols':cols}]
+            out[tn]=rows
+    print('[r142-giulia-certificate-forensics] '+json.dumps(out,ensure_ascii=False,default=str),flush=True)
+finally:c.close()
