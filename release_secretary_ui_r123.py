@@ -795,6 +795,63 @@ def _bodymind_r130_payment_mobile_hard_fix(resp):
 else:
     print('[r130-payment-fix] already present',flush=True)
 
+# BODYMIND_R131_HISTORY_NAME_VISIBLE_DIV
+# The history table already contains the correct name in <strong>, but the
+# legacy mobile table CSS hides that element. Duplicate the text into a plain
+# div inside EACH history row server-side, so mobile cannot lose the identity.
+core_r131=CORE.read_text(encoding='utf-8',errors='replace')
+if 'BODYMIND_R131_HISTORY_NAME_VISIBLE_DIV' not in core_r131:
+    core_r131 += r'''
+
+# BODYMIND_R131_HISTORY_NAME_VISIBLE_DIV
+@app.after_request
+def _bodymind_r131_history_name_visible_div(resp):
+    try:
+        if request.method!='GET' or request.path!='/pagamenti' or int(getattr(resp,'status_code',200) or 200)!=200:
+            return resp
+        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
+            return resp
+        html=resp.get_data(as_text=True)
+        if 'Elenco pagamenti' not in html:
+            return resp
+
+        import re as _r131_re
+        head,sep,tail=html.partition('Elenco pagamenti')
+        # Only touch the historical payments area. Each row already has the
+        # authoritative athlete name as the first-cell <strong> value.
+        pat=_r131_re.compile(r"(?is)(<tr[^>]*class=['\"][^'\"]*table-row-ok[^'\"]*['\"][^>]*>\s*<td>\s*)(<strong>(.*?)</strong>)")
+        def _add_name(m):
+            raw=m.group(3)
+            plain=_r131_re.sub(r'<[^>]+>','',raw).strip()
+            if not plain:
+                return m.group(0)
+            return m.group(1)+"<div class='r131-history-name'>"+raw+"</div>"+m.group(2)
+        tail,count=pat.subn(_add_name,tail)
+        html=head+sep+tail
+        if count:
+            css="""<style id='bodymind-r131-history-name'>
+            .r131-history-name{
+              display:block!important;visibility:visible!important;opacity:1!important;
+              position:static!important;clip:auto!important;clip-path:none!important;
+              width:auto!important;height:auto!important;overflow:visible!important;
+              color:#f8fafc!important;font-size:20px!important;line-height:1.15!important;
+              font-weight:950!important;letter-spacing:.01em!important;margin:8px 0 12px!important;
+              text-transform:uppercase!important;
+            }
+            @media(max-width:600px){.r131-history-name{font-size:18px!important}}
+            </style>"""
+            html=html.replace('</head>',css+'</head>',1) if '</head>' in html else css+html
+        resp.set_data(html)
+    except Exception as exc:
+        print('[r131-history-name-warning] '+repr(exc),flush=True)
+    return resp
+'''
+    CORE.write_text(core_r131,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+    print('[r131-history-name] PASS server-side visible name div installed',flush=True)
+else:
+    print('[r131-history-name] already present',flush=True)
+
 # Fresh import/UI gate.
 qa=r'''
 import sqlite3,sys
@@ -831,8 +888,9 @@ history_names=ph.count("r126-history-name")
 history_name_ok=(history_labels==0 or history_names>=history_labels)
 r127_script_ok=("BODYMIND_R127_HISTORY_SCRIPT" in ph and "r127-nav-current" in ph and "paymentNames=" in ph)
 r129_css_ok=("bodymind-r130-payment-fix" in ph and 'a[href^="/pagamenti"]' in ph and 'td:first-child>strong' in ph)
-ok=(p.status_code==200 and "BODYMIND_R123_PAYMENT_MOBILE" in ph and premium_pay_ok and r127_script_ok and r129_css_ok and _identity_ok and a.status_code in (301,302,307,308) and "/presenze-semplici" in str(a.headers.get("Location","")) and b.status_code==200 and direct_ok and "Giornata operativa" not in bh and all(x in bh for x in ("Base","Kids","Adult","Pro / Agoniste")) and integrity.lower()=="ok" and fk==0)
-print("[r123-selftest] status_payment=%s premium_pay_ok=%s legacy_history_name_ok=%s r127_script_ok=%s r129_css_ok=%s identity_ok=%s presence_redirect=%s simple=%s db=%s fk=%s ok=%s"%(p.status_code,premium_pay_ok,history_name_ok,r127_script_ok,r129_css_ok,_identity_ok,a.status_code,b.status_code,integrity,fk,ok),flush=True)
+r131_history_ok=("r131-history-name" in ph)
+ok=(p.status_code==200 and "BODYMIND_R123_PAYMENT_MOBILE" in ph and premium_pay_ok and r127_script_ok and r129_css_ok and r131_history_ok and _identity_ok and a.status_code in (301,302,307,308) and "/presenze-semplici" in str(a.headers.get("Location","")) and b.status_code==200 and direct_ok and "Giornata operativa" not in bh and all(x in bh for x in ("Base","Kids","Adult","Pro / Agoniste")) and integrity.lower()=="ok" and fk==0)
+print("[r123-selftest] status_payment=%s premium_pay_ok=%s legacy_history_name_ok=%s r127_script_ok=%s r129_css_ok=%s r131_history_ok=%s identity_ok=%s presence_redirect=%s simple=%s db=%s fk=%s ok=%s"%(p.status_code,premium_pay_ok,history_name_ok,r127_script_ok,r129_css_ok,r131_history_ok,_identity_ok,a.status_code,b.status_code,integrity,fk,ok),flush=True)
 if not ok: raise RuntimeError("R123 QA failed")
 '''
 proc=subprocess.run([sys.executable,'-c',qa],capture_output=True,text=True,timeout=120)
