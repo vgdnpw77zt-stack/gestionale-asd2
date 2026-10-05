@@ -215,11 +215,11 @@ def _bodymind_r147_review_surface(resp):
 <form method='post' action='/documenti/da-verificare/r147/verifica'>{csrf_input()}<input type='hidden' name='source' value='{source}'><input type='hidden' name='id' value='{rid}'>
 <label>Atleta<select name='tesserato_id' required><option value=''>Seleziona…</option>{athlete_options}</select></label>
 <label>Tipo<select name='tipo' required><option value='certificato_medico'{sel('certificato_medico')}>Certificato medico</option><option value='modulo_unico_tesseramento'{sel('modulo_unico_tesseramento')}>Modulo Unico</option><option value='liberatoria_immagini'{sel('liberatoria_immagini')}>Liberatoria immagini</option><option value='altro'{sel('altro')}>Altro</option></select></label>
-<label>Scadenza certificato · GG/MM/AAAA<input name='scadenza' value='{e(current_exp)}' inputmode='numeric' placeholder='10/12/2026' pattern='[0-9]{{2}}/[0-9]{{2}}/[0-9]{{4}}'></label>
+<label>Scadenza certificato · GG/MM/AAAA oppure 8 cifre<input type='text' name='scadenza' value='{e(current_exp)}' inputmode='text' autocomplete='off' placeholder='es. 14/11/2026 o 14112026'></label>
 <button type='submit'>✓ Verifica e aggiorna stato</button></form></article>"""
         cards=''.join(card(x) for x in docs+inbound)
         err=request.args.get('error') or ''
-        messages={'scadenza':'Per un certificato medico inserisci la scadenza in formato GG/MM/AAAA.','atleta':'Seleziona l’atleta.','materializza':'Il file non è materializzabile: resta da verificare.','tipo':'Seleziona il tipo documento.'}
+        messages={'scadenza':'Per un certificato medico inserisci GG/MM/AAAA oppure 8 cifre, ad esempio 14112026.','atleta':'Seleziona l’atleta.','materializza':'Il file non è materializzabile: resta da verificare.','tipo':'Seleziona il tipo documento.'}
         msg=messages.get(err,'')
         html=f"""<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'><title>Documenti da verificare</title>
 <style>body{{margin:0;background:#071426;color:#eef6ff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}}main{{max-width:780px;margin:auto;padding:18px 15px 110px}}h1{{margin:0 0 6px;font-size:32px}}.sub{{color:#9fb3ca;margin-bottom:15px}}.okmsg,.errmsg{{padding:11px;border-radius:12px;margin:10px 0;font-weight:800}}.okmsg{{background:#14532d}}.errmsg{{background:#7f1d1d}}.r147-card{{background:#0b1d33;border:1px solid #27445f;border-radius:18px;padding:15px;margin:12px 0}}.r147-head{{display:flex;justify-content:space-between;gap:10px}}.r147-head b{{font-size:18px}}.r147-head small{{display:block;color:#a9b9cb;margin-top:4px}}.r147-head span{{height:max-content;background:#92400e;color:#fff7ed;border-radius:999px;padding:6px 9px;font-size:11px;font-weight:950}}p{{color:#fcd34d}}label{{display:block;margin-top:11px;font-weight:900}}select,input{{width:100%;box-sizing:border-box;min-height:48px;margin-top:5px;border-radius:12px;border:1px solid #315475;background:#081727;color:#fff;padding:10px;font-size:16px}}button{{width:100%;margin-top:14px;padding:13px;border:0;border-radius:12px;background:#166534;color:#fff;font-weight:950;font-size:16px}}a.back{{display:block;margin-top:15px;padding:12px;border-radius:12px;background:#163b5f;color:#fff;text-decoration:none;text-align:center;font-weight:900}}</style></head><body><main><h1>Documenti da verificare</h1><div class='sub'>{len(docs)+len(inbound)} casi dubbi o incompleti. La verifica manuale aggiorna davvero lo stato dell’atleta.</div>{("<div class='okmsg'>Documento verificato e stato aggiornato.</div>" if request.args.get('verified') else "")}{("<div class='errmsg'>"+e(msg)+"</div>" if msg else "")}{cards if cards else "<div class='okmsg'>Nessun documento da verificare.</div>"}<a class='back' href='/documenti'>← Documenti</a></main></body></html>"""
@@ -254,9 +254,9 @@ finally:conn.close()
 checks={
  'review_200':p.status_code==200,
  'review_verify':'Verifica e aggiorna stato' in h,
- 'review_expiry_field':"name='scadenza'" in h,
- 'upload_expiry_field':"name='scadenza'" in uh and "type='text' name='scadenza'" in uh,
- 'date_parser':_r147_parse_it_date('10/12/2026')=='2026-12-10',
+ 'review_expiry_field':"name='scadenza'" in h and "inputmode='text'" in h and "inputmode='numeric'" not in h,
+ 'upload_expiry_field':"name='scadenza'" in uh and "type='text' name='scadenza'" in uh and "inputmode='text'" in uh and "type='date' name='scadenza'" not in uh,
+ 'date_parser':_r147_parse_it_date('10/12/2026')=='2026-12-10' and _r147_parse_it_date('10122026')=='2026-12-10',
  'db':integ.lower()=='ok' and fk==0,
 }
 print('[r147-selftest] '+repr(checks),flush=True)
