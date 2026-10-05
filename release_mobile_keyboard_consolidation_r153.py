@@ -53,33 +53,17 @@ if 'BODYMIND_R153_KEYBOARD_CONSOLIDATION' not in ops:
       ("          if(window.scrollY)window.scrollTo(0,0);","          // R153: never force page scroll while keyboard is opening."),
       ("        [40,120,260,420].forEach(ms=>setTimeout(bodymindR90SyncViewport,ms));","        setTimeout(bodymindR90SyncViewport,120);"),
       ("        window.visualViewport.addEventListener('scroll',bodymindR90SyncViewport,{passive:true});","        // R153: visualViewport scroll is noisy on iOS; resize is sufficient."),
-      ("      input?.addEventListener('focus',bodymindR90SyncSoon);","      input?.addEventListener('focus',bodymindR90SyncViewport,{passive:true});"),
-      ("      input?.addEventListener('blur',bodymindR90SyncSoon);","      input?.addEventListener('blur',bodymindR90SyncViewport,{passive:true});"),
+      ("      input?.addEventListener('focus',bodymindR90SyncSoon);","      input?.addEventListener('focus',bodymindR90SyncViewport);"),
+      ("      input?.addEventListener('blur',bodymindR90SyncSoon);","      input?.addEventListener('blur',bodymindR90SyncViewport);"),
     ]
     for a,b in repls:
         if a in ops:
             ops=ops.replace(a,b,1); changed=True
 
-    # Preserve unsent draft across incidental rerenders/navigation restores.
-    anchor="      bodymindR90SyncSoon();"
-    draft=r'''
-      // BODYMIND_R153_DRAFT_PRESERVE
-      try{
-        const draftKey='bodymind.operator.draft';
-        const restoreDraft=()=>{ if(input && !input.value){ const v=sessionStorage.getItem(draftKey)||''; if(v) input.value=v; } };
-        restoreDraft();
-        input?.addEventListener('input',()=>{ try{ sessionStorage.setItem(draftKey,input.value||''); }catch(e){} },{passive:true});
-        if(send){
-          send.addEventListener('click',()=>{ setTimeout(()=>{ try{ if(input && !input.value) sessionStorage.removeItem(draftKey); }catch(e){} },0); },{passive:true});
-        }
-      }catch(e){}
-'''
-    if anchor in ops and 'BODYMIND_R153_DRAFT_PRESERVE' not in ops:
-        ops=ops.replace(anchor,anchor+draft,1); changed=True
-
     if not changed:
         raise RuntimeError('R153 operator anchors not found; refusing blind patch')
     OP.write_text(ops,encoding='utf-8')
+    # Hard gate: the runtime operator module must remain valid Python after patching.
     py_compile.compile(str(OP),doraise=True)
 
 core=CORE.read_text(encoding='utf-8',errors='replace')
@@ -129,7 +113,6 @@ checks={
  'no_smooth_composer_scroll':"shell.scrollIntoView({block:'end',behavior:'smooth'})" not in ops,
  'no_forced_page_scroll':'if(window.scrollY)window.scrollTo(0,0);' not in ops,
  'no_async_forced_focus':'input.focus();setTimeout(bodymindKeepComposerVisible,80)' not in ops,
- 'draft_preserve':'BODYMIND_R153_DRAFT_PRESERVE' in ops,
  'native_inputs':'BODYMIND_R153_NATIVE_MOBILE_INPUTS' in core and 'touch-action:manipulation' in core,
 }
 conn=sqlite3.connect('file:'+str(DB)+'?mode=ro',uri=True,timeout=20)
@@ -142,4 +125,4 @@ checks['db']=integ.lower()=='ok' and fk==0
 print('[r153-selftest] '+repr(checks)+' integrity='+integ+' fk='+str(fk),flush=True)
 if not all(checks.values()):
     raise RuntimeError('R153 QA failed '+repr(checks))
-print('[r153-selftest-main] PASS consolidated-ios-keyboard native-inputs draft-preserve db-readonly-ok',flush=True)
+print('[r153-selftest-main] PASS consolidated-ios-keyboard native-inputs db-readonly-ok',flush=True)
