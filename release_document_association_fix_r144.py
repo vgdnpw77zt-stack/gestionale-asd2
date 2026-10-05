@@ -508,7 +508,7 @@ else:
 
 # Ensure a direct upload route exists even on a clean runtime.
 core=CORE.read_text(encoding='utf-8',errors='replace')
-if "/mobile/atleta/<int:tid>/documenti/carica" not in core:
+if "def bodymind_r144_direct_document_upload" not in core:
     shutil.copy2(CORE,BACK/'core.py')
     core += r'''
 
