@@ -269,4 +269,4 @@ proc=subprocess.run([sys.executable,'-c',qa],capture_output=True,text=True,timeo
 print((proc.stdout or '').strip(),flush=True)
 if proc.returncode!=0:
     raise RuntimeError('R147 child QA failed '+((proc.stderr or '')+(proc.stdout or ''))[-6000:])
-print('[r147-selftest-main] PASS human-verify persistent state doubtful-queue Italian-date db-ok',flush=True)
+print('[r147-selftest-main] PASS human-verify persistent state doubtful-queue canonical-date db-ok',flush=True)
