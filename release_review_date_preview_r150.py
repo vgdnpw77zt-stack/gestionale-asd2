@@ -76,7 +76,8 @@ document.addEventListener('DOMContentLoaded',function(){
                 resp.set_data(html)"""
     upload_new="""html=html.replace('Scadenza certificato (solo se nota)','Scadenza certificato · GG/MM/AAAA')
                 if 'BODYMIND_R150_DATE_AUTOFMT' not in html:
-                    html=html.replace('</body>',"""<script id='BODYMIND_R150_DATE_AUTOFMT'>document.addEventListener('DOMContentLoaded',function(){document.querySelectorAll(\"input[name='scadenza']\").forEach(function(el){function f(){const d=(el.value||'').replace(/\\D/g,'');if(d.length===8)el.value=d.slice(0,2)+'/'+d.slice(2,4)+'/'+d.slice(4,8);}el.addEventListener('input',function(){const d=(el.value||'').replace(/\\D/g,'');if(d.length===8)f();});el.addEventListener('blur',f);});});</script></body>""",1)
+                    _r150_js="<script id='BODYMIND_R150_DATE_AUTOFMT'>document.addEventListener('DOMContentLoaded',function(){document.querySelectorAll(\\\"input[name='scadenza']\\\").forEach(function(el){function f(){const d=(el.value||'').replace(/\\\\D/g,'');if(d.length===8)el.value=d.slice(0,2)+'/'+d.slice(2,4)+'/'+d.slice(4,8);}el.addEventListener('input',function(){const d=(el.value||'').replace(/\\\\D/g,'');if(d.length===8)f();});el.addEventListener('blur',f);});});</script>"
+                    html=html.replace('</body>',_r150_js+'</body>',1)
                 resp.set_data(html)"""
     if upload_anchor in s:
         s=s.replace(upload_anchor,upload_new,1)
