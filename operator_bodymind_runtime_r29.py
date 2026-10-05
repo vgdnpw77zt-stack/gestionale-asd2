@@ -2194,37 +2194,109 @@ def _answer(conn, text: str):
             "mode":"local"
         }
 
-    # BODYMIND_MINOR_COUNT_FAST_FACT
-    # "Quanti/quante minorenni/minori abbiamo?" means the number of registered
-    # athletes marked as minors, not total athletes and not minors with tutela issues.
-    if (
-        re.search(r"\b(quanti|quante|numero|totale)\b",n)
-        and re.search(r"\b(minori|minorenni|minorenne|minore)\b",n)
-        and not any(x in n for x in ("manca","incomplet","tutela","consenso","document","certificat"))
-    ):
+    # BODYMIND_SIMPLE_FACT_ROUTER
+    # Deterministic DB answers for simple quantitative questions. These must be
+    # resolved before athlete matching / cloud planning so a specific count
+    # can never fall through to the generic total-tesserati answer.
+    asks_count=bool(re.search(r"\b(quanti|quante|quanto|numero|totale|conteggio)\b",n))
+    if asks_count:
         rows=_athletes(conn)
+        total=len(rows)
         minors=sum(1 for a in rows if ("minorenne" in a.keys() and int(a["minorenne"] or 0)==1))
-        return {
-            "text":f"Nel gestionale risultano {minors} minorenni su {len(rows)} tesserati.",
-            "mode":"fast_fact",
-            "cloud_ai":False,
-            "links":[{"label":"Apri Tesserati","href":"/tesserati"}]
-        }
+        adults=total-minors
+        active=sum(1 for a in rows if ("attivo" not in a.keys() or int(a["attivo"] or 0)==1))
+        inactive=total-active
+        g=None
 
-    # BODYMIND_R51_FAST_FACTS
-    # Fatti semplici e inequivocabili arrivano direttamente dal DB: più veloci, più economici, zero allucinazioni.
-    if (
-        re.search(r"\b(quanti|numero|totale)\b",n)
-        and any(x in n for x in ("tesserat","iscritt","atlet","alliev","soci"))
-        and not any(x in n for x in ("manca","document","certificat","pagament","ricevut","quota"))
-    ):
-        cnt=len(_athletes(conn))
-        return {
-            "text":f"Nel gestionale risultano {cnt} tesserati.",
-            "mode":"fast_fact",
-            "cloud_ai":False,
-            "links":[{"label":"Apri Tesserati","href":"/tesserati"}]
-        }
+        # Person counts: specific dimensions always win over generic "tesserati".
+        if re.search(r"\b(minori|minorenni|minorenne|minore)\b",n):
+            if any(x in n for x in ("tutela","consenso","incomplet","da rivedere","da controllare")):
+                g=_global_check(conn)
+                cnt=len(g["minor_issues"])
+                return {
+                    "text":f"Nel gestionale risultano {cnt} minorenni con tutela o consensi da ricontrollare, su {minors} minorenni totali.",
+                    "mode":"fast_fact","cloud_ai":False,
+                    "links":[{"label":"Apri Tesserati","href":"/tesserati"}]
+                }
+            return {
+                "text":f"Nel gestionale risultano {minors} minorenni su {total} tesserati.",
+                "mode":"fast_fact","cloud_ai":False,
+                "links":[{"label":"Apri Tesserati","href":"/tesserati"}]
+            }
+
+        if re.search(r"\b(maggiorenni|maggiorenne|adulti|adulte|adulto|adulta)\b",n):
+            return {
+                "text":f"Nel gestionale risultano {adults} maggiorenni su {total} tesserati.",
+                "mode":"fast_fact","cloud_ai":False,
+                "links":[{"label":"Apri Tesserati","href":"/tesserati"}]
+            }
+
+        if any(x in n for x in ("non attivi","non attive","inattivi","inattive","disattivati","disattivate")):
+            return {
+                "text":f"Nel gestionale risultano {inactive} tesserati non attivi su {total}.",
+                "mode":"fast_fact","cloud_ai":False,
+                "links":[{"label":"Apri Tesserati","href":"/tesserati"}]
+            }
+
+        if any(x in n for x in ("attivi","attive")) and any(x in n for x in ("tesserat","iscritt","atlet","alliev","soci")):
+            return {
+                "text":f"Nel gestionale risultano {active} tesserati attivi su {total}.",
+                "mode":"fast_fact","cloud_ai":False,
+                "links":[{"label":"Apri Tesserati","href":"/tesserati"}]
+            }
+
+        # Operational counts already represented by canonical helpers.
+        if (
+            any(x in n for x in ("documenti da verificare","documenti in attesa","documenti pendenti","coda documenti"))
+            or (("document" in n or "modul" in n) and any(x in n for x in ("verificare","verifica","controllare","da controllare")))
+        ):
+            cnt=_pending_count(conn)
+            return {
+                "text":f"Ci sono {cnt} documenti che richiedono verifica.",
+                "mode":"fast_fact","cloud_ai":False,
+                "links":[{"label":"Apri Da verificare","href":"/documenti/da-verificare"}]
+            }
+
+        if "pagament" in n:
+            g=_global_check(conn)
+            return {
+                "text":f"Nel gestionale risultano {g['payments']} pagamenti registrati.",
+                "mode":"fast_fact","cloud_ai":False,
+                "links":[{"label":"Quote & Incassi","href":"/quote-incassi"}]
+            }
+
+        if "ricevut" in n:
+            g=_global_check(conn)
+            return {
+                "text":f"Nel gestionale risultano {g['receipts']} ricevute.",
+                "mode":"fast_fact","cloud_ai":False,
+                "links":[{"label":"Apri Ricevute","href":"/ricevute"}]
+            }
+
+        if "certificat" in n:
+            g=_global_check(conn)
+            if any(x in n for x in ("senza scadenza","mancano","mancanti","senza certificato")):
+                cnt=len(g["missing_cert"])
+                return {
+                    "text":f"Risultano {cnt} tesserati attivi senza una scadenza certificato registrata.",
+                    "mode":"fast_fact","cloud_ai":False,
+                    "links":[{"label":"Apri Tesserati","href":"/tesserati"}]
+                }
+            if any(x in n for x in ("scaduti","scadute","in scadenza","scadono","da rinnovare")):
+                cnt=len(g["expiring_cert"])
+                return {
+                    "text":f"Risultano {cnt} certificati scaduti o in scadenza entro 30 giorni.",
+                    "mode":"fast_fact","cloud_ai":False,
+                    "links":[{"label":"Apri Tesserati","href":"/tesserati"}]
+                }
+
+        # Generic membership total only after all specific dimensions above.
+        if any(x in n for x in ("tesserat","iscritt","atlet","alliev","soci")):
+            return {
+                "text":f"Nel gestionale risultano {total} tesserati.",
+                "mode":"fast_fact","cloud_ai":False,
+                "links":[{"label":"Apri Tesserati","href":"/tesserati"}]
+            }
 
     athlete, ambiguous=_match_athlete(conn,raw)
     if not athlete and not ambiguous:
