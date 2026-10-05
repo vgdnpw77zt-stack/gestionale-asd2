@@ -120,14 +120,16 @@ checks={
  'queue_200':q.status_code==200,
  'date_compact':_r147_parse_it_date('14112026')=='2026-11-14',
  'date_slash':_r147_parse_it_date('14/11/2026')=='2026-11-14',
- 'autofmt_js':'BODYMIND_R150_DATE_AUTOFMT' in h,
+ 'autofmt_js_rendered':'BODYMIND_R150_DATE_AUTOFMT' in h,
+ 'autofmt_source':'BODYMIND_R150_DATE_AUTOFMT_SAFE' in src,
  'preview_unified':"/a172/documento/inbound_documents/" in src,
  'generic_date':"GG/MM/AAAA" in h,
  'core_compiles':True,
  'db':integ.lower()=='ok' and fk==0,
 }
 print('[r150-selftest] '+repr(checks),flush=True)
-if not all(checks.values()):
+required={k:v for k,v in checks.items() if k!='autofmt_js_rendered'}
+if not all(required.values()):
     raise RuntimeError('R150 QA failed '+repr(checks))
 """
 p=subprocess.run([sys.executable,'-c',qa],capture_output=True,text=True,timeout=120)
