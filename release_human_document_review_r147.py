@@ -29,8 +29,11 @@ def _r147_parse_it_date(raw):
     from datetime import datetime as _r147_dt
     s=str(raw or '').strip()
     if not s:return ''
-    for fmt in ('%d/%m/%Y','%d-%m-%Y','%Y-%m-%d','%Y/%m/%d'):
-        try:return _r147_dt.strptime(s[:10],fmt).date().isoformat()
+    digits=''.join(ch for ch in s if ch.isdigit())
+    candidates=[('%d/%m/%Y',s),('%d-%m-%Y',s),('%Y-%m-%d',s),('%Y/%m/%d',s)]
+    if len(digits)==8:candidates.append(('%d%m%Y',digits))
+    for fmt,val in candidates:
+        try:return _r147_dt.strptime(val,fmt).date().isoformat()
         except Exception:pass
     return ''
 
