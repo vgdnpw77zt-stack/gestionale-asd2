@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
-import py_compile, shutil, sqlite3, subprocess, sys
+import py_compile, re, shutil, sqlite3, subprocess, sys
 from pathlib import Path
 from datetime import datetime
 
@@ -234,6 +234,73 @@ def _bodymind_r147_review_surface(resp):
 else:
     print('[r147-install] already installed',flush=True)
 
+# Migrate an already-installed persistent R147 block before its own QA.
+# The /data runtime survives deploys, so changing the release template alone is
+# not enough once BODYMIND_R147_HUMAN_DOCUMENT_REVIEW already exists.
+_persist=CORE.read_text(encoding='utf-8',errors='replace')
+_persist_before=_persist
+_r147_marker='# BODYMIND_R147_HUMAN_DOCUMENT_REVIEW'
+_r147_start=_persist.find(_r147_marker)
+if _r147_start>=0:
+    _r147_next=_persist.find('\n# BODYMIND_',_r147_start+len(_r147_marker))
+    if _r147_next<0:_r147_next=len(_persist)
+    _seg=_persist[_r147_start:_r147_next]
+
+    _canonical_parser="""def _r147_parse_it_date(raw):
+    from datetime import datetime as _r147_dt
+    s=str(raw or '').strip()
+    if not s:return ''
+    digits=''.join(ch for ch in s if ch.isdigit())
+    candidates=[('%d/%m/%Y',s),('%d-%m-%Y',s),('%Y-%m-%d',s),('%Y/%m/%d',s)]
+    if len(digits)==8:candidates.append(('%d%m%Y',digits))
+    for fmt,val in candidates:
+        try:return _r147_dt.strptime(val,fmt).date().isoformat()
+        except Exception:pass
+    return ''"""
+    _seg,n_parser=re.subn(
+        r"def _r147_parse_it_date\(raw\):.*?(?=\n\ndef _r147_it_date)",
+        lambda m:_canonical_parser,
+        _seg,count=1,flags=re.S
+    )
+
+    _canonical_nonqueue="""        if request.method!='GET' or p!='/documenti/da-verificare' or int(getattr(resp,'status_code',200) or 200) not in (200,301,302,303):
+            return resp
+"""
+    _seg,n_nonqueue=re.subn(
+        r"        if request\.method!='GET' or p!='/documenti/da-verificare' or int\(getattr\(resp,'status_code',200\) or 200\) not in \(200,301,302,303\):.*?(?=        if not bool\(session\.get\('logged'\)\):return resp)",
+        lambda m:_canonical_nonqueue,
+        _seg,count=1,flags=re.S
+    )
+
+    _canonical_field="<label>Scadenza certificato · GG/MM/AAAA oppure 8 cifre<input type='text' name='scadenza' value='{e(current_exp)}' inputmode='text' autocomplete='off' placeholder='es. 14/11/2026 o 14112026'></label>"
+    _seg,n_field=re.subn(
+        r"<label>Scadenza certificato[^\\n]*?<input[^\\n]*?name='scadenza'[^\\n]*?</label>",
+        lambda m:_canonical_field,
+        _seg,count=1
+    )
+
+    _seg=_seg.replace(
+        "messages={'scadenza':'Per un certificato medico inserisci la scadenza in formato GG/MM/AAAA.'",
+        "messages={'scadenza':'Per un certificato medico inserisci GG/MM/AAAA oppure 8 cifre, ad esempio 14112026.'"
+    )
+    _seg=_seg.replace(
+        "messages={'scadenza':'Per un certificato medico inserisci la scadenza in formato GG/MM/AAAA.','atleta'",
+        "messages={'scadenza':'Per un certificato medico inserisci GG/MM/AAAA oppure 8 cifre, ad esempio 14112026.','atleta'"
+    )
+
+    if not (n_parser==1 and n_nonqueue==1 and n_field==1):
+        raise RuntimeError('R147 persistent migration incomplete parser=%s nonqueue=%s field=%s' % (n_parser,n_nonqueue,n_field))
+    _persist=_persist[:_r147_start]+_seg+_persist[_r147_next:]
+
+if _persist!=_persist_before:
+    shutil.copy2(CORE,BACK/(stamp+'_core_pre_canonical_migration.py'))
+    CORE.write_text(_persist,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+    print('[r147-persistent-migration] PASS canonical parser+surface',flush=True)
+else:
+    py_compile.compile(str(CORE),doraise=True)
+    print('[r147-persistent-migration] already canonical',flush=True)
+
 # Read-only fresh-process QA.
 qa=r'''
 import sqlite3,sys
@@ -251,11 +318,16 @@ uh=u.get_data(as_text=True)
 conn=sqlite3.connect('/data/tenants/default/asd.db')
 try: integ=str(conn.execute('PRAGMA integrity_check').fetchone()[0]);fk=len(conn.execute('PRAGMA foreign_key_check').fetchall())
 finally:conn.close()
+import re
+def _expiry_tag(html):
+    m=re.search(r"<input[^>]*\\bname=['\"]scadenza['\"][^>]*>",html,re.I)
+    return m.group(0) if m else ''
+rt=_expiry_tag(h);ut=_expiry_tag(uh)
 checks={
  'review_200':p.status_code==200,
  'review_verify':'Verifica e aggiorna stato' in h,
- 'review_expiry_field':"name='scadenza'" in h and "inputmode='text'" in h and "inputmode='numeric'" not in h,
- 'upload_expiry_field':"name='scadenza'" in uh and "type='text' name='scadenza'" in uh and "inputmode='text'" in uh and "type='date' name='scadenza'" not in uh,
+ 'review_expiry_field':bool(rt) and ("type='text'" in rt or 'type="text"' in rt) and ("inputmode='text'" in rt or 'inputmode="text"' in rt) and 'pattern=' not in rt.lower(),
+ 'upload_expiry_field':bool(ut) and ("type='text'" in ut or 'type="text"' in ut) and ("inputmode='text'" in ut or 'inputmode="text"' in ut) and 'pattern=' not in ut.lower(),
  'date_parser':_r147_parse_it_date('10/12/2026')=='2026-12-10' and _r147_parse_it_date('10122026')=='2026-12-10',
  'db':integ.lower()=='ok' and fk==0,
 }
