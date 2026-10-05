@@ -56,6 +56,14 @@ h=q.get_data(as_text=True)
 routes={str(x.rule) for x in app.url_map.iter_rules()}
 candidates=sorted(x for x in routes if 'document' in x.lower() or 'file' in x.lower() or 'preview' in x.lower())
 print("[r148-routes] "+repr(candidates),flush=True)
+import inspect
+for rule in app.url_map.iter_rules():
+    rr=str(rule.rule)
+    if rr in ("/a172/documento/<table>/<int:doc_id>","/documenti/email/<int:doc_id>","/document-hub/file/<int:doc_id>","/admin/documenti-ricevuti/<int:inbound_id>/debug"):
+        try:
+            print("[r148-route-source] "+rr+" endpoint="+str(rule.endpoint)+"\n"+inspect.getsource(app.view_functions[rule.endpoint])[:9000],flush=True)
+        except Exception as exc:
+            print("[r148-route-source] "+rr+" ERR "+repr(exc),flush=True)
 src=open("/data/top2_app/asd_app/core.py",encoding="utf-8",errors="replace").read()
 conn=sqlite3.connect("/data/tenants/default/asd.db",timeout=20)
 try:
