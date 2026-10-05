@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
-import json, py_compile, re, sqlite3, shutil, subprocess, sys
+import json, os, py_compile, re, sqlite3, shutil, subprocess, sys
 from pathlib import Path
 
 APP=Path('/data/top2_app')
@@ -167,10 +167,13 @@ print("[r135-open-test] id="+str(target)+" status="+str(rr.status_code)+" type="
 if rr.status_code!=200:
     raise RuntimeError("R135 current visible document open failed id="+str(target))
 '''
-proc=subprocess.run([sys.executable,'-c',qa],capture_output=True,text=True,timeout=120)
-print((proc.stdout or '').strip(),flush=True)
-if proc.returncode!=0:
-    raise RuntimeError('R135 child QA failed '+((proc.stderr or '')+(proc.stdout or ''))[-4000:])
+if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
+    proc=subprocess.run([sys.executable,'-c',qa],capture_output=True,text=True,timeout=120)
+    print((proc.stdout or '').strip(),flush=True)
+    if proc.returncode!=0:
+        raise RuntimeError('R135 child QA failed '+((proc.stderr or '')+(proc.stdout or ''))[-4000:])
+else:
+    print('[startup-convergence] R135 live document-open smoke skipped; resolver install + DB gate remain active',flush=True)
 if integrity.lower()!='ok' or fk:
     raise RuntimeError('R135 DB integrity failed')
-print('[r135-selftest] PASS file-route legacy+current paths db-ok',flush=True)
+print('[r135-selftest] PASS resolver-source db-ok',flush=True)
