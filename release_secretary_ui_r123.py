@@ -1450,3 +1450,64 @@ if _changed_v5:
     CORE.write_text(_core_v5,encoding='utf-8')
     py_compile.compile(str(CORE),doraise=True)
 print('[r123-payment-module-v5] PASS one-module two-modes-only old-surfaces-disabled',flush=True)
+
+
+# BODYMIND_R123_PAYMENT_OPERATIVITY_V6
+_core_v6=CORE.read_text(encoding='utf-8',errors='replace')
+if 'BODYMIND_R123_CANONICAL_PAYMENT_MODULE_V5' in _core_v6 and 'BODYMIND_R123_PAYMENT_OPERATIVITY_V6' not in _core_v6:
+    anchor="""        cards=[]
+        paid_n=0
+"""
+    inject="""        # BODYMIND_R123_PAYMENT_OPERATIVITY_V6
+        _miss_enroll=[]; _miss_month=[]
+        for _a in athletes:
+            _tid=int(_a.get('id') or 0)
+            _ep=enroll.get(_tid)
+            _legacy=(bool(int(_a.get('iscrizione_pagata') or 0)) if 'iscrizione_pagata' in _a else False) or (bool(int(_a.get('tesseramento_pagato') or 0)) if 'tesseramento_pagato' in _a else False)
+            if not (_ep or _legacy):
+                _h=f"/pagamenti?vista=iscrizioni&stagione={season}&mese={mese}&anno={anno}&tesserato_id={_tid}&azione=registra"
+                _miss_enroll.append("<div class='bmpv6-miss'><b>"+e(_name(_a))+"</b><a href='"+_h+"'>Registra iscrizione</a></div>")
+            _mp=monthly.get(_tid)
+            if not (_mp or _tid in qpaid):
+                _h=f"/pagamenti?vista=mensili&mese={mese}&anno={anno}&tesserato_id={_tid}&azione=registra"
+                _miss_month.append("<div class='bmpv6-miss'><b>"+e(_name(_a))+"</b><a href='"+_h+"'>Registra mensile "+e(months[mese])+"</a></div>")
+        immediate=f\"\"\"<section class='bmpv6-immediate'>
+          <div class='bmpv6-head'><div><span>OPERATIVITÀ IMMEDIATA</span><h2>Da registrare</h2></div><small>Unica verità per tutto il gestionale</small></div>
+          <div class='bmpv6-cols'>
+            <div><div class='bmpv6-colhead'><b>SENZA ISCRIZIONE</b><strong>{len(_miss_enroll)}</strong></div>{''.join(_miss_enroll) if _miss_enroll else "<p class='bmpv6-ok'>Nessuna iscrizione mancante.</p>"}</div>
+            <div><div class='bmpv6-colhead'><b>SENZA MENSILE · {e(months[mese])} {anno}</b><strong>{len(_miss_month)}</strong></div>{''.join(_miss_month) if _miss_month else "<p class='bmpv6-ok'>Nessun mensile mancante.</p>"}</div>
+          </div>
+        </section><div id='bmpv5-form-mount'></div>\"\"\"
+
+        cards=[]
+        paid_n=0
+"""
+    if anchor not in _core_v6: raise RuntimeError('V6 cards anchor missing')
+    _core_v6=_core_v6.replace(anchor,inject,1)
+    surf="""          {selector}
+          <div class='bmpv5-list'>"""
+    if surf not in _core_v6: raise RuntimeError('V6 surface anchor missing')
+    _core_v6=_core_v6.replace(surf,"""          {selector}
+          {immediate}
+          <div class='bmpv5-list'>""",1)
+    css=""".bmpv5-period button{{background:#2563eb;font-weight:900}}
+        .bmpv5-list"""
+    css2=""".bmpv5-period button{{background:#2563eb;font-weight:900}}
+        .bmpv6-immediate{{margin:14px 0;padding:14px;border-radius:16px;background:#071321;border:1px solid rgba(148,163,184,.18)}}.bmpv6-head{{display:flex;justify-content:space-between;gap:12px;align-items:end;margin-bottom:10px}}.bmpv6-head span{{font-size:10px;font-weight:950;letter-spacing:.12em;color:#fbbf24}}.bmpv6-head h2{{margin:3px 0 0;font-size:20px}}.bmpv6-head small{{color:#94a3b8}}.bmpv6-cols{{display:grid;grid-template-columns:1fr 1fr;gap:10px}}.bmpv6-cols>div{{padding:10px;border-radius:13px;background:#0c2035}}.bmpv6-colhead{{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}}.bmpv6-colhead b{{font-size:11px}}.bmpv6-colhead strong{{min-width:28px;height:28px;display:grid;place-items:center;border-radius:999px;background:#7f1d1d}}.bmpv6-miss{{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px 9px;margin-top:6px;border-radius:10px;background:#111f31}}.bmpv6-miss b{{font-size:12px}}.bmpv6-miss a{{padding:8px 10px;border-radius:9px;background:#2563eb;color:white!important;text-decoration:none;font-size:11px;font-weight:950}}.bmpv6-ok{{padding:9px;border-radius:9px;background:#14532d;color:#dcfce7;font-size:12px}}#bmpv5-form-mount:not(:empty){{margin:14px 0;padding:14px;border-radius:16px;background:#0b1d31;border:2px solid rgba(96,165,250,.55)}}
+        .bmpv5-list"""
+    if css not in _core_v6: raise RuntimeError('V6 css anchor missing')
+    _core_v6=_core_v6.replace(css,css2,1)
+    mover="""              active.style.outlineOffset='6px';
+            }}"""
+    mover2="""              active.style.outlineOffset='6px';
+              var mount=document.getElementById('bmpv5-form-mount');
+              if(mount && active.parentNode!==mount) mount.appendChild(active);
+            }}"""
+    if mover not in _core_v6: raise RuntimeError('V6 form mover anchor missing')
+    _core_v6=_core_v6.replace(mover,mover2,1)
+    _core_v6=_core_v6.replace("@media(max-width:700px){{.bmpv5{{padding:13px}}","@media(max-width:700px){{.bmpv6-cols{{grid-template-columns:1fr}}.bmpv6-head{{align-items:flex-start;flex-direction:column}}.bmpv6-miss{{grid-template-columns:1fr}}.bmpv5{{padding:13px}}",1)
+    CORE.write_text(_core_v6,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+    print('[r123-payment-operativity-v6] PASS immediate-missing-lists direct-register existing-form-mounted',flush=True)
+else:
+    print('[r123-payment-operativity-v6] already or waiting for V5',flush=True)
