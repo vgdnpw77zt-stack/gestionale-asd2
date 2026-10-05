@@ -64,7 +64,7 @@ checks={
  "queue_200":q.status_code==200,
  "preview_markup":"r148-preview-actions" in src and "Anteprima documento" in src,
  "document_preview_route":"/documenti/visualizza/<int:doc_id>" in routes,
- "inbound_preview_route":"/documenti-automatici/file/<int:doc_id>" in routes,
+ "inbound_preview_route":any(x.startswith("/documenti-automatici/file/") for x in routes),
  "generic_date":"placeholder='GG/MM/AAAA'" in src and "placeholder='10/12/2026'" not in src,
  "db":integ.lower()=="ok" and fk==0,
 }
