@@ -1338,31 +1338,54 @@ def _pending_count(conn) -> int:
     ).fetchone()[0])
 
 
-# BODYMIND_PAYMENT_SPLIT_FACTS_V2
+# BODYMIND_PAYMENT_SPLIT_FACTS_V3
 def _payment_split_counts(conn, tid=None):
-    out={"iscrizioni":0,"mensili":0,"altri":0,"totale":0}
-    if not _table(conn,"pagamenti"):
+    # Use exactly the same canonical truth used by Dashboard, Centro operativo,
+    # Task, Tesserati and /pagamenti. Keep the old row-counting logic only as
+    # a defensive fallback if the canonical helper is unavailable.
+    try:
+        from .core import bodymind_payment_truth
+        today=date.today()
+        truth=bodymind_payment_truth(
+            conn,
+            tesserato_id=(int(tid) if tid else None),
+            mese=today.month,
+            anno=today.year,
+        )
+        return {
+            "iscrizioni":int(truth.get("iscrizioni_pagate",0) or 0),
+            "mensili":int(truth.get("mensili_pagati",0) or 0),
+            "altri":0,
+            "totale":int(truth.get("iscrizioni_pagate",0) or 0)+int(truth.get("mensili_pagati",0) or 0),
+            "tesserati":int(truth.get("totale",0) or 0),
+            "mese":int(truth.get("mese",today.month) or today.month),
+            "anno":int(truth.get("anno",today.year) or today.year),
+            "stagione":int(truth.get("stagione",today.year if today.month>=7 else today.year-1)),
+        }
+    except Exception:
+        out={"iscrizioni":0,"mensili":0,"altri":0,"totale":0}
+        if not _table(conn,"pagamenti"):
+            return out
+        sql="SELECT * FROM pagamenti"+(" WHERE tesserato_id=?" if tid else "")+" ORDER BY id DESC"
+        rows=conn.execute(sql,((int(tid),) if tid else ())).fetchall()
+        for p in rows:
+            st=(str(p["stato"] or "") if "stato" in p.keys() else "")+" "+(str(p["online_status"] or "") if "online_status" in p.keys() else "")
+            st=st.lower()
+            if any(x in st for x in ("pending","attesa","cancel","annull","failed","fallit","refunded","rimbors")):
+                continue
+            try: amount=float(p["importo"] or 0)
+            except Exception: amount=0
+            paid=any(x in st for x in ("paid","pagat","saldat","complet","incassat")) or (bool(p["data"] if "data" in p.keys() else "") and amount>0)
+            if not paid: continue
+            cause=str(p["causale"] or "").strip().lower() if "causale" in p.keys() else ""
+            out["totale"]+=1
+            if cause in ("iscrizione","tesseramento") or "iscrizion" in cause:
+                out["iscrizioni"]+=1
+            elif cause=="mensile" or "mensil" in cause or cause in ("quota","quota_mensile"):
+                out["mensili"]+=1
+            else:
+                out["altri"]+=1
         return out
-    sql="SELECT * FROM pagamenti"+(" WHERE tesserato_id=?" if tid else "")+" ORDER BY id DESC"
-    rows=conn.execute(sql,((int(tid),) if tid else ())).fetchall()
-    for p in rows:
-        st=(str(p["stato"] or "") if "stato" in p.keys() else "")+" "+(str(p["online_status"] or "") if "online_status" in p.keys() else "")
-        st=st.lower()
-        if any(x in st for x in ("pending","attesa","cancel","annull","failed","fallit","refunded","rimbors")):
-            continue
-        try: amount=float(p["importo"] or 0)
-        except Exception: amount=0
-        paid=any(x in st for x in ("paid","pagat","saldat","complet","incassat")) or (bool(p["data"] if "data" in p.keys() else "") and amount>0)
-        if not paid: continue
-        cause=str(p["causale"] or "").strip().lower() if "causale" in p.keys() else ""
-        out["totale"]+=1
-        if cause in ("iscrizione","tesseramento") or "iscrizion" in cause:
-            out["iscrizioni"]+=1
-        elif cause=="mensile" or "mensil" in cause or cause in ("quota","quota_mensile"):
-            out["mensili"]+=1
-        else:
-            out["altri"]+=1
-    return out
 
 def _global_check(conn):
     athletes=_athletes(conn)
