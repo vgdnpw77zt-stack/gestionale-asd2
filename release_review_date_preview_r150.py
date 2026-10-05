@@ -11,7 +11,7 @@ BACK.mkdir(parents=True,exist_ok=True)
 s=CORE.read_text(encoding='utf-8',errors='replace')
 before=s
 
-# 1) Accept compact Italian dates server-side: 14112026 -> 14/11/2026.
+# 1) Server-side Italian date parser also accepts 8 compact digits.
 old="""def _r147_parse_it_date(raw):
     from datetime import datetime as _r147_dt
     s=str(raw or '').strip()
@@ -36,60 +36,66 @@ new="""def _r147_parse_it_date(raw):
 if old in s:
     s=s.replace(old,new,1)
 
-# 2) Preview review items through the already-existing unified document opener.
+# 2) Inbound preview uses the already-existing generic document opener.
 s=s.replace(
-"""preview_url=('/documenti/visualizza/'+str(rid)) if source=='documenti' else ('/documenti-automatici/file/'+str(rid))""",
-"""preview_url=('/documenti/visualizza/'+str(rid)) if source=='documenti' else ('/a172/documento/inbound_documents/'+str(rid))"""
+    "preview_url=('/documenti/visualizza/'+str(rid)) if source=='documenti' else ('/documenti-automatici/file/'+str(rid))",
+    "preview_url=('/documenti/visualizza/'+str(rid)) if source=='documenti' else ('/a172/documento/inbound_documents/'+str(rid))"
 )
 
-# 3) Input UX: typing 14112026 auto-displays 14/11/2026, while keeping
-# server-side validation authoritative.
-js_marker="BODYMIND_R150_DATE_AUTOFMT"
-if js_marker not in s:
-    injection="""<script id='BODYMIND_R150_DATE_AUTOFMT'>
+# 3) Safe response-time enhancement. Do NOT inject JavaScript into an f-string
+# source block: previous candidate proved that braces/backslashes can corrupt
+# persistent core.py. This after_request hook is ordinary Python source.
+if 'BODYMIND_R150_DATE_AUTOFMT_SAFE' not in s:
+    hook=r'''
+
+# BODYMIND_R150_DATE_AUTOFMT_SAFE
+@app.after_request
+def _bodymind_r150_date_autofmt_safe(resp):
+    try:
+        import re as _r150_re
+        p=request.path or ''
+        if request.method!='GET' or int(getattr(resp,'status_code',200) or 200)!=200:
+            return resp
+        if p!='/documenti/da-verificare' and not _r150_re.fullmatch(r'/mobile/atleta/\d+/documenti/carica/?',p):
+            return resp
+        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
+            return resp
+        html=resp.get_data(as_text=True)
+        html=html.replace("placeholder='10/12/2026'","placeholder='GG/MM/AAAA'")
+        html=html.replace('Scadenza certificato (solo se nota)','Scadenza certificato · GG/MM/AAAA')
+        js="""<script id="BODYMIND_R150_DATE_AUTOFMT">
 document.addEventListener('DOMContentLoaded',function(){
   document.querySelectorAll("input[name='scadenza']").forEach(function(el){
     function fmt(){
-      const d=(el.value||'').replace(/\D/g,'');
-      if(d.length===8){
-        el.value=d.slice(0,2)+'/'+d.slice(2,4)+'/'+d.slice(4,8);
-      }
+      var d=(el.value||'').replace(/\D/g,'');
+      if(d.length===8){el.value=d.slice(0,2)+'/'+d.slice(2,4)+'/'+d.slice(4,8);}
     }
     el.addEventListener('input',function(){
-      const d=(el.value||'').replace(/\D/g,'');
-      if(d.length===8) fmt();
+      var d=(el.value||'').replace(/\D/g,'');
+      if(d.length===8){fmt();}
     });
     el.addEventListener('blur',fmt);
   });
 });
 </script>"""
-    # Add to the R147 review page.
-    target="""<a class='back' href='/documenti'>← Documenti</a></main></body></html>"""
-    if target in s:
-        s=s.replace(target,"""<a class='back' href='/documenti'>← Documenti</a></main>"""+injection+"""</body></html>""",1)
-    else:
-        raise RuntimeError('R150 review HTML anchor missing')
-
-    # Add same behavior to per-athlete manual upload page through its existing
-    # after_request branch.
-    upload_anchor="""html=html.replace('Scadenza certificato (solo se nota)','Scadenza certificato · GG/MM/AAAA')
-                resp.set_data(html)"""
-    upload_new="""html=html.replace('Scadenza certificato (solo se nota)','Scadenza certificato · GG/MM/AAAA')
-                if 'BODYMIND_R150_DATE_AUTOFMT' not in html:
-                    _r150_js="<script id='BODYMIND_R150_DATE_AUTOFMT'>document.addEventListener('DOMContentLoaded',function(){document.querySelectorAll(\\\"input[name='scadenza']\\\").forEach(function(el){function f(){const d=(el.value||'').replace(/\\\\D/g,'');if(d.length===8)el.value=d.slice(0,2)+'/'+d.slice(2,4)+'/'+d.slice(4,8);}el.addEventListener('input',function(){const d=(el.value||'').replace(/\\\\D/g,'');if(d.length===8)f();});el.addEventListener('blur',f);});});</script>"
-                    html=html.replace('</body>',_r150_js+'</body>',1)
-                resp.set_data(html)"""
-    if upload_anchor in s:
-        s=s.replace(upload_anchor,upload_new,1)
-    else:
-        raise RuntimeError('R150 upload after_request anchor missing')
+        if 'BODYMIND_R150_DATE_AUTOFMT' not in html:
+            html=html.replace('</body>',js+'</body>',1) if '</body>' in html else html+js
+        resp.set_data(html)
+    except Exception as exc:
+        print('[r150-date-warning] '+repr(exc),flush=True)
+    return resp
+'''
+    s += hook
 
 if s!=before:
-    shutil.copy2(CORE,BACK/'core.py')
+    backup=BACK/'core.py'
+    if not backup.exists():
+        shutil.copy2(CORE,backup)
     CORE.write_text(s,encoding='utf-8')
     py_compile.compile(str(CORE),doraise=True)
-    print('[r150-install] compact date + preview convergence installed',flush=True)
+    print('[r150-install] safe compact date + preview convergence installed',flush=True)
 else:
+    py_compile.compile(str(CORE),doraise=True)
     print('[r150-install] already current',flush=True)
 
 qa=r"""
@@ -103,22 +109,29 @@ with c.session_transaction() as sess:
     sess.update({"logged":True,"logged_in":True,"username":"admin","display_name":"R150 QA","role":"admin","tenant_slug":"default","user_id":1,"is_admin":True,"admin":True,"_csrf_token":"r150"})
 q=c.get('/documenti/da-verificare')
 h=q.get_data(as_text=True)
+routes={str(r.rule) for r in app.url_map.iter_rules()}
 conn=sqlite3.connect('/data/tenants/default/asd.db')
 try:
-    integ=str(conn.execute('PRAGMA integrity_check').fetchone()[0]);fk=len(conn.execute('PRAGMA foreign_key_check').fetchall())
+    integ=str(conn.execute('PRAGMA integrity_check').fetchone()[0])
+    fk=len(conn.execute('PRAGMA foreign_key_check').fetchall())
 finally:conn.close()
+src=open('/data/top2_app/asd_app/core.py',encoding='utf-8',errors='replace').read()
 checks={
  'queue_200':q.status_code==200,
  'date_compact':_r147_parse_it_date('14112026')=='2026-11-14',
  'date_slash':_r147_parse_it_date('14/11/2026')=='2026-11-14',
  'autofmt_js':'BODYMIND_R150_DATE_AUTOFMT' in h,
- 'preview_unified':('/a172/documento/inbound_documents/' in open('/data/top2_app/asd_app/core.py',encoding='utf-8',errors='replace').read()),
+ 'preview_unified':"/a172/documento/inbound_documents/" in src,
+ 'generic_date':"GG/MM/AAAA" in h,
+ 'core_compiles':True,
  'db':integ.lower()=='ok' and fk==0,
 }
 print('[r150-selftest] '+repr(checks),flush=True)
-if not all(checks.values()):raise RuntimeError('R150 QA failed '+repr(checks))
+if not all(checks.values()):
+    raise RuntimeError('R150 QA failed '+repr(checks))
 """
 p=subprocess.run([sys.executable,'-c',qa],capture_output=True,text=True,timeout=120)
 print((p.stdout or '').strip(),flush=True)
 if p.returncode!=0:
     raise RuntimeError('R150 child QA failed '+((p.stderr or '')+(p.stdout or ''))[-5000:])
+print('[r150-selftest-main] PASS safe-date review-preview db-ok',flush=True)
