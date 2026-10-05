@@ -1196,16 +1196,30 @@ def _bodymind_r123_payment_split_v3(resp):
             var txt=(form.innerText||'').toLowerCase();
             var hasPaymentFields=form.querySelector('[name=\"tesserato_id\"],[name=\"importo\"]');
             if(!hasPaymentFields && txt.indexOf('importo')<0) return;
+            var oldBadge=form.querySelector('.bmps4-mode');
+            if(oldBadge) oldBadge.remove();
+            var badge=document.createElement('div');
+            badge.className='bmps4-mode';
             if(vista==='mensili'){{
               cause.value='mensile';
               setField(form,'mese',mese); setField(form,'anno',anno);
+              badge.innerHTML='<b>Stai registrando: MENSILE</b><span>'+String(mese).padStart(2,'0')+'/'+anno+' · questa quota vale solo per questo mese</span>';
             }} else if(vista==='iscrizioni'){{
               cause.value='iscrizione';
               setField(form,'mese',mese);
-              /* For season identity, Jul-Dec use season start; Jan-Jun use season end. */
               var payYear=(mese>=7)?stagione:(stagione+1);
               setField(form,'anno',payYear);
+              badge.innerHTML='<b>Stai registrando: ISCRIZIONE ANNUALE</b><span>Stagione '+stagione+'/'+(stagione+1)+' · mese incasso '+String(mese).padStart(2,'0')+'/'+payYear+'</span>';
+            }} else {{
+              return;
             }}
+            var first=form.firstElementChild;
+            if(first) form.insertBefore(badge,first); else form.appendChild(badge);
+            try{{
+              cause.setAttribute('data-bodymind-locked-causale','1');
+              if(cause.tagName==='SELECT') cause.style.pointerEvents='none';
+              cause.setAttribute('aria-readonly','true');
+            }}catch(e){{}}
           }});
         }})();</script>"""
         html=html.replace('</body>',js+'</body>',1) if '</body>' in html else html+js
@@ -1216,7 +1230,7 @@ def _bodymind_r123_payment_split_v3(resp):
         .bmps3-explain.monthly{background:linear-gradient(135deg,#122c24,#174733)}
         .bmps3-explain.all{background:linear-gradient(135deg,#211a38,#322653)}
         .bmps3-explain span{display:block;font-size:11px;font-weight:950;letter-spacing:.14em;color:#93c5fd}.bmps3-explain h3{font-size:26px;margin:4px 0 5px}.bmps3-explain p{margin:0;max-width:780px;color:#cbd5e1;line-height:1.5}
-        .bmps3-period{display:flex;gap:8px;align-items:end;flex-wrap:wrap;justify-content:flex-end}.bmps3-period label{display:grid;gap:4px;font-size:11px;font-weight:900;color:#cbd5e1}.bmps3-period select,.bmps3-period button{min-height:42px;border-radius:11px;border:1px solid rgba(148,163,184,.28);background:#071426;color:#fff;padding:8px 10px;font-weight:800}.bmps3-period button{background:#2563eb;border-color:#60a5fa;cursor:pointer}
+        .bmps3-period{display:flex;gap:8px;align-items:end;flex-wrap:wrap;justify-content:flex-end}.bmps3-period label{display:grid;gap:4px;font-size:11px;font-weight:900;color:#cbd5e1}.bmps3-period select,.bmps3-period button{min-height:42px;border-radius:11px;border:1px solid rgba(148,163,184,.28);background:#071426;color:#fff;padding:8px 10px;font-weight:800}.bmps3-period button{background:#2563eb;border-color:#60a5fa;cursor:pointer}.bmps4-mode{grid-column:1/-1;display:grid;gap:3px;margin:0 0 10px;padding:11px 13px;border-radius:12px;background:#071426;border:1px solid rgba(96,165,250,.35)}.bmps4-mode b{font-size:12px;letter-spacing:.04em;color:#fff}.bmps4-mode span{font-size:11px;color:#bfdbfe}
         @media(min-width:901px){.bmps{padding:20px!important}.bmps-head h2{font-size:28px!important}.bmps-tabs{max-width:680px}.bmps-card{padding:15px 17px!important}.bmps-card b{font-size:15px}}
         @media(max-width:900px){.bmps3-explain{grid-template-columns:1fr;padding:14px}.bmps3-period{justify-content:flex-start}.bmps3-explain h3{font-size:21px}}
         </style>"""
@@ -1231,3 +1245,6 @@ def _bodymind_r123_payment_split_v3(resp):
     print('[r123-payment-split-v3] PASS annual-enrollment monthly-period form-forcing desktop-clarity',flush=True)
 else:
     print('[r123-payment-split-v3] already installed',flush=True)
+
+# BODYMIND_R123_PAYMENT_FORM_CLARITY_V4
+print('[r123-payment-form-clarity-v4] PASS explicit annual/monthly registration mode',flush=True)
