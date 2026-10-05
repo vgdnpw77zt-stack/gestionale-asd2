@@ -800,6 +800,51 @@ if db_path.exists():
         flush=True,
     )
 
+
+# BODYMIND_FINAL_PRODUCTION_HYGIENE_AUDIT
+def _bodymind_final_production_hygiene_audit():
+    critical_sources=[
+        pathlib.Path("/data/top2_app/asd_app/core.py"),
+        pathlib.Path("/data/top2_app/asd_app/routes_operator_bodymind.py"),
+        pathlib.Path("/data/top2_app/asd_app/routes_tesserati.py"),
+        pathlib.Path("/data/top2_app/asd_app/routes_bodymind_fix24.py"),
+    ]
+    for p in critical_sources:
+        if p.exists():
+            py_compile.compile(str(p),doraise=True)
+
+    core_path=critical_sources[0]
+    src=core_path.read_text(encoding="utf-8",errors="replace")
+    forbidden=[
+        "BODYMIND_R150_DATE_AUTOFMT_SAFE",
+        "BODYMIND_R152_IOS_123_KEY",
+        "BODYMIND_R151_KEYBOARD_PREVIEW_CLOSE",
+        "name='scadenza' inputmode='numeric'",
+        'name="scadenza" inputmode="numeric"',
+        "type='date' name='scadenza'",
+        'type="date" name="scadenza"',
+    ]
+    leftovers=[x for x in forbidden if x in src]
+    if leftovers:
+        raise SystemExit("[final-hygiene] legacy/mismatch leftovers="+repr(leftovers))
+
+    dbp=pathlib.Path("/data/tenants/default/asd.db")
+    conn=sqlite3.connect("file:"+str(dbp)+"?mode=ro",uri=True,timeout=20)
+    try:
+        integrity=str(conn.execute("PRAGMA integrity_check").fetchone()[0])
+        fk=conn.execute("PRAGMA foreign_key_check").fetchall()
+        counts={}
+        for table in ("tesserati","documenti","inbound_documents","pagamenti","ricevute"):
+            if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(table,)).fetchone():
+                counts[table]=int(conn.execute("SELECT COUNT(*) FROM "+table).fetchone()[0])
+    finally:
+        conn.close()
+    if integrity.lower()!="ok" or fk:
+        raise SystemExit("[final-hygiene] db failed integrity="+integrity+" fk="+str(len(fk)))
+    print("[final-hygiene] PASS python=ok legacy=0 integrity=ok fk=0 counts="+json.dumps(counts,ensure_ascii=False),flush=True)
+
+_bodymind_final_production_hygiene_audit()
+
 port = os.environ.get("PORT", "8080")
 args = [
     "gunicorn",

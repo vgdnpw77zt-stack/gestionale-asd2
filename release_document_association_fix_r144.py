@@ -572,17 +572,52 @@ else:
     print('[r144-upload-route] existing direct route retained',flush=True)
 
 # Canonical date-input migration for an already-persisted R144 route.
+# Scope every rewrite to bodymind_r144_direct_document_upload so historical
+# variants elsewhere cannot be touched accidentally.
 _r144_core=CORE.read_text(encoding='utf-8',errors='replace')
 _r144_before=_r144_core
-_r144_core=_r144_core.replace("            cat,label=meta[dtype];scad=str(request.form.get('scadenza') or '').strip() if dtype=='certificato_medico' else ''","            cat,label=meta[dtype]\n            scad_raw=str(request.form.get('scadenza') or '').strip() if dtype=='certificato_medico' else ''\n            scad=''\n            if dtype=='certificato_medico' and scad_raw:\n                _digits=''.join(ch for ch in scad_raw if ch.isdigit())\n                _candidates=[('%d/%m/%Y',scad_raw),('%d-%m-%Y',scad_raw),('%Y-%m-%d',scad_raw),('%Y/%m/%d',scad_raw)]\n                if len(_digits)==8:_candidates.append(('%d%m%Y',_digits))\n                for _fmt,_val in _candidates:\n                    try:scad=_DT.strptime(_val,_fmt).date().isoformat();break\n                    except Exception:pass\n                if not scad:return redirect('/mobile/atleta/'+str(tid)+'/documenti/carica?error=scadenza')")
-_r144_core=_r144_core.replace("<label>Scadenza certificato (se nota)<input type='date' name='scadenza'></label>","<label>Scadenza certificato (se nota) · GG/MM/AAAA oppure 8 cifre<input type='text' name='scadenza' inputmode='text' autocomplete='off' placeholder='es. 14/11/2026 o 14112026'></label>")
-_r144_core=_r144_core.replace("    msg={'tipo':'Seleziona il tipo documento.','file':'Seleziona un file.','formato':'Formato non supportato.'}.get(request.args.get('error') or '','')","    msg={'tipo':'Seleziona il tipo documento.','file':'Seleziona un file.','formato':'Formato non supportato.','scadenza':'Data non valida. Usa GG/MM/AAAA oppure 8 cifre, ad esempio 14112026.'}.get(request.args.get('error') or '','')")
+_r144_start=_r144_core.find('def bodymind_r144_direct_document_upload')
+if _r144_start<0:
+    raise RuntimeError('R144 direct upload route missing from persistent core')
+_r144_end=_r144_core.find('\n# BODYMIND_',_r144_start+1)
+if _r144_end<0:_r144_end=len(_r144_core)
+_r144_seg=_r144_core[_r144_start:_r144_end]
+
+_old_parser="            cat,label=meta[dtype];scad=str(request.form.get('scadenza') or '').strip() if dtype=='certificato_medico' else ''"
+_new_parser="""            cat,label=meta[dtype]
+            scad_raw=str(request.form.get('scadenza') or '').strip() if dtype=='certificato_medico' else ''
+            scad=''
+            if dtype=='certificato_medico' and scad_raw:
+                _digits=''.join(ch for ch in scad_raw if ch.isdigit())
+                _candidates=[('%d/%m/%Y',scad_raw),('%d-%m-%Y',scad_raw),('%Y-%m-%d',scad_raw),('%Y/%m/%d',scad_raw)]
+                if len(_digits)==8:_candidates.append(('%d%m%Y',_digits))
+                for _fmt,_val in _candidates:
+                    try:scad=_DT.strptime(_val,_fmt).date().isoformat();break
+                    except Exception:pass
+                if not scad:return redirect('/mobile/atleta/'+str(tid)+'/documenti/carica?error=scadenza')"""
+if _old_parser in _r144_seg:
+    _r144_seg=_r144_seg.replace(_old_parser,_new_parser,1)
+
+_canonical_field="<label>Scadenza certificato (se nota) · GG/MM/AAAA oppure 8 cifre<input type='text' name='scadenza' inputmode='text' autocomplete='off' placeholder='es. 14/11/2026 o 14112026'></label>"
+_r144_seg,n_field=re.subn(
+    r"<label>Scadenza certificato[^<\n]*<input\b[^>]*\bname=['\"]scadenza['\"][^>]*></label>",
+    lambda m:_canonical_field,
+    _r144_seg,count=1,flags=re.I
+)
+if n_field!=1:
+    raise RuntimeError('R144 persistent expiry field migration matched '+str(n_field)+' fields; refusing blind write')
+if "%d%m%Y" not in _r144_seg:
+    raise RuntimeError('R144 persistent expiry parser is not compact-date capable')
+
+_r144_core=_r144_core[:_r144_start]+_r144_seg+_r144_core[_r144_end:]
 if _r144_core!=_r144_before:
+    compile(_r144_core,str(CORE),'exec')
     shutil.copy2(CORE,BACK/'core_pre_canonical_date.py')
     CORE.write_text(_r144_core,encoding='utf-8')
     py_compile.compile(str(CORE),doraise=True)
-    print('[r144-date-canonical] migrated persistent direct-upload route',flush=True)
+    print('[r144-date-canonical] PASS route-scoped persistent migration field=1 parser=compact+slash',flush=True)
 else:
+    py_compile.compile(str(CORE),doraise=True)
     print('[r144-date-canonical] already canonical',flush=True)
 
 # If the older post-association hook is absent, add one. It calls the safe,
@@ -679,7 +714,10 @@ try:
                 rules=[]
             print("[r144-profile-diag] status="+str(p.status_code)+" location="+str(p.headers.get("Location",""))+" body="+repr(ph[:2500])+" rules="+repr(rules),flush=True)
         checks["upload"]=u.status_code==200 and "Certificato medico" in uh and "Modulo Unico" in uh
-        checks["upload_date_native"]=("name='scadenza'" in uh and "inputmode='text'" in uh and "type='date' name='scadenza'" not in uh and "inputmode='numeric'" not in uh)
+        import re as _r144_re
+        _m=_r144_re.search(r"<input\b[^>]*\bname=['\"]scadenza['\"][^>]*>",uh,_r144_re.I)
+        _tag=_m.group(0) if _m else ""
+        checks["upload_date_native"]=bool(_tag) and ("type='text'" in _tag or 'type="text"' in _tag) and ("inputmode='text'" in _tag or 'inputmode="text"' in _tag) and 'pattern=' not in _tag.lower()
     checks["db"]=str(conn.execute("PRAGMA integrity_check").fetchone()[0]).lower()=="ok" and len(conn.execute("PRAGMA foreign_key_check").fetchall())==0
 finally:conn.close()
 print("[r144-selftest] "+repr(checks),flush=True)
