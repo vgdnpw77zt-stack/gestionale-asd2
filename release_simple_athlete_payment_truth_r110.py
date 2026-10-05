@@ -700,7 +700,7 @@ def _bodymind_payment_entrypoints_v4(resp):
 
         # Every visible legacy entry becomes an alias of the canonical module.
         import re as _bm_re
-        html=_bm_re.sub(r'''href=(["'])(/quote-incassi/?|/pagamenti-pro/?|/pagamenti-automatici/?)([^"']*)\1''',
+        html=_bm_re.sub(r"href=([\"'])(/quote-incassi/?|/pagamenti-pro/?|/pagamenti-automatici/?)([^\"']*)\\1",
                         lambda m:'href='+m.group(1)+'/pagamenti'+(m.group(3) or '')+m.group(1),html,flags=_bm_re.I)
 
         # Dashboard and Centro operativo display the same truth component.
