@@ -273,11 +273,15 @@ for _p in (DESK, MOB):
 
 _desk_now=DESK.read_text(encoding='utf-8',errors='replace')
 _mob_now=MOB.read_text(encoding='utf-8',errors='replace')
-if "/pagamenti?tesserato_id={int(tesserato_id)}" not in _desk_now:
-    raise RuntimeError('R110 contextual desktop payment link missing')
-if "/pagamenti?tesserato_id={{tid}}" not in _mob_now:
-    raise RuntimeError('R110 contextual mobile payment link missing')
-print('[r110-payment-focus] PASS athlete-scoped payment navigation',flush=True)
+_desk_old="/pagamenti?tesserato_id={int(tesserato_id)}" in _desk_now
+_mob_old="/pagamenti?tesserato_id={{tid}}" in _mob_now
+_desk_new=("BODYMIND_R110_CANONICAL_PROFILE_PAYMENT_LINKS_V4" in _desk_now and "/pagamenti?vista=iscrizioni&tesserato_id={int(tesserato_id)}" in _desk_now and "/pagamenti?vista=mensili&tesserato_id={int(tesserato_id)}" in _desk_now)
+_mob_new=("BODYMIND_R110_CANONICAL_PROFILE_PAYMENT_LINKS_V4" in _mob_now and "/pagamenti?vista=iscrizioni&tesserato_id={{tid}}" in _mob_now and "/pagamenti?vista=mensili&tesserato_id={{tid}}" in _mob_now)
+if not (_desk_old or _desk_new):
+    raise RuntimeError('R110 contextual desktop payment links missing')
+if not (_mob_old or _mob_new):
+    raise RuntimeError('R110 contextual mobile payment links missing')
+print('[r110-payment-focus] PASS athlete-scoped canonical payment navigation',flush=True)
 
 
 # BODYMIND_R110_PAYMENT_TASK_TRUTH_V2
