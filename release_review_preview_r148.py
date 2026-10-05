@@ -38,3 +38,41 @@ if s!=before:
     print('[r148-review-preview] installed',flush=True)
 else:
     print('[r148-review-preview] already present',flush=True)
+
+
+# Read-only fresh-process QA.
+import subprocess, sys
+qa=r"""
+import sqlite3,sys
+sys.path.insert(0,"/data/top2_app")
+import app as _full
+from asd_app.core import app
+app.config["TESTING"]=True
+c=app.test_client()
+with c.session_transaction() as sess:
+    sess.update({"logged":True,"logged_in":True,"username":"admin","display_name":"R148 QA","role":"admin","tenant_slug":"default","user_id":1,"is_admin":True,"admin":True,"_csrf_token":"r148"})
+q=c.get("/documenti/da-verificare")
+h=q.get_data(as_text=True)
+routes={str(x.rule) for x in app.url_map.iter_rules()}
+src=open("/data/top2_app/asd_app/core.py",encoding="utf-8",errors="replace").read()
+conn=sqlite3.connect("/data/tenants/default/asd.db",timeout=20)
+try:
+    integ=str(conn.execute("PRAGMA integrity_check").fetchone()[0])
+    fk=len(conn.execute("PRAGMA foreign_key_check").fetchall())
+finally:conn.close()
+checks={
+ "queue_200":q.status_code==200,
+ "preview_markup":"r148-preview-actions" in src and "Anteprima documento" in src,
+ "document_preview_route":"/documenti/visualizza/<int:doc_id>" in routes,
+ "inbound_preview_route":"/documenti-automatici/file/<int:doc_id>" in routes,
+ "generic_date":"placeholder='GG/MM/AAAA'" in src and "placeholder='10/12/2026'" not in src,
+ "db":integ.lower()=="ok" and fk==0,
+}
+print("[r148-selftest] "+repr(checks),flush=True)
+if not all(checks.values()):raise RuntimeError("R148 QA failed "+repr(checks))
+"""
+p=subprocess.run([sys.executable,"-c",qa],capture_output=True,text=True,timeout=120)
+print((p.stdout or "").strip(),flush=True)
+if p.returncode!=0:
+    raise RuntimeError("R148 child QA failed "+((p.stderr or "")+(p.stdout or ""))[-5000:])
+print("[r148-selftest-main] PASS review-preview existing+inbound generic-date db-ok",flush=True)
