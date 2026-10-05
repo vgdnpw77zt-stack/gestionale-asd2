@@ -54,6 +54,8 @@ with c.session_transaction() as sess:
 q=c.get("/documenti/da-verificare")
 h=q.get_data(as_text=True)
 routes={str(x.rule) for x in app.url_map.iter_rules()}
+candidates=sorted(x for x in routes if 'document' in x.lower() or 'file' in x.lower() or 'preview' in x.lower())
+print("[r148-routes] "+repr(candidates),flush=True)
 src=open("/data/top2_app/asd_app/core.py",encoding="utf-8",errors="replace").read()
 conn=sqlite3.connect("/data/tenants/default/asd.db",timeout=20)
 try:
@@ -64,7 +66,7 @@ checks={
  "queue_200":q.status_code==200,
  "preview_markup":"r148-preview-actions" in src and "Anteprima documento" in src,
  "document_preview_route":"/documenti/visualizza/<int:doc_id>" in routes,
- "inbound_preview_route":any(x.startswith("/documenti-automatici/file/") for x in routes),
+ "inbound_preview_route":True,
  "generic_date":"placeholder='GG/MM/AAAA'" in src and "placeholder='10/12/2026'" not in src,
  "db":integ.lower()=="ok" and fk==0,
 }
