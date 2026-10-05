@@ -1090,8 +1090,9 @@ def _execute_agent_tool(conn, plan, raw_message=""):
             snap=_athlete_snapshot(conn,athlete)
             total=sum(float(p["importo"] or 0) for p in snap["payments"])
             return {"text":f"Per {snap['name']} trovo {len(snap['payments'])} pagamenti, totale € {total:.2f}.","mode":"agent_tool","links":_links_for(snap["tid"])}
-        count=int(conn.execute("SELECT COUNT(*) FROM pagamenti").fetchone()[0]) if _table(conn,"pagamenti") else 0
-        return {"text":f"Nel gestionale risultano {count} pagamenti.","mode":"agent_tool","links":[{"label":"Quote & Incassi","href":"/quote-incassi"}]}
+        pc=_payment_split_counts(conn)
+        extra=(f", {pc['altri']} altri" if pc["altri"] else "")
+        return {"text":f"Nel gestionale risultano {pc['totale']} incassi registrati: {pc['iscrizioni']} iscrizioni e {pc['mensili']} mensili"+extra+".","mode":"agent_tool","links":[{"label":"Pagamenti","href":"/pagamenti"}]}
 
     if tool=="set_quota":
         if not athlete: return {"text":"Dimmi il tesserato per cui vuoi modificare la quota.","mode":"clarify"}
@@ -1336,6 +1337,32 @@ def _pending_count(conn) -> int:
         PENDING_STATUSES
     ).fetchone()[0])
 
+
+# BODYMIND_PAYMENT_SPLIT_FACTS_V2
+def _payment_split_counts(conn, tid=None):
+    out={"iscrizioni":0,"mensili":0,"altri":0,"totale":0}
+    if not _table(conn,"pagamenti"):
+        return out
+    sql="SELECT * FROM pagamenti"+(" WHERE tesserato_id=?" if tid else "")+" ORDER BY id DESC"
+    rows=conn.execute(sql,((int(tid),) if tid else ())).fetchall()
+    for p in rows:
+        st=(str(p["stato"] or "") if "stato" in p.keys() else "")+" "+(str(p["online_status"] or "") if "online_status" in p.keys() else "")
+        st=st.lower()
+        if any(x in st for x in ("pending","attesa","cancel","annull","failed","fallit","refunded","rimbors")):
+            continue
+        try: amount=float(p["importo"] or 0)
+        except Exception: amount=0
+        paid=any(x in st for x in ("paid","pagat","saldat","complet","incassat")) or (bool(p["data"] if "data" in p.keys() else "") and amount>0)
+        if not paid: continue
+        cause=str(p["causale"] or "").strip().lower() if "causale" in p.keys() else ""
+        out["totale"]+=1
+        if cause in ("iscrizione","tesseramento") or "iscrizion" in cause:
+            out["iscrizioni"]+=1
+        elif cause=="mensile" or "mensil" in cause or cause in ("quota","quota_mensile"):
+            out["mensili"]+=1
+        else:
+            out["altri"]+=1
+    return out
 
 def _global_check(conn):
     athletes=_athletes(conn)
@@ -2257,12 +2284,19 @@ def _answer(conn, text: str):
                 "links":[{"label":"Apri Da verificare","href":"/documenti/da-verificare"}]
             }
 
-        if "pagament" in n:
-            g=_global_check(conn)
+        if "pagament" in n or "incass" in n:
+            pc=_payment_split_counts(conn)
+            if "iscrizion" in n or "tesserament" in n:
+                txt=f"Nel gestionale risultano {pc['iscrizioni']} pagamenti di iscrizione registrati."
+            elif "mensil" in n or "quota mese" in n or "quote mensili" in n:
+                txt=f"Nel gestionale risultano {pc['mensili']} pagamenti mensili registrati."
+            else:
+                extra=(f", {pc['altri']} altri" if pc["altri"] else "")
+                txt=f"Nel gestionale risultano {pc['totale']} incassi: {pc['iscrizioni']} iscrizioni e {pc['mensili']} mensili"+extra+"."
             return {
-                "text":f"Nel gestionale risultano {g['payments']} pagamenti registrati.",
+                "text":txt,
                 "mode":"fast_fact","cloud_ai":False,
-                "links":[{"label":"Quote & Incassi","href":"/quote-incassi"}]
+                "links":[{"label":"Pagamenti","href":"/pagamenti"}]
             }
 
         if "ricevut" in n:
@@ -2488,8 +2522,15 @@ def _answer(conn, text: str):
         return {"text":f"Al momento risultano {count} ricevute nel registro.","mode":"local","links":[{"label":"Apri Ricevute","href":"/ricevute"}]}
 
     if "pagament" in n or "incass" in n or "quota" in n:
-        count=int(conn.execute("SELECT COUNT(*) FROM pagamenti").fetchone()[0]) if _table(conn,"pagamenti") else 0
-        return {"text":f"Al momento risultano {count} pagamenti nella tabella pagamenti. Per una persona specifica dimmi nome e cognome.","mode":"local","links":[{"label":"Quote & Incassi","href":"/quote-incassi"}]}
+        pc=_payment_split_counts(conn)
+        if "iscrizion" in n or "tesserament" in n:
+            txt=f"Al momento risultano {pc['iscrizioni']} iscrizioni pagate."
+        elif "mensil" in n or "quota mese" in n:
+            txt=f"Al momento risultano {pc['mensili']} mensili pagati."
+        else:
+            extra=(f", {pc['altri']} altri" if pc["altri"] else "")
+            txt=f"Al momento risultano {pc['totale']} incassi: {pc['iscrizioni']} iscrizioni e {pc['mensili']} mensili"+extra+"."
+        return {"text":txt+" Per una persona specifica dimmi nome e cognome.","mode":"local","links":[{"label":"Pagamenti","href":"/pagamenti"}]}
 
     if any(x in n for x in ("apri tesserati","vai ai tesserati")):
         return {"text":"Ti porto ai Tesserati.","mode":"navigation","links":[{"label":"Apri Tesserati","href":"/tesserati"}]}
