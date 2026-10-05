@@ -2194,6 +2194,23 @@ def _answer(conn, text: str):
             "mode":"local"
         }
 
+    # BODYMIND_MINOR_COUNT_FAST_FACT
+    # "Quanti/quante minorenni/minori abbiamo?" means the number of registered
+    # athletes marked as minors, not total athletes and not minors with tutela issues.
+    if (
+        re.search(r"\b(quanti|quante|numero|totale)\b",n)
+        and re.search(r"\b(minori|minorenni|minorenne|minore)\b",n)
+        and not any(x in n for x in ("manca","incomplet","tutela","consenso","document","certificat"))
+    ):
+        rows=_athletes(conn)
+        minors=sum(1 for a in rows if ("minorenne" in a.keys() and int(a["minorenne"] or 0)==1))
+        return {
+            "text":f"Nel gestionale risultano {minors} minorenni su {len(rows)} tesserati.",
+            "mode":"fast_fact",
+            "cloud_ai":False,
+            "links":[{"label":"Apri Tesserati","href":"/tesserati"}]
+        }
+
     # BODYMIND_R51_FAST_FACTS
     # Fatti semplici e inequivocabili arrivano direttamente dal DB: più veloci, più economici, zero allucinazioni.
     if (
