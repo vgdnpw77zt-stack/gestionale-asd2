@@ -1334,19 +1334,28 @@ def _bodymind_r123_canonical_payment_module_v5(resp):
         for a in athletes:
             tid=int(a.get('id') or 0)
             if selected_tid and tid!=selected_tid: continue
+            ep=enroll.get(tid)
+            elegacy=bool(int(a.get('iscrizione_pagata') or 0)) if 'iscrizione_pagata' in a else False
+            elegacy=elegacy or (bool(int(a.get('tesseramento_pagato') or 0)) if 'tesseramento_pagato' in a else False)
+            enroll_ok=bool(ep or elegacy)
+            mp=monthly.get(tid)
+            month_ok=bool(mp or tid in qpaid)
+
             if vista=='iscrizioni':
-                p=enroll.get(tid)
-                legacy=bool(int(a.get('iscrizione_pagata') or 0)) if 'iscrizione_pagata' in a else False
-                legacy=legacy or (bool(int(a.get('tesseramento_pagato') or 0)) if 'tesseramento_pagato' in a else False)
-                ok=bool(p or legacy)
-                detail=(_money(p.get('importo'))+' · '+str(p.get('data') or '')).strip(' ·') if p else ('Già registrata' if legacy else 'Da registrare')
-                href=f"/pagamenti?vista=iscrizioni&stagione={season}&mese={mese}&anno={anno}&tesserato_id={tid}"
+                ok=enroll_ok
+                detail=(_money(ep.get('importo'))+' · '+str(ep.get('data') or '')).strip(' ·') if ep else ('Già registrata' if elegacy else 'Iscrizione da registrare')
             else:
-                p=monthly.get(tid); ok=bool(p or tid in qpaid)
-                detail=(_money(p.get('importo'))+' · '+str(p.get('data') or '')).strip(' ·') if p else ('Già registrato' if tid in qpaid else 'Da registrare')
-                href=f"/pagamenti?vista=mensili&mese={mese}&anno={anno}&tesserato_id={tid}"
+                ok=month_ok
+                detail=(_money(mp.get('importo'))+' · '+str(mp.get('data') or '')).strip(' ·') if mp else ('Già registrato' if tid in qpaid else ('Mensile '+months[mese]+' da registrare'))
             if ok: paid_n+=1
-            cards.append("<a class='bmpv5-card "+("paid" if ok else "due")+"' href='"+href+"'><div><b>"+e(_name(a))+"</b><small>"+e(detail)+"</small></div><strong>"+("PAGATO" if ok else "DA PAGARE")+"</strong></a>")
+
+            enroll_href=f"/pagamenti?vista=iscrizioni&stagione={season}&mese={mese}&anno={anno}&tesserato_id={tid}&azione=registra"
+            monthly_href=f"/pagamenti?vista=mensili&mese={mese}&anno={anno}&tesserato_id={tid}&azione=registra"
+            actions=(
+                "<a class='bmpv5-act "+("done" if enroll_ok else "primary")+"' href='"+enroll_href+"'>"+("Iscrizione ✓" if enroll_ok else "Registra iscrizione")+"</a>"
+                +"<a class='bmpv5-act "+("done" if month_ok else "secondary")+"' href='"+monthly_href+"'>"+(("Mensile "+months[mese]+" ✓") if month_ok else ("Registra mensile "+months[mese]))+"</a>"
+            )
+            cards.append("<div class='bmpv5-card "+("paid" if ok else "due")+"'><div class='bmpv5-person'><b>"+e(_name(a))+"</b><small>"+e(detail)+"</small></div><strong>"+("PAGATO" if ok else "DA PAGARE")+"</strong><div class='bmpv5-actions'>"+actions+"</div></div>")
 
         total_visible=len(cards)
         mode_title=("Iscrizione · stagione "+str(season)+"/"+str(season+1)) if vista=='iscrizioni' else ("Mensile · "+months[mese]+" "+str(anno))
@@ -1387,26 +1396,40 @@ def _bodymind_r123_canonical_payment_module_v5(resp):
         .bmpv5-head{{display:flex;justify-content:space-between;gap:16px;align-items:center}}.bmpv5-head span{{font-size:10px;letter-spacing:.14em;font-weight:950;color:#7dd3fc}}.bmpv5-head h1{{margin:4px 0;font-size:28px}}.bmpv5-head p{{margin:0;color:#b7c6d9}}.bmpv5-count{{font-size:26px;font-weight:950}}
         .bmpv5-tabs{{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}}.bmpv5-tabs a{{padding:14px;border-radius:14px;background:#10243b;color:#cbd5e1!important;text-decoration:none;text-align:center;font-weight:950}}.bmpv5-tabs a.active{{background:#2563eb;color:white!important}}
         .bmpv5-period{{display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin-bottom:12px;padding:11px;border-radius:14px;background:#0c2035}}.bmpv5-period label{{display:grid;gap:4px;font-size:11px;font-weight:900;color:#cbd5e1}}.bmpv5-period input,.bmpv5-period select,.bmpv5-period button{{min-height:42px;border-radius:10px;border:1px solid rgba(148,163,184,.25);background:#06111f;color:#fff;padding:8px 10px}}.bmpv5-period button{{background:#2563eb;font-weight:900}}
-        .bmpv5-list{{display:grid;gap:8px}}.bmpv5-card{{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:13px 15px;border-radius:14px;color:#fff!important;text-decoration:none;border:1px solid transparent}}.bmpv5-card div{{display:grid;gap:3px}}.bmpv5-card small{{color:#cbd5e1}}.bmpv5-card.paid{{background:rgba(20,83,45,.78);border-color:rgba(74,222,128,.35)}}.bmpv5-card.due{{background:rgba(127,29,29,.70);border-color:rgba(248,113,113,.32)}}.bmpv5-card strong{{font-size:11px}}
-        @media(max-width:700px){{.bmpv5{{padding:13px}}.bmpv5-head{{align-items:flex-start}}.bmpv5-head h1{{font-size:21px}}.bmpv5-period{{display:grid;grid-template-columns:1fr 1fr}}.bmpv5-period button{{grid-column:1/-1}}.bmpv5-card{{grid-template-columns:1fr}}}}
+        .bmpv5-list{{display:grid;gap:8px}}.bmpv5-card{{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 14px;align-items:center;padding:13px 15px;border-radius:14px;color:#fff;border:1px solid transparent}}.bmpv5-person{{display:grid;gap:3px}}.bmpv5-card small{{color:#cbd5e1}}.bmpv5-card.paid{{background:rgba(20,83,45,.78);border-color:rgba(74,222,128,.35)}}.bmpv5-card.due{{background:rgba(127,29,29,.70);border-color:rgba(248,113,113,.32)}}.bmpv5-card>strong{{font-size:11px}}.bmpv5-actions{{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap}}.bmpv5-act{{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:9px 12px;border-radius:11px;text-decoration:none!important;font-size:12px;font-weight:950}}.bmpv5-act.primary{{background:#2563eb;color:#fff!important}}.bmpv5-act.secondary{{background:#0f766e;color:#fff!important}}.bmpv5-act.done{{background:rgba(15,23,42,.55);color:#d1fae5!important;border:1px solid rgba(74,222,128,.28)}}
+        @media(max-width:700px){{.bmpv5{{padding:13px}}.bmpv5-head{{align-items:flex-start}}.bmpv5-head h1{{font-size:21px}}.bmpv5-period{{display:grid;grid-template-columns:1fr 1fr}}.bmpv5-period button{{grid-column:1/-1}}.bmpv5-card{{grid-template-columns:1fr}}.bmpv5-actions{{display:grid;grid-template-columns:1fr}}}}
         </style>
         <script id='bodymind-payment-mode-v5'>(function(){{
-          var vista={vista!r}, mese={mese}, anno={anno}, stagione={season};
+          var vista={vista!r}, mese={mese}, anno={anno}, stagione={season}, selectedTid={selected_tid};
           document.querySelectorAll('form').forEach(function(form){{
             var cause=form.querySelector('input[name="causale"],select[name="causale"]');
             if(!cause) return;
             var has=form.querySelector('[name="tesserato_id"],[name="importo"]');
             if(!has && (form.innerText||'').toLowerCase().indexOf('importo')<0) return;
             cause.value=(vista==='mensili'?'mensile':'iscrizione');
-            var m=form.querySelector('[name="mese"]'), y=form.querySelector('[name="anno"]');
+            var m=form.querySelector('[name="mese"]'), y=form.querySelector('[name="anno"]'), t=form.querySelector('[name="tesserato_id"]');
             if(m) m.value=String(mese);
             if(y) y.value=String(vista==='mensili'?anno:(mese>=7?stagione:stagione+1));
+            if(t && selectedTid) {{
+              t.value=String(selectedTid);
+              try{{ t.dispatchEvent(new Event('change',{{bubbles:true}})); }}catch(e){{}}
+            }}
             var badge=form.querySelector('.bmpv5-formbadge');
             if(!badge){{badge=document.createElement('div');badge.className='bmpv5-formbadge';form.insertBefore(badge,form.firstElementChild);}}
             badge.innerHTML=vista==='mensili'
               ? '<b>MENSILE</b><span>'+String(mese).padStart(2,'0')+'/'+anno+'</span>'
               : '<b>ISCRIZIONE</b><span>Stagione '+stagione+'/'+(stagione+1)+'</span>';
+            if(selectedTid && new URLSearchParams(location.search).get('azione')==='registra') {{
+              form.setAttribute('data-bodymind-active-payment-form','1');
+            }}
           }});
+          if(selectedTid && new URLSearchParams(location.search).get('azione')==='registra') {{
+            var active=document.querySelector('form[data-bodymind-active-payment-form="1"]');
+            if(active) {{
+              active.style.outline='2px solid rgba(96,165,250,.7)';
+              active.style.outlineOffset='6px';
+            }}
+          }}
         }})();</script>
         <style>.bmpv5-formbadge{{display:flex;justify-content:space-between;gap:10px;margin-bottom:10px;padding:10px 12px;border-radius:11px;background:#07182a;border:1px solid rgba(96,165,250,.32)}}.bmpv5-formbadge span{{color:#bfdbfe}}</style>"""
 
