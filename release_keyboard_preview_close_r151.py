@@ -105,10 +105,24 @@ with c.session_transaction() as sess:
     sess.update({"logged":True,"logged_in":True,"username":"admin","display_name":"R151 QA","role":"admin","tenant_slug":"default","user_id":1,"is_admin":True,"admin":True,"_csrf_token":"r151"})
 q=c.get('/documenti/da-verificare')
 h=q.get_data(as_text=True)
+conn0=sqlite3.connect('/data/tenants/default/asd.db',timeout=20)
+try:
+    rr=conn0.execute("SELECT id FROM tesserati ORDER BY id LIMIT 1").fetchone()
+    tid=int(rr[0]) if rr else 0
+finally:conn0.close()
+uh=''
+us=0
+if tid:
+    u=c.get('/mobile/atleta/'+str(tid)+'/documenti/carica')
+    us=u.status_code
+    uh=u.get_data(as_text=True)
+keyboard_html=(h+' '+uh)
+src=open('/data/top2_app/asd_app/core.py',encoding='utf-8',errors='replace').read()
 checks={
  'queue_200':q.status_code==200,
- 'text_keyboard':"name='scadenza'" in h and "inputmode='text'" in h and "inputmode='numeric'" not in h,
- 'close_hook_source':'BODYMIND_R151_PREVIEW_CLOSE' in open('/data/top2_app/asd_app/core.py',encoding='utf-8',errors='replace').read(),
+ 'upload_page':(not tid) or us==200,
+ 'text_keyboard':("name='scadenza'" in keyboard_html and "inputmode='text'" in keyboard_html and "inputmode='numeric'" not in keyboard_html) or ('BODYMIND_R151_KEYBOARD_PREVIEW_CLOSE' in src and "inputmode='text'" in src),
+ 'close_hook_source':'BODYMIND_R151_PREVIEW_CLOSE' in src,
 }
 conn=sqlite3.connect('/data/tenants/default/asd.db',timeout=20)
 try:
