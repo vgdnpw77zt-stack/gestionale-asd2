@@ -1477,7 +1477,23 @@ if 'BODYMIND_R123_CANONICAL_PAYMENT_MODULE_V5' in _core_v6 and 'BODYMIND_R123_PA
             <div><div class='bmpv6-colhead'><b>SENZA ISCRIZIONE</b><strong>{len(_miss_enroll)}</strong></div>{''.join(_miss_enroll) if _miss_enroll else "<p class='bmpv6-ok'>Nessuna iscrizione mancante.</p>"}</div>
             <div><div class='bmpv6-colhead'><b>SENZA MENSILE · {e(months[mese])} {anno}</b><strong>{len(_miss_month)}</strong></div>{''.join(_miss_month) if _miss_month else "<p class='bmpv6-ok'>Nessun mensile mancante.</p>"}</div>
           </div>
-        </section><div id='bmpv5-form-mount'></div>\"\"\"
+        </section><div id='bmpv5-form-mount'></div>
+        <script id='bmpv6-form-mounter'>(function(){{
+          var tid={selected_tid}, mode={vista!r}, mm={mese}, yy={anno}, ss={season};
+          if(!tid || new URLSearchParams(location.search).get('azione')!=='registra') return;
+          var forms=[].slice.call(document.querySelectorAll('form'));
+          var active=forms.find(function(form){{
+            return form.querySelector('[name="tesserato_id"]') && (form.querySelector('[name="importo"]') || (form.innerText||'').toLowerCase().indexOf('importo')>=0);
+          }});
+          if(!active) return;
+          var t=active.querySelector('[name="tesserato_id"]'), c=active.querySelector('[name="causale"]'), m=active.querySelector('[name="mese"]'), y=active.querySelector('[name="anno"]');
+          if(t) t.value=String(tid);
+          if(c) c.value=(mode==='mensili'?'mensile':'iscrizione');
+          if(m) m.value=String(mm);
+          if(y) y.value=String(mode==='mensili'?yy:(mm>=7?ss:ss+1));
+          var mount=document.getElementById('bmpv5-form-mount');
+          if(mount && active.parentNode!==mount) mount.appendChild(active);
+        }})();</script>\"\"\"
 
         cards=[]
         paid_n=0
@@ -1503,8 +1519,8 @@ if 'BODYMIND_R123_CANONICAL_PAYMENT_MODULE_V5' in _core_v6 and 'BODYMIND_R123_PA
               var mount=document.getElementById('bmpv5-form-mount');
               if(mount && active.parentNode!==mount) mount.appendChild(active);
             }}"""
-    if mover not in _core_v6: raise RuntimeError('V6 form mover anchor missing')
-    _core_v6=_core_v6.replace(mover,mover2,1)
+    if mover in _core_v6:
+        _core_v6=_core_v6.replace(mover,mover2,1)
     _core_v6=_core_v6.replace("@media(max-width:700px){{.bmpv5{{padding:13px}}","@media(max-width:700px){{.bmpv6-cols{{grid-template-columns:1fr}}.bmpv6-head{{align-items:flex-start;flex-direction:column}}.bmpv6-miss{{grid-template-columns:1fr}}.bmpv5{{padding:13px}}",1)
     CORE.write_text(_core_v6,encoding='utf-8')
     py_compile.compile(str(CORE),doraise=True)
