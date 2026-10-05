@@ -142,7 +142,7 @@ if _marker in s:
     import re as _r150_patch_re
     pat=(r'\n# BODYMIND_R150_DATE_AUTOFMT_SAFE\n@app\.after_request\n'
          r'def _bodymind_r150_date_autofmt_safe\(resp\):.*?\n    return resp\n')
-    s2,n=_r150_patch_re.subn('\n'+canonical_hook.lstrip('\n'),s,count=1,flags=_r150_patch_re.S)
+    s2,n=_r150_patch_re.subn(pat,'\n'+canonical_hook.lstrip('\n'),s,count=1,flags=_r150_patch_re.S)
     if n!=1:
         raise RuntimeError('R150 existing hook marker found but canonical replacement failed')
     s=s2
