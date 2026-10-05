@@ -1,49 +1,41 @@
 from __future__ import annotations
-import py_compile, shutil, subprocess, sys
+import py_compile, shutil, sqlite3
 from pathlib import Path
 
 APP=Path('/data/top2_app')
 CORE=APP/'asd_app/core.py'
-BACK=Path('/data/release_backups/20261005_r151_keyboard_preview_close')
+BACK=Path('/data/release_backups/20261005_r151_preview_close_only')
 BACK.mkdir(parents=True,exist_ok=True)
 
-s=CORE.read_text(encoding='utf-8',errors='replace')
-if 'BODYMIND_R151_KEYBOARD_PREVIEW_CLOSE' not in s:
-    shutil.copy2(CORE,BACK/'core.py')
-    s += r'''
+def _strip_marked_function(src, marker):
+    lines=src.splitlines(True)
+    idx=next((i for i,x in enumerate(lines) if marker in x),-1)
+    if idx<0:return src,False
+    j=idx+1;seen_def=False
+    while j<len(lines):
+        line=lines[j]
+        if line.startswith('def '):
+            seen_def=True;j+=1;continue
+        if seen_def and line.strip() and not line.startswith((' ','\t')):
+            break
+        j+=1
+    return ''.join(lines[:idx]+lines[j:]),True
 
-# BODYMIND_R151_KEYBOARD_PREVIEW_CLOSE
+s=CORE.read_text(encoding='utf-8',errors='replace')
+before=s
+s,_=_strip_marked_function(s,'BODYMIND_R151_KEYBOARD_PREVIEW_CLOSE')
+s,_=_strip_marked_function(s,'BODYMIND_R151_PREVIEW_CLOSE_ONLY')
+s += r'''
+
+# BODYMIND_R151_PREVIEW_CLOSE_ONLY
 @app.after_request
-def _bodymind_r151_keyboard_preview_close(resp):
+def _bodymind_r151_preview_close_only(resp):
     try:
-        import re as _r151_re
-        p=request.path or ''
         if request.method!='GET' or int(getattr(resp,'status_code',200) or 200)!=200:
             return resp
         if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
             return resp
         html=resp.get_data(as_text=True)
-
-        # iPhone/Safari: numeric inputmode removes the keyboard symbol-switch key.
-        # Keep a normal text keyboard so "/" and other symbols are available,
-        # while R150 still autoformats eight digits to GG/MM/AAAA.
-        if p=='/documenti/da-verificare' or _r151_re.fullmatch(r'/mobile/atleta/\d+/documenti/carica/?',p):
-            html=_r151_re.sub(
-                r"(<input\b[^>]*\bname=['\"]scadenza['\"][^>]*?)\s+inputmode=['\"](?:numeric|decimal|tel)['\"]",
-                r"\1 inputmode='text'",
-                html,
-                flags=_r151_re.I
-            )
-            html=_r151_re.sub(
-                r"(<input\b[^>]*\bname=['\"]scadenza['\"][^>]*)(?<!inputmode=['\"]text['\"])(>)",
-                lambda m: (m.group(1)+" inputmode='text'"+m.group(2)) if 'inputmode=' not in m.group(1).lower() else m.group(0),
-                html,
-                flags=_r151_re.I
-            )
-
-        # Generic document preview. "Chiudi" must actually leave the preview.
-        # First try to close a tab opened from target=_blank; otherwise go back
-        # to the verification queue in the same tab.
         if 'Anteprima documento' in html and 'Apri originale' in html and 'Chiudi' in html:
             js="""<script id="BODYMIND_R151_PREVIEW_CLOSE">
 (function(){
@@ -82,35 +74,28 @@ def _bodymind_r151_keyboard_preview_close(resp):
 </script>"""
             if 'BODYMIND_R151_PREVIEW_CLOSE' not in html:
                 html=html.replace('</body>',js+'</body>',1) if '</body>' in html else html+js
-
-        resp.set_data(html)
+            resp.set_data(html)
+            resp.headers.pop('Content-Length',None)
     except Exception as exc:
-        print('[r151-warning] '+repr(exc),flush=True)
+        print('[r151-preview-warning] '+repr(exc),flush=True)
     return resp
 '''
+if s!=before:
+    shutil.copy2(CORE,BACK/'core.py')
     CORE.write_text(s,encoding='utf-8')
     py_compile.compile(str(CORE),doraise=True)
-    print('[r151-install] PASS text keyboard + real preview close installed',flush=True)
-else:
-    print('[r151-install] already present',flush=True)
+print('[r151-install] preview-close-only installed',flush=True)
 
-# Fast in-process/static gate: normal production startup is already close to
-# Railway's health window. R147/R150 independently test the rendered upload and
-# review routes; R151 only needs to prove its final response hook is installed,
-# compile-safe and DB-safe.
 src=CORE.read_text(encoding='utf-8',errors='replace')
 checks={
- 'keyboard_hook':"BODYMIND_R151_KEYBOARD_PREVIEW_CLOSE" in src and "inputmode='text'" in src,
- 'close_hook':"BODYMIND_R151_PREVIEW_CLOSE" in src and "history.back()" in src and "window.close()" in src,
+ 'preview_only':"BODYMIND_R151_PREVIEW_CLOSE_ONLY" in src and "BODYMIND_R151_PREVIEW_CLOSE" in src,
+ 'old_keyboard_hook_absent':"BODYMIND_R151_KEYBOARD_PREVIEW_CLOSE" not in src,
 }
-import sqlite3
 conn=sqlite3.connect('/data/tenants/default/asd.db',timeout=20)
 try:
-    integ=str(conn.execute('PRAGMA integrity_check').fetchone()[0])
-    fk=len(conn.execute('PRAGMA foreign_key_check').fetchall())
+    integ=str(conn.execute('PRAGMA integrity_check').fetchone()[0]);fk=len(conn.execute('PRAGMA foreign_key_check').fetchall())
 finally:conn.close()
 checks['db']=integ.lower()=='ok' and fk==0
 print('[r151-selftest] '+repr(checks),flush=True)
-if not all(checks.values()):
-    raise RuntimeError('R151 QA failed '+repr(checks))
-print('[r151-selftest-main] PASS keyboard-symbol-access preview-close-source db-ok',flush=True)
+if not all(checks.values()):raise RuntimeError('R151 QA failed '+repr(checks))
+print('[r151-selftest-main] PASS preview-close-only db-ok',flush=True)
