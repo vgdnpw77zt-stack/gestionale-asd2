@@ -42,9 +42,9 @@ s=s.replace(
     "preview_url=('/documenti/visualizza/'+str(rid)) if source=='documenti' else ('/a172/documento/inbound_documents/'+str(rid))"
 )
 
-# 3) Safe response-time enhancement. Do NOT inject JavaScript into an f-string
-# source block: previous candidate proved that braces/backslashes can corrupt
-# persistent core.py. This after_request hook is ordinary Python source.
+# 3) Safe response-time enhancement. Replace the already-installed R150 hook
+# in-place when present. This avoids the persistent-runtime marker preventing
+# later fixes from reaching the actually rendered HTML.
 
 # R150b - iOS-proof date entry: the user never needs to type "/".
 # Keep accepting both 8 compact digits and slash dates server-side, but make
@@ -82,8 +82,8 @@ s=s.replace("html=html.replace(\"placeholder='10/12/2026'\",\"placeholder='GG/MM
 s=s.replace("html=html.replace('Scadenza certificato (solo se nota)','Scadenza certificato · GG/MM/AAAA')",
             "html=html.replace('Scadenza certificato (solo se nota)','Scadenza certificato · 8 cifre (GGMMYYYY)')")
 
-if 'BODYMIND_R150_DATE_AUTOFMT_SAFE' not in s:
-    hook=r'''
+
+canonical_hook=r'''
 
 # BODYMIND_R150_DATE_AUTOFMT_SAFE
 @app.after_request
@@ -98,31 +98,56 @@ def _bodymind_r150_date_autofmt_safe(resp):
         if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
             return resp
         html=resp.get_data(as_text=True)
-        html=html.replace("placeholder='10/12/2026'","placeholder='GG/MM/AAAA'")
-        html=html.replace('Scadenza certificato (solo se nota)','Scadenza certificato · GG/MM/AAAA')
+        html=html.replace("placeholder='10/12/2026'","placeholder='GGMMYYYY · es. 27032027'")
+        html=html.replace("placeholder='GG/MM/AAAA'","placeholder='GGMMYYYY · es. 27032027'")
+        html=html.replace('Scadenza certificato (solo se nota)','Scadenza certificato · 8 cifre (GGMMYYYY)')
+        html=html.replace('Scadenza certificato · GG/MM/AAAA','Scadenza certificato · 8 cifre (GGMMYYYY)')
         js="""<script id="BODYMIND_R150_DATE_AUTOFMT">
-document.addEventListener('DOMContentLoaded',function(){
-  document.querySelectorAll("input[name='scadenza']").forEach(function(el){
-    function fmt(){
-      var d=(el.value||'').replace(/\D/g,'');
-      if(d.length===8){el.value=d.slice(0,2)+'/'+d.slice(2,4)+'/'+d.slice(4,8);}
-    }
-    el.addEventListener('input',function(){
-      var d=(el.value||'').replace(/\D/g,'');
-      if(d.length===8){fmt();}
+(function(){
+  function bind(){
+    document.querySelectorAll("input[name='scadenza']").forEach(function(el){
+      if(el.dataset.r150Bound==='1') return;
+      el.dataset.r150Bound='1';
+      function fmt(){
+        var d=(el.value||'').replace(/\D/g,'').slice(0,8);
+        var out=d;
+        if(d.length>4){out=d.slice(0,2)+'/'+d.slice(2,4)+'/'+d.slice(4,8);}
+        else if(d.length>2){out=d.slice(0,2)+'/'+d.slice(2,4);}
+        el.value=out;
+      }
+      el.addEventListener('input',fmt);
+      el.addEventListener('change',fmt);
+      el.addEventListener('blur',fmt);
+      fmt();
     });
-    el.addEventListener('blur',fmt);
-  });
-});
+  }
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',bind,{once:true});
+  }else{
+    bind();
+  }
+})();
 </script>"""
         if 'BODYMIND_R150_DATE_AUTOFMT' not in html:
             html=html.replace('</body>',js+'</body>',1) if '</body>' in html else html+js
         resp.set_data(html)
+        resp.headers.pop('Content-Length',None)
     except Exception as exc:
         print('[r150-date-warning] '+repr(exc),flush=True)
     return resp
 '''
-    s += hook
+
+_marker='# BODYMIND_R150_DATE_AUTOFMT_SAFE'
+if _marker in s:
+    import re as _r150_patch_re
+    pat=(r'\n# BODYMIND_R150_DATE_AUTOFMT_SAFE\n@app\.after_request\n'
+         r'def _bodymind_r150_date_autofmt_safe\(resp\):.*?\n    return resp\n')
+    s2,n=_r150_patch_re.subn('\n'+canonical_hook.lstrip('\n'),s,count=1,flags=_r150_patch_re.S)
+    if n!=1:
+        raise RuntimeError('R150 existing hook marker found but canonical replacement failed')
+    s=s2
+else:
+    s += canonical_hook
 
 if s!=before:
     backup=BACK/'core.py'
@@ -167,7 +192,7 @@ checks={
  'db':integ.lower()=='ok' and fk==0,
 }
 print('[r150-selftest] '+repr(checks),flush=True)
-required={k:v for k,v in checks.items() if k!='autofmt_js_rendered'}
+required=checks
 if not all(required.values()):
     raise RuntimeError('R150 QA failed '+repr(checks))
 """
@@ -175,4 +200,4 @@ p=subprocess.run([sys.executable,'-c',qa],capture_output=True,text=True,timeout=
 print((p.stdout or '').strip(),flush=True)
 if p.returncode!=0:
     raise RuntimeError('R150 child QA failed '+((p.stderr or '')+(p.stdout or ''))[-5000:])
-print('[r150-selftest-main] PASS compact-date autoslash review-preview db-ok',flush=True)
+print('[r150-selftest-main] PASS rendered-autoslash compact-date review-preview db-ok',flush=True)
