@@ -568,7 +568,10 @@ runpy.run_path("/opt/bodymind/release_operator_upload_semantic_r52.py", run_name
 runpy.run_path("/opt/bodymind/release_operator_web_audio_r52.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_autonomy_r55.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_fast_dedupe_r56.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_operator_dedupe_smoke_r56.py", run_name="__main__")
+if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
+    runpy.run_path("/opt/bodymind/release_operator_dedupe_smoke_r56.py", run_name="__main__")
+else:
+    print("[startup-convergence] R56 operator dedupe latency smoke skipped; R56 source safety remains active",flush=True)
 runpy.run_path("/opt/bodymind/release_operator_avatar_r57.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_voice_state_r59.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_targeted_missing_r60.py", run_name="__main__")
@@ -654,7 +657,10 @@ if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
     runpy.run_path("/opt/bodymind/release_convergence_smoke_r111.py", run_name="__main__")
 else:
     print("[startup-convergence] R111 convergence integration smoke skipped; R110/R113 canonical gates remain active",flush=True)
-runpy.run_path("/opt/bodymind/release_desktop_post_regression_r113.py", run_name="__main__")
+if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
+    runpy.run_path("/opt/bodymind/release_desktop_post_regression_r113.py", run_name="__main__")
+else:
+    print("[startup-convergence] R113 mutating desktop POST smoke skipped; R106/R110 canonical gates remain active",flush=True)
 if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
     runpy.run_path("/opt/bodymind/release_simple_athlete_payment_smoke_r111.py", run_name="__main__")
 else:
@@ -664,7 +670,10 @@ if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
 else:
     print("[startup-convergence] R116 read-only MU audit skipped; R118/R119 live gates remain active", flush=True)
 runpy.run_path("/opt/bodymind/release_mu_nomatch_operator_r119.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_mu_nomatch_create_smoke_r118.py", run_name="__main__")
+if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
+    runpy.run_path("/opt/bodymind/release_mu_nomatch_create_smoke_r118.py", run_name="__main__")
+else:
+    print("[startup-convergence] R118 temp-DB integration smoke skipped; R119 persistent route/import gates remain active",flush=True)
 runpy.run_path("/opt/bodymind/release_upload_truth_convergence_r146.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_human_document_review_r147.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_review_preview_r148.py", run_name="__main__")
