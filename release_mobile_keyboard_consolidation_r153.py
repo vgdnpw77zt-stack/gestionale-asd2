@@ -1,5 +1,5 @@
 from __future__ import annotations
-import py_compile, shutil, sqlite3
+import py_compile, shutil, sqlite3, re
 from pathlib import Path
 
 APP=Path('/data/top2_app')
@@ -43,9 +43,26 @@ if 'BODYMIND_R153_KEYBOARD_CONSOLIDATION' not in ops:
 
     # Do not force focus after async send completion; on iOS that races with taps,
     # blur, dictation/composition and viewport changes.
-    old2="        }finally{send.disabled=false;input.focus();setTimeout(bodymindKeepComposerVisible,80)}"
-    if old2 in ops:
-        ops=ops.replace(old2,"        }finally{send.disabled=false;bodymindKeepComposerVisible()}",1); changed=True
+    # Remove forced focus after send in any spacing/minor variant. The user tap owns focus.
+    before_focus=ops
+    ops=re.sub(
+        r"input\.focus\(\)\s*;\s*setTimeout\(bodymindKeepComposerVisible\s*,\s*80\s*\)",
+        "bodymindKeepComposerVisible()",
+        ops
+    )
+    ops=re.sub(
+        r"input\.focus\(\)\s*;\s*bodymindKeepComposerVisible\(\)",
+        "bodymindKeepComposerVisible()",
+        ops
+    )
+    if ops!=before_focus: changed=True
+
+    # Mark the single consolidated controller in the existing R90 function.
+    if 'BODYMIND_R153_KEYBOARD_CONSOLIDATION' not in ops:
+        marker_anchor="      function bodymindR90SyncViewport()"
+        if marker_anchor in ops:
+            ops=ops.replace(marker_anchor,"      // BODYMIND_R153_KEYBOARD_CONSOLIDATION\n"+marker_anchor,1)
+            changed=True
 
     # R90 must resize the shell, but must not drive document scroll or schedule
     # a train of viewport writes from focus/blur events.
@@ -112,7 +129,7 @@ checks={
  'operator_marker':'BODYMIND_R153_KEYBOARD_CONSOLIDATION' in ops,
  'no_smooth_composer_scroll':"shell.scrollIntoView({block:'end',behavior:'smooth'})" not in ops,
  'no_forced_page_scroll':'if(window.scrollY)window.scrollTo(0,0);' not in ops,
- 'no_async_forced_focus':'input.focus();setTimeout(bodymindKeepComposerVisible,80)' not in ops,
+ 'no_async_forced_focus':re.search(r"input\.focus\(\)\s*;\s*(?:setTimeout\(bodymindKeepComposerVisible|bodymindKeepComposerVisible\()",ops) is None,
  'native_inputs':'BODYMIND_R153_NATIVE_MOBILE_INPUTS' in core and 'touch-action:manipulation' in core,
 }
 conn=sqlite3.connect('file:'+str(DB)+'?mode=ro',uri=True,timeout=20)
