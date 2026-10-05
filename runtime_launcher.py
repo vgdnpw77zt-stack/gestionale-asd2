@@ -664,13 +664,14 @@ runpy.run_path("/opt/bodymind/release_mu_nomatch_create_smoke_r118.py", run_name
 runpy.run_path("/opt/bodymind/release_upload_truth_convergence_r146.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_human_document_review_r147.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_review_preview_r148.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_review_date_preview_r150.py", run_name="__main__")
 # Re-run stale task cleanup after operator/document convergence, because old
 # upload tasks can become safely closable only after their async job/actions
 # have completed during startup.
 _bodymind_operator_task_cleanup()
 if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
-        runpy.run_path("/opt/bodymind/release_upload_state_probe_r142.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_stabilization_audit_r80.py", run_name="__main__")
+    runpy.run_path("/opt/bodymind/release_upload_state_probe_r142.py", run_name="__main__")
+    runpy.run_path("/opt/bodymind/release_stabilization_audit_r80.py", run_name="__main__")
 else:
     print("[startup-convergence] R142 probe + R80 replay fixture skipped in normal boot; newer R118/R119/R144/R146 live gates remain active",flush=True)
 runpy.run_path("/opt/bodymind/release_mobile_delete_r85.py", run_name="__main__")
