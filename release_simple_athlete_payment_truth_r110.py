@@ -657,3 +657,104 @@ finally:_c.close()
 if _integrity.lower()!='ok' or _fk:
     raise RuntimeError('R110 payment-flow-v3 DB guard failed')
 print('[r110-payment-flow-v3-selftest] PASS pagamenti='+str(_pay_count)+' integrity='+_integrity+' fk='+str(_fk),flush=True)
+
+
+# BODYMIND_R110_CANONICAL_ENTRYPOINTS_V4
+# Tesserati, Dashboard, Centro operativo and all payment shortcuts open the
+# exact same /pagamenti module, with semantic view + athlete/period context.
+for _profile_src in (DESK, MOB):
+    _txt=_profile_src.read_text(encoding='utf-8',errors='replace')
+    if 'BODYMIND_R110_CANONICAL_PROFILE_PAYMENT_LINKS_V4' not in _txt:
+        if _profile_src==DESK:
+            old="<a href='/pagamenti?tesserato_id={int(tesserato_id)}'>Pagamenti</a>"
+            new="<a href='/pagamenti?vista=iscrizioni&tesserato_id={int(tesserato_id)}'>Iscrizione</a><a href='/pagamenti?vista=mensili&tesserato_id={int(tesserato_id)}'>Mensile</a><!-- BODYMIND_R110_CANONICAL_PROFILE_PAYMENT_LINKS_V4 -->"
+        else:
+            old="<a href='/pagamenti?tesserato_id={{tid}}'>Pagamenti</a>"
+            new="<a href='/pagamenti?vista=iscrizioni&tesserato_id={{tid}}'>Iscrizione</a><a href='/pagamenti?vista=mensili&tesserato_id={{tid}}'>Mensile</a><!-- BODYMIND_R110_CANONICAL_PROFILE_PAYMENT_LINKS_V4 -->"
+        if old in _txt:
+            backup_file(_profile_src)
+            _txt=_txt.replace(old,new,1)
+            _profile_src.write_text(_txt,encoding='utf-8')
+            compile_file(_profile_src)
+            print('[r110-profile-payment-links-v4] PASS '+str(_profile_src),flush=True)
+        elif 'BODYMIND_R110_CANONICAL_PROFILE_PAYMENT_LINKS_V4' in _txt:
+            print('[r110-profile-payment-links-v4] already '+str(_profile_src),flush=True)
+        else:
+            print('[r110-profile-payment-links-v4] anchor not found '+str(_profile_src),flush=True)
+
+_core_v4=CORE.read_text(encoding='utf-8',errors='replace')
+if 'BODYMIND_R110_CANONICAL_ENTRYPOINTS_V4' not in _core_v4:
+    _core_v4 += r'''
+
+# BODYMIND_R110_CANONICAL_ENTRYPOINTS_V4
+@app.after_request
+def _bodymind_payment_entrypoints_v4(resp):
+    try:
+        if request.method!='GET' or int(getattr(resp,'status_code',200) or 200)!=200:
+            return resp
+        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
+            return resp
+        html=resp.get_data(as_text=True)
+        if not html:
+            return resp
+
+        # Every visible legacy entry becomes an alias of the canonical module.
+        import re as _bm_re
+        html=_bm_re.sub(r'''href=(["'])(/quote-incassi/?|/pagamenti-pro/?|/pagamenti-automatici/?)([^"']*)\1''',
+                        lambda m:'href='+m.group(1)+'/pagamenti'+(m.group(3) or '')+m.group(1),html,flags=_bm_re.I)
+
+        # Dashboard and Centro operativo display the same truth component.
+        if request.path in ('/dashboard','/cuore-operativo','/centro-operativo'):
+            if 'BODYMIND_PAYMENT_TRUTH_DASHBOARD_V3' not in html:
+                from datetime import date as _bm_date
+                today=_bm_date.today()
+                c=db(); c.row_factory=sqlite3.Row
+                try:
+                    t=bodymind_payment_truth(c,mese=today.month,anno=today.year)
+                finally:
+                    try:c.close()
+                    except Exception:pass
+                months=['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
+                panel=f"""<!-- BODYMIND_PAYMENT_TRUTH_DASHBOARD_V3 -->
+                <section class='bmpay-unified'>
+                  <div class='bmpay-title'><div><span>PAGAMENTI · MODULO UNICO</span><h2>Iscrizioni e mensile</h2><p>Questa è la stessa situazione usata da Tesserati, Task e Pagamenti.</p></div></div>
+                  <div class='bmpay-grid'>
+                    <a href='/pagamenti?vista=iscrizioni&stagione={t["stagione"]}'><small>ISCRIZIONI {t["stagione"]}/{t["stagione"]+1}</small><strong>{t["iscrizioni_pagate"]}/{t["totale"]}</strong><span>{t["iscrizioni_mancanti"]} da completare</span></a>
+                    <a href='/pagamenti?vista=mensili&mese={t["mese"]}&anno={t["anno"]}'><small>MENSILE · {months[t["mese"]]} {t["anno"]}</small><strong>{t["mensili_pagati"]}/{t["totale"]}</strong><span>{t["mensili_mancanti"]} da completare</span></a>
+                    <a href='/tesserati'><small>TESSERATI</small><strong>{t["totale"]}</strong><span>Apri una persona e gestisci gli stessi due stati</span></a>
+                  </div>
+                </section>
+                <style id='bodymind-payment-entrypoints-v4'>
+                .bmpay-unified{{margin:14px 0 18px;padding:18px;border-radius:20px;background:linear-gradient(135deg,#0a1728,#102c46);border:1px solid rgba(96,165,250,.24);color:#f8fafc}}
+                .bmpay-title span{{font-size:10px;font-weight:950;letter-spacing:.14em;color:#7dd3fc}}.bmpay-title h2{{margin:4px 0;font-size:25px}}.bmpay-title p{{margin:0;color:#b7c6d9}}
+                .bmpay-grid{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:13px}}.bmpay-grid a{{display:grid;gap:4px;padding:14px;border-radius:15px;background:#0b1d31;border:1px solid rgba(148,163,184,.16);color:white!important;text-decoration:none}}.bmpay-grid small{{font-size:10px;font-weight:900;color:#93c5fd}}.bmpay-grid strong{{font-size:24px}}.bmpay-grid span{{font-size:11px;color:#cbd5e1}}
+                @media(max-width:760px){{.bmpay-grid{{grid-template-columns:1fr}}}}
+                </style>"""
+                m=_bm_re.search(r'<main\b[^>]*>',html,_bm_re.I)
+                if m: html=html[:m.end()]+panel+html[m.end():]
+                elif '<body' in html:
+                    bm=_bm_re.search(r'<body\b[^>]*>',html,_bm_re.I)
+                    if bm: html=html[:bm.end()]+panel+html[bm.end():]
+                else: html=panel+html
+
+        if 'BODYMIND_PAYMENT_ENTRYPOINTS_V4_RENDERED' not in html:
+            html=html.replace('</body>','<!-- BODYMIND_PAYMENT_ENTRYPOINTS_V4_RENDERED --></body>',1) if '</body>' in html else html+'<!-- BODYMIND_PAYMENT_ENTRYPOINTS_V4_RENDERED -->'
+        resp.set_data(html)
+    except Exception as exc:
+        print('[payment-entrypoints-v4-warning] '+repr(exc),flush=True)
+    return resp
+'''
+    CORE.write_text(_core_v4,encoding='utf-8')
+    compile_file(CORE)
+    print('[r110-entrypoints-v4] PASS dashboard-center-tesserati legacy-links converge to /pagamenti',flush=True)
+else:
+    print('[r110-entrypoints-v4] already installed',flush=True)
+
+_c=sqlite3.connect(str(DB),timeout=20)
+try:
+    _ok=str(_c.execute('PRAGMA integrity_check').fetchone()[0])
+    _fk=len(_c.execute('PRAGMA foreign_key_check').fetchall())
+finally:_c.close()
+if _ok.lower()!='ok' or _fk:
+    raise RuntimeError('R110 entrypoints-v4 DB guard failed')
+print('[r110-entrypoints-v4-selftest] PASS integrity='+_ok+' fk='+str(_fk),flush=True)
