@@ -134,6 +134,7 @@ COPY release_human_document_review_r147.py /opt/bodymind/release_human_document_
 COPY release_review_preview_r148.py /opt/bodymind/release_review_preview_r148.py
 COPY release_review_date_preview_r150.py /opt/bodymind/release_review_date_preview_r150.py
 COPY release_keyboard_preview_close_r151.py /opt/bodymind/release_keyboard_preview_close_r151.py
+COPY release_ios_123_key_r152.py /opt/bodymind/release_ios_123_key_r152.py
 COPY release_core_recovery_r151.py /opt/bodymind/release_core_recovery_r151.py
 COPY release_document_association_sync_r143.py /opt/bodymind/release_document_association_sync_r143.py
 COPY release_document_association_fix_r144.py /opt/bodymind/release_document_association_fix_r144.py
