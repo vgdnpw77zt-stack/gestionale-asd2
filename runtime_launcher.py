@@ -650,7 +650,10 @@ else:
     print("[startup-convergence] R143 broad association sync skipped; R144 recent-only canonical sync active",flush=True)
 runpy.run_path("/opt/bodymind/release_mobile_profile_surface_r145.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_document_association_fix_r144.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_convergence_smoke_r111.py", run_name="__main__")
+if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
+    runpy.run_path("/opt/bodymind/release_convergence_smoke_r111.py", run_name="__main__")
+else:
+    print("[startup-convergence] R111 convergence integration smoke skipped; R110/R113 canonical gates remain active",flush=True)
 runpy.run_path("/opt/bodymind/release_desktop_post_regression_r113.py", run_name="__main__")
 if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
     runpy.run_path("/opt/bodymind/release_simple_athlete_payment_smoke_r111.py", run_name="__main__")
