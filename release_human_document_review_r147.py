@@ -274,7 +274,7 @@ if _r147_start>=0:
 
     _canonical_field="<label>Scadenza certificato · GG/MM/AAAA oppure 8 cifre<input type='text' name='scadenza' value='{e(current_exp)}' inputmode='text' autocomplete='off' placeholder='es. 14/11/2026 o 14112026'></label>"
     _seg,n_field=re.subn(
-        r"<label>Scadenza certificato[^\\n]*?<input[^\\n]*?name='scadenza'[^\\n]*?</label>",
+        r"<label>Scadenza certificato[^\n]*?<input[^\n]*?name='scadenza'[^\n]*?</label>",
         lambda m:_canonical_field,
         _seg,count=1
     )
@@ -320,7 +320,7 @@ try: integ=str(conn.execute('PRAGMA integrity_check').fetchone()[0]);fk=len(conn
 finally:conn.close()
 import re
 def _expiry_tag(html):
-    m=re.search(r"<input[^>]*\\bname=['\"]scadenza['\"][^>]*>",html,re.I)
+    m=re.search(r"<input[^>]*\bname=['\"]scadenza['\"][^>]*>",html,re.I)
     return m.group(0) if m else ''
 rt=_expiry_tag(h);ut=_expiry_tag(uh)
 checks={
