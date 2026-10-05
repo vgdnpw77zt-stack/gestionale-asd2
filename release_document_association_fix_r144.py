@@ -542,7 +542,17 @@ def bodymind_r144_direct_document_upload(tid):
                     except Exception:pass
                     return redirect('/mobile/atleta/'+str(tid)+'/documenti?duplicate=1')
             meta={'modulo_unico_tesseramento':('Modulo iscrizione BodyMind','Modulo Unico'),'certificato_medico':('Certificato medico','Certificato medico'),'liberatoria_immagini':('Liberatoria immagini','Liberatoria immagini'),'altro':('Documenti ASD','Documento')}
-            cat,label=meta[dtype];scad=str(request.form.get('scadenza') or '').strip() if dtype=='certificato_medico' else ''
+            cat,label=meta[dtype]
+            scad_raw=str(request.form.get('scadenza') or '').strip() if dtype=='certificato_medico' else ''
+            scad=''
+            if dtype=='certificato_medico' and scad_raw:
+                _digits=''.join(ch for ch in scad_raw if ch.isdigit())
+                _candidates=[('%d/%m/%Y',scad_raw),('%d-%m-%Y',scad_raw),('%Y-%m-%d',scad_raw),('%Y/%m/%d',scad_raw)]
+                if len(_digits)==8:_candidates.append(('%d%m%Y',_digits))
+                for _fmt,_val in _candidates:
+                    try:scad=_DT.strptime(_val,_fmt).date().isoformat();break
+                    except Exception:pass
+                if not scad:return redirect('/mobile/atleta/'+str(tid)+'/documenti/carica?error=scadenza')
             dc={str(x[1]) for x in conn.execute('PRAGMA table_info(documenti)').fetchall()}
             vals={'tesserato_id':tid,'titolo':name,'categoria':cat,'filename':str(dest),'original_filename':name,'data_caricamento':_DT.now().strftime('%Y-%m-%d %H:%M:%S'),'data_scadenza':scad,'note':'Caricamento manuale dalla scheda atleta','visibile':1,'tipo_template':'manuale_atleta','tenant_id':'default','doc_type':dtype,'confidence':100,'match_score':100,'source':'manuale_atleta','status':'salvato','inbound_id':None}
             ks=[k for k in vals if k in dc];conn.execute("INSERT INTO documenti("+','.join(ks)+") VALUES("+','.join('?' for _ in ks)+")",[vals[k] for k in ks]);did=int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
@@ -553,13 +563,27 @@ def bodymind_r144_direct_document_upload(tid):
             try:conn.close()
             except Exception:pass
     name=(str(athlete['cognome'] or '')+' '+str(athlete['nome'] or '')).strip()
-    msg={'tipo':'Seleziona il tipo documento.','file':'Seleziona un file.','formato':'Formato non supportato.'}.get(request.args.get('error') or '','')
-    return f"""<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'><title>Carica documento</title><style>body{{margin:0;background:#071426;color:#eef6ff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}}main{{max-width:620px;margin:auto;padding:18px}}.box{{background:#0b1d33;border:1px solid #27445f;border-radius:20px;padding:18px}}label{{display:block;margin-top:13px;font-weight:900}}select,input{{width:100%;min-height:48px;margin-top:6px;border-radius:12px;border:1px solid #315475;background:#081727;color:#fff;padding:10px}}button,.back{{display:block;width:100%;margin-top:14px;padding:13px;border:0;border-radius:12px;background:#166534;color:#fff;text-align:center;text-decoration:none;font-weight:950}}.back{{background:#163b5f}}</style></head><body><main><div class='box'><small>DOCUMENTO ATLETA</small><h1>{e(name)}</h1>{("<p>"+e(msg)+"</p>" if msg else "")}<form method='post' enctype='multipart/form-data'>{csrf_input()}<label>Tipo documento<select name='tipo' required><option value=''>Seleziona…</option><option value='certificato_medico'>Certificato medico</option><option value='modulo_unico_tesseramento'>Modulo Unico</option><option value='liberatoria_immagini'>Liberatoria immagini</option><option value='altro'>Altro documento</option></select></label><label>File<input type='file' name='file' accept='.pdf,.png,.jpg,.jpeg,.webp,.docx' required></label><label>Scadenza certificato (se nota)<input type='date' name='scadenza'></label><button type='submit'>Carica e associa a {e(name)}</button></form><a class='back' href='/mobile/atleta/{tid}'>Annulla</a></div></main></body></html>"""
+    msg={'tipo':'Seleziona il tipo documento.','file':'Seleziona un file.','formato':'Formato non supportato.','scadenza':'Data non valida. Usa GG/MM/AAAA oppure 8 cifre, ad esempio 14112026.'}.get(request.args.get('error') or '','')
+    return f"""<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'><title>Carica documento</title><style>body{{margin:0;background:#071426;color:#eef6ff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}}main{{max-width:620px;margin:auto;padding:18px}}.box{{background:#0b1d33;border:1px solid #27445f;border-radius:20px;padding:18px}}label{{display:block;margin-top:13px;font-weight:900}}select,input{{width:100%;min-height:48px;margin-top:6px;border-radius:12px;border:1px solid #315475;background:#081727;color:#fff;padding:10px}}button,.back{{display:block;width:100%;margin-top:14px;padding:13px;border:0;border-radius:12px;background:#166534;color:#fff;text-align:center;text-decoration:none;font-weight:950}}.back{{background:#163b5f}}</style></head><body><main><div class='box'><small>DOCUMENTO ATLETA</small><h1>{e(name)}</h1>{("<p>"+e(msg)+"</p>" if msg else "")}<form method='post' enctype='multipart/form-data'>{csrf_input()}<label>Tipo documento<select name='tipo' required><option value=''>Seleziona…</option><option value='certificato_medico'>Certificato medico</option><option value='modulo_unico_tesseramento'>Modulo Unico</option><option value='liberatoria_immagini'>Liberatoria immagini</option><option value='altro'>Altro documento</option></select></label><label>File<input type='file' name='file' accept='.pdf,.png,.jpg,.jpeg,.webp,.docx' required></label><label>Scadenza certificato (se nota) · GG/MM/AAAA oppure 8 cifre<input type='text' name='scadenza' inputmode='text' autocomplete='off' placeholder='es. 14/11/2026 o 14112026'></label><button type='submit'>Carica e associa a {e(name)}</button></form><a class='back' href='/mobile/atleta/{tid}'>Annulla</a></div></main></body></html>"""
 '''
     CORE.write_text(core,encoding='utf-8');py_compile.compile(str(CORE),doraise=True)
     print('[r144-upload-route] installed',flush=True)
 else:
     print('[r144-upload-route] existing direct route retained',flush=True)
+
+# Canonical date-input migration for an already-persisted R144 route.
+_r144_core=CORE.read_text(encoding='utf-8',errors='replace')
+_r144_before=_r144_core
+_r144_core=_r144_core.replace("            cat,label=meta[dtype];scad=str(request.form.get('scadenza') or '').strip() if dtype=='certificato_medico' else ''","            cat,label=meta[dtype]\n            scad_raw=str(request.form.get('scadenza') or '').strip() if dtype=='certificato_medico' else ''\n            scad=''\n            if dtype=='certificato_medico' and scad_raw:\n                _digits=''.join(ch for ch in scad_raw if ch.isdigit())\n                _candidates=[('%d/%m/%Y',scad_raw),('%d-%m-%Y',scad_raw),('%Y-%m-%d',scad_raw),('%Y/%m/%d',scad_raw)]\n                if len(_digits)==8:_candidates.append(('%d%m%Y',_digits))\n                for _fmt,_val in _candidates:\n                    try:scad=_DT.strptime(_val,_fmt).date().isoformat();break\n                    except Exception:pass\n                if not scad:return redirect('/mobile/atleta/'+str(tid)+'/documenti/carica?error=scadenza')")
+_r144_core=_r144_core.replace("<label>Scadenza certificato (se nota)<input type='date' name='scadenza'></label>","<label>Scadenza certificato (se nota) · GG/MM/AAAA oppure 8 cifre<input type='text' name='scadenza' inputmode='text' autocomplete='off' placeholder='es. 14/11/2026 o 14112026'></label>")
+_r144_core=_r144_core.replace("    msg={'tipo':'Seleziona il tipo documento.','file':'Seleziona un file.','formato':'Formato non supportato.'}.get(request.args.get('error') or '','')","    msg={'tipo':'Seleziona il tipo documento.','file':'Seleziona un file.','formato':'Formato non supportato.','scadenza':'Data non valida. Usa GG/MM/AAAA oppure 8 cifre, ad esempio 14112026.'}.get(request.args.get('error') or '','')")
+if _r144_core!=_r144_before:
+    shutil.copy2(CORE,BACK/'core_pre_canonical_date.py')
+    CORE.write_text(_r144_core,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+    print('[r144-date-canonical] migrated persistent direct-upload route',flush=True)
+else:
+    print('[r144-date-canonical] already canonical',flush=True)
 
 # If the older post-association hook is absent, add one. It calls the safe,
 # recent-only reconciler above, so Autopilot/Operatore immediately update truth.
@@ -655,6 +679,7 @@ try:
                 rules=[]
             print("[r144-profile-diag] status="+str(p.status_code)+" location="+str(p.headers.get("Location",""))+" body="+repr(ph[:2500])+" rules="+repr(rules),flush=True)
         checks["upload"]=u.status_code==200 and "Certificato medico" in uh and "Modulo Unico" in uh
+        checks["upload_date_native"]=("name='scadenza'" in uh and "inputmode='text'" in uh and "type='date' name='scadenza'" not in uh and "inputmode='numeric'" not in uh)
     checks["db"]=str(conn.execute("PRAGMA integrity_check").fetchone()[0]).lower()=="ok" and len(conn.execute("PRAGMA foreign_key_check").fetchall())==0
 finally:conn.close()
 print("[r144-selftest] "+repr(checks),flush=True)
