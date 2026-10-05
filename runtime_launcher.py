@@ -673,8 +673,7 @@ runpy.run_path("/opt/bodymind/release_ios_123_key_r152.py", run_name="__main__")
 # have completed during startup.
 _bodymind_operator_task_cleanup()
 if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
-        runpy.run_path("/opt/bodymind/release_upload_state_probe_r142.py", run_name="__main__")
-runpy.run_path("/opt/bodymind/release_stabilization_audit_r80.py", run_name="__main__")
+        runpy.run_path("/opt/bodymind/release_stabilization_audit_r80.py", run_name="__main__")
 else:
     print("[startup-convergence] R142 probe + R80 replay fixture skipped in normal boot; newer R118/R119/R144/R146 live gates remain active",flush=True)
 runpy.run_path("/opt/bodymind/release_mobile_delete_r85.py", run_name="__main__")
