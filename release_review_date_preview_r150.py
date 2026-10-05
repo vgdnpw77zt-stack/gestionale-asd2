@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
-import py_compile, shutil, sqlite3, subprocess, sys
+import py_compile, shutil, sqlite3, subprocess, sys, tempfile
 from pathlib import Path
 
 APP=Path('/data/top2_app')
@@ -9,19 +9,16 @@ DB=Path('/data/tenants/default/asd.db')
 BACK=Path('/data/release_backups/20261005_r150_date_consolidation')
 BACK.mkdir(parents=True,exist_ok=True)
 
-def _strip_marked_function(src, marker):
-    lines=src.splitlines(True)
-    idx=next((i for i,x in enumerate(lines) if marker in x),-1)
-    if idx<0:return src,False
-    j=idx+1;seen_def=False
-    while j<len(lines):
-        line=lines[j]
-        if line.startswith('def '):
-            seen_def=True;j+=1;continue
-        if seen_def and line.strip() and not line.startswith((' ','\t')):
-            break
-        j+=1
-    return ''.join(lines[:idx]+lines[j:]),True
+def _strip_marked_block(src, marker):
+    token='# '+marker
+    idx=src.find(token)
+    if idx<0:
+        idx=src.find(marker)
+        if idx<0:return src,False
+    start=src.rfind('\n',0,idx)+1
+    next_idx=src.find('\n# BODYMIND_',idx+len(marker))
+    end=len(src) if next_idx<0 else next_idx+1
+    return src[:start]+src[end:],True
 
 s=CORE.read_text(encoding='utf-8',errors='replace')
 before=s
@@ -74,15 +71,27 @@ s=s.replace(
 # Remove every legacy response-time date/keyboard rewrite. R151 is reinstalled
 # later as preview-close-only.
 removed=[]
-for marker in ('BODYMIND_R150_DATE_AUTOFMT_SAFE','BODYMIND_R152_IOS_123_KEY','BODYMIND_R151_KEYBOARD_PREVIEW_CLOSE'):
-    s,done=_strip_marked_function(s,marker)
+for marker in ('BODYMIND_R150_DATE_AUTOFMT_SAFE','BODYMIND_R152_IOS_123_KEY','BODYMIND_R151_KEYBOARD_PREVIEW_CLOSE','BODYMIND_R151_PREVIEW_CLOSE_ONLY'):
+    s,done=_strip_marked_block(s,marker)
     if done:removed.append(marker)
 
 if s!=before:
-    shutil.copy2(CORE,BACK/'core_before_consolidation.py')
-    CORE.write_text(s,encoding='utf-8')
+    fd,tmp_name=tempfile.mkstemp(prefix='bodymind_r150_candidate_',suffix='.py')
+    import os as _r150_os
+    _r150_os.close(fd)
+    tmp=Path(tmp_name)
+    try:
+        tmp.write_text(s,encoding='utf-8')
+        py_compile.compile(str(tmp),doraise=True)
+        shutil.copy2(CORE,BACK/'core_before_consolidation.py')
+        CORE.write_text(s,encoding='utf-8')
+        py_compile.compile(str(CORE),doraise=True)
+    finally:
+        try:tmp.unlink()
+        except Exception:pass
+else:
     py_compile.compile(str(CORE),doraise=True)
-print('[r150-consolidation] removed='+repr(removed),flush=True)
+print('[r150-consolidation] removed='+repr(removed)+' candidate_compile=ok',flush=True)
 
 qa=r'''
 import re,sqlite3,sys
@@ -105,7 +114,8 @@ checks={
  "upload_native_text":text_field(uh) and "type='date' name='scadenza'" not in uh and "inputmode='numeric'" not in uh,
  "compact_parser":_r147_parse_it_date("14112026")=="2026-11-14",
  "slash_parser":_r147_parse_it_date("14/11/2026")=="2026-11-14",
- "legacy_hooks_absent":all(x not in src for x in ("BODYMIND_R150_DATE_AUTOFMT_SAFE","BODYMIND_R152_IOS_123_KEY","BODYMIND_R151_KEYBOARD_PREVIEW_CLOSE")),
+ "legacy_hooks_absent":all(x not in src for x in ("BODYMIND_R150_DATE_AUTOFMT_SAFE","BODYMIND_R152_IOS_123_KEY","BODYMIND_R151_KEYBOARD_PREVIEW_CLOSE","BODYMIND_R151_PREVIEW_CLOSE_ONLY")),
+ "no_orphan_legacy_js":"function fmt(){" not in src and 'BODYMIND_R150_DATE_AUTOFMT' not in src,
 }
 conn=sqlite3.connect("/data/tenants/default/asd.db",timeout=20)
 try:
