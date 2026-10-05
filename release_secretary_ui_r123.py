@@ -1543,3 +1543,333 @@ else:
 
 # BODYMIND_R123_INLINE_PAYMENT_ENTRY_V6
 print('[r123-inline-payment-entry-v6] PASS real payment form moved into canonical module',flush=True)
+
+
+# BODYMIND_R123_PAYMENT_FORM_CANONICAL_V7
+# Replace the V5/V6 "move an existing form" behavior with one real canonical
+# registration/edit form. One module, two modes, same write path everywhere.
+_core_v7=CORE.read_text(encoding='utf-8',errors='replace')
+_changed_v7=False
+
+# Disable the old payment renderer if still registered.
+_old_v5="@app.after_request\ndef _bodymind_r123_canonical_payment_module_v5(resp):"
+if _old_v5 in _core_v7:
+    _core_v7=_core_v7.replace(_old_v5,_old_v5.replace("@app.after_request\n",""),1)
+    _changed_v7=True
+
+if 'BODYMIND_R123_PAYMENT_FORM_CANONICAL_V7' not in _core_v7:
+    _core_v7 += r'''
+
+# BODYMIND_R123_PAYMENT_FORM_CANONICAL_V7
+@app.route('/pagamenti/registra-unico',methods=['POST'])
+@login_required
+def _bodymind_payment_register_v7():
+    from datetime import date as _date, datetime as _dt
+    tid=parse_int(request.form.get('tesserato_id'),0)
+    tipo=(request.form.get('tipo') or '').strip().lower()
+    mese=parse_int(request.form.get('mese'),0)
+    anno=parse_int(request.form.get('anno'),0)
+    stagione=parse_int(request.form.get('stagione'),0)
+    data=(request.form.get('data') or '').strip()
+    metodo=(request.form.get('metodo_pagamento') or '').strip()
+    note=(request.form.get('note_pagamento') or '').strip()[:1000]
+    payment_id=parse_int(request.form.get('payment_id'),0)
+    try:
+        importo=float(str(request.form.get('importo') or '').replace(',','.'))
+    except Exception:
+        importo=-1
+
+    if tipo not in ('iscrizione','mensile') or tid<=0 or mese<1 or mese>12 or anno<2020 or anno>2100 or importo<0:
+        return redirect('/pagamenti?errore=dati_non_validi',302)
+    try:
+        _date.fromisoformat(data)
+    except Exception:
+        data=_date.today().isoformat()
+    if not metodo:
+        metodo='contanti'
+    if tipo=='iscrizione' and not stagione:
+        stagione=anno if mese>=7 else anno-1
+
+    c=db(); c.row_factory=sqlite3.Row
+    try:
+        athlete=c.execute("SELECT * FROM tesserati WHERE id=?",(tid,)).fetchone()
+        if not athlete:
+            return redirect('/pagamenti?errore=tesserato_non_trovato',302)
+
+        existing=None
+        if payment_id:
+            existing=c.execute("SELECT * FROM pagamenti WHERE id=? AND tesserato_id=?",(payment_id,tid)).fetchone()
+        if not existing:
+            if tipo=='mensile':
+                existing=c.execute(
+                    "SELECT * FROM pagamenti WHERE tesserato_id=? AND mese=? AND anno=? AND lower(coalesce(causale,'')) LIKE '%mensil%' ORDER BY id DESC LIMIT 1",
+                    (tid,mese,anno)
+                ).fetchone()
+            else:
+                existing=c.execute(
+                    "SELECT * FROM pagamenti WHERE tesserato_id=? AND anno IN (?,?) AND (lower(coalesce(causale,''))='iscrizione' OR lower(coalesce(causale,''))='tesseramento' OR lower(coalesce(causale,'')) LIKE '%iscrizion%') ORDER BY id DESC LIMIT 1",
+                    (tid,stagione,stagione+1)
+                ).fetchone()
+
+        now=_dt.now().isoformat(timespec='seconds')
+        if existing:
+            pid=int(existing['id'])
+            c.execute("""
+                UPDATE pagamenti
+                   SET mese=?,anno=?,importo=?,data=?,causale=?,
+                       metodo_pagamento=?,note_pagamento=?,
+                       stato='paid_manual',online_status='paid_manual',
+                       paid_at=COALESCE(paid_at,?),updated_at=?
+                 WHERE id=?
+            """,(mese,anno,importo,data,tipo,metodo,note,now,now,pid))
+        else:
+            cur=c.execute("""
+                INSERT INTO pagamenti(
+                    tesserato_id,mese,anno,importo,data,causale,
+                    online_status,stato,metodo_pagamento,note_pagamento,
+                    tenant_id,paid_at,created_at,updated_at
+                ) VALUES(?,?,?,?,?,?,'paid_manual','paid_manual',?,?, 'default',?,?,?)
+            """,(tid,mese,anno,importo,data,tipo,metodo,note,now,now,now))
+            pid=int(cur.lastrowid)
+
+        nome=((str(athlete['cognome'] or '')+' '+str(athlete['nome'] or '')).strip())
+        desc=('Quota iscrizione stagione '+str(stagione)+'/'+str(stagione+1)) if tipo=='iscrizione' else ('Quota mensile '+str(mese).zfill(2)+'/'+str(anno))
+        receipt=c.execute("SELECT * FROM ricevute WHERE pagamento_id=? ORDER BY id DESC LIMIT 1",(pid,)).fetchone()
+        if receipt:
+            rid=int(receipt['id'])
+            c.execute("""
+                UPDATE ricevute
+                   SET nome=?,descrizione=?,importo=?,data=?,metodo_pagamento=?,updated_at=?
+                 WHERE id=?
+            """,(nome,desc,importo,data,metodo,now,rid))
+        else:
+            prog=int(c.execute("SELECT COALESCE(MAX(numero_progressivo),0)+1 FROM ricevute WHERE anno_progressivo=?",(anno,)).fetchone()[0] or 1)
+            cur=c.execute("""
+                INSERT INTO ricevute(
+                    nome,descrizione,importo,data,pagamento_id,tenant_id,
+                    created_at,updated_at,metodo_pagamento,
+                    numero_progressivo,anno_progressivo,annullata
+                ) VALUES(?,?,?,?,?,'default',?,?,?,?,?,0)
+            """,(nome,desc,importo,data,pid,now,now,metodo,prog,anno))
+            rid=int(cur.lastrowid)
+        c.execute("UPDATE pagamenti SET ricevuta_id=? WHERE id=?",(rid,pid))
+
+        if tipo=='iscrizione':
+            c.execute("""
+                UPDATE tesserati
+                   SET iscrizione_pagata=1,tesseramento_pagato=1,updated_at=?
+                 WHERE id=?
+            """,(now,tid))
+            if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='smart_alerts'").fetchone():
+                c.execute("""
+                    UPDATE smart_alerts
+                       SET status='closed',closed_at=COALESCE(closed_at,?),updated_at=?
+                     WHERE tesserato_id=? AND tipo='pagamento_mancante' AND status='open'
+                """,(now,now,tid))
+        else:
+            if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='quote_mensili'").fetchone():
+                q=c.execute("SELECT id FROM quote_mensili WHERE tesserato_id=? AND mese=? AND anno=? ORDER BY id DESC LIMIT 1",(tid,mese,anno)).fetchone()
+                if q:
+                    c.execute("""
+                        UPDATE quote_mensili
+                           SET importo_base=?,importo_dovuto=?,stato='pagato',
+                               note=CASE WHEN ?<>'' THEN ? ELSE note END,
+                               updated_at=?
+                         WHERE id=?
+                    """,(importo,importo,note,note,now,int(q['id'])))
+                else:
+                    c.execute("""
+                        INSERT INTO quote_mensili(
+                            tesserato_id,mese,anno,tariffa_codice,
+                            importo_base,sconto,importo_dovuto,stato,note,created_at,updated_at
+                        ) VALUES(?,?,?,'standard',?,0,?,'pagato',?,?,?)
+                    """,(tid,mese,anno,importo,importo,note,now,now))
+            if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='smart_alerts'").fetchone():
+                token=str(mese).zfill(2)+'/'+str(anno)
+                c.execute("""
+                    UPDATE smart_alerts
+                       SET status='closed',closed_at=COALESCE(closed_at,?),updated_at=?
+                     WHERE tesserato_id=? AND tipo='quota_mese_mancante' AND status='open'
+                       AND (message LIKE ? OR title LIKE ?)
+                """,(now,now,tid,'%'+token+'%','%'+token+'%'))
+
+        c.commit()
+    except Exception as exc:
+        try:c.rollback()
+        except Exception:pass
+        print('[payment-v7-save-warning] '+repr(exc),flush=True)
+        return redirect('/pagamenti?errore=salvataggio',302)
+    finally:
+        try:c.close()
+        except Exception:pass
+
+    target='/pagamenti?vista='+('iscrizioni' if tipo=='iscrizione' else 'mensili')+'&mese='+str(mese)+'&anno='+str(anno)+'&tesserato_id='+str(tid)+'&salvato=1'
+    if tipo=='iscrizione':
+        target+='&stagione='+str(stagione)
+    return redirect(target,303)
+
+
+@app.after_request
+def _bodymind_payment_module_v7(resp):
+    try:
+        if request.method!='GET' or request.path!='/pagamenti' or int(getattr(resp,'status_code',200) or 200)!=200:
+            return resp
+        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
+            return resp
+        html=resp.get_data(as_text=True)
+
+        from datetime import date as _date
+        today=_date.today()
+        mese=parse_int(request.args.get('mese',today.month),today.month)
+        anno=parse_int(request.args.get('anno',today.year),today.year)
+        if mese<1 or mese>12:mese=today.month
+        if anno<2020 or anno>2100:anno=today.year
+        stagione=parse_int(request.args.get('stagione',anno if mese>=7 else anno-1),anno if mese>=7 else anno-1)
+        vista=(request.args.get('vista') or 'iscrizioni').strip().lower()
+        if vista not in ('iscrizioni','mensili'):vista='iscrizioni'
+        selected_tid=parse_int(request.args.get('tesserato_id'),0)
+        action=(request.args.get('azione') or '').strip().lower()
+        action_tipo=(request.args.get('tipo') or '').strip().lower()
+        if action_tipo not in ('iscrizione','mensile'):
+            action_tipo='iscrizione' if vista=='iscrizioni' else 'mensile'
+
+        c=db(); c.row_factory=sqlite3.Row
+        try:
+            athletes=[dict(x) for x in c.execute("SELECT * FROM tesserati WHERE COALESCE(attivo,1)=1 ORDER BY TRIM(cognome) COLLATE NOCASE,TRIM(nome) COLLATE NOCASE").fetchall()]
+            payments=[dict(x) for x in c.execute("SELECT * FROM pagamenti ORDER BY id DESC").fetchall()]
+            qrows=[dict(x) for x in c.execute("SELECT * FROM quote_mensili WHERE mese=? AND anno=? ORDER BY id DESC",(mese,anno)).fetchall()] if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='quote_mensili'").fetchone() else []
+        finally:
+            try:c.close()
+            except Exception:pass
+
+        def _paid(p):
+            st=(str(p.get('stato') or '')+' '+str(p.get('online_status') or '')).lower()
+            if any(x in st for x in ('pending','attesa','cancel','annull','failed','fallit','refunded','rimbors')):return False
+            if any(x in st for x in ('paid','pagat','saldat','complet','incassat')):return True
+            try:amount=float(p.get('importo') or 0)
+            except Exception:amount=0
+            return bool(p.get('data') or p.get('paid_at')) and amount>0
+
+        enroll={}; monthly={}
+        for p in payments:
+            if not _paid(p):continue
+            tid=int(p.get('tesserato_id') or 0)
+            cause=str(p.get('causale') or '').lower()
+            pm=int(p.get('mese') or 0); py=int(p.get('anno') or 0)
+            if (cause in ('iscrizione','tesseramento') or 'iscrizion' in cause) and py in (stagione,stagione+1) and tid not in enroll:
+                enroll[tid]=p
+            if ('mensil' in cause or cause in ('quota','quota_mensile')) and pm==mese and py==anno and tid not in monthly:
+                monthly[tid]=p
+
+        qpaid=set()
+        for q in qrows:
+            st=str(q.get('stato') or '').lower()
+            if any(x in st for x in ('pagat','saldat','paid','incassat','complet')):
+                qpaid.add(int(q.get('tesserato_id') or 0))
+
+        months=['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
+        def _name(a):
+            return ((str(a.get('cognome') or '')+' '+str(a.get('nome') or '')).strip()) or ('Tesserata #'+str(int(a.get('id') or 0)))
+        def _money(v):
+            try:return ('€ %.2f' % float(v or 0)).replace('.',',')
+            except Exception:return ''
+
+        rows=[]
+        due_count=0
+        for a in athletes:
+            tid=int(a.get('id') or 0)
+            ep=enroll.get(tid)
+            legacy=(bool(int(a.get('iscrizione_pagata') or 0)) if 'iscrizione_pagata' in a else False) or (bool(int(a.get('tesseramento_pagato') or 0)) if 'tesseramento_pagato' in a else False)
+            eok=bool(ep or legacy)
+            mp=monthly.get(tid); mok=bool(mp or tid in qpaid)
+            focus_ok=eok if vista=='iscrizioni' else mok
+            if not focus_ok:due_count+=1
+            eh=f"/pagamenti?vista=iscrizioni&stagione={stagione}&mese={mese}&anno={anno}&tesserato_id={tid}&azione=registra&tipo=iscrizione"
+            mh=f"/pagamenti?vista=mensili&mese={mese}&anno={anno}&tesserato_id={tid}&azione=registra&tipo=mensile"
+            rows.append((0 if not focus_ok else 1,
+                "<div class='bmpv7-row "+("due" if not focus_ok else "paid")+"'>"
+                +"<div class='bmpv7-person'><b>"+e(_name(a))+"</b><small>Iscrizione: "+("PAGATA" if eok else "da pagare")+" · "+months[mese]+": "+("PAGATO" if mok else "da pagare")+"</small></div>"
+                +"<div class='bmpv7-actions'><a href='"+eh+"'>"+("Modifica iscrizione" if eok else "Registra iscrizione")+"</a><a href='"+mh+"'>"+("Modifica mensile "+months[mese] if mok else "Registra mensile "+months[mese])+"</a></div>"
+                +"</div>"
+            ))
+        rows.sort(key=lambda x:x[0])
+
+        form_html=''
+        if selected_tid and action=='registra':
+            athlete=next((a for a in athletes if int(a.get('id') or 0)==selected_tid),None)
+            if athlete:
+                existing=enroll.get(selected_tid) if action_tipo=='iscrizione' else monthly.get(selected_tid)
+                pid=int(existing.get('id') or 0) if existing else 0
+                amount=(str(existing.get('importo') or '') if existing else '')
+                paydate=(str(existing.get('data') or today.isoformat()) if existing else today.isoformat())
+                method=(str(existing.get('metodo_pagamento') or 'contanti') if existing else 'contanti')
+                note=(str(existing.get('note_pagamento') or '') if existing else '')
+                title=('ISCRIZIONE '+str(stagione)+'/'+str(stagione+1)) if action_tipo=='iscrizione' else ('MENSILE '+months[mese].upper()+' '+str(anno))
+                form_html=f"""<form class='bmpv7-form' method='post' action='/pagamenti/registra-unico'>
+                  <input type='hidden' name='csrf_token' value='{e(csrf_token())}'>
+                  <input type='hidden' name='tesserato_id' value='{selected_tid}'>
+                  <input type='hidden' name='tipo' value='{e(action_tipo)}'>
+                  <input type='hidden' name='payment_id' value='{pid}'>
+                  <input type='hidden' name='stagione' value='{stagione}'>
+                  <div class='bmpv7-formhead'><div><span>{e(title)}</span><h2>{e(_name(athlete))}</h2></div><a href='/pagamenti?vista={vista}&mese={mese}&anno={anno}&stagione={stagione}'>Chiudi</a></div>
+                  <div class='bmpv7-fields'>
+                    <label>Importo €<input type='number' name='importo' step='0.01' min='0' required value='{e(amount)}' placeholder='es. 50,00'></label>
+                    <label>Data<input type='date' name='data' required value='{e(paydate)}'></label>
+                    <label>Mese<select name='mese'>{''.join("<option value='"+str(i)+"'"+(" selected" if i==mese else "")+">"+months[i]+"</option>" for i in range(1,13))}</select></label>
+                    <label>Anno<input type='number' name='anno' min='2020' max='2100' required value='{anno}'></label>
+                    <label>Metodo<select name='metodo_pagamento'>{''.join("<option"+(" selected" if method==x else "")+">"+x+"</option>" for x in ('contanti','bonifico','carta/SumUp','altro'))}</select></label>
+                    <label class='wide'>Note / eccezione<textarea name='note_pagamento' rows='2' placeholder='Sconto, importo diverso, accordo particolare…'>{e(note)}</textarea></label>
+                  </div>
+                  <button class='bmpv7-save' type='submit'>{'Aggiorna pagamento' if pid else 'Salva pagamento'}</button>
+                </form>"""
+
+        saved="<div class='bmpv7-saved'>Pagamento salvato. Dashboard, Task e Centro operativo leggono ora lo stesso stato.</div>" if request.args.get('salvato')=='1' else ""
+        error="<div class='bmpv7-error'>Il pagamento non è stato salvato. Controlla i dati e riprova.</div>" if request.args.get('errore') else ""
+
+        selector=f"""<form class='bmpv7-period' method='get' action='/pagamenti'>
+          <input type='hidden' name='vista' value='{e(vista)}'>
+          <label>Mese<select name='mese'>{''.join("<option value='"+str(i)+"'"+(" selected" if i==mese else "")+">"+months[i]+"</option>" for i in range(1,13))}</select></label>
+          <label>Anno<input type='number' name='anno' min='2020' max='2100' value='{anno}'></label>
+          <input type='hidden' name='stagione' value='{stagione}'>
+          <button type='submit'>Mostra</button>
+        </form>"""
+
+        surface=f"""<!-- BODYMIND_R123_PAYMENT_FORM_CANONICAL_V7 -->
+        <section class='bmpv7'>
+          <div class='bmpv7-head'><div><span>PAGAMENTI BODYMIND · MODULO UNICO</span><h1>{'ISCRIZIONE' if vista=='iscrizioni' else 'MENSILE '+months[mese].upper()}</h1><p>Prima chi deve pagare. Accanto a ogni atleta puoi registrare sia iscrizione sia mensile.</p></div><strong>{due_count} da pagare</strong></div>
+          <nav class='bmpv7-tabs'><a class='{'on' if vista=='iscrizioni' else ''}' href='/pagamenti?vista=iscrizioni&stagione={stagione}&mese={mese}&anno={anno}'>ISCRIZIONE</a><a class='{'on' if vista=='mensili' else ''}' href='/pagamenti?vista=mensili&mese={mese}&anno={anno}'>MENSILE</a></nav>
+          {selector}{saved}{error}{form_html}
+          <div class='bmpv7-list'>{''.join(x[1] for x in rows)}</div>
+        </section>
+        <style id='bodymind-payment-v7'>
+        .r123-pay-box,.r125-board,.bmps,.bmpv5,.bmpv6-immediate,.bmps3-explain{{display:none!important}}
+        .bmpv7{{margin:14px 0 22px;padding:18px;border-radius:22px;background:#081626;border:1px solid rgba(96,165,250,.24);color:#f8fafc}}.bmpv7-head{{display:flex;justify-content:space-between;gap:14px;align-items:center}}.bmpv7-head span{{font-size:10px;letter-spacing:.14em;font-weight:950;color:#7dd3fc}}.bmpv7-head h1{{margin:4px 0;font-size:27px}}.bmpv7-head p{{margin:0;color:#b7c6d9}}.bmpv7-head>strong{{font-size:22px}}
+        .bmpv7-tabs{{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}}.bmpv7-tabs a{{padding:14px;border-radius:13px;background:#10243a;color:#cbd5e1!important;text-decoration:none;text-align:center;font-weight:950}}.bmpv7-tabs a.on{{background:#2563eb;color:white!important}}
+        .bmpv7-period{{display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin-bottom:12px;padding:10px;border-radius:13px;background:#0c2035}}.bmpv7-period label{{display:grid;gap:4px;font-size:11px;font-weight:900}}.bmpv7-period input,.bmpv7-period select,.bmpv7-period button{{min-height:42px;border-radius:9px;border:1px solid rgba(148,163,184,.25);background:#06111f;color:#fff;padding:8px 10px}}.bmpv7-period button{{background:#2563eb;font-weight:900}}
+        .bmpv7-form{{margin:12px 0 16px;padding:15px;border-radius:16px;background:#0d2138;border:2px solid rgba(96,165,250,.48)}}.bmpv7-formhead{{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:12px}}.bmpv7-formhead span{{font-size:10px;font-weight:950;color:#7dd3fc}}.bmpv7-formhead h2{{margin:3px 0;font-size:20px}}.bmpv7-formhead a{{color:#bfdbfe!important}}.bmpv7-fields{{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px}}.bmpv7-fields label{{display:grid;gap:5px;font-size:11px;font-weight:900;color:#cbd5e1}}.bmpv7-fields input,.bmpv7-fields select,.bmpv7-fields textarea{{width:100%;border-radius:9px;border:1px solid rgba(148,163,184,.25);background:#06111f;color:#fff;padding:9px;font-size:15px}}.bmpv7-fields .wide{{grid-column:1/-1}}.bmpv7-save{{margin-top:10px;min-height:45px;padding:10px 18px;border:0;border-radius:10px;background:#16a34a;color:#fff;font-weight:950}}
+        .bmpv7-list{{display:grid;gap:8px}}.bmpv7-row{{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 14px;align-items:center;padding:12px 14px;border-radius:14px}}.bmpv7-row.due{{background:rgba(127,29,29,.66);border:1px solid rgba(248,113,113,.28)}}.bmpv7-row.paid{{background:rgba(20,83,45,.55);border:1px solid rgba(74,222,128,.24)}}.bmpv7-person{{display:grid;gap:3px}}.bmpv7-person small{{color:#cbd5e1}}.bmpv7-actions{{display:flex;gap:7px;flex-wrap:wrap}}.bmpv7-actions a{{padding:9px 11px;border-radius:9px;background:#2563eb;color:#fff!important;text-decoration:none;font-size:11px;font-weight:950}}.bmpv7-actions a+ a{{background:#0f766e}}.bmpv7-saved,.bmpv7-error{{margin:10px 0;padding:10px 12px;border-radius:10px;font-weight:850}}.bmpv7-saved{{background:#14532d;color:#dcfce7}}.bmpv7-error{{background:#7f1d1d;color:#fee2e2}}
+        @media(max-width:780px){{.bmpv7{{padding:12px}}.bmpv7-head{{align-items:flex-start}}.bmpv7-head h1{{font-size:21px}}.bmpv7-fields{{grid-template-columns:1fr 1fr}}.bmpv7-fields .wide{{grid-column:1/-1}}.bmpv7-row{{grid-template-columns:1fr}}.bmpv7-actions{{display:grid;grid-template-columns:1fr}}}}
+        </style>
+        <script id='bodymind-payment-v7-clean'>(function(){{
+          document.querySelectorAll('form').forEach(function(f){{
+            if(!f.closest('.bmpv7') && !f.closest('header') && !f.closest('nav')) f.style.display='none';
+          }});
+        }})();</script>"""
+
+        import re as _re
+        m=_re.search(r'<main\b[^>]*>',html,_re.I)
+        if m:html=html[:m.end()]+surface+html[m.end():]
+        else:
+            b=_re.search(r'<body\b[^>]*>',html,_re.I)
+            html=html[:b.end()]+surface+html[b.end():] if b else surface+html
+        resp.set_data(html)
+    except Exception as exc:
+        print('[payment-v7-render-warning] '+repr(exc),flush=True)
+    return resp
+'''
+    _changed_v7=True
+
+if _changed_v7:
+    CORE.write_text(_core_v7,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+print('[r123-payment-v7] PASS real editable form no-loop same-write-path',flush=True)
