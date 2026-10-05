@@ -426,3 +426,234 @@ try:
     print('[r110-payment-task-truth-v2] canonical_payments='+str(_pc)+' enrollment_flags='+str(_flags)+' paid_monthly_quotes='+str(_qpaid)+' stale_alerts_closed='+str(len(_close)),flush=True)
 finally:
     _conn.close()
+
+
+# BODYMIND_R110_CANONICAL_PAYMENT_FLOW_V3
+# One payment truth for Dashboard / Centro operativo / Tasks / Tesserati / Pagamenti.
+# This appends one canonical helper to core.py and makes old GET entry points converge
+# on /pagamenti without altering historical payment rows.
+_core_v3=CORE.read_text(encoding='utf-8',errors='replace')
+if 'BODYMIND_R110_CANONICAL_PAYMENT_FLOW_V3' not in _core_v3:
+    _core_v3 += r'''
+
+# BODYMIND_R110_CANONICAL_PAYMENT_FLOW_V3
+def bodymind_payment_truth(conn, tesserato_id=None, mese=None, anno=None, stagione=None):
+    from datetime import date as _bm_date
+    today=_bm_date.today()
+    mese=int(mese or today.month)
+    anno=int(anno or today.year)
+    stagione=int(stagione if stagione is not None else (anno if mese>=7 else anno-1))
+
+    def _table_local(name):
+        return bool(conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(name,)).fetchone())
+
+    def _paid_row(p):
+        try:get=p.get
+        except Exception:get=lambda k,d=None:p[k] if k in p.keys() else d
+        st=(str(get('stato','') or '')+' '+str(get('online_status','') or '')).lower()
+        if any(x in st for x in ('pending','attesa','cancel','annull','failed','fallit','refunded','rimbors')):
+            return False
+        if any(x in st for x in ('paid','pagat','saldat','complet','incassat')):
+            return True
+        try:amount=float(get('importo',0) or 0)
+        except Exception:amount=0
+        return bool(get('data','') or get('paid_at','')) and amount>0
+
+    active=[]
+    if _table_local('tesserati'):
+        sql="SELECT * FROM tesserati WHERE COALESCE(attivo,1)=1"
+        args=()
+        if tesserato_id:
+            sql+=" AND id=?"; args=(int(tesserato_id),)
+        sql+=" ORDER BY cognome,nome"
+        active=conn.execute(sql,args).fetchall()
+
+    payments=[]
+    if _table_local('pagamenti'):
+        sql="SELECT * FROM pagamenti"
+        args=()
+        if tesserato_id:
+            sql+=" WHERE tesserato_id=?"; args=(int(tesserato_id),)
+        sql+=" ORDER BY id DESC"
+        payments=conn.execute(sql,args).fetchall()
+
+    by_tid={}
+    for a in active:
+        tid=int(a['id'])
+        by_tid[tid]={
+            'tesserato_id':tid,
+            'nome':str(a['nome'] or '') if 'nome' in a.keys() else '',
+            'cognome':str(a['cognome'] or '') if 'cognome' in a.keys() else '',
+            'iscrizione_pagata':False,
+            'mensile_pagato':False,
+            'iscrizione_payment_id':None,
+            'mensile_payment_id':None,
+        }
+        # Preserve historical explicit enrollment flags as valid truth.
+        if 'iscrizione_pagata' in a.keys() and int(a['iscrizione_pagata'] or 0)==1:
+            by_tid[tid]['iscrizione_pagata']=True
+        if 'tesseramento_pagato' in a.keys() and int(a['tesseramento_pagato'] or 0)==1:
+            by_tid[tid]['iscrizione_pagata']=True
+
+    for p in payments:
+        if not _paid_row(p):
+            continue
+        tid=int(p['tesserato_id'] or 0) if 'tesserato_id' in p.keys() else 0
+        if tid not in by_tid:
+            continue
+        cause=str(p['causale'] or '').strip().lower() if 'causale' in p.keys() else ''
+        pm=int(p['mese'] or 0) if 'mese' in p.keys() else 0
+        py=int(p['anno'] or 0) if 'anno' in p.keys() else 0
+        if (cause in ('iscrizione','tesseramento') or 'iscrizion' in cause) and py in (stagione,stagione+1):
+            if not by_tid[tid]['iscrizione_pagata']:
+                by_tid[tid]['iscrizione_pagata']=True
+                by_tid[tid]['iscrizione_payment_id']=int(p['id']) if 'id' in p.keys() else None
+        if (cause=='mensile' or 'mensil' in cause or cause in ('quota','quota_mensile')) and pm==mese and py==anno:
+            if not by_tid[tid]['mensile_pagato']:
+                by_tid[tid]['mensile_pagato']=True
+                by_tid[tid]['mensile_payment_id']=int(p['id']) if 'id' in p.keys() else None
+
+    # Legacy quote_mensili can prove that a monthly was already marked paid,
+    # but never creates a second cash receipt.
+    if _table_local('quote_mensili'):
+        qrows=conn.execute("SELECT * FROM quote_mensili WHERE mese=? AND anno=?",(mese,anno)).fetchall()
+        for q in qrows:
+            tid=int(q['tesserato_id'] or 0) if 'tesserato_id' in q.keys() else 0
+            if tid not in by_tid: continue
+            st=str(q['stato'] or '').strip().lower() if 'stato' in q.keys() else ''
+            if any(x in st for x in ('pagat','saldat','paid','incassat','complet')):
+                by_tid[tid]['mensile_pagato']=True
+
+    rows=list(by_tid.values())
+    return {
+        'mese':mese,'anno':anno,'stagione':stagione,
+        'totale':len(rows),
+        'iscrizioni_pagate':sum(1 for x in rows if x['iscrizione_pagata']),
+        'iscrizioni_mancanti':sum(1 for x in rows if not x['iscrizione_pagata']),
+        'mensili_pagati':sum(1 for x in rows if x['mensile_pagato']),
+        'mensili_mancanti':sum(1 for x in rows if not x['mensile_pagato']),
+        'rows':rows,
+    }
+
+# Last task wrapper: all payment task decisions use bodymind_payment_truth().
+_bodymind_payment_flow_v3_tasks=get_operational_tasks
+def get_operational_tasks(*args, **kwargs):
+    items=_bodymind_payment_flow_v3_tasks(*args, **kwargs) or []
+    try:
+        from datetime import date as _bm_date
+        today=_bm_date.today()
+        conn=db(); conn.row_factory=sqlite3.Row
+        truth=bodymind_payment_truth(conn,mese=today.month,anno=today.year)
+        state={int(x['tesserato_id']):x for x in truth['rows']}
+        out=[]; seen=set()
+        for item in items:
+            try:get=item.get
+            except Exception:get=lambda k,d=None:item[k] if k in item.keys() else d
+            typ=str(get('tipo','') or get('type','') or get('category','') or get('categoria','')).strip().lower()
+            tid=int(get('tesserato_id',0) or 0)
+            st=state.get(tid,{})
+            semantic=None
+            if typ=='pagamento_mancante':
+                semantic='iscrizione'
+                if st.get('iscrizione_pagata'): continue
+            elif typ=='quota_mese_mancante':
+                semantic='mensile'
+                if st.get('mensile_pagato'): continue
+            if semantic:
+                key=(tid,semantic)
+                if key in seen: continue
+                seen.add(key)
+                # Normalize action to the one canonical module.
+                try:
+                    item=dict(item)
+                    item['href']=('/pagamenti?vista=iscrizioni&tesserato_id='+str(tid)) if semantic=='iscrizione' else ('/pagamenti?vista=mensili&mese='+str(today.month)+'&anno='+str(today.year)+'&tesserato_id='+str(tid))
+                    item['url']=item['href']
+                    item['action_url']=item['href']
+                except Exception:
+                    pass
+            out.append(item)
+        return out
+    except Exception:
+        return items
+
+@app.before_request
+def _bodymind_payment_entry_convergence_v3():
+    try:
+        # Old secretary entry points become aliases of the canonical payment module.
+        if request.method=='GET' and request.path in ('/quote-incassi','/quote-incassi/','/pagamenti-pro','/pagamenti-automatici'):
+            from flask import redirect
+            qs=request.query_string.decode('utf-8','ignore')
+            target='/pagamenti'+(('?'+qs) if qs else '')
+            return redirect(target,302)
+    except Exception:
+        return None
+
+@app.after_request
+def _bodymind_dashboard_payment_truth_v3(resp):
+    try:
+        if request.method!='GET' or request.path!='/dashboard' or int(getattr(resp,'status_code',200) or 200)!=200:
+            return resp
+        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
+            return resp
+        html=resp.get_data(as_text=True)
+        if 'BODYMIND_PAYMENT_TRUTH_DASHBOARD_V3' in html:
+            return resp
+        from datetime import date as _bm_date
+        today=_bm_date.today()
+        c=db(); c.row_factory=sqlite3.Row
+        try:
+            t=bodymind_payment_truth(c,mese=today.month,anno=today.year)
+        finally:
+            try:c.close()
+            except Exception:pass
+        months=['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
+        panel=f"""<!-- BODYMIND_PAYMENT_TRUTH_DASHBOARD_V3 -->
+        <section class='bmpay-unified'>
+          <div class='bmpay-title'><div><span>PAGAMENTI · UNICA VERITÀ</span><h2>Iscrizioni e mensile</h2><p>Gli stessi stati valgono in Dashboard, Centro operativo, Task, Tesserati e Pagamenti.</p></div></div>
+          <div class='bmpay-grid'>
+            <a href='/pagamenti?vista=iscrizioni&stagione={t["stagione"]}'><small>ISCRIZIONI {t["stagione"]}/{t["stagione"]+1}</small><strong>{t["iscrizioni_pagate"]}/{t["totale"]}</strong><span>{t["iscrizioni_mancanti"]} da completare</span></a>
+            <a href='/pagamenti?vista=mensili&mese={t["mese"]}&anno={t["anno"]}'><small>MENSILE · {months[t["mese"]]} {t["anno"]}</small><strong>{t["mensili_pagati"]}/{t["totale"]}</strong><span>{t["mensili_mancanti"]} da completare</span></a>
+            <a href='/tesserati'><small>TESSERATI</small><strong>{t["totale"]}</strong><span>Apri le schede individuali</span></a>
+          </div>
+        </section>
+        <style id='bodymind-payment-truth-dashboard-v3'>
+        .bmpay-unified{{margin:14px 0 18px;padding:18px;border-radius:20px;background:linear-gradient(135deg,#0a1728,#102c46);border:1px solid rgba(96,165,250,.24);color:#f8fafc}}
+        .bmpay-title span{{font-size:10px;font-weight:950;letter-spacing:.14em;color:#7dd3fc}}.bmpay-title h2{{margin:4px 0;font-size:25px}}.bmpay-title p{{margin:0;color:#b7c6d9}}
+        .bmpay-grid{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:13px}}.bmpay-grid a{{display:grid;gap:4px;padding:14px;border-radius:15px;background:#0b1d31;border:1px solid rgba(148,163,184,.16);color:white!important;text-decoration:none}}.bmpay-grid small{{font-size:10px;font-weight:900;color:#93c5fd}}.bmpay-grid strong{{font-size:24px}}.bmpay-grid span{{font-size:11px;color:#cbd5e1}}
+        @media(max-width:760px){{.bmpay-grid{{grid-template-columns:1fr}}}}
+        </style>
+        <script id='bodymind-payment-entry-links-v3'>(function(){{
+          document.querySelectorAll('a[href]').forEach(function(a){{
+            var h=a.getAttribute('href')||'';
+            if(h.indexOf('/quote-incassi')===0 || h.indexOf('/pagamenti-pro')===0 || h.indexOf('/pagamenti-automatici')===0){{
+              a.setAttribute('href','/pagamenti');
+            }}
+          }});
+        }})();</script>"""
+        # Put the one payment module near the top of the dashboard, after <main> if possible.
+        m=re.search(r'<main\b[^>]*>',html,re.I)
+        if m:
+            html=html[:m.end()]+panel+html[m.end():]
+        else:
+            html=html.replace('<body>','<body>'+panel,1) if '<body>' in html else panel+html
+        resp.set_data(html)
+    except Exception as exc:
+        print('[payment-dashboard-v3-warning] '+repr(exc),flush=True)
+    return resp
+'''
+    CORE.write_text(_core_v3,encoding='utf-8')
+    compile_file(CORE)
+    print('[r110-payment-flow-v3] PASS one-truth helper task-normalization dashboard-module entry-convergence',flush=True)
+else:
+    print('[r110-payment-flow-v3] already installed',flush=True)
+
+# Read-only integrity gate for the unified payment flow.
+_c=sqlite3.connect(str(DB),timeout=20); _c.row_factory=sqlite3.Row
+try:
+    _integrity=str(_c.execute('PRAGMA integrity_check').fetchone()[0])
+    _fk=len(_c.execute('PRAGMA foreign_key_check').fetchall())
+    _pay_count=int(_c.execute('SELECT COUNT(*) FROM pagamenti').fetchone()[0]) if _c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='pagamenti'").fetchone() else 0
+finally:_c.close()
+if _integrity.lower()!='ok' or _fk:
+    raise RuntimeError('R110 payment-flow-v3 DB guard failed')
+print('[r110-payment-flow-v3-selftest] PASS pagamenti='+str(_pay_count)+' integrity='+_integrity+' fk='+str(_fk),flush=True)
