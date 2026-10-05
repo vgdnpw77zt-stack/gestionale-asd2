@@ -1082,26 +1082,15 @@ def _bodymind_r123_payment_split_v2(resp):
             <a class='{'active' if vista=='mensili' else ''}' href='/pagamenti?vista=mensili{query}'>Mensili</a>
             <a class='{'active' if vista=='tutti' else ''}' href='/pagamenti?vista=tutti{query}'>Tutti</a>
           </nav>
-          <form class='bmps-period' method='get' action='/pagamenti'>
-            <input type='hidden' name='vista' value='{e(vista)}'>
-            <label><span>{'Mese iscrizione' if vista=='iscrizioni' else 'Mese mensile' if vista=='mensili' else 'Mese'}</span>
-              <select name='mese'>
-                {''.join("<option value='"+str(i)+"'"+(" selected" if i==mese else "")+">"+['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'][i]+"</option>" for i in range(1,13))}
-              </select>
-            </label>
-            <label><span>Anno</span><input name='anno' type='number' min='2020' max='2100' value='{anno}'></label>
-            <button type='submit'>Mostra periodo</button>
-          </form>
-          <div class='bmps-help'>{("L’iscrizione è una quota una tantum della stagione: di solito Agosto/Settembre, ma puoi scegliere qualsiasi mese." if vista=='iscrizioni' else "Il mensile è una quota ricorrente: seleziona ogni mese per vedere chi ha pagato e chi manca." if vista=='mensili' else "Storico completo degli incassi già registrati.")}</div>
           <div class='bmps-list'>{cards}</div>
         </section>
         <style id='bodymind-payment-split-v2'>
         .r123-pay-box,.r125-board{{display:none!important}}
         .bmps{{margin:12px 0 18px;padding:14px;border-radius:20px;background:#091524;border:1px solid rgba(148,163,184,.18);color:#f8fafc}}
         .bmps-head{{display:flex;justify-content:space-between;align-items:center;gap:10px}}.bmps-head span{{font-size:10px;letter-spacing:.13em;font-weight:950;color:#7dd3fc}}.bmps-head h2{{margin:3px 0 0;font-size:22px}}.bmps-count{{font-size:22px;font-weight:950}}
-        .bmps-tabs{{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:13px 0}}.bmps-tabs a{{padding:11px 7px;border-radius:12px;background:#12243a;color:#cbd5e1!important;text-align:center;text-decoration:none;font-weight:900}}.bmps-tabs a.active{{background:#2563eb;color:white!important}}.bmps-period{{display:grid;grid-template-columns:minmax(180px,1fr) 130px auto;gap:9px;align-items:end;margin:0 0 9px;padding:10px;border-radius:14px;background:#0d1d30}}.bmps-period label{{display:grid;gap:5px}}.bmps-period label span{{font-size:11px;font-weight:900;color:#94a3b8}}.bmps-period select,.bmps-period input{{min-height:42px;border-radius:10px;border:1px solid rgba(148,163,184,.24);background:#07111f;color:#f8fafc;padding:8px 10px;font-size:15px}}.bmps-period button{{min-height:42px;border:0;border-radius:10px;background:#2563eb;color:#fff;font-weight:900;padding:8px 14px}}.bmps-help{{font-size:12px;line-height:1.4;color:#cbd5e1;margin:0 2px 10px}}
+        .bmps-tabs{{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:13px 0}}.bmps-tabs a{{padding:11px 7px;border-radius:12px;background:#12243a;color:#cbd5e1!important;text-align:center;text-decoration:none;font-weight:900}}.bmps-tabs a.active{{background:#2563eb;color:white!important}}
         .bmps-list{{display:grid;gap:8px}}.bmps-card{{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:12px 13px;border-radius:15px;text-decoration:none!important;color:white!important;border:1px solid transparent}}.bmps-card>div,.bmps-card>span{{display:grid;gap:3px}}.bmps-card>span{{justify-items:end;text-align:right}}.bmps-card small{{font-size:11px;color:#cbd5e1}}.bmps-card strong{{font-size:11px;letter-spacing:.05em}}.bmps-card.paid{{background:rgba(20,83,45,.78);border-color:rgba(74,222,128,.38)}}.bmps-card.due{{background:rgba(127,29,29,.72);border-color:rgba(248,113,113,.36)}}.bmps-history{{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:11px;border-radius:13px;background:#102238}}.bmps-history small{{grid-column:1/-1;color:#94a3b8}}.bmps-empty{{padding:14px;color:#cbd5e1}}
-        @media(max-width:600px){{.bmps{{padding:11px}}.bmps-head h2{{font-size:19px}}.bmps-period{{grid-template-columns:1fr 110px}}.bmps-period button{{grid-column:1/-1}}.bmps-card{{grid-template-columns:1fr}}.bmps-card>span{{justify-items:start;text-align:left}}.bmps-history{{grid-template-columns:1fr auto}}}}
+        @media(max-width:600px){{.bmps{{padding:11px}}.bmps-head h2{{font-size:19px}}.bmps-card{{grid-template-columns:1fr}}.bmps-card>span{{justify-items:start;text-align:left}}.bmps-history{{grid-template-columns:1fr auto}}}}
         </style>"""
         marker="BODYMIND_R123_PAYMENT_MOBILE"
         idx=html.find(marker)
@@ -1123,5 +1112,122 @@ def _bodymind_r123_payment_split_v2(resp):
 else:
     print('[r123-payment-split-v2] already installed',flush=True)
 
-# BODYMIND_R123_PAYMENT_PERIOD_CONTROLS_V3
-print('[r123-payment-period-controls-v3] PASS desktop/mobile period selectors',flush=True)
+
+# BODYMIND_R123_PAYMENT_SPLIT_V3
+# Desktop-first payment semantics: enrollment is annual/seasonal; monthly is
+# strictly one calendar month at a time. Existing rows are preserved.
+_core_split_v3=CORE.read_text(encoding='utf-8',errors='replace')
+if 'BODYMIND_R123_PAYMENT_SPLIT_V3' not in _core_split_v3:
+    _core_split_v3 += r'''
+
+# BODYMIND_R123_PAYMENT_SPLIT_V3
+@app.after_request
+def _bodymind_r123_payment_split_v3(resp):
+    try:
+        if request.method!='GET' or request.path!='/pagamenti' or int(getattr(resp,'status_code',200) or 200)!=200:
+            return resp
+        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
+            return resp
+        html=resp.get_data(as_text=True)
+        if 'BODYMIND_R123_PAYMENT_SPLIT_V3_SURFACE' in html:
+            return resp
+
+        from datetime import date as _d
+        today=_d.today()
+        mese=parse_int(request.args.get('mese',today.month),today.month)
+        anno=parse_int(request.args.get('anno',today.year),today.year)
+        if mese<1 or mese>12: mese=today.month
+        if anno<2020 or anno>2100: anno=today.year
+        vista=(request.args.get('vista') or 'iscrizioni').strip().lower()
+        if vista not in ('iscrizioni','mensili','tutti'): vista='iscrizioni'
+        season_start=parse_int(request.args.get('stagione',anno if mese>=7 else anno-1),anno if mese>=7 else anno-1)
+
+        # Add a semantic header immediately before the V2 board, without
+        # altering the canonical payment POST route.
+        months=['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
+        month_opts=''.join("<option value='"+str(i)+"'"+(" selected" if i==mese else "")+">"+months[i]+"</option>" for i in range(1,13))
+        year_opts=''.join("<option value='"+str(y)+"'"+(" selected" if y==anno else "")+">"+str(y)+"</option>" for y in range(today.year-1,today.year+3))
+        season_opts=''.join("<option value='"+str(y)+"'"+(" selected" if y==season_start else "")+">"+str(y)+"/"+str(y+1)+"</option>" for y in range(today.year-2,today.year+3))
+
+        if vista=='iscrizioni':
+            expl=f"""<div class='bmps3-explain annual'>
+              <div><span>ISCRIZIONE ANNUALE</span><h3>Stagione {season_start}/{season_start+1}</h3>
+              <p>Una sola quota per stagione. Puoi incassarla ad agosto, settembre o in un altro mese: non diventa mai una quota mensile.</p></div>
+              <form method='get' class='bmps3-period'><input type='hidden' name='vista' value='iscrizioni'>
+                <label>Stagione<select name='stagione' onchange='this.form.submit()'>{season_opts}</select></label>
+                <label>Mese incasso<select name='mese'>{month_opts}</select></label>
+                <label>Anno incasso<select name='anno'>{year_opts}</select></label>
+                <button type='submit'>Applica</button>
+              </form>
+            </div>"""
+        elif vista=='mensili':
+            expl=f"""<div class='bmps3-explain monthly'>
+              <div><span>QUOTA MENSILE</span><h3>{months[mese]} {anno}</h3>
+              <p>Ogni mese è indipendente. Un pagamento di ottobre non copre novembre e non sostituisce l'iscrizione annuale.</p></div>
+              <form method='get' class='bmps3-period'><input type='hidden' name='vista' value='mensili'>
+                <label>Mese<select name='mese' onchange='this.form.submit()'>{month_opts}</select></label>
+                <label>Anno<select name='anno' onchange='this.form.submit()'>{year_opts}</select></label>
+              </form>
+            </div>"""
+        else:
+            expl="""<div class='bmps3-explain all'><div><span>STORICO INCASSI</span><h3>Tutti i pagamenti</h3><p>Elenco storico. La classificazione resta separata tra Iscrizione annuale e Mensile.</p></div></div>"""
+
+        anchor="<!-- BODYMIND_R123_PAYMENT_SPLIT_V2_SURFACE -->"
+        if anchor in html:
+            html=html.replace(anchor,"<!-- BODYMIND_R123_PAYMENT_SPLIT_V3_SURFACE -->"+expl+anchor,1)
+        else:
+            html=expl+html
+
+        # Force the existing payment form to the active semantic mode. This
+        # prevents monthly registrations from accidentally being saved with
+        # the legacy hidden causale=iscrizione.
+        js=f"""<script id='bodymind-payment-split-v3-js'>(function(){{
+          var vista={vista!r};
+          var mese={int(mese)}, anno={int(anno)}, stagione={int(season_start)};
+          function setField(form,name,value){{
+            var el=form.querySelector('[name=\"'+name+'\"]');
+            if(!el) return;
+            el.value=String(value);
+            try{{ el.dispatchEvent(new Event('change',{{bubbles:true}})); }}catch(e){{}}
+          }}
+          document.querySelectorAll('form').forEach(function(form){{
+            var cause=form.querySelector('input[name=\"causale\"],select[name=\"causale\"]');
+            if(!cause) return;
+            var txt=(form.innerText||'').toLowerCase();
+            var hasPaymentFields=form.querySelector('[name=\"tesserato_id\"],[name=\"importo\"]');
+            if(!hasPaymentFields && txt.indexOf('importo')<0) return;
+            if(vista==='mensili'){{
+              cause.value='mensile';
+              setField(form,'mese',mese); setField(form,'anno',anno);
+            }} else if(vista==='iscrizioni'){{
+              cause.value='iscrizione';
+              setField(form,'mese',mese);
+              /* For season identity, Jul-Dec use season start; Jan-Jun use season end. */
+              var payYear=(mese>=7)?stagione:(stagione+1);
+              setField(form,'anno',payYear);
+            }}
+          }});
+        }})();</script>"""
+        html=html.replace('</body>',js+'</body>',1) if '</body>' in html else html+js
+
+        css="""<style id='bodymind-payment-split-v3-css'>
+        .bmps3-explain{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px;align-items:center;margin:14px 0 12px;padding:20px 22px;border-radius:20px;color:#f8fafc;border:1px solid rgba(148,163,184,.18);box-shadow:0 18px 50px rgba(0,0,0,.18)}
+        .bmps3-explain.annual{background:linear-gradient(135deg,#10233a,#16324d)}
+        .bmps3-explain.monthly{background:linear-gradient(135deg,#122c24,#174733)}
+        .bmps3-explain.all{background:linear-gradient(135deg,#211a38,#322653)}
+        .bmps3-explain span{display:block;font-size:11px;font-weight:950;letter-spacing:.14em;color:#93c5fd}.bmps3-explain h3{font-size:26px;margin:4px 0 5px}.bmps3-explain p{margin:0;max-width:780px;color:#cbd5e1;line-height:1.5}
+        .bmps3-period{display:flex;gap:8px;align-items:end;flex-wrap:wrap;justify-content:flex-end}.bmps3-period label{display:grid;gap:4px;font-size:11px;font-weight:900;color:#cbd5e1}.bmps3-period select,.bmps3-period button{min-height:42px;border-radius:11px;border:1px solid rgba(148,163,184,.28);background:#071426;color:#fff;padding:8px 10px;font-weight:800}.bmps3-period button{background:#2563eb;border-color:#60a5fa;cursor:pointer}
+        @media(min-width:901px){.bmps{padding:20px!important}.bmps-head h2{font-size:28px!important}.bmps-tabs{max-width:680px}.bmps-card{padding:15px 17px!important}.bmps-card b{font-size:15px}}
+        @media(max-width:900px){.bmps3-explain{grid-template-columns:1fr;padding:14px}.bmps3-period{justify-content:flex-start}.bmps3-explain h3{font-size:21px}}
+        </style>"""
+        html=html.replace('</head>',css+'</head>',1) if '</head>' in html else css+html
+        resp.set_data(html)
+    except Exception as exc:
+        print('[payment-split-v3-warning] '+repr(exc),flush=True)
+    return resp
+'''
+    CORE.write_text(_core_split_v3,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+    print('[r123-payment-split-v3] PASS annual-enrollment monthly-period form-forcing desktop-clarity',flush=True)
+else:
+    print('[r123-payment-split-v3] already installed',flush=True)
