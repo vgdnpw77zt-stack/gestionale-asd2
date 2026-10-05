@@ -158,6 +158,7 @@ def _bodymind_early_source_recovery():
             print("[r120-early-recovery] restored "+backup_name+" before app imports",flush=True)
 
 _bodymind_early_source_recovery()
+runpy.run_path("/opt/bodymind/release_core_recovery_r151.py", run_name="__main__")
 
 # BODYMIND_EARLY_DB_FK_RECOVERY_R121
 def _bodymind_early_db_fk_recovery():
