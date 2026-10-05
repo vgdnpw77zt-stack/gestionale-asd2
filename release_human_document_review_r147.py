@@ -234,6 +234,58 @@ def _bodymind_r147_review_surface(resp):
 else:
     print('[r147-install] already installed',flush=True)
 
+
+# Migrate an already-persisted R147 block before its own QA.
+_p=CORE.read_text(encoding='utf-8',errors='replace')
+_before=_p
+_old_parser="""def _r147_parse_it_date(raw):
+    from datetime import datetime as _r147_dt
+    s=str(raw or '').strip()
+    if not s:return ''
+    for fmt in ('%d/%m/%Y','%d-%m-%Y','%Y-%m-%d','%Y/%m/%d'):
+        try:return _r147_dt.strptime(s[:10],fmt).date().isoformat()
+        except Exception:pass
+    return ''"""
+_new_parser="""def _r147_parse_it_date(raw):
+    from datetime import datetime as _r147_dt
+    s=str(raw or '').strip()
+    if not s:return ''
+    digits=''.join(ch for ch in s if ch.isdigit())
+    candidates=[('%d/%m/%Y',s),('%d-%m-%Y',s),('%Y-%m-%d',s),('%Y/%m/%d',s)]
+    if len(digits)==8:candidates.append(('%d%m%Y',digits))
+    for fmt,val in candidates:
+        try:return _r147_dt.strptime(val,fmt).date().isoformat()
+        except Exception:pass
+    return ''"""
+_p=_p.replace(_old_parser,_new_parser)
+
+_start=_p.find("        if request.method!='GET' or p!='/documenti/da-verificare' or int(getattr(resp,'status_code',200) or 200) not in (200,301,302,303):")
+_end=_p.find("        if not bool(session.get('logged')):return resp",_start if _start>=0 else 0)
+if _start>=0 and _end>_start:
+    _p=_p[:_start]+"""        if request.method!='GET' or p!='/documenti/da-verificare' or int(getattr(resp,'status_code',200) or 200) not in (200,301,302,303):
+            return resp
+"""+_p[_end:]
+
+_new_field="<label>Scadenza certificato · GG/MM/AAAA oppure 8 cifre<input type='text' name='scadenza' value='{e(current_exp)}' inputmode='text' autocomplete='off' placeholder='es. 14/11/2026 o 14112026'></label>"
+for _old_field in (
+    "<label>Scadenza certificato · GG/MM/AAAA<input name='scadenza' value='{e(current_exp)}' inputmode='numeric' placeholder='10/12/2026' pattern='[0-9]{{2}}/[0-9]{{2}}/[0-9]{{4}}'></label>",
+    "<label>Scadenza certificato · GG/MM/AAAA<input name='scadenza' value='{e(current_exp)}' inputmode='text' placeholder='GG/MM/AAAA' autocomplete='off'></label>",
+    "<label>Scadenza certificato · 8 cifre (GGMMYYYY)<input name='scadenza' value='{e(current_exp)}' inputmode='text' placeholder='GGMMYYYY · es. 27032027' autocomplete='off'></label>",
+):
+    _p=_p.replace(_old_field,_new_field)
+
+_p=_p.replace(
+    "        messages={'scadenza':'Per un certificato medico inserisci la scadenza in formato GG/MM/AAAA.','atleta':'Seleziona l’atleta.','materializza':'Il file non è materializzabile: resta da verificare.','tipo':'Seleziona il tipo documento.'}",
+    "        messages={'scadenza':'Per un certificato medico inserisci GG/MM/AAAA oppure 8 cifre, ad esempio 14112026.','atleta':'Seleziona l’atleta.','materializza':'Il file non è materializzabile: resta da verificare.','tipo':'Seleziona il tipo documento.'}"
+)
+if _p!=_before:
+    shutil.copy2(CORE,BACK/'core_pre_r147_canonical.py')
+    CORE.write_text(_p,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+    print('[r147-date-canonical] migrated persistent review block',flush=True)
+else:
+    print('[r147-date-canonical] already canonical',flush=True)
+
 # Read-only fresh-process QA.
 qa=r'''
 import sqlite3,sys
