@@ -1387,6 +1387,7 @@ def _bodymind_r123_canonical_payment_module_v5(resp):
             <a class='{'active' if vista=='mensili' else ''}' href='/pagamenti?vista=mensili&mese={mese}&anno={anno}'>MENSILE</a>
           </nav>
           {selector}
+          {("<div class='bmpv5-entry' id='bmpv5Entry'><div class='bmpv5-entry-head'><b>REGISTRA "+("ISCRIZIONE" if vista=="iscrizioni" else "MENSILE "+months[mese].upper())+"</b><span>Completa importo, metodo e data, poi salva.</span></div><div id='bmpv5EntrySlot'></div></div>" if selected_tid and (request.args.get('azione') or '')=='registra' else "")}
           <div class='bmpv5-list'>{''.join(cards) if cards else "<div class='bmpv5-empty'>Nessuna tesserata trovata.</div>"}</div>
         </section>
         <style id='bodymind-payment-module-v5'>
@@ -1396,6 +1397,7 @@ def _bodymind_r123_canonical_payment_module_v5(resp):
         .bmpv5-head{{display:flex;justify-content:space-between;gap:16px;align-items:center}}.bmpv5-head span{{font-size:10px;letter-spacing:.14em;font-weight:950;color:#7dd3fc}}.bmpv5-head h1{{margin:4px 0;font-size:28px}}.bmpv5-head p{{margin:0;color:#b7c6d9}}.bmpv5-count{{font-size:26px;font-weight:950}}
         .bmpv5-tabs{{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}}.bmpv5-tabs a{{padding:14px;border-radius:14px;background:#10243b;color:#cbd5e1!important;text-decoration:none;text-align:center;font-weight:950}}.bmpv5-tabs a.active{{background:#2563eb;color:white!important}}
         .bmpv5-period{{display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin-bottom:12px;padding:11px;border-radius:14px;background:#0c2035}}.bmpv5-period label{{display:grid;gap:4px;font-size:11px;font-weight:900;color:#cbd5e1}}.bmpv5-period input,.bmpv5-period select,.bmpv5-period button{{min-height:42px;border-radius:10px;border:1px solid rgba(148,163,184,.25);background:#06111f;color:#fff;padding:8px 10px}}.bmpv5-period button{{background:#2563eb;font-weight:900}}
+        .bmpv5-entry{{margin:0 0 14px;padding:14px;border-radius:16px;background:#071426;border:1px solid rgba(96,165,250,.42);box-shadow:0 10px 30px rgba(2,6,23,.28)}}.bmpv5-entry-head{{display:grid;gap:3px;margin-bottom:10px}}.bmpv5-entry-head b{{font-size:13px;letter-spacing:.05em;color:#fff}}.bmpv5-entry-head span{{font-size:12px;color:#bfdbfe}}#bmpv5EntrySlot>form{{margin:0!important;max-width:none!important;width:100%!important;display:block!important;visibility:visible!important;opacity:1!important}}#bmpv5EntrySlot form [type=submit],#bmpv5EntrySlot form button[type=submit]{{min-height:44px!important;background:#2563eb!important;color:#fff!important;font-weight:950!important}}
         .bmpv5-list{{display:grid;gap:8px}}.bmpv5-card{{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 14px;align-items:center;padding:13px 15px;border-radius:14px;color:#fff;border:1px solid transparent}}.bmpv5-person{{display:grid;gap:3px}}.bmpv5-card small{{color:#cbd5e1}}.bmpv5-card.paid{{background:rgba(20,83,45,.78);border-color:rgba(74,222,128,.35)}}.bmpv5-card.due{{background:rgba(127,29,29,.70);border-color:rgba(248,113,113,.32)}}.bmpv5-card>strong{{font-size:11px}}.bmpv5-actions{{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap}}.bmpv5-act{{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:9px 12px;border-radius:11px;text-decoration:none!important;font-size:12px;font-weight:950}}.bmpv5-act.primary{{background:#2563eb;color:#fff!important}}.bmpv5-act.secondary{{background:#0f766e;color:#fff!important}}.bmpv5-act.done{{background:rgba(15,23,42,.55);color:#d1fae5!important;border:1px solid rgba(74,222,128,.28)}}
         @media(max-width:700px){{.bmpv5{{padding:13px}}.bmpv5-head{{align-items:flex-start}}.bmpv5-head h1{{font-size:21px}}.bmpv5-period{{display:grid;grid-template-columns:1fr 1fr}}.bmpv5-period button{{grid-column:1/-1}}.bmpv5-card{{grid-template-columns:1fr}}.bmpv5-actions{{display:grid;grid-template-columns:1fr}}}}
         </style>
@@ -1425,9 +1427,20 @@ def _bodymind_r123_canonical_payment_module_v5(resp):
           }});
           if(selectedTid && new URLSearchParams(location.search).get('azione')==='registra') {{
             var active=document.querySelector('form[data-bodymind-active-payment-form="1"]');
-            if(active) {{
-              active.style.outline='2px solid rgba(96,165,250,.7)';
-              active.style.outlineOffset='6px';
+            var slot=document.getElementById('bmpv5EntrySlot');
+            if(active && slot) {{
+              active.style.outline='none';
+              active.style.outlineOffset='0';
+              active.style.display='block';
+              active.style.visibility='visible';
+              active.style.opacity='1';
+              slot.appendChild(active);
+              var amount=active.querySelector('[name="importo"]');
+              if(amount) {{
+                try{{amount.focus({{preventScroll:true}})}}catch(e){{}}
+              }}
+            }} else if(slot) {{
+              slot.innerHTML='<div style="padding:10px;border-radius:10px;background:#3f1d1d;color:#fecaca;font-weight:800">Form di registrazione non trovato: nessun dato è stato modificato.</div>';
             }}
           }}
         }})();</script>
@@ -1527,3 +1540,6 @@ if 'BODYMIND_R123_CANONICAL_PAYMENT_MODULE_V5' in _core_v6 and 'BODYMIND_R123_PA
     print('[r123-payment-operativity-v6] PASS immediate-missing-lists direct-register existing-form-mounted',flush=True)
 else:
     print('[r123-payment-operativity-v6] already or waiting for V5',flush=True)
+
+# BODYMIND_R123_INLINE_PAYMENT_ENTRY_V6
+print('[r123-inline-payment-entry-v6] PASS real payment form moved into canonical module',flush=True)
