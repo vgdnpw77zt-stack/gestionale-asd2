@@ -278,3 +278,151 @@ if "/pagamenti?tesserato_id={int(tesserato_id)}" not in _desk_now:
 if "/pagamenti?tesserato_id={{tid}}" not in _mob_now:
     raise RuntimeError('R110 contextual mobile payment link missing')
 print('[r110-payment-focus] PASS athlete-scoped payment navigation',flush=True)
+
+
+# BODYMIND_R110_PAYMENT_TASK_TRUTH_V2
+# One payment truth for operational tasks. Canonical paid records win, but
+# already-registered legacy enrollment flags and paid quote_mensili states
+# remain valid so existing secretary work is never lost.
+_core_v2=CORE.read_text(encoding='utf-8',errors='replace')
+if 'BODYMIND_R110_PAYMENT_TASK_TRUTH_V2' not in _core_v2:
+    _core_v2 += r'''
+
+# BODYMIND_R110_PAYMENT_TASK_TRUTH_V2
+def _bodymind_payment_paid_row_v2(p):
+    try:
+        get=p.get
+    except Exception:
+        get=lambda k,d=None: p[k] if k in p.keys() else d
+    st=(str(get('stato','') or '')+' '+str(get('online_status','') or '')).lower()
+    if any(x in st for x in ('pending','attesa','cancel','annull','failed','fallit','refunded','rimbors')):
+        return False
+    if any(x in st for x in ('paid','pagat','saldat','complet','incassat')):
+        return True
+    try: amount=float(get('importo',0) or 0)
+    except Exception: amount=0
+    return bool(get('data','') or get('paid_at','')) and amount>0
+
+def _bodymind_enrollment_paid_v2(conn, tid, season_start):
+    row=conn.execute("SELECT * FROM tesserati WHERE id=?",(int(tid),)).fetchone()
+    if row:
+        keys=set(row.keys())
+        if ('iscrizione_pagata' in keys and int(row['iscrizione_pagata'] or 0)==1) or ('tesseramento_pagato' in keys and int(row['tesseramento_pagato'] or 0)==1):
+            return True
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='pagamenti'").fetchone():
+        return False
+    for p in conn.execute("SELECT * FROM pagamenti WHERE tesserato_id=? ORDER BY id DESC",(int(tid),)).fetchall():
+        cause=str(p['causale'] or '').strip().lower() if 'causale' in p.keys() else ''
+        yr=int(p['anno'] or 0) if 'anno' in p.keys() else 0
+        if cause in ('iscrizione','tesseramento') and yr in (int(season_start),int(season_start)+1) and _bodymind_payment_paid_row_v2(p):
+            return True
+    return False
+
+def _bodymind_month_paid_v2(conn, tid, mese, anno):
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='pagamenti'").fetchone():
+        for p in conn.execute("SELECT * FROM pagamenti WHERE tesserato_id=? AND mese=? AND anno=? ORDER BY id DESC",(int(tid),int(mese),int(anno))).fetchall():
+            cause=str(p['causale'] or '').strip().lower() if 'causale' in p.keys() else ''
+            if (cause=='mensile' or 'mensil' in cause or cause in ('quota','quota_mensile')) and _bodymind_payment_paid_row_v2(p):
+                return True
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='quote_mensili'").fetchone():
+        q=conn.execute("SELECT * FROM quote_mensili WHERE tesserato_id=? AND mese=? AND anno=? ORDER BY id DESC LIMIT 1",(int(tid),int(mese),int(anno))).fetchone()
+        if q:
+            st=str(q['stato'] or '').strip().lower() if 'stato' in q.keys() else ''
+            if any(x in st for x in ('pagat','saldat','paid','incassat','complet')):
+                return True
+    return False
+
+_bodymind_r110_tasks_v1=get_operational_tasks
+def get_operational_tasks(*args, **kwargs):
+    items=_bodymind_r110_tasks_v1(*args, **kwargs) or []
+    try:
+        from datetime import date as _bm_date
+        import re as _bm_re
+        today=_bm_date.today(); season=today.year if today.month>=7 else today.year-1
+        conn=db(); conn.row_factory=sqlite3.Row
+        out=[]
+        for item in items:
+            try: get=item.get
+            except Exception: get=lambda k,d=None: item[k] if k in item.keys() else d
+            typ=str(get('tipo','') or get('type','') or get('category','') or get('categoria','')).strip().lower()
+            tid=int(get('tesserato_id',0) or 0)
+            if tid>0 and typ=='pagamento_mancante' and _bodymind_enrollment_paid_v2(conn,tid,season):
+                continue
+            if tid>0 and typ=='quota_mese_mancante':
+                hay=' '.join(str(get(k,'') or '') for k in ('title','titolo','message','messaggio','note'))
+                m=_bm_re.search(r'(?<!\d)(0?[1-9]|1[0-2])\s*[/\-]\s*(20\d{2})(?!\d)',hay)
+                mm=int(m.group(1)) if m else today.month
+                yy=int(m.group(2)) if m else today.year
+                if _bodymind_month_paid_v2(conn,tid,mm,yy):
+                    continue
+            out.append(item)
+        return out
+    except Exception:
+        return items
+'''
+    CORE.write_text(_core_v2,encoding='utf-8')
+    compile_file(CORE)
+    print('[r110-payment-task-truth-v2] PASS runtime task truth installed',flush=True)
+else:
+    print('[r110-payment-task-truth-v2] already installed',flush=True)
+
+# Close only stale payment alerts that are contradicted by the same truth.
+# Never delete history; take a DB backup before changing alert status.
+_conn=sqlite3.connect(str(DB),timeout=30); _conn.row_factory=sqlite3.Row
+try:
+    from datetime import date as _bm_date
+    import re as _bm_re
+    _today=_bm_date.today(); _season=_today.year if _today.month>=7 else _today.year-1
+    _alerts=[]
+    if _conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='smart_alerts'").fetchone():
+        _alerts=_conn.execute("SELECT * FROM smart_alerts WHERE status='open' AND tipo IN ('pagamento_mancante','quota_mese_mancante') ORDER BY id").fetchall()
+    _close=[]
+    def _paidrow(p):
+        st=(str(p['stato'] or '') if 'stato' in p.keys() else '')+' '+(str(p['online_status'] or '') if 'online_status' in p.keys() else '')
+        st=st.lower()
+        if any(x in st for x in ('pending','attesa','cancel','annull','failed','fallit','refunded','rimbors')): return False
+        if any(x in st for x in ('paid','pagat','saldat','complet','incassat')): return True
+        try: amount=float(p['importo'] or 0)
+        except Exception: amount=0
+        return bool((p['data'] if 'data' in p.keys() else '') or (p['paid_at'] if 'paid_at' in p.keys() else '')) and amount>0
+    def _enroll(tid):
+        a=_conn.execute("SELECT * FROM tesserati WHERE id=?",(tid,)).fetchone()
+        if a:
+            ks=set(a.keys())
+            if ('iscrizione_pagata' in ks and int(a['iscrizione_pagata'] or 0)==1) or ('tesseramento_pagato' in ks and int(a['tesseramento_pagato'] or 0)==1): return True
+        for p in _conn.execute("SELECT * FROM pagamenti WHERE tesserato_id=?",(tid,)).fetchall():
+            cause=str(p['causale'] or '').lower()
+            yr=int(p['anno'] or 0)
+            if cause in ('iscrizione','tesseramento') and yr in (_season,_season+1) and _paidrow(p): return True
+        return False
+    def _month(tid,mm,yy):
+        for p in _conn.execute("SELECT * FROM pagamenti WHERE tesserato_id=? AND mese=? AND anno=?",(tid,mm,yy)).fetchall():
+            cause=str(p['causale'] or '').lower()
+            if (cause=='mensile' or 'mensil' in cause or cause in ('quota','quota_mensile')) and _paidrow(p): return True
+        if _conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='quote_mensili'").fetchone():
+            q=_conn.execute("SELECT * FROM quote_mensili WHERE tesserato_id=? AND mese=? AND anno=? ORDER BY id DESC LIMIT 1",(tid,mm,yy)).fetchone()
+            if q and any(x in str(q['stato'] or '').lower() for x in ('pagat','saldat','paid','incassat','complet')): return True
+        return False
+    for a in _alerts:
+        tid=int(a['tesserato_id'] or 0)
+        if not tid: continue
+        if str(a['tipo'])=='pagamento_mancante' and _enroll(tid):
+            _close.append(int(a['id'])); continue
+        if str(a['tipo'])=='quota_mese_mancante':
+            hay=' '.join(str(a[k] or '') for k in ('title','message') if k in a.keys())
+            m=_bm_re.search(r'(?<!\d)(0?[1-9]|1[0-2])\s*[/\-]\s*(20\d{2})(?!\d)',hay)
+            mm=int(m.group(1)) if m else _today.month; yy=int(m.group(2)) if m else _today.year
+            if _month(tid,mm,yy): _close.append(int(a['id']))
+    if _close:
+        backup_db()
+        marks=','.join('?' for _ in _close)
+        _conn.execute("UPDATE smart_alerts SET status='closed',closed_at=COALESCE(closed_at,datetime('now')),updated_at=datetime('now') WHERE id IN ("+marks+")",_close)
+        _conn.commit()
+    _pc=int(_conn.execute("SELECT COUNT(*) FROM pagamenti").fetchone()[0]) if _conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='pagamenti'").fetchone() else 0
+    _flags=int(_conn.execute("SELECT COUNT(*) FROM tesserati WHERE COALESCE(iscrizione_pagata,0)=1 OR COALESCE(tesseramento_pagato,0)=1").fetchone()[0])
+    _qpaid=0
+    if _conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='quote_mensili'").fetchone():
+        _qpaid=int(_conn.execute("SELECT COUNT(*) FROM quote_mensili WHERE lower(coalesce(stato,'')) LIKE '%pagat%' OR lower(coalesce(stato,'')) LIKE '%saldat%' OR lower(coalesce(stato,'')) LIKE '%paid%' OR lower(coalesce(stato,'')) LIKE '%incassat%'").fetchone()[0])
+    print('[r110-payment-task-truth-v2] canonical_payments='+str(_pc)+' enrollment_flags='+str(_flags)+' paid_monthly_quotes='+str(_qpaid)+' stale_alerts_closed='+str(len(_close)),flush=True)
+finally:
+    _conn.close()

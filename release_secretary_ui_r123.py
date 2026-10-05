@@ -962,3 +962,152 @@ if not ok: raise RuntimeError("R123 QA failed")
 proc=subprocess.run([sys.executable,'-c',qa],capture_output=True,text=True,timeout=120)
 print((proc.stdout or '').strip(),flush=True)
 if proc.returncode!=0: raise RuntimeError('R123 child QA failed '+((proc.stderr or '')+(proc.stdout or ''))[-4000:])
+
+
+# BODYMIND_R123_PAYMENT_SPLIT_V2
+# Replace duplicate payment dashboards with one split secretary surface.
+_core_split=CORE.read_text(encoding='utf-8',errors='replace')
+if 'BODYMIND_R123_PAYMENT_SPLIT_V2' not in _core_split:
+    _core_split += r'''
+
+# BODYMIND_R123_PAYMENT_SPLIT_V2
+@app.after_request
+def _bodymind_r123_payment_split_v2(resp):
+    try:
+        if request.method!='GET' or request.path!='/pagamenti' or int(getattr(resp,'status_code',200) or 200)!=200:
+            return resp
+        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
+            return resp
+        html=resp.get_data(as_text=True)
+        if 'BODYMIND_R123_PAYMENT_SPLIT_V2_SURFACE' in html:
+            return resp
+
+        from datetime import date as _d
+        today=_d.today()
+        mese=parse_int(request.args.get('mese',today.month),today.month)
+        anno=parse_int(request.args.get('anno',today.year),today.year)
+        if mese<1 or mese>12: mese=today.month
+        if anno<2020 or anno>2100: anno=today.year
+        vista=(request.args.get('vista') or 'iscrizioni').strip().lower()
+        if vista not in ('iscrizioni','mensili','tutti'): vista='iscrizioni'
+        season=anno if mese>=7 else anno-1
+
+        c=db(); c.row_factory=sqlite3.Row
+        try:
+            tcols={str(x[1]) for x in c.execute('PRAGMA table_info(tesserati)').fetchall()}
+            athletes=[dict(x) for x in c.execute("SELECT * FROM tesserati WHERE COALESCE(attivo,1)=1 ORDER BY TRIM(cognome) COLLATE NOCASE,TRIM(nome) COLLATE NOCASE").fetchall()]
+            payments=[dict(x) for x in c.execute("SELECT * FROM pagamenti ORDER BY id DESC").fetchall()] if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='pagamenti'").fetchone() else []
+            quote_rows=[dict(x) for x in c.execute("SELECT * FROM quote_mensili WHERE mese=? AND anno=? ORDER BY id DESC",(mese,anno)).fetchall()] if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='quote_mensili'").fetchone() else []
+        finally:
+            try:c.close()
+            except Exception:pass
+
+        def _paid(p):
+            st=(str(p.get('stato') or '')+' '+str(p.get('online_status') or '')).lower()
+            if any(x in st for x in ('pending','attesa','cancel','annull','failed','fallit','refunded','rimbors')): return False
+            if any(x in st for x in ('paid','pagat','saldat','complet','incassat')): return True
+            try: amount=float(p.get('importo') or 0)
+            except Exception: amount=0
+            return bool(p.get('data') or p.get('paid_at')) and amount>0
+
+        enroll_pay={}
+        month_pay={}
+        all_paid=[]
+        for p in payments:
+            if not _paid(p): continue
+            tid=int(p.get('tesserato_id') or 0)
+            cause=str(p.get('causale') or '').strip().lower()
+            yr=int(p.get('anno') or 0)
+            mm=int(p.get('mese') or 0)
+            all_paid.append(p)
+            if cause in ('iscrizione','tesseramento') and yr in (season,season+1) and tid not in enroll_pay:
+                enroll_pay[tid]=p
+            if (cause=='mensile' or 'mensil' in cause or cause in ('quota','quota_mensile')) and mm==mese and yr==anno and tid not in month_pay:
+                month_pay[tid]=p
+
+        quote_paid={}
+        for q in quote_rows:
+            tid=int(q.get('tesserato_id') or 0)
+            st=str(q.get('stato') or '').lower()
+            if tid and any(x in st for x in ('pagat','saldat','paid','incassat','complet')) and tid not in quote_paid:
+                quote_paid[tid]=q
+
+        def _name(a):
+            return ((str(a.get('cognome') or '')+' '+str(a.get('nome') or '')).strip()) or ('Tesserata #'+str(int(a.get('id') or 0)))
+        def _money(v):
+            try:return ('€ %.2f' % float(v or 0)).replace('.',',')
+            except Exception:return ''
+        def _card(a,kind):
+            tid=int(a.get('id') or 0); name=e(_name(a)); phone=e(str(a.get('telefono') or a.get('telefono_genitore') or ''))
+            href='/pagamenti?tesserato_id='+str(tid)+'&mese='+str(mese)+'&anno='+str(anno)+'&vista='+kind
+            if kind=='iscrizioni':
+                p=enroll_pay.get(tid)
+                legacy=bool(int(a.get('iscrizione_pagata') or 0) if 'iscrizione_pagata' in a else 0) or bool(int(a.get('tesseramento_pagato') or 0) if 'tesseramento_pagato' in a else 0)
+                ok=bool(p or legacy)
+                detail=(_money(p.get('importo'))+' · '+str(p.get('data') or '')).strip(' ·') if p else ('Già registrata' if legacy else 'Da registrare')
+                badge='PAGATA' if ok else 'DA PAGARE'
+            else:
+                p=month_pay.get(tid); q=quote_paid.get(tid); ok=bool(p or q)
+                detail=(_money(p.get('importo'))+' · '+str(p.get('data') or '')).strip(' ·') if p else ((_money(q.get('importo_dovuto'))+' · già registrato').strip(' ·') if q else 'Da registrare')
+                badge='PAGATO' if ok else 'DA PAGARE'
+            cls='paid' if ok else 'due'
+            return "<a class='bmps-card "+cls+"' href='"+href+"'><div><b>"+name+"</b>"+("<small>"+phone+"</small>" if phone else "")+"</div><span><strong>"+badge+"</strong><small>"+e(detail)+"</small></span></a>"
+
+        if vista=='iscrizioni':
+            cards=''.join(_card(a,'iscrizioni') for a in athletes)
+            paid_n=sum(1 for a in athletes if int(a.get('id') or 0) in enroll_pay or bool(int(a.get('iscrizione_pagata') or 0) if 'iscrizione_pagata' in a else 0) or bool(int(a.get('tesseramento_pagato') or 0) if 'tesseramento_pagato' in a else 0))
+            title='Iscrizioni · stagione '+str(season)+'/'+str(season+1)
+        elif vista=='mensili':
+            cards=''.join(_card(a,'mensili') for a in athletes)
+            paid_n=sum(1 for a in athletes if int(a.get('id') or 0) in month_pay or int(a.get('id') or 0) in quote_paid)
+            names=['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
+            title='Mensili · '+names[mese]+' '+str(anno)
+        else:
+            rows=[]
+            byid={int(a.get('id') or 0):a for a in athletes}
+            for p in all_paid:
+                a=byid.get(int(p.get('tesserato_id') or 0),{})
+                cause=str(p.get('causale') or 'pagamento').strip().title()
+                rows.append("<div class='bmps-history'><b>"+e(_name(a))+"</b><span>"+e(cause)+"</span><strong>"+e(_money(p.get('importo')))+"</strong><small>"+e(str(p.get('data') or ''))+"</small></div>")
+            cards=''.join(rows) or "<div class='bmps-empty'>Nessun incasso canonico registrato.</div>"
+            paid_n=len(all_paid); title='Tutti gli incassi'
+
+        total=len(athletes)
+        query='&mese='+str(mese)+'&anno='+str(anno)
+        surface=f"""<!-- BODYMIND_R123_PAYMENT_SPLIT_V2_SURFACE -->
+        <section class='bmps'>
+          <div class='bmps-head'><div><span>PAGAMENTI BODYMIND</span><h2>{e(title)}</h2></div><div class='bmps-count'>{paid_n}{(' / '+str(total)) if vista!='tutti' else ''}</div></div>
+          <nav class='bmps-tabs'>
+            <a class='{'active' if vista=='iscrizioni' else ''}' href='/pagamenti?vista=iscrizioni{query}'>Iscrizioni</a>
+            <a class='{'active' if vista=='mensili' else ''}' href='/pagamenti?vista=mensili{query}'>Mensili</a>
+            <a class='{'active' if vista=='tutti' else ''}' href='/pagamenti?vista=tutti{query}'>Tutti</a>
+          </nav>
+          <div class='bmps-list'>{cards}</div>
+        </section>
+        <style id='bodymind-payment-split-v2'>
+        .r123-pay-box,.r125-board{{display:none!important}}
+        .bmps{{margin:12px 0 18px;padding:14px;border-radius:20px;background:#091524;border:1px solid rgba(148,163,184,.18);color:#f8fafc}}
+        .bmps-head{{display:flex;justify-content:space-between;align-items:center;gap:10px}}.bmps-head span{{font-size:10px;letter-spacing:.13em;font-weight:950;color:#7dd3fc}}.bmps-head h2{{margin:3px 0 0;font-size:22px}}.bmps-count{{font-size:22px;font-weight:950}}
+        .bmps-tabs{{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:13px 0}}.bmps-tabs a{{padding:11px 7px;border-radius:12px;background:#12243a;color:#cbd5e1!important;text-align:center;text-decoration:none;font-weight:900}}.bmps-tabs a.active{{background:#2563eb;color:white!important}}
+        .bmps-list{{display:grid;gap:8px}}.bmps-card{{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:12px 13px;border-radius:15px;text-decoration:none!important;color:white!important;border:1px solid transparent}}.bmps-card>div,.bmps-card>span{{display:grid;gap:3px}}.bmps-card>span{{justify-items:end;text-align:right}}.bmps-card small{{font-size:11px;color:#cbd5e1}}.bmps-card strong{{font-size:11px;letter-spacing:.05em}}.bmps-card.paid{{background:rgba(20,83,45,.78);border-color:rgba(74,222,128,.38)}}.bmps-card.due{{background:rgba(127,29,29,.72);border-color:rgba(248,113,113,.36)}}.bmps-history{{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:11px;border-radius:13px;background:#102238}}.bmps-history small{{grid-column:1/-1;color:#94a3b8}}.bmps-empty{{padding:14px;color:#cbd5e1}}
+        @media(max-width:600px){{.bmps{{padding:11px}}.bmps-head h2{{font-size:19px}}.bmps-card{{grid-template-columns:1fr}}.bmps-card>span{{justify-items:start;text-align:left}}.bmps-history{{grid-template-columns:1fr auto}}}}
+        </style>"""
+        marker="BODYMIND_R123_PAYMENT_MOBILE"
+        idx=html.find(marker)
+        if idx>=0:
+            pos=html.rfind('<section',0,idx)
+            html=html[:pos]+surface+html[pos:] if pos>=0 else surface+html
+        else:
+            html=html.replace('<main','<main',1)
+            bodypos=html.find('>')
+            html=html[:bodypos+1]+surface+html[bodypos+1:] if bodypos>=0 else surface+html
+        resp.set_data(html)
+    except Exception as exc:
+        print('[payment-split-v2-warning] '+repr(exc),flush=True)
+    return resp
+'''
+    CORE.write_text(_core_split,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+    print('[r123-payment-split-v2] PASS split Iscrizioni/Mensili/Tutti installed',flush=True)
+else:
+    print('[r123-payment-split-v2] already installed',flush=True)
