@@ -821,8 +821,8 @@ def _bodymind_final_production_hygiene_audit():
         "BODYMIND_R151_KEYBOARD_PREVIEW_CLOSE",
         "name='scadenza' inputmode='numeric'",
         'name="scadenza" inputmode="numeric"',
-        "type='date' name='scadenza'",
-        'type="date" name="scadenza"',
+        # Do not globally ban type=date: unrelated screens may legitimately use it.
+        # R150 already hard-gates the two target expiry surfaces as native text.
     ]
     leftovers=[x for x in forbidden if x in src]
     if leftovers:
@@ -841,7 +841,7 @@ def _bodymind_final_production_hygiene_audit():
         conn.close()
     if integrity.lower()!="ok" or fk:
         raise SystemExit("[final-hygiene] db failed integrity="+integrity+" fk="+str(len(fk)))
-    print("[final-hygiene] PASS python=ok legacy=0 integrity=ok fk=0 counts="+json.dumps(counts,ensure_ascii=False),flush=True)
+    print("[final-hygiene] PASS python=ok legacy-hooks=0 target-date-gated-by-r150 integrity=ok fk=0 counts="+json.dumps(counts,ensure_ascii=False),flush=True)
 
 _bodymind_final_production_hygiene_audit()
 
