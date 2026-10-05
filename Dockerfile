@@ -130,6 +130,7 @@ COPY release_mobile_athlete_truth_r140.py /opt/bodymind/release_mobile_athlete_t
 COPY release_mobile_truth_surface_r141.py /opt/bodymind/release_mobile_truth_surface_r141.py
 COPY release_upload_state_probe_r142.py /opt/bodymind/release_upload_state_probe_r142.py
 COPY release_upload_truth_convergence_r146.py /opt/bodymind/release_upload_truth_convergence_r146.py
+COPY release_human_document_review_r147.py /opt/bodymind/release_human_document_review_r147.py
 COPY release_document_association_sync_r143.py /opt/bodymind/release_document_association_sync_r143.py
 COPY release_document_association_fix_r144.py /opt/bodymind/release_document_association_fix_r144.py
 COPY release_mobile_profile_surface_r145.py /opt/bodymind/release_mobile_profile_surface_r145.py
