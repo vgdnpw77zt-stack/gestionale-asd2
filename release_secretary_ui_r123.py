@@ -1248,3 +1248,182 @@ else:
 
 # BODYMIND_R123_PAYMENT_FORM_CLARITY_V4
 print('[r123-payment-form-clarity-v4] PASS explicit annual/monthly registration mode',flush=True)
+
+
+# BODYMIND_R123_CANONICAL_PAYMENT_MODULE_V5
+# Final convergence: one operational payment module, two modes only.
+# Disable old V2/V3 renderers in persisted core before app import, then install
+# one canonical surface. Historical rows stay untouched.
+_core_v5=CORE.read_text(encoding='utf-8',errors='replace')
+_changed_v5=False
+for _old in (
+    "@app.after_request\ndef _bodymind_r123_payment_split_v2(resp):",
+    "@app.after_request\ndef _bodymind_r123_payment_split_v3(resp):",
+):
+    if _old in _core_v5:
+        _core_v5=_core_v5.replace(_old,_old.replace("@app.after_request\n",""),1)
+        _changed_v5=True
+
+if 'BODYMIND_R123_CANONICAL_PAYMENT_MODULE_V5' not in _core_v5:
+    _core_v5 += r'''
+
+# BODYMIND_R123_CANONICAL_PAYMENT_MODULE_V5
+@app.after_request
+def _bodymind_r123_canonical_payment_module_v5(resp):
+    try:
+        if request.method!='GET' or request.path!='/pagamenti' or int(getattr(resp,'status_code',200) or 200)!=200:
+            return resp
+        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
+            return resp
+        html=resp.get_data(as_text=True)
+        from datetime import date as _d
+        today=_d.today()
+        mese=parse_int(request.args.get('mese',today.month),today.month)
+        anno=parse_int(request.args.get('anno',today.year),today.year)
+        if mese<1 or mese>12: mese=today.month
+        if anno<2020 or anno>2100: anno=today.year
+        vista=(request.args.get('vista') or 'iscrizioni').strip().lower()
+        if vista not in ('iscrizioni','mensili'): vista='iscrizioni'
+        season=parse_int(request.args.get('stagione',anno if mese>=7 else anno-1),anno if mese>=7 else anno-1)
+        selected_tid=parse_int(request.args.get('tesserato_id',0),0)
+
+        c=db(); c.row_factory=sqlite3.Row
+        try:
+            athletes=[dict(x) for x in c.execute(
+                "SELECT * FROM tesserati WHERE COALESCE(attivo,1)=1 ORDER BY TRIM(cognome) COLLATE NOCASE,TRIM(nome) COLLATE NOCASE"
+            ).fetchall()]
+            payments=[dict(x) for x in c.execute("SELECT * FROM pagamenti ORDER BY id DESC").fetchall()] if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='pagamenti'").fetchone() else []
+            qrows=[dict(x) for x in c.execute("SELECT * FROM quote_mensili WHERE mese=? AND anno=? ORDER BY id DESC",(mese,anno)).fetchall()] if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='quote_mensili'").fetchone() else []
+        finally:
+            try:c.close()
+            except Exception:pass
+
+        def _paid(p):
+            st=(str(p.get('stato') or '')+' '+str(p.get('online_status') or '')).lower()
+            if any(x in st for x in ('pending','attesa','cancel','annull','failed','fallit','refunded','rimbors')): return False
+            if any(x in st for x in ('paid','pagat','saldat','complet','incassat')): return True
+            try: amount=float(p.get('importo') or 0)
+            except Exception: amount=0
+            return bool(p.get('data') or p.get('paid_at')) and amount>0
+
+        enroll={}; monthly={}
+        for p in payments:
+            if not _paid(p): continue
+            tid=int(p.get('tesserato_id') or 0)
+            cause=str(p.get('causale') or '').strip().lower()
+            pm=int(p.get('mese') or 0); py=int(p.get('anno') or 0)
+            if (cause in ('iscrizione','tesseramento') or 'iscrizion' in cause) and py in (season,season+1) and tid not in enroll:
+                enroll[tid]=p
+            if (cause=='mensile' or 'mensil' in cause or cause in ('quota','quota_mensile')) and pm==mese and py==anno and tid not in monthly:
+                monthly[tid]=p
+        qpaid=set()
+        for q in qrows:
+            st=str(q.get('stato') or '').lower()
+            if any(x in st for x in ('pagat','saldat','paid','incassat','complet')):
+                qpaid.add(int(q.get('tesserato_id') or 0))
+
+        months=['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
+        def _name(a):
+            return ((str(a.get('cognome') or '')+' '+str(a.get('nome') or '')).strip()) or ('Tesserata #'+str(int(a.get('id') or 0)))
+        def _money(v):
+            try:return ('€ %.2f' % float(v or 0)).replace('.',',')
+            except Exception:return ''
+
+        cards=[]
+        paid_n=0
+        for a in athletes:
+            tid=int(a.get('id') or 0)
+            if selected_tid and tid!=selected_tid: continue
+            if vista=='iscrizioni':
+                p=enroll.get(tid)
+                legacy=bool(int(a.get('iscrizione_pagata') or 0)) if 'iscrizione_pagata' in a else False
+                legacy=legacy or (bool(int(a.get('tesseramento_pagato') or 0)) if 'tesseramento_pagato' in a else False)
+                ok=bool(p or legacy)
+                detail=(_money(p.get('importo'))+' · '+str(p.get('data') or '')).strip(' ·') if p else ('Già registrata' if legacy else 'Da registrare')
+                href=f"/pagamenti?vista=iscrizioni&stagione={season}&mese={mese}&anno={anno}&tesserato_id={tid}"
+            else:
+                p=monthly.get(tid); ok=bool(p or tid in qpaid)
+                detail=(_money(p.get('importo'))+' · '+str(p.get('data') or '')).strip(' ·') if p else ('Già registrato' if tid in qpaid else 'Da registrare')
+                href=f"/pagamenti?vista=mensili&mese={mese}&anno={anno}&tesserato_id={tid}"
+            if ok: paid_n+=1
+            cards.append("<a class='bmpv5-card "+("paid" if ok else "due")+"' href='"+href+"'><div><b>"+e(_name(a))+"</b><small>"+e(detail)+"</small></div><strong>"+("PAGATO" if ok else "DA PAGARE")+"</strong></a>")
+
+        total_visible=len(cards)
+        mode_title=("Iscrizione · stagione "+str(season)+"/"+str(season+1)) if vista=='iscrizioni' else ("Mensile · "+months[mese]+" "+str(anno))
+        selector=""
+        if vista=='iscrizioni':
+            selector=f"""<form class='bmpv5-period' method='get'>
+              <input type='hidden' name='vista' value='iscrizioni'>
+              <label>Stagione<input name='stagione' type='number' value='{season}' min='2020' max='2100'></label>
+              <label>Mese incasso<select name='mese'>{''.join("<option value='"+str(i)+"'"+(" selected" if i==mese else "")+">"+months[i]+"</option>" for i in range(1,13))}</select></label>
+              <label>Anno<input name='anno' type='number' value='{anno}' min='2020' max='2100'></label>
+              <button>Mostra</button>
+            </form>"""
+        else:
+            selector=f"""<form class='bmpv5-period' method='get'>
+              <input type='hidden' name='vista' value='mensili'>
+              <label>Mese<select name='mese'>{''.join("<option value='"+str(i)+"'"+(" selected" if i==mese else "")+">"+months[i]+"</option>" for i in range(1,13))}</select></label>
+              <label>Anno<input name='anno' type='number' value='{anno}' min='2020' max='2100'></label>
+              <button>Mostra</button>
+            </form>"""
+
+        surface=f"""<!-- BODYMIND_R123_CANONICAL_PAYMENT_MODULE_V5 -->
+        <section class='bmpv5'>
+          <div class='bmpv5-head'>
+            <div><span>PAGAMENTI BODYMIND</span><h1>{e(mode_title)}</h1><p>Un solo modulo. Gli stessi dati valgono ovunque.</p></div>
+            <div class='bmpv5-count'>{paid_n}/{total_visible}</div>
+          </div>
+          <nav class='bmpv5-tabs'>
+            <a class='{'active' if vista=='iscrizioni' else ''}' href='/pagamenti?vista=iscrizioni&stagione={season}&mese={mese}&anno={anno}'>ISCRIZIONE</a>
+            <a class='{'active' if vista=='mensili' else ''}' href='/pagamenti?vista=mensili&mese={mese}&anno={anno}'>MENSILE</a>
+          </nav>
+          {selector}
+          <div class='bmpv5-list'>{''.join(cards) if cards else "<div class='bmpv5-empty'>Nessuna tesserata trovata.</div>"}</div>
+        </section>
+        <style id='bodymind-payment-module-v5'>
+        /* Hide every superseded payment dashboard/surface; keep real POST forms/history available below. */
+        .r123-pay-box,.r125-board,.bmps,.bmps3-explain{{display:none!important}}
+        .bmpv5{{margin:14px 0 18px;padding:20px;border-radius:22px;background:#091728;border:1px solid rgba(96,165,250,.24);color:#f8fafc}}
+        .bmpv5-head{{display:flex;justify-content:space-between;gap:16px;align-items:center}}.bmpv5-head span{{font-size:10px;letter-spacing:.14em;font-weight:950;color:#7dd3fc}}.bmpv5-head h1{{margin:4px 0;font-size:28px}}.bmpv5-head p{{margin:0;color:#b7c6d9}}.bmpv5-count{{font-size:26px;font-weight:950}}
+        .bmpv5-tabs{{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}}.bmpv5-tabs a{{padding:14px;border-radius:14px;background:#10243b;color:#cbd5e1!important;text-decoration:none;text-align:center;font-weight:950}}.bmpv5-tabs a.active{{background:#2563eb;color:white!important}}
+        .bmpv5-period{{display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin-bottom:12px;padding:11px;border-radius:14px;background:#0c2035}}.bmpv5-period label{{display:grid;gap:4px;font-size:11px;font-weight:900;color:#cbd5e1}}.bmpv5-period input,.bmpv5-period select,.bmpv5-period button{{min-height:42px;border-radius:10px;border:1px solid rgba(148,163,184,.25);background:#06111f;color:#fff;padding:8px 10px}}.bmpv5-period button{{background:#2563eb;font-weight:900}}
+        .bmpv5-list{{display:grid;gap:8px}}.bmpv5-card{{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:13px 15px;border-radius:14px;color:#fff!important;text-decoration:none;border:1px solid transparent}}.bmpv5-card div{{display:grid;gap:3px}}.bmpv5-card small{{color:#cbd5e1}}.bmpv5-card.paid{{background:rgba(20,83,45,.78);border-color:rgba(74,222,128,.35)}}.bmpv5-card.due{{background:rgba(127,29,29,.70);border-color:rgba(248,113,113,.32)}}.bmpv5-card strong{{font-size:11px}}
+        @media(max-width:700px){{.bmpv5{{padding:13px}}.bmpv5-head{{align-items:flex-start}}.bmpv5-head h1{{font-size:21px}}.bmpv5-period{{display:grid;grid-template-columns:1fr 1fr}}.bmpv5-period button{{grid-column:1/-1}}.bmpv5-card{{grid-template-columns:1fr}}}}
+        </style>
+        <script id='bodymind-payment-mode-v5'>(function(){{
+          var vista={vista!r}, mese={mese}, anno={anno}, stagione={season};
+          document.querySelectorAll('form').forEach(function(form){{
+            var cause=form.querySelector('input[name="causale"],select[name="causale"]');
+            if(!cause) return;
+            var has=form.querySelector('[name="tesserato_id"],[name="importo"]');
+            if(!has && (form.innerText||'').toLowerCase().indexOf('importo')<0) return;
+            cause.value=(vista==='mensili'?'mensile':'iscrizione');
+            var m=form.querySelector('[name="mese"]'), y=form.querySelector('[name="anno"]');
+            if(m) m.value=String(mese);
+            if(y) y.value=String(vista==='mensili'?anno:(mese>=7?stagione:stagione+1));
+            var badge=form.querySelector('.bmpv5-formbadge');
+            if(!badge){{badge=document.createElement('div');badge.className='bmpv5-formbadge';form.insertBefore(badge,form.firstElementChild);}}
+            badge.innerHTML=vista==='mensili'
+              ? '<b>MENSILE</b><span>'+String(mese).padStart(2,'0')+'/'+anno+'</span>'
+              : '<b>ISCRIZIONE</b><span>Stagione '+stagione+'/'+(stagione+1)+'</span>';
+          }});
+        }})();</script>
+        <style>.bmpv5-formbadge{{display:flex;justify-content:space-between;gap:10px;margin-bottom:10px;padding:10px 12px;border-radius:11px;background:#07182a;border:1px solid rgba(96,165,250,.32)}}.bmpv5-formbadge span{{color:#bfdbfe}}</style>"""
+
+        # Insert once at the top of the active page.
+        m=re.search(r'<main\b[^>]*>',html,re.I)
+        if m: html=html[:m.end()]+surface+html[m.end():]
+        else:
+            b=re.search(r'<body\b[^>]*>',html,re.I)
+            html=html[:b.end()]+surface+html[b.end():] if b else surface+html
+        resp.set_data(html)
+    except Exception as exc:
+        print('[payment-module-v5-warning] '+repr(exc),flush=True)
+    return resp
+'''
+    _changed_v5=True
+
+if _changed_v5:
+    CORE.write_text(_core_v5,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+print('[r123-payment-module-v5] PASS one-module two-modes-only old-surfaces-disabled',flush=True)
