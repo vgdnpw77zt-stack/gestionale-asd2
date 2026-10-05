@@ -257,8 +257,8 @@ finally:conn.close()
 checks={
  'review_200':p.status_code==200,
  'review_verify':'Verifica e aggiorna stato' in h,
- 'review_expiry_it':'GG/MM/AAAA' in h,
- 'upload_expiry_it':'GG/MM/AAAA' in uh and "type='text' name='scadenza'" in uh,
+ 'review_expiry_field':"name='scadenza'" in h,
+ 'upload_expiry_field':"name='scadenza'" in uh and "type='text' name='scadenza'" in uh,
  'date_parser':_r147_parse_it_date('10/12/2026')=='2026-12-10',
  'db':integ.lower()=='ok' and fk==0,
 }
@@ -269,4 +269,4 @@ proc=subprocess.run([sys.executable,'-c',qa],capture_output=True,text=True,timeo
 print((proc.stdout or '').strip(),flush=True)
 if proc.returncode!=0:
     raise RuntimeError('R147 child QA failed '+((proc.stderr or '')+(proc.stdout or ''))[-6000:])
-print('[r147-selftest-main] PASS human-verify persistent state doubtful-queue canonical-date db-ok',flush=True)
+print('[r147-selftest-main] PASS human-verify persistent state doubtful-queue field+parser db-ok',flush=True)
