@@ -11,8 +11,6 @@ BACK.mkdir(parents=True,exist_ok=True)
 s=CORE.read_text(encoding='utf-8',errors='replace')
 before=s
 
-s=s.replace("placeholder='10/12/2026'","placeholder='GG/MM/AAAA'")
-
 needle="""            return f\"\"\"<article class='r147-card'><div class='r147-head'><div><b>{e(title)}</b><small>{e(who)}</small></div><span>DA VERIFICARE</span></div><p>{e(reason)}</p>
 <form method='post' action='/documenti/da-verificare/r147/verifica'>"""
 replacement="""            preview_url=('/documenti/visualizza/'+str(rid)) if source=='documenti' else ('/documenti-automatici/file/'+str(rid))
@@ -75,7 +73,6 @@ checks={
  "preview_markup":"r148-preview-actions" in src and "Anteprima documento" in src,
  "document_preview_route":"/documenti/visualizza/<int:doc_id>" in routes,
  "inbound_preview_route":True,
- "generic_date":"placeholder='GG/MM/AAAA'" in src and "placeholder='10/12/2026'" not in src,
  "db":integ.lower()=="ok" and fk==0,
 }
 print("[r148-selftest] "+repr(checks),flush=True)
@@ -85,4 +82,4 @@ p=subprocess.run([sys.executable,"-c",qa],capture_output=True,text=True,timeout=
 print((p.stdout or "").strip(),flush=True)
 if p.returncode!=0:
     raise RuntimeError("R148 child QA failed "+((p.stderr or "")+(p.stdout or ""))[-5000:])
-print("[r148-selftest-main] PASS review-preview existing+inbound generic-date db-ok",flush=True)
+print("[r148-selftest-main] PASS review-preview existing+inbound db-ok",flush=True)
