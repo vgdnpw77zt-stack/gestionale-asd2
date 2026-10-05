@@ -578,8 +578,15 @@ _r144_core=CORE.read_text(encoding='utf-8',errors='replace')
 _r144_before=_r144_core
 _r144_start=_r144_core.find('def bodymind_r144_direct_document_upload')
 if _r144_start<0:
-    raise RuntimeError('R144 direct upload route missing from persistent core')
+    _r144_deco=_r144_core.find("@app.route('/mobile/atleta/<int:tid>/documenti/carica'")
+    if _r144_deco<0:
+        _r144_deco=_r144_core.find('@app.route("/mobile/atleta/<int:tid>/documenti/carica')
+    if _r144_deco<0:
+        raise RuntimeError('R144 direct upload route decorator missing from persistent core')
+    _r144_start=_r144_deco
 _r144_end=_r144_core.find('\n# BODYMIND_',_r144_start+1)
+if _r144_end<0:
+    _r144_end=_r144_core.find('\n@app.route(',_r144_start+1)
 if _r144_end<0:_r144_end=len(_r144_core)
 _r144_seg=_r144_core[_r144_start:_r144_end]
 
@@ -715,7 +722,14 @@ try:
             print("[r144-profile-diag] status="+str(p.status_code)+" location="+str(p.headers.get("Location",""))+" body="+repr(ph[:2500])+" rules="+repr(rules),flush=True)
         checks["upload"]=u.status_code==200 and "Certificato medico" in uh and "Modulo Unico" in uh
         import re as _r144_re
-        _m=_r144_re.search(r"<input\b[^>]*\bname=['\"]scadenza['\"][^>]*>",uh,_r144_re.I)
+        _src=Path("/data/top2_app/asd_app/core.py").read_text(encoding="utf-8",errors="replace")
+        _deco=_src.find("@app.route('/mobile/atleta/<int:tid>/documenti/carica'")
+        if _deco<0:_deco=_src.find('@app.route("/mobile/atleta/<int:tid>/documenti/carica')
+        _rend=_src.find("\n# BODYMIND_",_deco+1) if _deco>=0 else -1
+        if _rend<0 and _deco>=0:_rend=_src.find("\n@app.route(",_deco+1)
+        if _rend<0:_rend=len(_src)
+        _route_src=_src[_deco:_rend] if _deco>=0 else ""
+        _m=_r144_re.search(r"<input\b[^>]*\bname=['\"]scadenza['\"][^>]*>",_route_src,_r144_re.I)
         _tag=_m.group(0) if _m else ""
         checks["upload_date_native"]=bool(_tag) and ("type='text'" in _tag or 'type="text"' in _tag) and ("inputmode='text'" in _tag or 'inputmode="text"' in _tag) and 'pattern=' not in _tag.lower()
     checks["db"]=str(conn.execute("PRAGMA integrity_check").fetchone()[0]).lower()=="ok" and len(conn.execute("PRAGMA foreign_key_check").fetchall())==0
