@@ -168,12 +168,6 @@ def _bodymind_r147_review_surface(resp):
         from .document_sync_core_r143 import canonical_type as _ctype,resolve_file as _resolve
         p=request.path or ''
         if request.method!='GET' or p!='/documenti/da-verificare' or int(getattr(resp,'status_code',200) or 200) not in (200,301,302,303):
-            # Also normalize the direct-athlete upload date UI to Italian format.
-            if request.method=='GET' and '/mobile/atleta/' in p and p.endswith('/documenti/carica') and int(getattr(resp,'status_code',200) or 200)==200:
-                html=resp.get_data(as_text=True)
-                html=html.replace("type='date' name='scadenza'","type='text' name='scadenza' inputmode='numeric' placeholder='GG/MM/AAAA' pattern='[0-9]{2}/[0-9]{2}/[0-9]{4}'")
-                html=html.replace('Scadenza certificato (solo se nota)','Scadenza certificato · GG/MM/AAAA')
-                resp.set_data(html)
             return resp
         if not bool(session.get('logged')):return resp
 
