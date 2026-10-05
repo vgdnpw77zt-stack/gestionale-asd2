@@ -707,6 +707,7 @@ else:
 runpy.run_path("/opt/bodymind/release_mobile_operator_mu_r73.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mobile_keyboard_consolidation_r153.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_operator_experience_r38.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_operator_mobile_composer_r154.py", run_name="__main__")
 if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
     runpy.run_path("/opt/bodymind/release_operator_dinicola_r55f.py", run_name="__main__")
 else:
