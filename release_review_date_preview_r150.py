@@ -45,6 +45,43 @@ s=s.replace(
 # 3) Safe response-time enhancement. Do NOT inject JavaScript into an f-string
 # source block: previous candidate proved that braces/backslashes can corrupt
 # persistent core.py. This after_request hook is ordinary Python source.
+
+# R150b - iOS-proof date entry: the user never needs to type "/".
+# Keep accepting both 8 compact digits and slash dates server-side, but make
+# the browser progressively render DD/MM/YYYY while the user enters digits.
+s=s.replace("Scadenza certificato · GG/MM/AAAA<input",
+            "Scadenza certificato · 8 cifre (GGMMYYYY)<input")
+s=s.replace("placeholder='10/12/2026'","placeholder='GGMMYYYY · es. 27032027'")
+s=s.replace("placeholder='GG/MM/AAAA'","placeholder='GGMMYYYY · es. 27032027'")
+
+old_js="""    function fmt(){
+      var d=(el.value||'').replace(/\D/g,'');
+      if(d.length===8){el.value=d.slice(0,2)+'/'+d.slice(2,4)+'/'+d.slice(4,8);}
+    }
+    el.addEventListener('input',function(){
+      var d=(el.value||'').replace(/\D/g,'');
+      if(d.length===8){fmt();}
+    });
+    el.addEventListener('blur',fmt);"""
+new_js="""    function fmt(){
+      var d=(el.value||'').replace(/\D/g,'').slice(0,8);
+      var out=d;
+      if(d.length>4){out=d.slice(0,2)+'/'+d.slice(2,4)+'/'+d.slice(4,8);}
+      else if(d.length>2){out=d.slice(0,2)+'/'+d.slice(2,4);}
+      el.value=out;
+    }
+    el.addEventListener('input',fmt);
+    el.addEventListener('blur',fmt);"""
+if old_js in s:
+    s=s.replace(old_js,new_js,1)
+
+# Upgrade an already-installed R150 hook too; the marker makes the normal
+# append branch idempotent, so this explicit source migration is required.
+s=s.replace("html=html.replace(\"placeholder='10/12/2026'\",\"placeholder='GG/MM/AAAA'\")",
+            "html=html.replace(\"placeholder='10/12/2026'\",\"placeholder='GGMMYYYY · es. 27032027'\")")
+s=s.replace("html=html.replace('Scadenza certificato (solo se nota)','Scadenza certificato · GG/MM/AAAA')",
+            "html=html.replace('Scadenza certificato (solo se nota)','Scadenza certificato · 8 cifre (GGMMYYYY)')")
+
 if 'BODYMIND_R150_DATE_AUTOFMT_SAFE' not in s:
     hook=r'''
 
@@ -123,7 +160,9 @@ checks={
  'autofmt_js_rendered':'BODYMIND_R150_DATE_AUTOFMT' in h,
  'autofmt_source':'BODYMIND_R150_DATE_AUTOFMT_SAFE' in src,
  'preview_unified':"/a172/documento/inbound_documents/" in src,
- 'generic_date':"GG/MM/AAAA" in h,
+ 'generic_date':("GGMMYYYY" in h or "GG/MM/AAAA" in h),
+ 'compact_hint':"GGMMYYYY" in h,
+ 'progressive_autoslash':"if(d.length>2)" in src and "if(d.length>4)" in src,
  'core_compiles':True,
  'db':integ.lower()=='ok' and fk==0,
 }
@@ -136,4 +175,4 @@ p=subprocess.run([sys.executable,'-c',qa],capture_output=True,text=True,timeout=
 print((p.stdout or '').strip(),flush=True)
 if p.returncode!=0:
     raise RuntimeError('R150 child QA failed '+((p.stderr or '')+(p.stdout or ''))[-5000:])
-print('[r150-selftest-main] PASS safe-date review-preview db-ok',flush=True)
+print('[r150-selftest-main] PASS compact-date autoslash review-preview db-ok',flush=True)
