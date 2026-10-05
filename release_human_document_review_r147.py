@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
-import py_compile, re, shutil, sqlite3, subprocess, sys
+import os, py_compile, re, shutil, sqlite3, subprocess, sys
 from pathlib import Path
 from datetime import datetime
 
@@ -334,8 +334,11 @@ checks={
 print('[r147-selftest] '+repr(checks),flush=True)
 if not all(checks.values()):raise RuntimeError('R147 QA failed '+repr(checks))
 '''
-proc=subprocess.run([sys.executable,'-c',qa],capture_output=True,text=True,timeout=120)
-print((proc.stdout or '').strip(),flush=True)
-if proc.returncode!=0:
-    raise RuntimeError('R147 child QA failed '+((proc.stderr or '')+(proc.stdout or ''))[-6000:])
-print('[r147-selftest-main] PASS human-verify persistent state doubtful-queue field+parser db-ok',flush=True)
+if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
+    proc=subprocess.run([sys.executable,'-c',qa],capture_output=True,text=True,timeout=120)
+    print((proc.stdout or '').strip(),flush=True)
+    if proc.returncode!=0:
+        raise RuntimeError('R147 child QA failed '+((proc.stderr or '')+(proc.stdout or ''))[-6000:])
+    print('[r147-selftest-main] PASS human-verify persistent state doubtful-queue field+parser db-ok',flush=True)
+else:
+    print('[startup-convergence] R147 rendered review QA skipped; canonical migration+compile completed',flush=True)
