@@ -59,11 +59,38 @@ def _bodymind_r152_ios_123_key(resp):
 else:
     print('[r152-install] already present',flush=True)
 
+
+# R152b: remove the legacy R147 numeric keypad source itself.
+# Flask after_request handlers run in reverse registration order; leaving the
+# old R147 numeric rewrite in core.py can undo R151/R152 at response time.
+s=CORE.read_text(encoding='utf-8',errors='replace')
+legacy_before=s
+
+# Direct rendered-review markup from R147.
+s=s.replace(
+    "inputmode='numeric' placeholder='10/12/2026' pattern='[0-9]{{2}}/[0-9]{{2}}/[0-9]{{4}}'",
+    "inputmode='text' placeholder='GG/MM/AAAA' autocomplete='off'"
+)
+# R147 response-rewrite literal for upload/review forms.
+s=s.replace(
+    "type='text' name='scadenza' inputmode='numeric' placeholder='GG/MM/AAAA' pattern='[0-9]{2}/[0-9]{2}/[0-9]{4}'",
+    "type='text' name='scadenza' inputmode='text' placeholder='GG/MM/AAAA' autocomplete='off'"
+)
+
+if s!=legacy_before:
+    shutil.copy2(CORE,BACK/'core_pre_r152b.py')
+    CORE.write_text(s,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+    print('[r152b-source-cleanup] PASS removed legacy R147 numeric scadenza keypad',flush=True)
+else:
+    print('[r152b-source-cleanup] no legacy numeric scadenza source found',flush=True)
+
 src=CORE.read_text(encoding='utf-8',errors='replace')
 checks={
   'marker':'BODYMIND_R152_IOS_123_KEY' in src,
   'text_mode':"inputmode='text'" in src,
   'pattern_removed':"tag=_r152_re.sub(r\"\\s+pattern=" in src,
+  'no_legacy_numeric_scadenza':"name='scadenza' inputmode='numeric'" not in src and 'name="scadenza" inputmode="numeric"' not in src,
 }
 import sqlite3
 conn=sqlite3.connect('/data/tenants/default/asd.db',timeout=20)
