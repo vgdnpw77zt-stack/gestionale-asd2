@@ -666,6 +666,7 @@ runpy.run_path("/opt/bodymind/release_upload_truth_convergence_r146.py", run_nam
 runpy.run_path("/opt/bodymind/release_human_document_review_r147.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_review_preview_r148.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_review_date_preview_r150.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_keyboard_preview_close_r151.py", run_name="__main__")
 # Re-run stale task cleanup after operator/document convergence, because old
 # upload tasks can become safely closable only after their async job/actions
 # have completed during startup.
