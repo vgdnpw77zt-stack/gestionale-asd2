@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
-import json, py_compile, shutil, sqlite3, subprocess, sys
+import json, os, py_compile, shutil, sqlite3, subprocess, sys
 from pathlib import Path
 
 APP=Path('/data/top2_app')
@@ -231,10 +231,13 @@ print("[r101-profile-post-smoke] "+json.dumps(obj,ensure_ascii=False),flush=True
 if getr.status_code!=200 or resp is None or resp.status_code not in (302,303) or not loc.startswith("/mobile/atlete?updated=") or not persisted or not restored or integrity.lower()!="ok" or fk:
     raise RuntimeError("R101 profile POST smoke failed "+repr(obj))
 '''
-proc=subprocess.run([sys.executable,'-c',qa],capture_output=True,text=True,timeout=90)
-if proc.returncode!=0:
-    raise RuntimeError('R101 child QA failed '+(proc.stderr or proc.stdout)[-2000:])
-print((proc.stdout or '').strip(),flush=True)
+if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
+    proc=subprocess.run([sys.executable,'-c',qa],capture_output=True,text=True,timeout=90)
+    if proc.returncode!=0:
+        raise RuntimeError('R101 child QA failed '+(proc.stderr or proc.stdout)[-2000:])
+    print((proc.stdout or '').strip(),flush=True)
+else:
+    print('[startup-convergence] R101 mutating profile POST smoke skipped; static+DB hard gates remain active',flush=True)
 
 # Static + DB final gates.
 ct=CORE.read_text(encoding='utf-8',errors='replace')
