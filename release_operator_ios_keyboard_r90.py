@@ -54,8 +54,8 @@ if 'BODYMIND_R90_IOS_KEYBOARD_COMPOSER' not in s:
     @media(max-width:800px){{
       .bmo{{
         position:fixed!important;left:0!important;right:0!important;
-        top:var(--bmo-r90-vv-top,0px)!important;bottom:auto!important;
-        width:100vw!important;height:var(--bmo-r90-vv-height,100dvh)!important;
+        top:0!important;bottom:auto!important;
+        width:100vw!important;height:var(--bmo-r90-vv-height,100dvh)!important;z-index:2147483647!important;
         min-height:0!important;max-height:none!important;
         padding:0!important;margin:0!important;overflow:hidden!important;
       }}
@@ -110,12 +110,9 @@ if 'BODYMIND_R90_IOS_KEYBOARD_COMPOSER' not in s:
           root.classList.add('bmo-r90-operator');
           const vv=window.visualViewport;
           const vh=Math.max(260,Math.round(vv?vv.height:window.innerHeight));
-          const vt=Math.max(0,Math.round(vv?vv.offsetTop:0));
           root.style.setProperty('--bmo-r90-vv-height',vh+'px');
-          root.style.setProperty('--bmo-r90-vv-top',vt+'px');
           // R74's keyboard offset is intentionally neutralized: the flex shell follows visualViewport.
           root.style.setProperty('--bmo-r74-keyboard','0px');
-          if(window.scrollY)window.scrollTo(0,0);
           if(document.activeElement===input){{
             requestAnimationFrame(()=>{{messages.scrollTop=messages.scrollHeight}});
           }}
@@ -127,7 +124,7 @@ if 'BODYMIND_R90_IOS_KEYBOARD_COMPOSER' not in s:
       }}
       if(window.visualViewport){{
         window.visualViewport.addEventListener('resize',bodymindR90SyncViewport,{{passive:true}});
-        window.visualViewport.addEventListener('scroll',bodymindR90SyncViewport,{{passive:true}});
+        // R90 canonical: resize-only, no visualViewport scroll chase.
       }}
       window.addEventListener('resize',bodymindR90SyncViewport,{{passive:true}});
       window.addEventListener('orientationchange',bodymindR90SyncSoon,{{passive:true}});

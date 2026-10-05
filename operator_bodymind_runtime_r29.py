@@ -2739,6 +2739,21 @@ def bodymind_operator_home():
       .bmo-starters{{display:grid!important;grid-template-columns:1fr!important;width:min(430px,100%)!important}}
       .bmo-starters button{{text-align:left!important;border-radius:13px!important}}
     }}
+    /* BODYMIND_OPERATOR_MOBILE_LAYOUT_CANONICAL
+       iPhone/PWA: compact welcome; operator stays above external mobile chrome. */
+    @media(max-width:800px){{
+      .bmo{{z-index:2147483647!important;isolation:isolate!important;}}
+      .bmo-empty{{flex:0 0 auto!important;height:auto!important;min-height:0!important;display:block!important;place-items:initial!important;padding:14px 10px 8px!important;text-align:left!important;}}
+      .bmo-empty-inner{{max-width:100%!important;margin:0!important}}
+      .bmo-empty-logo{{width:34px!important;height:34px!important;margin:0 0 7px!important}}
+      .bmo-empty h1{{font-size:20px!important;line-height:1.12!important;margin:0 0 6px!important}}
+      .bmo-empty p{{font-size:12.5px!important;line-height:1.4!important;margin:0!important;color:var(--bmo-muted)!important}}
+      .bmo-starters{{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;width:100%!important;gap:6px!important;margin-top:10px!important;}}
+      .bmo-starters button{{min-width:0!important;padding:8px 9px!important;border-radius:11px!important;font-size:11.5px!important;text-align:left!important}}
+      .bmo-compose-shell,.bmo-compose,.bmo-compose textarea,.bmo-attach,.bmo-mic,.bmo-send{{pointer-events:auto!important;}}
+      .bmo-attach,.bmo-mic,.bmo-send{{touch-action:manipulation!important}}
+      .bmo-file-picker{{position:fixed!important;width:1px!important;height:1px!important;left:-10000px!important;top:-10000px!important;opacity:0!important;pointer-events:none!important;}}
+    }}
     </style>
 
     <main class="bmo">
@@ -2781,6 +2796,7 @@ def bodymind_operator_home():
           </div>
           <div class="bmo-compose-shell">
             <div class="bmo-compose">
+              <input class="bmo-file-picker" type="file" id="bmoAttachPicker" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.docx" aria-hidden="true" tabindex="-1">
               <button class="bmo-attach" id="bmoAttach" type="button" title="Allega file" aria-label="Allega file">＋</button>
               <textarea id="bmoInput" placeholder="Messaggio a Segreteria BodyMind" autocomplete="off"></textarea>
               <button class="bmo-mic" id="bmoMic" type="button" title="Parla" aria-label="Parla con Segreteria BodyMind">🎙</button>
@@ -2873,6 +2889,7 @@ def bodymind_operator_home():
       const voiceStatus=document.getElementById('bmoVoiceStatus');
       const voiceRecover=document.getElementById('bmoVoiceRecover');
       const attach=document.getElementById('bmoAttach');
+      const attachPicker=document.getElementById('bmoAttachPicker');
       const voiceStage=document.getElementById('bmoVoiceStage');
       const voiceStageClose=document.getElementById('bmoVoiceStageClose');
       const voiceOrb=document.getElementById('bmoVoiceOrb');
@@ -3297,43 +3314,36 @@ def bodymind_operator_home():
         throw new Error('L’analisi documentale sta impiegando troppo tempo. Il job resta registrato sul server.');
       }}
 
-      attach?.addEventListener('click',()=>{{
-        const picker=document.createElement('input');
-        picker.type='file';
-        picker.multiple=true;
-        picker.accept='.pdf,.png,.jpg,.jpeg,.webp,.docx';
-        picker.setAttribute('aria-hidden','true');
-        picker.tabIndex=-1;
-        picker.style.setProperty('display','none','important');
-        document.body.appendChild(picker);
-        picker.addEventListener('change',async()=>{{
-          const files=[...(picker.files||[])];
-          try{{
-            if(!files.length)return;
-            const fd=new FormData();files.forEach(f=>fd.append('files',f,f.name));
-            fd.append('production_mode','1');
-            const hint=document.getElementById('bmoUploadType')?.value||'';
-            if(hint)fd.append('document_type_hint',hint);
-            uploadInFlight=true;
-            addMsg('Sto inviando '+files.length+' file al server BodyMind. Ti confermo la ricezione appena il server li prende in carico.','bot');
-            const r=await fetch('/operatore-bodymind/upload-async',{{method:'POST',headers:{{'X-CSRFToken':csrf}},body:fd}});
-            const data=await r.json();
-            if(!r.ok)throw new Error(data.text||('Upload HTTP '+r.status));
-            addMsg(data.text||'File ricevuti dal server. Avvio l’analisi.','bot',data);
-            if(data.job_id){{
-              const finalData=await waitUploadJob(data.job_id);
-              addMsg(finalData.text||'Analisi completata.','bot',finalData);
-              speak(finalData.text||'Analisi completata.');
-            }}else{{speak(data.text||'File ricevuti dal server.');}}
-          }}catch(e){{
-            addMsg('Il caricamento non è riuscito. Non ho modificato file esistenti.','bot');
-          }}finally{{
-            uploadInFlight=false;
-            try{{picker.remove()}}catch(e){{}}
-          }}
-        }},{{once:true}});
-        picker.click();
+      // BODYMIND_OPERATOR_REUSABLE_FILE_PICKER
+      attach?.addEventListener('click',ev=>{{
+        ev.preventDefault();ev.stopPropagation();
+        if(!attachPicker||uploadInFlight)return;
+        try{{attachPicker.value=''}}catch(e){{}}
+        attachPicker.click();
       }});
+      attachPicker?.addEventListener('change',async()=>{{
+        const files=[...(attachPicker.files||[])];
+        if(!files.length){{try{{attachPicker.value=''}}catch(e){{}};return}}
+        try{{
+          const fd=new FormData();files.forEach(f=>fd.append('files',f,f.name));
+          fd.append('production_mode','1');
+          const hint=document.getElementById('bmoUploadType')?.value||'';
+          if(hint)fd.append('document_type_hint',hint);
+          uploadInFlight=true;attach.disabled=true;
+          addMsg('Sto inviando '+files.length+' file al server BodyMind. Ti confermo la ricezione appena il server li prende in carico.','bot');
+          const r=await fetch('/operatore-bodymind/upload-async',{{method:'POST',headers:{{'X-CSRFToken':csrf}},body:fd}});
+          const data=await r.json();
+          if(!r.ok)throw new Error(data.text||('Upload HTTP '+r.status));
+          addMsg(data.text||'File ricevuti dal server. Avvio l’analisi.','bot',data);
+          if(data.job_id){{
+            const finalData=await waitUploadJob(data.job_id);
+            addMsg(finalData.text||'Analisi completata.','bot',finalData);
+            speak(finalData.text||'Analisi completata.');
+          }}else{{speak(data.text||'File ricevuti dal server.');}}
+        }}catch(e){{addMsg('Il caricamento non è riuscito. Non ho modificato file esistenti.','bot')}}
+        finally{{uploadInFlight=false;if(attach)attach.disabled=false;try{{attachPicker.value=''}}catch(e){{}}}}
+      }});
+
 
       document.getElementById('bmoUploadForm')?.addEventListener('submit',async ev=>{{
         ev.preventDefault();
