@@ -1873,3 +1873,235 @@ if _changed_v7:
     CORE.write_text(_core_v7,encoding='utf-8')
     py_compile.compile(str(CORE),doraise=True)
 print('[r123-payment-v7] PASS real editable form no-loop same-write-path',flush=True)
+
+
+# BODYMIND_R123_ADMIN_CONVERGENCE_V8
+# Keep V7 as the single payment renderer/write path, enrich it with document
+# verification + explicit cash-entry actions, restore desktop Collaboratori
+# navigation, and expose Uscite without changing existing payment rows.
+_core_v8=CORE.read_text(encoding='utf-8',errors='replace')
+_changed_v8=False
+
+# 1) Per-athlete actions in the canonical payment list.
+_old_actions = """            eh=f"/pagamenti?vista=iscrizioni&stagione={stagione}&mese={mese}&anno={anno}&tesserato_id={tid}&azione=registra&tipo=iscrizione"
+            mh=f"/pagamenti?vista=mensili&mese={mese}&anno={anno}&tesserato_id={tid}&azione=registra&tipo=mensile"
+            rows.append((0 if not focus_ok else 1,
+                "<div class='bmpv7-row "+("due" if not focus_ok else "paid")+"'>"
+                +"<div class='bmpv7-person'><b>"+e(_name(a))+"</b><small>Iscrizione: "+("PAGATA" if eok else "da pagare")+" · "+months[mese]+": "+("PAGATO" if mok else "da pagare")+"</small></div>"
+                +"<div class='bmpv7-actions'><a href='"+eh+"'>"+("Modifica iscrizione" if eok else "Registra iscrizione")+"</a><a href='"+mh+"'>"+("Modifica mensile "+months[mese] if mok else "Registra mensile "+months[mese])+"</a></div>"
+                +"</div>"
+            ))"""
+_new_actions = """            eh=f"/pagamenti?vista=iscrizioni&stagione={stagione}&mese={mese}&anno={anno}&tesserato_id={tid}&azione=registra&tipo=iscrizione"
+            mh=f"/pagamenti?vista=mensili&mese={mese}&anno={anno}&tesserato_id={tid}&azione=registra&tipo=mensile"
+            dh=f"/documenti?tesserato_id={tid}"
+            rows.append((0 if not focus_ok else 1,
+                "<div class='bmpv7-row "+("due" if not focus_ok else "paid")+"'>"
+                +"<div class='bmpv7-person'><b>"+e(_name(a))+"</b><small>Iscrizione: "+("PAGATA" if eok else "da pagare")+" · "+months[mese]+": "+("PAGATO" if mok else "da pagare")+"</small></div>"
+                +"<div class='bmpv7-actions'><a class='doc' href='"+dh+"'>Verifica documento</a><a href='"+eh+"'>"+("Modifica incasso iscrizione" if eok else "Registra incasso iscrizione")+"</a><a href='"+mh+"'>"+("Modifica incasso "+months[mese] if mok else "Registra incasso "+months[mese])+"</a></div>"
+                +"</div>"
+            ))"""
+if _old_actions in _core_v8:
+    _core_v8=_core_v8.replace(_old_actions,_new_actions,1)
+    _changed_v8=True
+
+# 2) Add admin destinations to the canonical V7 surface.
+_old_error = """        error="<div class='bmpv7-error'>Il pagamento non è stato salvato. Controlla i dati e riprova.</div>" if request.args.get('errore') else ""
+"""
+_new_error = """        error="<div class='bmpv7-error'>Il pagamento non è stato salvato. Controlla i dati e riprova.</div>" if request.args.get('errore') else ""
+        collab_href=_bodymind_admin_route_v8('collaboratori') or '/collaboratori'
+        collab_receipts_href=_bodymind_admin_route_v8('ricevute_collaboratori') or collab_href
+        expense_href=_bodymind_admin_route_v8('uscite') or '/pagamenti/uscite'
+"""
+if _old_error in _core_v8:
+    _core_v8=_core_v8.replace(_old_error,_new_error,1)
+    _changed_v8=True
+
+_old_nav = """          <nav class='bmpv7-tabs'><a class='{'on' if vista=='iscrizioni' else ''}' href='/pagamenti?vista=iscrizioni&stagione={stagione}&mese={mese}&anno={anno}'>ISCRIZIONE</a><a class='{'on' if vista=='mensili' else ''}' href='/pagamenti?vista=mensili&mese={mese}&anno={anno}'>MENSILE</a></nav>
+          {selector}{saved}{error}{form_html}"""
+_new_nav = """          <nav class='bmpv7-tabs'><a class='{'on' if vista=='iscrizioni' else ''}' href='/pagamenti?vista=iscrizioni&stagione={stagione}&mese={mese}&anno={anno}'>ISCRIZIONE</a><a class='{'on' if vista=='mensili' else ''}' href='/pagamenti?vista=mensili&mese={mese}&anno={anno}'>MENSILE</a></nav>
+          <div class='bmpv8-admin'><a href='{e(expense_href)}'>USCITE</a><a href='{e(collab_href)}'>COLLABORATORI</a><a href='{e(collab_receipts_href)}'>RICEVUTE COLLABORATORI</a></div>
+          {selector}{saved}{error}{form_html}"""
+if _old_nav in _core_v8:
+    _core_v8=_core_v8.replace(_old_nav,_new_nav,1)
+    _changed_v8=True
+
+_old_css = """.bmpv7-actions a{{padding:9px 11px;border-radius:9px;background:#2563eb;color:#fff!important;text-decoration:none;font-size:11px;font-weight:950}}.bmpv7-actions a+ a{{background:#0f766e}}"""
+_new_css = """.bmpv7-actions a{{padding:9px 11px;border-radius:9px;background:#2563eb;color:#fff!important;text-decoration:none;font-size:11px;font-weight:950}}.bmpv7-actions a+ a{{background:#0f766e}}.bmpv7-actions a.doc{{background:#334155!important}}.bmpv8-admin{{display:flex;gap:8px;flex-wrap:wrap;margin:-4px 0 13px}}.bmpv8-admin a{{padding:9px 12px;border-radius:10px;background:#172554;color:#dbeafe!important;text-decoration:none;font-size:11px;font-weight:950;border:1px solid rgba(96,165,250,.26)}}"""
+if _old_css in _core_v8:
+    _core_v8=_core_v8.replace(_old_css,_new_css,1)
+    _changed_v8=True
+
+if 'BODYMIND_R123_ADMIN_CONVERGENCE_V8' not in _core_v8:
+    _core_v8 += r'''
+
+# BODYMIND_R123_ADMIN_CONVERGENCE_V8
+def _bodymind_admin_route_v8(kind):
+    """Resolve existing business routes at runtime instead of inventing URLs."""
+    best=[]
+    for rule in app.url_map.iter_rules():
+        try:
+            path=str(rule.rule); ep=str(rule.endpoint).lower()
+            methods=set(rule.methods or set())
+        except Exception:
+            continue
+        if 'GET' not in methods or '<' in path:
+            continue
+        low=(path+' '+ep).lower()
+        score=0
+        if kind=='collaboratori':
+            if 'collabor' not in low: continue
+            if 'ricevut' in low or 'pdf' in low or 'delete' in low or 'elimina' in low: continue
+            score=20
+            if path.rstrip('/')=='/collaboratori': score+=100
+        elif kind=='ricevute_collaboratori':
+            if 'collabor' not in low or 'ricevut' not in low: continue
+            if 'pdf' in low or 'delete' in low or 'elimina' in low: continue
+            score=30
+        elif kind=='uscite':
+            if path.rstrip('/')=='/pagamenti/uscite': continue
+            words=('uscit','spes','prima-nota','prima_nota','moviment','cassa')
+            if not any(w in low for w in words): continue
+            # Avoid delete/PDF/detail routes.
+            if any(w in low for w in ('delete','elimina','pdf','<')): continue
+            score=20
+            if 'uscit' in low or 'spes' in low: score+=40
+        else:
+            continue
+        best.append((score,len(path),path))
+    if not best:
+        return ''
+    best.sort(key=lambda x:(-x[0],x[1],x[2]))
+    return best[0][2]
+
+
+def _bodymind_uscite_schema_v8(conn):
+    conn.execute("""
+      CREATE TABLE IF NOT EXISTS bodymind_uscite(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        data TEXT NOT NULL,
+        descrizione TEXT NOT NULL,
+        categoria TEXT,
+        importo REAL NOT NULL,
+        metodo TEXT,
+        note TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    """)
+
+
+@app.route('/pagamenti/uscite',methods=['GET','POST'])
+@login_required
+def _bodymind_uscite_v8():
+    # Prefer an already existing accounting/expense module if the app has one.
+    existing=_bodymind_admin_route_v8('uscite')
+    if existing and existing!='/pagamenti/uscite' and request.method=='GET' and request.args.get('fallback')!='1':
+        return redirect(existing,302)
+
+    from datetime import date as _date, datetime as _dt
+    conn=db(); conn.row_factory=sqlite3.Row
+    _bodymind_uscite_schema_v8(conn)
+    saved=False; err=''
+    if request.method=='POST':
+        data=(request.form.get('data') or _date.today().isoformat()).strip()
+        descrizione=(request.form.get('descrizione') or '').strip()
+        categoria=(request.form.get('categoria') or '').strip()
+        metodo=(request.form.get('metodo') or '').strip()
+        note=(request.form.get('note') or '').strip()[:1500]
+        try: importo=float(str(request.form.get('importo') or '').replace(',','.'))
+        except Exception: importo=-1
+        try: _date.fromisoformat(data)
+        except Exception: data=_date.today().isoformat()
+        if not descrizione or importo<0:
+            err='Inserisci descrizione e importo validi.'
+        else:
+            now=_dt.now().isoformat(timespec='seconds')
+            conn.execute(
+                "INSERT INTO bodymind_uscite(data,descrizione,categoria,importo,metodo,note,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
+                (data,descrizione,categoria,importo,metodo,note,now,now)
+            )
+            conn.commit(); saved=True
+    rows=conn.execute("SELECT * FROM bodymind_uscite ORDER BY data DESC,id DESC LIMIT 200").fetchall()
+    total=float(conn.execute("SELECT COALESCE(SUM(importo),0) FROM bodymind_uscite").fetchone()[0] or 0)
+    conn.close()
+    items=''.join(
+        "<tr><td>"+e(str(r['data']))+"</td><td><b>"+e(str(r['descrizione']))+"</b><br><small>"+e(str(r['categoria'] or ''))+"</small></td><td>€ "+e(("%.2f" % float(r['importo'] or 0)).replace('.',','))+"</td><td>"+e(str(r['metodo'] or ''))+"</td></tr>"
+        for r in rows
+    ) or "<tr><td colspan='4'>Nessuna uscita registrata.</td></tr>"
+    msg="<div class='bmout-ok'>Uscita registrata.</div>" if saved else ("<div class='bmout-err'>"+e(err)+"</div>" if err else "")
+    html=f"""
+    <section class='bmout'>
+      <div class='bmout-head'><div><span>AMMINISTRAZIONE</span><h1>Uscite</h1><p>Spese e uscite di cassa. Gli incassi di atlete restano nel modulo Pagamenti.</p></div><strong>Totale € {("%.2f" % total).replace('.',',')}</strong></div>
+      <div class='bmout-links'><a href='/pagamenti'>Pagamenti</a><a href='{e(_bodymind_admin_route_v8("collaboratori") or "/collaboratori")}'>Collaboratori</a></div>
+      {msg}
+      <form method='post' class='bmout-form'>
+        <input type='hidden' name='csrf_token' value='{e(csrf_token())}'>
+        <label>Data<input type='date' name='data' value='{_date.today().isoformat()}' required></label>
+        <label>Descrizione<input name='descrizione' required placeholder='Es. affitto sala'></label>
+        <label>Categoria<input name='categoria' placeholder='Affitto, attrezzatura, utenze…'></label>
+        <label>Importo €<input type='number' step='0.01' min='0' name='importo' required></label>
+        <label>Metodo<select name='metodo'><option>contanti</option><option>bonifico</option><option>carta</option><option>altro</option></select></label>
+        <label class='wide'>Note<textarea name='note' rows='2'></textarea></label>
+        <button>Registra uscita</button>
+      </form>
+      <div class='bmout-table'><table><thead><tr><th>Data</th><th>Uscita</th><th>Importo</th><th>Metodo</th></tr></thead><tbody>{items}</tbody></table></div>
+    </section>
+    <style>
+    .bmout{{padding:18px;border-radius:20px;background:#081626;color:#f8fafc}}.bmout-head{{display:flex;justify-content:space-between;gap:12px;align-items:center}}.bmout-head span{{font-size:10px;color:#7dd3fc;font-weight:950;letter-spacing:.14em}}.bmout-head h1{{margin:4px 0}}.bmout-head p{{margin:0;color:#cbd5e1}}.bmout-links{{display:flex;gap:8px;margin:13px 0}}.bmout-links a{{padding:9px 12px;border-radius:9px;background:#1d4ed8;color:white!important;text-decoration:none;font-weight:900}}.bmout-form{{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px;padding:13px;background:#0c2035;border-radius:14px}}.bmout-form label{{display:grid;gap:5px;font-size:11px;font-weight:900}}.bmout-form input,.bmout-form select,.bmout-form textarea{{width:100%;padding:9px;border-radius:9px;border:1px solid #334155;background:#06111f;color:#fff}}.bmout-form .wide{{grid-column:1/-1}}.bmout-form button{{min-height:43px;border:0;border-radius:9px;background:#dc2626;color:#fff;font-weight:950}}.bmout-table{{overflow:auto;margin-top:12px}}.bmout-table table{{width:100%;border-collapse:collapse}}.bmout-table th,.bmout-table td{{padding:9px;border-bottom:1px solid #1e293b;text-align:left}}.bmout-ok,.bmout-err{{padding:9px 11px;border-radius:9px;margin:8px 0}}.bmout-ok{{background:#14532d}}.bmout-err{{background:#7f1d1d}}
+    @media(max-width:800px){{.bmout-form{{grid-template-columns:1fr 1fr}}.bmout-form .wide{{grid-column:1/-1}}}}
+    </style>
+    """
+    return layout(html)
+
+
+@app.after_request
+def _bodymind_desktop_admin_nav_v8(resp):
+    try:
+        if request.method!='GET' or int(getattr(resp,'status_code',200) or 200)!=200:
+            return resp
+        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
+            return resp
+        html=resp.get_data(as_text=True)
+        if 'BODYMIND_DESKTOP_ADMIN_NAV_V8' in html:
+            return resp
+        collab=_bodymind_admin_route_v8('collaboratori') or '/collaboratori'
+        receipts=_bodymind_admin_route_v8('ricevute_collaboratori') or collab
+        expense=_bodymind_admin_route_v8('uscite') or '/pagamenti/uscite'
+        inject=f"""<!-- BODYMIND_DESKTOP_ADMIN_NAV_V8 -->
+        <div id='bmAdminNavV8'>
+          <span>AMMINISTRAZIONE</span>
+          <a href='/pagamenti'>Pagamenti</a>
+          <a href='{e(expense)}'>Uscite</a>
+          <a href='{e(collab)}'>Collaboratori</a>
+          <a href='{e(receipts)}'>Ricevute collaboratori</a>
+        </div>
+        <style>
+        #bmAdminNavV8{{display:none}}
+        @media(min-width:901px){{#bmAdminNavV8.bm-admin-mounted{{display:grid;gap:4px;margin:10px 8px;padding:9px;border-radius:12px;background:rgba(15,23,42,.62);border:1px solid rgba(148,163,184,.16)}}#bmAdminNavV8 span{{font-size:9px;letter-spacing:.13em;color:#94a3b8;font-weight:950}}#bmAdminNavV8 a{{padding:7px 8px;border-radius:8px;color:inherit!important;text-decoration:none;font-size:12px;font-weight:800}}#bmAdminNavV8 a:hover{{background:rgba(59,130,246,.14)}}}}
+        </style>
+        <script>(function(){{var box=document.getElementById('bmAdminNavV8');if(!box)return;var side=document.querySelector('aside nav,aside,.sidebar,[class*="sidebar"]');if(side){{side.appendChild(box);box.classList.add('bm-admin-mounted');}}else{{box.remove();}}}})();</script>"""
+        if '</body>' in html: html=html.replace('</body>',inject+'</body>',1)
+        else: html+=inject
+        resp.set_data(html)
+    except Exception as exc:
+        print('[admin-nav-v8-warning] '+repr(exc),flush=True)
+    return resp
+'''
+    _changed_v8=True
+
+if _changed_v8:
+    CORE.write_text(_core_v8,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+
+# Read-only integrity check: existing payments/receipts must remain untouched here.
+_c=sqlite3.connect(str(DB),timeout=20)
+try:
+    _integrity=str(_c.execute('PRAGMA integrity_check').fetchone()[0])
+    _fk=len(_c.execute('PRAGMA foreign_key_check').fetchall())
+    _pc=int(_c.execute('SELECT COUNT(*) FROM pagamenti').fetchone()[0]) if _c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='pagamenti'").fetchone() else 0
+    _rc=int(_c.execute('SELECT COUNT(*) FROM ricevute').fetchone()[0]) if _c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='ricevute'").fetchone() else 0
+finally:
+    _c.close()
+if _integrity.lower()!='ok' or _fk:
+    raise RuntimeError('R123 V8 DB integrity guard failed')
+print('[r123-admin-v8] PASS verify-doc + cash-entry + expenses + collaborators-nav payments='+str(_pc)+' receipts='+str(_rc)+' integrity='+_integrity+' fk='+str(_fk),flush=True)
