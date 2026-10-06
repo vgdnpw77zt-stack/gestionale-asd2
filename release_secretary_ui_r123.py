@@ -2781,7 +2781,15 @@ def _bodymind_uscite_v11_impl():
 @app.before_request
 def _bodymind_expense_entry_v11():
     # One expense module for every legacy accounting/expense entry point.
+    # Unauthenticated requests continue to the original protected endpoint.
     if request.path in ('/pagamenti/uscite','/contabilita') and request.method in ('GET','POST'):
+        try:
+            from flask import session as _session
+            authenticated=bool(_session.get('logged') or _session.get('logged_in') or _session.get('user_id'))
+        except Exception:
+            authenticated=False
+        if not authenticated:
+            return None
         return _bodymind_uscite_v11_impl()
 
 
