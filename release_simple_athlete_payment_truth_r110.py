@@ -941,7 +941,26 @@ def _bodymind_monthly_arrears_dashboard_v5(resp):
     compile_file(CORE)
     print('[r110-monthly-arrears-v5] PASS month-specific historical dues + dashboard/task convergence',flush=True)
 else:
-    print('[r110-monthly-arrears-v5] already installed',flush=True)
+    # Persistent /data may contain an older V5 implementation from a prior deploy.
+    # Converge the two monthly-summary functions in-place to the canonical source
+    # instead of trusting the marker alone. This changes code only, never rows.
+    _src_v5=Path(__file__).read_text(encoding='utf-8',errors='replace')
+    _raw_start=_src_v5.find("def bodymind_monthly_due_periods(conn, tesserato_id=None, through_date=None):", _src_v5.find("# BODYMIND_R110_MONTHLY_ARREARS_V5"))
+    _raw_end=_src_v5.find("_bodymind_payment_flow_v5_base=get_operational_tasks",_raw_start)
+    _live_start=_core_v5.find("def bodymind_monthly_due_periods(conn, tesserato_id=None, through_date=None):")
+    _live_end=_core_v5.find("_bodymind_payment_flow_v5_base=get_operational_tasks",_live_start)
+    if _raw_start>=0 and _raw_end>_raw_start and _live_start>=0 and _live_end>_live_start:
+        _canonical_monthly=_src_v5[_raw_start:_raw_end]
+        _current_monthly=_core_v5[_live_start:_live_end]
+        if _current_monthly!=_canonical_monthly:
+            _core_v5=_core_v5[:_live_start]+_canonical_monthly+_core_v5[_live_end:]
+            CORE.write_text(_core_v5,encoding='utf-8')
+            compile_file(CORE)
+            print('[r110-monthly-arrears-v5] upgraded persistent monthly summary to canonical payment truth',flush=True)
+        else:
+            print('[r110-monthly-arrears-v5] already canonical',flush=True)
+    else:
+        raise RuntimeError('R110 V5 persistent convergence anchors missing')
 
 # Read-only proof of due months currently represented by quote_mensili.
 _conn=sqlite3.connect(str(DB),timeout=20); _conn.row_factory=sqlite3.Row
