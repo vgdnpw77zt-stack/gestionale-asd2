@@ -1565,11 +1565,11 @@ try:
         expected[tid]=(bool(x['iscrizione_pagata'] and ep),('%.2f'%float(ep['importo'] or 0) if ep else ''),bool(x['mensile_pagato'] and mp),('%.2f'%float(mp['importo'] or 0) if mp else ''))
     integrity=str(db.execute('PRAGMA integrity_check').fetchone()[0]);fk=len(db.execute('PRAGMA foreign_key_check').fetchall())
     target_breakdown=[]
-    for p in db.execute("""SELECT t.cognome,t.nome,p.causale,p.mese,p.anno,p.importo,p.data
-                           FROM pagamenti p JOIN tesserati t ON t.id=p.tesserato_id
-                          WHERE lower(t.cognome) IN ('abatini','angelucci','annunziato','frioli','fabiani')
-                            AND p.anno IN (2026,2027)
-                          ORDER BY lower(t.cognome),lower(t.nome),p.anno,p.mese,p.id""").fetchall():
+    for p in db.execute("SELECT t.cognome,t.nome,p.causale,p.mese,p.anno,p.importo,p.data "
+                        "FROM pagamenti p JOIN tesserati t ON t.id=p.tesserato_id "
+                        "WHERE lower(t.cognome) IN ('abatini','angelucci','annunziato','frioli','fabiani') "
+                        "AND p.anno IN (2026,2027) "
+                        "ORDER BY lower(t.cognome),lower(t.nome),p.anno,p.mese,p.id").fetchall():
         target_breakdown.append(dict(p))
 finally:
     db.close()
