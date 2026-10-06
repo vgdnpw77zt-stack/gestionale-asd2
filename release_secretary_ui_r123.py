@@ -1364,6 +1364,7 @@ if 'BODYMIND_R123_QUOTE_INCASSI_CANONICAL_V12' not in _core_qi:
 
 # BODYMIND_R123_QUOTE_INCASSI_CANONICAL_V12
 def bodymind_quote_incassi_canonical():
+    # BODYMIND_R123_QUOTE_INCASSI_DETAIL_V12
     from datetime import date as _bm_date
     if request.method!='GET':
         return redirect('/quote-incassi',303)
@@ -1399,6 +1400,21 @@ def bodymind_quote_incassi_canonical():
                     quote_by_tid[tid]=None
                 else:
                     quote_by_tid[tid]=q
+
+        # Read-only movement ledger for the selected month + annual enrollment.
+        # This explains historical split/duplicate rows without changing them.
+        movement_by_tid={}
+        _truth_ids=[int(x['tesserato_id']) for x in truth.get('rows',[]) if int(x.get('tesserato_id') or 0)>0]
+        if _truth_ids:
+            _marks=','.join('?' for _ in _truth_ids)
+            _args=list(_truth_ids)+[mese,anno,stagione,stagione+1]
+            _sql=("SELECT * FROM pagamenti WHERE tesserato_id IN ("+_marks+") "
+                  "AND ((mese=? AND anno=?) OR (anno IN (?,?) AND "
+                  "(lower(coalesce(causale,''))='iscrizione' OR lower(coalesce(causale,''))='tesseramento' "
+                  "OR lower(coalesce(causale,'')) LIKE '%iscrizion%'))) "
+                  "ORDER BY tesserato_id,COALESCE(data,''),id")
+            for p in conn.execute(_sql,_args).fetchall():
+                movement_by_tid.setdefault(int(p['tesserato_id']),[]).append(p)
     finally:
         conn.close()
 
@@ -1425,10 +1441,11 @@ def bodymind_quote_incassi_canonical():
 
         ep_amount=(float(ep['importo'] or 0) if ep_ok else None)
         mp_paid_amount=(float(mp['importo'] or 0) if mp_ok else None)
-        if mp_ok:
+        mp_due_amount=(float(q['importo_dovuto'] or q['importo_base'] or 0) if q not in (None,'__missing__') else None)
+        if mp_due_amount is not None:
+            mp_display=mp_due_amount
+        elif mp_ok:
             mp_display=mp_paid_amount
-        elif q not in (None,'__missing__'):
-            mp_display=float(q['importo_dovuto'] or q['importo_base'] or 0)
         else:
             mp_display=None
 
@@ -1444,13 +1461,66 @@ def bodymind_quote_incassi_canonical():
         ep_attr=('%.2f'%ep_amount) if ep_amount is not None else ''
         mp_attr=('%.2f'%mp_paid_amount) if mp_paid_amount is not None else ''
 
+        movs=movement_by_tid.get(tid,[])
+        month_movs=[]
+        detail_items=[]
+        for p in movs:
+            causale=str(p['causale'] or '').strip()
+            causale_l=causale.lower()
+            pm=parse_int(p['mese'],0); py=parse_int(p['anno'],0)
+            is_enroll=(causale_l in ('iscrizione','tesseramento') or 'iscrizion' in causale_l)
+            is_month=('mensil' in causale_l or causale_l in ('quota','quota_mensile'))
+            if is_month and pm==mese and py==anno:
+                month_movs.append(p)
+            if is_enroll:
+                label='Iscrizione '+str(stagione)+'/'+str(stagione+1)
+            elif is_month and 1<=pm<=12:
+                label='Mensile '+months[pm]+' '+str(py)
+            else:
+                label=causale or 'Altro movimento'
+            method=str(p['metodo_pagamento'] or 'non indicato') if 'metodo_pagamento' in p.keys() else 'non indicato'
+            note=str(p['note_pagamento'] or '').strip() if 'note_pagamento' in p.keys() else ''
+            ref=str(p['riferimento_pagamento'] or '').strip() if 'riferimento_pagamento' in p.keys() else ''
+            stato=(str(p['stato'] or '').strip() if 'stato' in p.keys() else '') or (str(p['online_status'] or '').strip() if 'online_status' in p.keys() else '') or 'registrato'
+            pdate=str(p['data'] or '—') if 'data' in p.keys() else '—'
+            extra=[]
+            if ref: extra.append('Rif. '+ref)
+            if note: extra.append('Note: '+note)
+            detail_items.append(
+                "<div class='bmqi-movement' data-bm-payment-id='"+str(int(p['id']))+"' data-bm-causale='"+e(causale)+"'>"
+                "<div><b>"+e(label)+"</b><small>Causale: <code>"+e(causale or '—')+"</code></small></div>"
+                "<strong>"+_money(float(p['importo'] or 0))+"</strong>"
+                "<span>"+e(pdate)+" · "+e(method)+" · "+e(stato)+"</span>"
+                +("<em>"+e(' · '.join(extra))+"</em>" if extra else "")+
+                "</div>"
+            )
+        month_total=sum(float(p['importo'] or 0) for p in month_movs)
+        duplicate_warning=(
+            "<div class='bmqi-warning'><b>"+str(len(month_movs))+" movimenti mensili per "+months[mese]+" "+str(anno)+"</b>"
+            "<span>Totale storico registrato "+_money(month_total)+". È un dettaglio contabile: non viene usato come importo della quota mensile.</span></div>"
+            if len(month_movs)>1 else ""
+        )
+        details_html=(
+            "<details class='bmqi-details' data-bm-detail-tid='"+str(tid)+"'><summary>Dettaglio movimenti <b>"+str(len(movs))+"</b></summary>"
+            +duplicate_warning+
+            ("<div class='bmqi-movements'>"+''.join(detail_items)+"</div>" if detail_items else "<p>Nessun movimento registrato per queste voci.</p>")+
+            "</details>"
+        )
+        if mp_ok:
+            month_meta='Registrato '+_money(mp_paid_amount)+' · Modifica'
+        elif month_applicable:
+            month_meta='Da registrare'
+        else:
+            month_meta='Non dovuto'
+
         rows.append(
           "<article class='bmqi-row' data-bm-tid='"+str(tid)+"' data-bm-enroll-paid='"+('1' if ep_ok else '0')+
           "' data-bm-enroll-amount='"+ep_attr+"' data-bm-month-paid='"+('1' if mp_ok else '0')+
           "' data-bm-month-amount='"+mp_attr+"'>"
           "<div class='bmqi-name'><b>"+e(name)+"</b><small>"+months[mese]+" "+str(anno)+"</small></div>"
           "<a class='bmqi-pay "+enroll_cls+"' href='"+enroll_href+"'><span>ISCRIZIONE "+str(stagione)+"/"+str(stagione+1)+"</span><strong>"+_money(ep_amount)+"</strong><em>"+enroll_state+"</em><small>"+('Modifica' if ep_ok else 'Registra')+"</small></a>"
-          "<a class='bmqi-pay "+month_cls+"' href='"+month_href+"'><span>MENSILE · "+months[mese].upper()+" "+str(anno)+"</span><strong>"+_money(mp_display)+"</strong><em>"+month_state+"</em><small>"+('Modifica' if mp_ok else ('Apri' if month_applicable else 'Non dovuto'))+"</small></a>"
+          "<a class='bmqi-pay "+month_cls+"' href='"+month_href+"'><span>MENSILE · "+months[mese].upper()+" "+str(anno)+"</span><strong>"+_money(mp_display)+"</strong><em>"+month_state+"</em><small>"+e(month_meta)+"</small></a>"
+          +details_html+
           "</article>"
         )
 
@@ -1492,6 +1562,7 @@ def bodymind_quote_incassi_canonical():
       .bmqi-pay{{display:grid;grid-template-columns:1fr auto;grid-template-areas:'label amount' 'state action';gap:5px 10px;padding:11px;border-radius:12px;text-decoration:none!important;color:#fff!important;border:1px solid transparent}}
       .bmqi-pay>span{{grid-area:label;font-size:10px;font-weight:950;letter-spacing:.04em}}.bmqi-pay>strong{{grid-area:amount;font-size:18px;text-align:right}}.bmqi-pay>em{{grid-area:state;font-style:normal;font-size:11px;font-weight:950}}.bmqi-pay>small{{grid-area:action;text-align:right;font-weight:900}}
       .bmqi-pay.paid{{background:rgba(20,83,45,.72);border-color:rgba(74,222,128,.30)}}.bmqi-pay.due{{background:rgba(127,29,29,.54);border-color:rgba(248,113,113,.34)}}.bmqi-pay.na{{background:rgba(51,65,85,.46);border-color:rgba(148,163,184,.22);color:#cbd5e1!important}}
+      .bmqi-details{{grid-column:1/-1;border-top:1px solid rgba(148,163,184,.16);padding:8px 4px 2px}}.bmqi-details summary{{cursor:pointer;font-weight:950;color:#bfdbfe;padding:7px 4px}}.bmqi-details summary b{{display:inline-flex;min-width:22px;justify-content:center;margin-left:6px;padding:2px 6px;border-radius:999px;background:#163b5f;color:#fff}}.bmqi-warning{{display:grid;gap:3px;margin:5px 0 8px;padding:9px 10px;border-radius:10px;background:rgba(146,64,14,.42);border:1px solid rgba(251,191,36,.38);color:#fef3c7}}.bmqi-warning span{{font-size:11px;line-height:1.35}}.bmqi-movements{{display:grid;gap:6px}}.bmqi-movement{{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 12px;padding:9px 10px;border-radius:10px;background:#07182a;border:1px solid rgba(148,163,184,.14)}}.bmqi-movement>div{{display:grid;gap:2px}}.bmqi-movement b{{font-size:12px}}.bmqi-movement small,.bmqi-movement span,.bmqi-movement em{{font-size:10px;color:#a9bbcf;font-style:normal}}.bmqi-movement strong{{font-size:14px}}.bmqi-movement span,.bmqi-movement em{{grid-column:1/-1}}.bmqi-movement code{{color:#dbeafe}}
       @media(max-width:900px){{.bmqi-row{{grid-template-columns:1fr 1fr}}.bmqi-name{{grid-column:1/-1}}}}
       @media(max-width:620px){{.bmqi{{padding:11px 10px 65px}}.bmqi-head{{display:grid}}.bmqi-summary{{grid-template-columns:1fr}}.bmqi-row{{grid-template-columns:1fr}}.bmqi-name{{grid-column:auto}}.bmqi-period label,.bmqi-period select,.bmqi-period input,.bmqi-period button{{width:100%}}}}
     </style>"""
@@ -1502,6 +1573,133 @@ def bodymind_quote_incassi_canonical():
     print('[r123-quote-incassi] installed canonical enrollment+monthly summary',flush=True)
 else:
     print('[r123-quote-incassi] canonical summary already installed',flush=True)
+
+# Converge the already-persisted canonical function in place. This is not a
+# second renderer: it upgrades the one function that /quote-incassi delegates to.
+_core_qi_detail=CORE.read_text(encoding='utf-8',errors='replace')
+if 'BODYMIND_R123_QUOTE_INCASSI_DETAIL_V12' not in _core_qi_detail:
+    import ast as _bm_qi_detail_ast
+    _tree=_bm_qi_detail_ast.parse(_core_qi_detail); _lines=_core_qi_detail.splitlines(True)
+    _nodes=[n for n in _tree.body if isinstance(n,(_bm_qi_detail_ast.FunctionDef,_bm_qi_detail_ast.AsyncFunctionDef)) and n.name=='bodymind_quote_incassi_canonical']
+    if len(_nodes)!=1:
+        raise RuntimeError('canonical quote-incassi function count='+str(len(_nodes)))
+    _n=_nodes[0]; _a=_n.lineno-1; _b=int(getattr(_n,'end_lineno',_n.lineno))
+    _fn=''.join(_lines[_a:_b])
+    _fn=_fn.replace("def bodymind_quote_incassi_canonical():\n    from datetime import date as _bm_date",
+                    "def bodymind_quote_incassi_canonical():\n    # BODYMIND_R123_QUOTE_INCASSI_DETAIL_V12\n    from datetime import date as _bm_date",1)
+    _fn=_fn.replace("""                else:
+                    quote_by_tid[tid]=q
+    finally:
+        conn.close()""","""                else:
+                    quote_by_tid[tid]=q
+
+        # Read-only movement ledger for the selected month + annual enrollment.
+        # This explains historical split/duplicate rows without changing them.
+        movement_by_tid={}
+        _truth_ids=[int(x['tesserato_id']) for x in truth.get('rows',[]) if int(x.get('tesserato_id') or 0)>0]
+        if _truth_ids:
+            _marks=','.join('?' for _ in _truth_ids)
+            _args=list(_truth_ids)+[mese,anno,stagione,stagione+1]
+            _sql=("SELECT * FROM pagamenti WHERE tesserato_id IN ("+_marks+") "
+                  "AND ((mese=? AND anno=?) OR (anno IN (?,?) AND "
+                  "(lower(coalesce(causale,''))='iscrizione' OR lower(coalesce(causale,''))='tesseramento' "
+                  "OR lower(coalesce(causale,'')) LIKE '%iscrizion%'))) "
+                  "ORDER BY tesserato_id,COALESCE(data,''),id")
+            for p in conn.execute(_sql,_args).fetchall():
+                movement_by_tid.setdefault(int(p['tesserato_id']),[]).append(p)
+    finally:
+        conn.close()""",1)
+    _fn=_fn.replace("""        ep_amount=(float(ep['importo'] or 0) if ep_ok else None)
+        mp_paid_amount=(float(mp['importo'] or 0) if mp_ok else None)
+        if mp_ok:
+            mp_display=mp_paid_amount
+        elif q not in (None,'__missing__'):
+            mp_display=float(q['importo_dovuto'] or q['importo_base'] or 0)
+        else:
+            mp_display=None""","""        ep_amount=(float(ep['importo'] or 0) if ep_ok else None)
+        mp_paid_amount=(float(mp['importo'] or 0) if mp_ok else None)
+        mp_due_amount=(float(q['importo_dovuto'] or q['importo_base'] or 0) if q not in (None,'__missing__') else None)
+        if mp_due_amount is not None:
+            mp_display=mp_due_amount
+        elif mp_ok:
+            mp_display=mp_paid_amount
+        else:
+            mp_display=None""",1)
+    _fn=_fn.replace("""        ep_attr=('%.2f'%ep_amount) if ep_amount is not None else ''
+        mp_attr=('%.2f'%mp_paid_amount) if mp_paid_amount is not None else ''
+
+        rows.append(""","""        ep_attr=('%.2f'%ep_amount) if ep_amount is not None else ''
+        mp_attr=('%.2f'%mp_paid_amount) if mp_paid_amount is not None else ''
+
+        movs=movement_by_tid.get(tid,[])
+        month_movs=[]
+        detail_items=[]
+        for p in movs:
+            causale=str(p['causale'] or '').strip()
+            causale_l=causale.lower()
+            pm=parse_int(p['mese'],0); py=parse_int(p['anno'],0)
+            is_enroll=(causale_l in ('iscrizione','tesseramento') or 'iscrizion' in causale_l)
+            is_month=('mensil' in causale_l or causale_l in ('quota','quota_mensile'))
+            if is_month and pm==mese and py==anno:
+                month_movs.append(p)
+            if is_enroll:
+                label='Iscrizione '+str(stagione)+'/'+str(stagione+1)
+            elif is_month and 1<=pm<=12:
+                label='Mensile '+months[pm]+' '+str(py)
+            else:
+                label=causale or 'Altro movimento'
+            method=str(p['metodo_pagamento'] or 'non indicato') if 'metodo_pagamento' in p.keys() else 'non indicato'
+            note=str(p['note_pagamento'] or '').strip() if 'note_pagamento' in p.keys() else ''
+            ref=str(p['riferimento_pagamento'] or '').strip() if 'riferimento_pagamento' in p.keys() else ''
+            stato=(str(p['stato'] or '').strip() if 'stato' in p.keys() else '') or (str(p['online_status'] or '').strip() if 'online_status' in p.keys() else '') or 'registrato'
+            pdate=str(p['data'] or '—') if 'data' in p.keys() else '—'
+            extra=[]
+            if ref: extra.append('Rif. '+ref)
+            if note: extra.append('Note: '+note)
+            detail_items.append(
+                "<div class='bmqi-movement' data-bm-payment-id='"+str(int(p['id']))+"' data-bm-causale='"+e(causale)+"'>"
+                "<div><b>"+e(label)+"</b><small>Causale: <code>"+e(causale or '—')+"</code></small></div>"
+                "<strong>"+_money(float(p['importo'] or 0))+"</strong>"
+                "<span>"+e(pdate)+" · "+e(method)+" · "+e(stato)+"</span>"
+                +("<em>"+e(' · '.join(extra))+"</em>" if extra else "")+
+                "</div>"
+            )
+        month_total=sum(float(p['importo'] or 0) for p in month_movs)
+        duplicate_warning=(
+            "<div class='bmqi-warning'><b>"+str(len(month_movs))+" movimenti mensili per "+months[mese]+" "+str(anno)+"</b>"
+            "<span>Totale storico registrato "+_money(month_total)+". È un dettaglio contabile: non viene usato come importo della quota mensile.</span></div>"
+            if len(month_movs)>1 else ""
+        )
+        details_html=(
+            "<details class='bmqi-details' data-bm-detail-tid='"+str(tid)+"'><summary>Dettaglio movimenti <b>"+str(len(movs))+"</b></summary>"
+            +duplicate_warning+
+            ("<div class='bmqi-movements'>"+''.join(detail_items)+"</div>" if detail_items else "<p>Nessun movimento registrato per queste voci.</p>")+
+            "</details>"
+        )
+        if mp_ok:
+            month_meta='Registrato '+_money(mp_paid_amount)+' · Modifica'
+        elif month_applicable:
+            month_meta='Da registrare'
+        else:
+            month_meta='Non dovuto'
+
+        rows.append(""",1)
+    _fn=_fn.replace("""          "<a class='bmqi-pay "+month_cls+"' href='"+month_href+"'><span>MENSILE · "+months[mese].upper()+" "+str(anno)+"</span><strong>"+_money(mp_display)+"</strong><em>"+month_state+"</em><small>"+('Modifica' if mp_ok else ('Apri' if month_applicable else 'Non dovuto'))+"</small></a>"
+          "</article>""","""          "<a class='bmqi-pay "+month_cls+"' href='"+month_href+"'><span>MENSILE · "+months[mese].upper()+" "+str(anno)+"</span><strong>"+_money(mp_display)+"</strong><em>"+month_state+"</em><small>"+e(month_meta)+"</small></a>"
+          +details_html+
+          "</article>""",1)
+    _fn=_fn.replace("""      .bmqi-pay.paid{{background:rgba(20,83,45,.72);border-color:rgba(74,222,128,.30)}}.bmqi-pay.due{{background:rgba(127,29,29,.54);border-color:rgba(248,113,113,.34)}}.bmqi-pay.na{{background:rgba(51,65,85,.46);border-color:rgba(148,163,184,.22);color:#cbd5e1!important}}
+      @media(max-width:900px)""","""      .bmqi-pay.paid{{background:rgba(20,83,45,.72);border-color:rgba(74,222,128,.30)}}.bmqi-pay.due{{background:rgba(127,29,29,.54);border-color:rgba(248,113,113,.34)}}.bmqi-pay.na{{background:rgba(51,65,85,.46);border-color:rgba(148,163,184,.22);color:#cbd5e1!important}}
+      .bmqi-details{{grid-column:1/-1;border-top:1px solid rgba(148,163,184,.16);padding:8px 4px 2px}}.bmqi-details summary{{cursor:pointer;font-weight:950;color:#bfdbfe;padding:7px 4px}}.bmqi-details summary b{{display:inline-flex;min-width:22px;justify-content:center;margin-left:6px;padding:2px 6px;border-radius:999px;background:#163b5f;color:#fff}}.bmqi-warning{{display:grid;gap:3px;margin:5px 0 8px;padding:9px 10px;border-radius:10px;background:rgba(146,64,14,.42);border:1px solid rgba(251,191,36,.38);color:#fef3c7}}.bmqi-warning span{{font-size:11px;line-height:1.35}}.bmqi-movements{{display:grid;gap:6px}}.bmqi-movement{{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 12px;padding:9px 10px;border-radius:10px;background:#07182a;border:1px solid rgba(148,163,184,.14)}}.bmqi-movement>div{{display:grid;gap:2px}}.bmqi-movement b{{font-size:12px}}.bmqi-movement small,.bmqi-movement span,.bmqi-movement em{{font-size:10px;color:#a9bbcf;font-style:normal}}.bmqi-movement strong{{font-size:14px}}.bmqi-movement span,.bmqi-movement em{{grid-column:1/-1}}.bmqi-movement code{{color:#dbeafe}}
+      @media(max-width:900px)""",1)
+    if 'BODYMIND_R123_QUOTE_INCASSI_DETAIL_V12' not in _fn:
+        raise RuntimeError('quote-incassi detail convergence anchors did not apply')
+    _lines[_a:_b]=[_fn+'\n']
+    CORE.write_text(''.join(_lines),encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+    print('[r123-quote-incassi-detail] converged canonical function in place',flush=True)
+else:
+    print('[r123-quote-incassi-detail] already canonical',flush=True)
 
 # Replace the historical /quote-incassi implementation at source level.
 # Preserve the registered endpoint/decorators, but make its body delegate to the
@@ -1603,6 +1801,9 @@ checks={
  'truth':rendered==expected,
  'no_legacy_columns':not any(x in h.upper() for x in ('>RESIDUO<','>CREDITO<','>SCONTO<','>INCASSATO<')),
  'two_semantics':'ISCRIZIONE 2026/2027' in h and 'MENSILE · OTTOBRE 2026' in h,
+ 'movement_details':h.count("data-bm-detail-tid=")==len(expected) and 'data-bm-payment-id=' in h,
+ 'duplicate_explained':'mensile_parziale_2' in h and 'Totale storico registrato' in h,
+ 'due_vs_registered':'Registrato ' in h and 'Dovuto' not in h,
  'read_only':counts_before==counts_after,
  'db':integrity.lower()=='ok' and fk==0,
 }
