@@ -2942,3 +2942,75 @@ print((_v11p.stdout or "").strip(),flush=True)
 if _v11p.returncode!=0:
     raise RuntimeError("R123 V11 child audit failed "+((_v11p.stderr or "")+(_v11p.stdout or ""))[-6000:])
 print('[r123-expense-v11] PASS one-expense-module attachments-preview-download payments-preserved before='+str(_v11_before)+' after='+str(_v11_after),flush=True)
+
+
+# BODYMIND_R123_DASHBOARD_BACKGROUND_RESTORE
+# UI-only convergence: restore the layered A239 dashboard atmosphere that was
+# flattened by later global body backgrounds. No routes, data or mobile operator
+# behavior are changed. The first radial layer is recovered from the historical
+# rendered production CSS; the remaining layers use the same established navy palette.
+_core_bg=CORE.read_text(encoding='utf-8',errors='replace')
+if 'BODYMIND_R123_DASHBOARD_BACKGROUND_RESTORE_RUNTIME' not in _core_bg:
+    _core_bg += r'''
+# BODYMIND_R123_DASHBOARD_BACKGROUND_RESTORE_RUNTIME
+@app.after_request
+def _bodymind_dashboard_background_restore_r123(resp):
+    try:
+        if request.method!='GET' or request.path not in ('/','/dashboard'):
+            return resp
+        if int(getattr(resp,'status_code',200) or 200)!=200:
+            return resp
+        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
+            return resp
+        html=resp.get_data(as_text=True)
+        if 'BODYMIND_R123_DASHBOARD_BACKGROUND_RESTORE_RENDERED' in html:
+            return resp
+        css="""<style id='bodymind-r123-dashboard-background'>
+        /* BODYMIND_R123_DASHBOARD_BACKGROUND_RESTORE_RENDERED */
+        html body.a239-theme-root,
+        html body.a236-enterprise-active{
+          background:
+            radial-gradient(circle at 12% 6%, rgba(255,255,255,.10) 0%, rgba(255,255,255,.04) 18%, transparent 38%),
+            radial-gradient(circle at 88% 12%, rgba(59,130,246,.14) 0%, rgba(30,64,175,.07) 24%, transparent 44%),
+            radial-gradient(circle at 54% 86%, rgba(14,165,233,.08) 0%, transparent 42%),
+            linear-gradient(145deg,#07111f 0%,#0a1728 42%,#0d2034 72%,#071321 100%) !important;
+          background-attachment:fixed!important;
+          min-height:100vh;
+        }
+        html body.a239-theme-root > .overlay,
+        html body.a236-enterprise-active > .overlay{
+          background:transparent!important;
+        }
+        @media(max-width:760px){
+          html body.a239-theme-root,
+          html body.a236-enterprise-active{
+            background:
+              radial-gradient(circle at 12% 6%, rgba(255,255,255,.08) 0%, rgba(255,255,255,.03) 18%, transparent 36%),
+              linear-gradient(160deg,#07111f 0%,#0a1728 52%,#071321 100%) !important;
+            background-attachment:scroll!important;
+          }
+        }
+        </style>"""
+        if '</head>' in html:
+            html=html.replace('</head>',css+'</head>',1)
+        else:
+            html=css+html
+        resp.set_data(html)
+    except Exception as exc:
+        print('[dashboard-background-r123-warning] '+repr(exc),flush=True)
+    return resp
+'''
+    CORE.write_text(_core_bg,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+
+# Static/read-only guard: this UI change must not touch business data.
+_bg_conn=sqlite3.connect(str(DB),timeout=20)
+try:
+    _bg_counts={t:int(_bg_conn.execute("SELECT COUNT(*) FROM "+t).fetchone()[0]) for t in ("tesserati","pagamenti","ricevute")}
+    _bg_integrity=str(_bg_conn.execute("PRAGMA integrity_check").fetchone()[0])
+    _bg_fk=len(_bg_conn.execute("PRAGMA foreign_key_check").fetchall())
+finally:
+    _bg_conn.close()
+if _bg_integrity.lower()!='ok' or _bg_fk:
+    raise RuntimeError('Dashboard background restore DB guard failed')
+print('[r123-dashboard-background] PASS a239-layered-background scoped-dashboard-only counts='+str(_bg_counts)+' integrity='+_bg_integrity+' fk='+str(_bg_fk),flush=True)
