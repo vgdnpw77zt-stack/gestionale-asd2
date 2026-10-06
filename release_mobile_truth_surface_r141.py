@@ -465,3 +465,90 @@ proc=subprocess.run([sys.executable,'-c',qa],capture_output=True,text=True,timeo
 print((proc.stdout or '').strip(),flush=True)
 if proc.returncode!=0:
     raise RuntimeError('R141 child QA failed '+((proc.stderr or '')+(proc.stdout or ''))[-5000:])
+
+
+# BODYMIND_R157_MOBILE_HOME_BACKGROUND
+# Mobile-home-only visual convergence. /mobile is the real iPhone dashboard;
+# previous desktop-only background restores did not affect this route.
+_core_r157=CORE.read_text(encoding='utf-8',errors='replace')
+if 'BODYMIND_R157_MOBILE_HOME_BACKGROUND_RUNTIME' not in _core_r157:
+    _core_r157 += r'''
+
+# BODYMIND_R157_MOBILE_HOME_BACKGROUND_RUNTIME
+@app.after_request
+def _bodymind_mobile_home_background_r157(resp):
+    try:
+        if request.method!='GET' or request.path!='/mobile':
+            return resp
+        if int(getattr(resp,'status_code',200) or 200)!=200:
+            return resp
+        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
+            return resp
+        html=resp.get_data(as_text=True)
+        if 'BODYMIND_R157_MOBILE_HOME_BACKGROUND_RENDERED' in html:
+            return resp
+        addon=r"""<!-- BODYMIND_R157_MOBILE_HOME_BACKGROUND_RENDERED -->
+<style id="bodymind-r157-mobile-home-background">
+html,html body{
+  min-height:100%!important;
+  background:
+    radial-gradient(circle at 8% 2%,rgba(255,255,255,.13) 0%,rgba(255,255,255,.045) 18%,transparent 36%),
+    radial-gradient(circle at 92% 10%,rgba(56,189,248,.24) 0%,rgba(37,99,235,.11) 27%,transparent 48%),
+    radial-gradient(circle at 48% 92%,rgba(16,185,129,.10) 0%,transparent 40%),
+    linear-gradient(155deg,#050d18 0%,#08182a 43%,#102a43 72%,#06111e 100%)!important;
+  background-attachment:fixed!important;
+}
+html body:before{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;
+  background:
+    radial-gradient(ellipse at 50% -8%,rgba(255,255,255,.09),transparent 44%),
+    linear-gradient(118deg,transparent 0 47%,rgba(255,255,255,.025) 47.2% 47.8%,transparent 48%);
+}
+html body>.overlay,html body .overlay{background:transparent!important}
+html body main,html body .wrap,html body .mobile-home,html body .dashboard,html body .dashboard-page{
+  background:transparent!important;
+}
+.r141-dash-panel{
+  background:linear-gradient(145deg,rgba(8,25,43,.86),rgba(13,38,62,.80))!important;
+  border-color:rgba(125,211,252,.20)!important;
+  box-shadow:0 18px 42px rgba(0,0,0,.20)!important;
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+}
+@supports(-webkit-touch-callout:none){
+  html,html body{background-attachment:scroll!important}
+}
+</style>
+<script id="bodymind-r157-mobile-home-js">
+(function(){
+  try{
+    document.documentElement.style.setProperty('background-color','#050d18','important');
+    document.body.style.setProperty('background-color','transparent','important');
+  }catch(_){}
+})();
+</script>"""
+        if '</body>' in html:
+            html=html.replace('</body>',addon+'</body>',1)
+        else:
+            html+=addon
+        resp.set_data(html)
+    except Exception as exc:
+        print('[r157-mobile-home-background-warning] '+repr(exc),flush=True)
+    return resp
+'''
+    CORE.write_text(_core_r157,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+    print('[r157-mobile-home-background] installed /mobile premium background override',flush=True)
+else:
+    print('[r157-mobile-home-background] already installed',flush=True)
+
+# Read-only invariant gate.
+_r157_conn=sqlite3.connect(str(DB),timeout=20)
+try:
+    _r157_counts={t:int(_r157_conn.execute("SELECT COUNT(*) FROM "+t).fetchone()[0]) for t in ("tesserati","pagamenti","ricevute","documenti")}
+    _r157_integrity=str(_r157_conn.execute("PRAGMA integrity_check").fetchone()[0])
+    _r157_fk=len(_r157_conn.execute("PRAGMA foreign_key_check").fetchall())
+finally:
+    _r157_conn.close()
+if _r157_integrity.lower()!='ok' or _r157_fk:
+    raise RuntimeError('R157 mobile-home background DB guard failed')
+print('[r157-mobile-home-background-selftest] PASS route=/mobile ui-only counts='+str(_r157_counts)+' integrity='+_r157_integrity+' fk='+str(_r157_fk),flush=True)
