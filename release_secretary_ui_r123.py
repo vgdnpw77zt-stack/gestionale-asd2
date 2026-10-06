@@ -2338,6 +2338,119 @@ if _p.returncode!=0:
 print('[r123-admin-v9] PASS admin-functions-restored-via-live-routes backups-preserved data-intact',flush=True)
 
 
+# BODYMIND_R123_CANONICAL_PAYMENT_CONVERGENCE
+# Reconcile already-persistent runtime sources without introducing another release layer.
+# This is source-only: no payment/receipt/document rows are created, deleted or rewritten here.
+_core_conv=CORE.read_text(encoding='utf-8',errors='replace')
+_old_quote_truth=r"""    # Legacy quote_mensili can prove that a monthly was already marked paid,
+    # but never creates a second cash receipt.
+    if _table_local('quote_mensili'):
+        qrows=conn.execute("SELECT * FROM quote_mensili WHERE mese=? AND anno=?",(mese,anno)).fetchall()
+        for q in qrows:
+            tid=int(q['tesserato_id'] or 0) if 'tesserato_id' in q.keys() else 0
+            if tid not in by_tid: continue
+            st=str(q['stato'] or '').strip().lower() if 'stato' in q.keys() else ''
+            if any(x in st for x in ('pagat','saldat','paid','incassat','complet')):
+                by_tid[tid]['mensile_pagato']=True
+
+"""
+_new_quote_truth=r"""    # quote_mensili describes what is due (and can retain legacy workflow state),
+    # but it is NOT evidence of a cash receipt. A monthly is paid only when a
+    # canonical row exists in pagamenti for the exact athlete + month + year.
+    # This prevents Dashboard/Task/Tesserati/Operatore from inventing an incasso.
+
+"""
+if _old_quote_truth in _core_conv:
+    _core_conv=_core_conv.replace(_old_quote_truth,_new_quote_truth,1)
+_core_conv=_core_conv.replace(
+    "if request.method!='GET' or request.path!='/dashboard' or int(getattr(resp,'status_code',200) or 200)!=200:",
+    "if request.method!='GET' or request.path not in ('/dashboard','/cuore-operativo','/centro-operativo') or int(getattr(resp,'status_code',200) or 200)!=200:",
+    1
+)
+# Collaboratori is a real business module and must remain visible in normal desktop navigation.
+_core_conv=_core_conv.replace(
+    "if can_access_section('collaboratori') and is_advanced_mode() else ''",
+    "if can_access_section('collaboratori') else ''"
+)
+CORE.write_text(_core_conv,encoding='utf-8')
+py_compile.compile(str(CORE),doraise=True)
+
+# Patch only the canonical payment/navigation fragments in the already-installed
+# operator; preserve R52-R155 document, audio and iOS work.
+_OP=APP/'asd_app/routes_operator_bodymind.py'
+if _OP.exists():
+    _ops=_OP.read_text(encoding='utf-8',errors='replace')
+    _src=Path('/opt/bodymind/operator_bodymind_runtime_r29.py').read_text(encoding='utf-8',errors='replace')
+    for _start,_end in (
+        ('def _payment_split_counts(', '\ndef _global_check('),
+        ('def _links_for(', '\ndef _set_pending_action('),
+    ):
+        _a=_src.find(_start); _b=_src.find(_end,_a)
+        _oa=_ops.find(_start); _ob=_ops.find(_end,_oa)
+        if _a>=0 and _b>_a and _oa>=0 and _ob>_oa:
+            _ops=_ops[:_oa]+_src[_a:_b]+_ops[_ob:]
+    # Copy the deterministic named-athlete payment branch from canonical source.
+    _mark='# Canonical deterministic payment status for a named athlete.'
+    if _mark not in _ops and _mark in _src:
+        _sa=_src.find(_mark)
+        _sb=_src.find('    # BODYMIND_R40_AGENT_TOOLS',_sa)
+        _anchor='    # BODYMIND_R40_AGENT_TOOLS'
+        _oa=_ops.find(_anchor)
+        if _sb>_sa and _oa>=0:
+            _ops=_ops[:_oa]+_src[_sa:_sb]+_ops[_oa:]
+    # Period-aware count branch: replace only the simple-fact payment clause.
+    _s0=_src.find('        if "pagament" in n or "incass" in n:')
+    _s1=_src.find('        if "ricevut" in n:',_s0)
+    _o0=_ops.find('        if "pagament" in n or "incass" in n:')
+    _o1=_ops.find('        if "ricevut" in n:',_o0)
+    if _s0>=0 and _s1>_s0 and _o0>=0 and _o1>_o0:
+        _ops=_ops[:_o0]+_src[_s0:_s1]+_ops[_o1:]
+    _OP.write_text(_ops,encoding='utf-8')
+    py_compile.compile(str(_OP),doraise=True)
+
+# Read-only convergence gate. Never use quote_mensili as proof of an incasso.
+_conv_qa=r"""
+import json,sqlite3,sys
+sys.path.insert(0,"/data/top2_app")
+import app as _full
+from asd_app.core import app,bodymind_payment_truth
+from pathlib import Path
+c=sqlite3.connect("/data/tenants/default/asd.db",timeout=20); c.row_factory=sqlite3.Row
+try:
+    before={t:int(c.execute("SELECT COUNT(*) FROM "+t).fetchone()[0]) for t in ("tesserati","pagamenti","ricevute")}
+    today=__import__('datetime').date.today()
+    truth=bodymind_payment_truth(c,mese=today.month,anno=today.year)
+    mismatches=[]
+    for row in truth.get("rows",[]):
+        tid=int(row["tesserato_id"])
+        paid=c.execute('''SELECT 1 FROM pagamenti WHERE tesserato_id=? AND mese=? AND anno=?
+          AND (lower(coalesce(causale,'')) LIKE '%mensil%' OR lower(coalesce(causale,'')) IN ('quota','quota_mensile'))
+          AND lower(coalesce(stato,'')||' '||coalesce(online_status,'')) NOT LIKE '%pending%'
+          AND lower(coalesce(stato,'')||' '||coalesce(online_status,'')) NOT LIKE '%annull%'
+          AND lower(coalesce(stato,'')||' '||coalesce(online_status,'')) NOT LIKE '%failed%'
+          LIMIT 1''',(tid,today.month,today.year)).fetchone()
+        if bool(row.get("mensile_pagato")) != bool(paid):
+            mismatches.append(tid)
+    after={t:int(c.execute("SELECT COUNT(*) FROM "+t).fetchone()[0]) for t in ("tesserati","pagamenti","ricevute")}
+    integrity=str(c.execute("PRAGMA integrity_check").fetchone()[0]); fk=len(c.execute("PRAGMA foreign_key_check").fetchall())
+finally:c.close()
+src=Path("/data/top2_app/asd_app/core.py").read_text(encoding="utf-8",errors="replace")
+ops=Path("/data/top2_app/asd_app/routes_operator_bodymind.py").read_text(encoding="utf-8",errors="replace")
+out={"counts_before":before,"counts_after":after,"monthly_truth_mismatches":mismatches,"integrity":integrity,"fk":fk,
+     "collaboratori_normal_nav":"if can_access_section('collaboratori') and is_advanced_mode() else ''" not in src,
+     "operator_canonical":"from .core import bodymind_payment_truth" in ops and "/quote-incassi/atleta/" not in ops,
+     "no_forced_ios_scroll":"if(window.scrollY)window.scrollTo(0,0);" not in ops}
+print("[r123-canonical-payment-convergence-audit] "+json.dumps(out,ensure_ascii=False),flush=True)
+if before!=after or mismatches or integrity.lower()!="ok" or fk or not all(out[k] for k in ("collaboratori_normal_nav","operator_canonical","no_forced_ios_scroll")):
+    raise RuntimeError("canonical payment convergence audit failed")
+"""
+_cp=subprocess.run([sys.executable,"-c",_conv_qa],capture_output=True,text=True,timeout=180)
+print((_cp.stdout or "").strip(),flush=True)
+if _cp.returncode!=0:
+    raise RuntimeError("R123 canonical convergence child audit failed "+((_cp.stderr or "")+(_cp.stdout or ""))[-6000:])
+print('[r123-canonical-payment-convergence] PASS one-cash-truth operator-links collaborators-visible ios-preserved',flush=True)
+
+
 # BODYMIND_R123_ONBOARDING_PAYMENT_SYNC_V10
 # A paid athlete/document truth must immediately reconcile the stale onboarding
 # flags used by dashboard/tesserati. Monthly arrears remain operational tasks,
@@ -2482,123 +2595,6 @@ print((_v10p.stdout or "").strip(),flush=True)
 if _v10p.returncode!=0:
     raise RuntimeError("R123 V10 child audit failed "+((_v10p.stderr or "")+(_v10p.stdout or ""))[-6000:])
 print('[r123-onboarding-v10] PASS payment+document truth reconciles tesseramento/dashboard status',flush=True)
-
-
-# BODYMIND_R123_CANONICAL_PAYMENT_CONVERGENCE
-# Reconcile already-persistent runtime sources without introducing another release layer.
-# This is source-only: no payment/receipt/document rows are created, deleted or rewritten here.
-_core_conv=CORE.read_text(encoding='utf-8',errors='replace')
-_old_quote_truth=r"""    # Legacy quote_mensili can prove that a monthly was already marked paid,
-    # but never creates a second cash receipt.
-    if _table_local('quote_mensili'):
-        qrows=conn.execute("SELECT * FROM quote_mensili WHERE mese=? AND anno=?",(mese,anno)).fetchall()
-        for q in qrows:
-            tid=int(q['tesserato_id'] or 0) if 'tesserato_id' in q.keys() else 0
-            if tid not in by_tid: continue
-            st=str(q['stato'] or '').strip().lower() if 'stato' in q.keys() else ''
-            if any(x in st for x in ('pagat','saldat','paid','incassat','complet')):
-                by_tid[tid]['mensile_pagato']=True
-
-"""
-_new_quote_truth=r"""    # quote_mensili describes what is due (and can retain legacy workflow state),
-    # but it is NOT evidence of a cash receipt. A monthly is paid only when a
-    # canonical row exists in pagamenti for the exact athlete + month + year.
-    # This prevents Dashboard/Task/Tesserati/Operatore from inventing an incasso.
-
-"""
-if _old_quote_truth in _core_conv:
-    _core_conv=_core_conv.replace(_old_quote_truth,_new_quote_truth,1)
-_core_conv=_core_conv.replace(
-    "if request.method!='GET' or request.path!='/dashboard' or int(getattr(resp,'status_code',200) or 200)!=200:",
-    "if request.method!='GET' or request.path not in ('/dashboard','/cuore-operativo','/centro-operativo') or int(getattr(resp,'status_code',200) or 200)!=200:",
-    1
-)
-# Collaboratori is a real business module and must remain visible in normal desktop navigation.
-_core_conv=_core_conv.replace(
-    "if can_access_section('collaboratori') and is_advanced_mode() else ''",
-    "if can_access_section('collaboratori') else ''"
-)
-CORE.write_text(_core_conv,encoding='utf-8')
-py_compile.compile(str(CORE),doraise=True)
-
-# Patch only the canonical payment/navigation fragments in the already-installed
-# operator; preserve R52-R155 document, audio and iOS work.
-_OP=APP/'asd_app/routes_operator_bodymind.py'
-if _OP.exists():
-    _ops=_OP.read_text(encoding='utf-8',errors='replace')
-    _src=Path('/opt/bodymind/operator_bodymind_runtime_r29.py').read_text(encoding='utf-8',errors='replace')
-    for _start,_end in (
-        ('def _payment_split_counts(', '\ndef _global_check('),
-        ('def _links_for(', '\ndef _set_pending_action('),
-    ):
-        _a=_src.find(_start); _b=_src.find(_end,_a)
-        _oa=_ops.find(_start); _ob=_ops.find(_end,_oa)
-        if _a>=0 and _b>_a and _oa>=0 and _ob>_oa:
-            _ops=_ops[:_oa]+_src[_a:_b]+_ops[_ob:]
-    # Copy the deterministic named-athlete payment branch from canonical source.
-    _mark='# Canonical deterministic payment status for a named athlete.'
-    if _mark not in _ops and _mark in _src:
-        _sa=_src.find(_mark)
-        _sb=_src.find('    # BODYMIND_R40_AGENT_TOOLS',_sa)
-        _anchor='    # BODYMIND_R40_AGENT_TOOLS'
-        _oa=_ops.find(_anchor)
-        if _sb>_sa and _oa>=0:
-            _ops=_ops[:_oa]+_src[_sa:_sb]+_ops[_oa:]
-    # Period-aware count branch: replace only the simple-fact payment clause.
-    _s0=_src.find('        if "pagament" in n or "incass" in n:')
-    _s1=_src.find('        if "ricevut" in n:',_s0)
-    _o0=_ops.find('        if "pagament" in n or "incass" in n:')
-    _o1=_ops.find('        if "ricevut" in n:',_o0)
-    if _s0>=0 and _s1>_s0 and _o0>=0 and _o1>_o0:
-        _ops=_ops[:_o0]+_src[_s0:_s1]+_ops[_o1:]
-    _OP.write_text(_ops,encoding='utf-8')
-    py_compile.compile(str(_OP),doraise=True)
-
-# Read-only convergence gate. Never use quote_mensili as proof of an incasso.
-_conv_qa=r"""
-import json,sqlite3,sys
-sys.path.insert(0,"/data/top2_app")
-import app as _full
-from asd_app.core import app,bodymind_payment_truth
-from pathlib import Path
-c=sqlite3.connect("/data/tenants/default/asd.db",timeout=20); c.row_factory=sqlite3.Row
-try:
-    before={t:int(c.execute("SELECT COUNT(*) FROM "+t).fetchone()[0]) for t in ("tesserati","pagamenti","ricevute")}
-    today=__import__('datetime').date.today()
-    truth=bodymind_payment_truth(c,mese=today.month,anno=today.year)
-    mismatches=[]
-    for row in truth.get("rows",[]):
-        tid=int(row["tesserato_id"])
-        paid=c.execute('''SELECT 1 FROM pagamenti WHERE tesserato_id=? AND mese=? AND anno=?
-          AND (lower(coalesce(causale,'')) LIKE '%mensil%' OR lower(coalesce(causale,'')) IN ('quota','quota_mensile'))
-          AND lower(coalesce(stato,'')||' '||coalesce(online_status,'')) NOT LIKE '%pending%'
-          AND lower(coalesce(stato,'')||' '||coalesce(online_status,'')) NOT LIKE '%annull%'
-          AND lower(coalesce(stato,'')||' '||coalesce(online_status,'')) NOT LIKE '%failed%'
-          LIMIT 1''',(tid,today.month,today.year)).fetchone()
-        if bool(row.get("mensile_pagato")) != bool(paid):
-            mismatches.append(tid)
-    after={t:int(c.execute("SELECT COUNT(*) FROM "+t).fetchone()[0]) for t in ("tesserati","pagamenti","ricevute")}
-    integrity=str(c.execute("PRAGMA integrity_check").fetchone()[0]); fk=len(c.execute("PRAGMA foreign_key_check").fetchall())
-finally:c.close()
-src=Path("/data/top2_app/asd_app/core.py").read_text(encoding="utf-8",errors="replace")
-ops=Path("/data/top2_app/asd_app/routes_operator_bodymind.py").read_text(encoding="utf-8",errors="replace")
-routes=[str(r.rule) for r in app.url_map.iter_rules()]
-duplicates=len(routes)-len(set(routes))
-out={"counts_before":before,"counts_after":after,"monthly_truth_mismatches":mismatches,"integrity":integrity,"fk":fk,"duplicates":duplicates,
-     "collaboratori_normal_nav":"if can_access_section('collaboratori') and is_advanced_mode() else ''" not in src,
-     "operator_canonical":"from .core import bodymind_payment_truth" in ops and "/quote-incassi/atleta/" not in ops,
-     "ios_r153":"BODYMIND_R153_KEYBOARD_CONSOLIDATION" in ops,
-     "ios_r154":"BODYMIND_R154_OPERATOR_MOBILE_COMPOSER_FINAL" in ops,
-     "no_forced_ios_scroll":"if(window.scrollY)window.scrollTo(0,0);" not in ops}
-print("[r123-canonical-payment-convergence-audit] "+json.dumps(out,ensure_ascii=False),flush=True)
-if before!=after or mismatches or integrity.lower()!="ok" or fk or duplicates or not all(out[k] for k in ("collaboratori_normal_nav","operator_canonical","ios_r153","ios_r154","no_forced_ios_scroll")):
-    raise RuntimeError("canonical payment convergence audit failed")
-"""
-_cp=subprocess.run([sys.executable,"-c",_conv_qa],capture_output=True,text=True,timeout=180)
-print((_cp.stdout or "").strip(),flush=True)
-if _cp.returncode!=0:
-    raise RuntimeError("R123 canonical convergence child audit failed "+((_cp.stderr or "")+(_cp.stdout or ""))[-6000:])
-print('[r123-canonical-payment-convergence] PASS one-cash-truth operator-links collaborators-visible ios-preserved',flush=True)
 
 
 # BODYMIND_R123_EXPENSE_ATTACHMENTS_V11
