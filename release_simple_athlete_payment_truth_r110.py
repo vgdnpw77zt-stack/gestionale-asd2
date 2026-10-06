@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 import py_compile, re, shutil, sqlite3
-from datetime import datetime
 from pathlib import Path
 
 APP=Path('/data/top2_app')
@@ -15,13 +14,6 @@ if not APP.joinpath('.TOP2_OFFICIAL').exists():
 def backup_file(p):
     dst=BACK/p.name
     if p.exists() and not dst.exists(): shutil.copy2(p,dst)
-
-def backup_db():
-    dst=BACK/(datetime.now().strftime('%Y%m%d_%H%M%S')+'_pre_r110.db')
-    src=sqlite3.connect(str(DB),timeout=30); out=sqlite3.connect(str(dst))
-    try: src.backup(out)
-    finally: out.close(); src.close()
-    return str(dst)
 
 def compile_file(p):
     py_compile.compile(str(p),doraise=True)
@@ -250,18 +242,15 @@ else:
     print('[r110-mobile] already applied',flush=True)
 
 # ------------------------------------------------------------------
-# Close only redundant aggregate alerts. Preserve all history and specific
-# alerts. This is not a deletion and can be rolled back from the DB backup.
+# Read-only startup diagnostic for aggregate alerts.
+# Runtime filtering may hide redundant aggregate tasks, but startup must never
+# rewrite business state merely to make a regression gate pass.
 # ------------------------------------------------------------------
 backup=''
-conn=sqlite3.connect(str(DB),timeout=30); conn.row_factory=sqlite3.Row
+conn=sqlite3.connect("file:"+str(DB)+"?mode=ro",uri=True,timeout=30); conn.row_factory=sqlite3.Row
 try:
     open_agg=int(conn.execute("SELECT COUNT(*) FROM smart_alerts WHERE status='open' AND tipo='tesseramento_bloccato'").fetchone()[0]) if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='smart_alerts'").fetchone() else 0
-    if open_agg:
-        backup=backup_db()
-        conn.execute("UPDATE smart_alerts SET status='closed',closed_at=COALESCE(closed_at,datetime('now')),updated_at=datetime('now') WHERE status='open' AND tipo='tesseramento_bloccato'")
-        conn.commit()
-    remaining_agg=int(conn.execute("SELECT COUNT(*) FROM smart_alerts WHERE status='open' AND tipo='tesseramento_bloccato'").fetchone()[0]) if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='smart_alerts'").fetchone() else 0
+    remaining_agg=open_agg
     counts={t:int(conn.execute('SELECT COUNT(*) FROM '+t).fetchone()[0]) for t in ('tesserati','pagamenti','quote_mensili','documenti','inbound_documents') if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(t,)).fetchone()}
     integrity=str(conn.execute('PRAGMA integrity_check').fetchone()[0]); fk=len(conn.execute('PRAGMA foreign_key_check').fetchall())
 finally: conn.close()
@@ -273,10 +262,10 @@ checks={
  'mobile_simple':'BODYMIND_R110_SIMPLE_MOBILE' in mob and "request.method=='POST'" in mob,
  'payments_canonical':"SELECT * FROM pagamenti WHERE tesserato_id=?" in desk and ("SELECT * FROM pagamenti WHERE tesserato_id=?" in mob or "BODYMIND_R144_CANONICAL_PROFILE_TRUTH" in mob),
  'quote_not_payment_truth':'quote_mensili' not in desk[desk.find('BODYMIND_R110_SIMPLE_DESKTOP'):desk.find('BODYMIND_R110_SIMPLE_DESKTOP')+12000],
- 'aggregate_alerts_closed':remaining_agg==0,
+ 'aggregate_alerts_read_only':True,
  'db_ok':integrity.lower()=='ok' and fk==0,
 }
-print('[r110-summary] counts='+repr(counts)+' open_aggregate_before='+str(open_agg)+' remaining='+str(remaining_agg)+' backup='+backup,flush=True)
+print('[r110-summary] mode=read_only counts='+repr(counts)+' legacy_open_aggregate_alerts='+str(open_agg),flush=True)
 print('[r110-checks] '+repr(checks)+' integrity='+integrity+' fk='+str(fk),flush=True)
 failed=[k for k,v in checks.items() if not v]
 if failed: raise RuntimeError('R110 QA failed '+repr(failed))
@@ -319,9 +308,9 @@ print('[r110-payment-focus] PASS athlete-scoped canonical payment navigation',fl
 
 
 # BODYMIND_R110_PAYMENT_TASK_TRUTH_V2
-# One payment truth for operational tasks. Canonical paid records win, but
-# already-registered legacy enrollment flags and paid quote_mensili states
-# remain valid so existing secretary work is never lost.
+# Compatibility task wrapper. Payment state is canonical only through
+# bodymind_payment_truth(); legacy enrollment flags are diagnostic metadata and
+# quote_mensili describes due periods, never cash receipts.
 _core_v2=CORE.read_text(encoding='utf-8',errors='replace')
 if 'BODYMIND_R110_PAYMENT_TASK_TRUTH_V2' not in _core_v2:
     _core_v2 += r'''
@@ -342,33 +331,14 @@ def _bodymind_payment_paid_row_v2(p):
     return bool(get('data','') or get('paid_at','')) and amount>0
 
 def _bodymind_enrollment_paid_v2(conn, tid, season_start):
-    row=conn.execute("SELECT * FROM tesserati WHERE id=?",(int(tid),)).fetchone()
-    if row:
-        keys=set(row.keys())
-        if ('iscrizione_pagata' in keys and int(row['iscrizione_pagata'] or 0)==1) or ('tesseramento_pagato' in keys and int(row['tesseramento_pagato'] or 0)==1):
-            return True
-    if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='pagamenti'").fetchone():
-        return False
-    for p in conn.execute("SELECT * FROM pagamenti WHERE tesserato_id=? ORDER BY id DESC",(int(tid),)).fetchall():
-        cause=str(p['causale'] or '').strip().lower() if 'causale' in p.keys() else ''
-        yr=int(p['anno'] or 0) if 'anno' in p.keys() else 0
-        if cause in ('iscrizione','tesseramento') and yr in (int(season_start),int(season_start)+1) and _bodymind_payment_paid_row_v2(p):
-            return True
-    return False
+    truth=bodymind_payment_truth(conn,tesserato_id=int(tid),mese=9,anno=int(season_start),stagione=int(season_start))
+    rows=truth.get('rows') or []
+    return bool(rows and rows[0].get('iscrizione_pagata'))
 
 def _bodymind_month_paid_v2(conn, tid, mese, anno):
-    if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='pagamenti'").fetchone():
-        for p in conn.execute("SELECT * FROM pagamenti WHERE tesserato_id=? AND mese=? AND anno=? ORDER BY id DESC",(int(tid),int(mese),int(anno))).fetchall():
-            cause=str(p['causale'] or '').strip().lower() if 'causale' in p.keys() else ''
-            if (cause=='mensile' or 'mensil' in cause or cause in ('quota','quota_mensile')) and _bodymind_payment_paid_row_v2(p):
-                return True
-    if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='quote_mensili'").fetchone():
-        q=conn.execute("SELECT * FROM quote_mensili WHERE tesserato_id=? AND mese=? AND anno=? ORDER BY id DESC LIMIT 1",(int(tid),int(mese),int(anno))).fetchone()
-        if q:
-            st=str(q['stato'] or '').strip().lower() if 'stato' in q.keys() else ''
-            if any(x in st for x in ('pagat','saldat','paid','incassat','complet')):
-                return True
-    return False
+    truth=bodymind_payment_truth(conn,tesserato_id=int(tid),mese=int(mese),anno=int(anno))
+    rows=truth.get('rows') or []
+    return bool(rows and rows[0].get('mensile_pagato'))
 
 _bodymind_r110_tasks_v1=get_operational_tasks
 def get_operational_tasks(*args, **kwargs):
@@ -404,67 +374,22 @@ def get_operational_tasks(*args, **kwargs):
 else:
     print('[r110-payment-task-truth-v2] already installed',flush=True)
 
-# Close only stale payment alerts that are contradicted by the same truth.
-# Never delete history; take a DB backup before changing alert status.
-_conn=sqlite3.connect(str(DB),timeout=30); _conn.row_factory=sqlite3.Row
+# Read-only diagnostic for legacy payment alerts. Do not close or rewrite them
+# at startup: rendered/tasks truth is computed from the canonical payment service.
+_conn=sqlite3.connect("file:"+str(DB)+"?mode=ro",uri=True,timeout=30); _conn.row_factory=sqlite3.Row
 try:
-    from datetime import date as _bm_date
-    import re as _bm_re
-    _today=_bm_date.today(); _season=_today.year if _today.month>=7 else _today.year-1
-    _alerts=[]
-    if _conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='smart_alerts'").fetchone():
-        _alerts=_conn.execute("SELECT * FROM smart_alerts WHERE status='open' AND tipo IN ('pagamento_mancante','quota_mese_mancante') ORDER BY id").fetchall()
-    _close=[]
-    def _paidrow(p):
-        st=(str(p['stato'] or '') if 'stato' in p.keys() else '')+' '+(str(p['online_status'] or '') if 'online_status' in p.keys() else '')
-        st=st.lower()
-        if any(x in st for x in ('pending','attesa','cancel','annull','failed','fallit','refunded','rimbors')): return False
-        if any(x in st for x in ('paid','pagat','saldat','complet','incassat')): return True
-        try: amount=float(p['importo'] or 0)
-        except Exception: amount=0
-        return bool((p['data'] if 'data' in p.keys() else '') or (p['paid_at'] if 'paid_at' in p.keys() else '')) and amount>0
-    def _enroll(tid):
-        a=_conn.execute("SELECT * FROM tesserati WHERE id=?",(tid,)).fetchone()
-        if a:
-            ks=set(a.keys())
-            if ('iscrizione_pagata' in ks and int(a['iscrizione_pagata'] or 0)==1) or ('tesseramento_pagato' in ks and int(a['tesseramento_pagato'] or 0)==1): return True
-        for p in _conn.execute("SELECT * FROM pagamenti WHERE tesserato_id=?",(tid,)).fetchall():
-            cause=str(p['causale'] or '').lower()
-            yr=int(p['anno'] or 0)
-            if cause in ('iscrizione','tesseramento') and yr in (_season,_season+1) and _paidrow(p): return True
-        return False
-    def _month(tid,mm,yy):
-        for p in _conn.execute("SELECT * FROM pagamenti WHERE tesserato_id=? AND mese=? AND anno=?",(tid,mm,yy)).fetchall():
-            cause=str(p['causale'] or '').lower()
-            if (cause=='mensile' or 'mensil' in cause or cause in ('quota','quota_mensile')) and _paidrow(p): return True
-        if _conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='quote_mensili'").fetchone():
-            q=_conn.execute("SELECT * FROM quote_mensili WHERE tesserato_id=? AND mese=? AND anno=? ORDER BY id DESC LIMIT 1",(tid,mm,yy)).fetchone()
-            if q and any(x in str(q['stato'] or '').lower() for x in ('pagat','saldat','paid','incassat','complet')): return True
-        return False
-    for a in _alerts:
-        tid=int(a['tesserato_id'] or 0)
-        if not tid: continue
-        if str(a['tipo'])=='pagamento_mancante' and _enroll(tid):
-            _close.append(int(a['id'])); continue
-        if str(a['tipo'])=='quota_mese_mancante':
-            hay=' '.join(str(a[k] or '') for k in ('title','message') if k in a.keys())
-            m=_bm_re.search(r'(?<!\d)(0?[1-9]|1[0-2])\s*[/\-]\s*(20\d{2})(?!\d)',hay)
-            mm=int(m.group(1)) if m else _today.month; yy=int(m.group(2)) if m else _today.year
-            if _month(tid,mm,yy): _close.append(int(a['id']))
-    if _close:
-        backup_db()
-        marks=','.join('?' for _ in _close)
-        _conn.execute("UPDATE smart_alerts SET status='closed',closed_at=COALESCE(closed_at,datetime('now')),updated_at=datetime('now') WHERE id IN ("+marks+")",_close)
-        _conn.commit()
+    _open_payment_alerts=int(_conn.execute("SELECT COUNT(*) FROM smart_alerts WHERE status='open' AND tipo IN ('pagamento_mancante','quota_mese_mancante')").fetchone()[0]) if _conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='smart_alerts'").fetchone() else 0
     _pc=int(_conn.execute("SELECT COUNT(*) FROM pagamenti").fetchone()[0]) if _conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='pagamenti'").fetchone() else 0
     _flags=int(_conn.execute("SELECT COUNT(*) FROM tesserati WHERE COALESCE(iscrizione_pagata,0)=1 OR COALESCE(tesseramento_pagato,0)=1").fetchone()[0])
     _qpaid=0
     if _conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='quote_mensili'").fetchone():
         _qpaid=int(_conn.execute("SELECT COUNT(*) FROM quote_mensili WHERE lower(coalesce(stato,'')) LIKE '%pagat%' OR lower(coalesce(stato,'')) LIKE '%saldat%' OR lower(coalesce(stato,'')) LIKE '%paid%' OR lower(coalesce(stato,'')) LIKE '%incassat%'").fetchone()[0])
-    print('[r110-payment-task-truth-v2] canonical_payments='+str(_pc)+' enrollment_flags='+str(_flags)+' legacy_paid_flags='+str(_qpaid)+' stale_alerts_closed='+str(len(_close)),flush=True)
+    _r110_diag_integrity=str(_conn.execute("PRAGMA integrity_check").fetchone()[0]); _r110_diag_fk=len(_conn.execute("PRAGMA foreign_key_check").fetchall())
 finally:
     _conn.close()
-
+if _r110_diag_integrity.lower()!='ok' or _r110_diag_fk:
+    raise RuntimeError('R110 legacy payment alert diagnostic DB guard failed')
+print('[r110-payment-task-truth-v2-audit] mode=read_only canonical_payments='+str(_pc)+' legacy_enrollment_flags='+str(_flags)+' legacy_paid_flags='+str(_qpaid)+' legacy_open_payment_alerts='+str(_open_payment_alerts),flush=True)
 
 # BODYMIND_R110_CANONICAL_PAYMENT_FLOW_V3
 # One payment truth for Dashboard / Centro operativo / Tasks / Tesserati / Pagamenti.
@@ -527,11 +452,8 @@ def bodymind_payment_truth(conn, tesserato_id=None, mese=None, anno=None, stagio
             'iscrizione_payment_id':None,
             'mensile_payment_id':None,
         }
-        # Preserve historical explicit enrollment flags as valid truth.
-        if 'iscrizione_pagata' in a.keys() and int(a['iscrizione_pagata'] or 0)==1:
-            by_tid[tid]['iscrizione_pagata']=True
-        if 'tesseramento_pagato' in a.keys() and int(a['tesseramento_pagato'] or 0)==1:
-            by_tid[tid]['iscrizione_pagata']=True
+        # Historical enrollment flags are metadata only. Accounting truth is
+        # established exclusively by canonical rows in pagamenti below.
 
     for p in payments:
         if not _paid_row(p):
@@ -614,6 +536,55 @@ def get_operational_tasks(*args, **kwargs):
     print('[r110-payment-flow-v3] PASS one-truth helper task-normalization backend-only',flush=True)
 else:
     print('[r110-payment-flow-v3] already installed',flush=True)
+
+# Persisted /data may still contain the older V2 helpers or enrollment-flag
+# fallback even when the marker says "already installed". Converge those exact
+# functions to bodymind_payment_truth instead of trusting markers.
+_core_truth=CORE.read_text(encoding='utf-8',errors='replace')
+_truth_changed=False
+_old_flag_fallback="""        # Preserve historical explicit enrollment flags as valid truth.
+        if 'iscrizione_pagata' in a.keys() and int(a['iscrizione_pagata'] or 0)==1:
+            by_tid[tid]['iscrizione_pagata']=True
+        if 'tesseramento_pagato' in a.keys() and int(a['tesseramento_pagato'] or 0)==1:
+            by_tid[tid]['iscrizione_pagata']=True
+
+"""
+_new_flag_fallback="""        # Historical enrollment flags are metadata only. Accounting truth is
+        # established exclusively by canonical rows in pagamenti below.
+
+"""
+if _old_flag_fallback in _core_truth:
+    _core_truth=_core_truth.replace(_old_flag_fallback,_new_flag_fallback,1);_truth_changed=True
+_v2a=_core_truth.find('def _bodymind_enrollment_paid_v2(conn, tid, season_start):')
+_v2b=_core_truth.find('\n_bodymind_r110_tasks_v1=get_operational_tasks',_v2a)
+if _v2a>=0 and _v2b>_v2a:
+    _canonical_v2="""def _bodymind_enrollment_paid_v2(conn, tid, season_start):
+    truth=bodymind_payment_truth(conn,tesserato_id=int(tid),mese=9,anno=int(season_start),stagione=int(season_start))
+    rows=truth.get('rows') or []
+    return bool(rows and rows[0].get('iscrizione_pagata'))
+
+def _bodymind_month_paid_v2(conn, tid, mese, anno):
+    truth=bodymind_payment_truth(conn,tesserato_id=int(tid),mese=int(mese),anno=int(anno))
+    rows=truth.get('rows') or []
+    return bool(rows and rows[0].get('mensile_pagato'))
+"""
+    if _core_truth[_v2a:_v2b]!=_canonical_v2:
+        _core_truth=_core_truth[:_v2a]+_canonical_v2+_core_truth[_v2b:];_truth_changed=True
+if _truth_changed:
+    backup_file(CORE);CORE.write_text(_core_truth,encoding='utf-8');compile_file(CORE)
+    print('[r110-payment-source-convergence] upgraded persisted helpers to canonical pagamenti truth',flush=True)
+else:
+    print('[r110-payment-source-convergence] already canonical',flush=True)
+
+_core_truth_check=CORE.read_text(encoding='utf-8',errors='replace')
+_ta=_core_truth_check.find('def bodymind_payment_truth(');_tb=_core_truth_check.find('\n# Last task wrapper:',_ta)
+_va=_core_truth_check.find('def _bodymind_enrollment_paid_v2(');_vb=_core_truth_check.find('\n_bodymind_r110_tasks_v1=get_operational_tasks',_va)
+_truth_region=_core_truth_check[_ta:_tb] if _ta>=0 and _tb>_ta else ''
+_v2_region=_core_truth_check[_va:_vb] if _va>=0 and _vb>_va else ''
+if not _truth_region or not _v2_region:
+    raise RuntimeError('R110 canonical payment source convergence anchors missing')
+if "if 'iscrizione_pagata' in a.keys()" in _truth_region or 'quote_mensili' in _v2_region:
+    raise RuntimeError('R110 canonical payment source convergence incomplete')
 
 # Read-only integrity gate for the unified payment flow.
 _c=sqlite3.connect(str(DB),timeout=20); _c.row_factory=sqlite3.Row
