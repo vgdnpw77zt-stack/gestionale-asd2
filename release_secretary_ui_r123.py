@@ -2569,12 +2569,12 @@ try:
     mismatches=[]
     for row in truth.get("rows",[]):
         tid=int(row["tesserato_id"])
-        paid=c.execute("""SELECT 1 FROM pagamenti WHERE tesserato_id=? AND mese=? AND anno=?
+        paid=c.execute('''SELECT 1 FROM pagamenti WHERE tesserato_id=? AND mese=? AND anno=?
           AND (lower(coalesce(causale,'')) LIKE '%mensil%' OR lower(coalesce(causale,'')) IN ('quota','quota_mensile'))
           AND lower(coalesce(stato,'')||' '||coalesce(online_status,'')) NOT LIKE '%pending%'
           AND lower(coalesce(stato,'')||' '||coalesce(online_status,'')) NOT LIKE '%annull%'
           AND lower(coalesce(stato,'')||' '||coalesce(online_status,'')) NOT LIKE '%failed%'
-          LIMIT 1""",(tid,today.month,today.year)).fetchone()
+          LIMIT 1''',(tid,today.month,today.year)).fetchone()
         if bool(row.get("mensile_pagato")) != bool(paid):
             mismatches.append(tid)
     after={t:int(c.execute("SELECT COUNT(*) FROM "+t).fetchone()[0]) for t in ("tesserati","pagamenti","ricevute")}
