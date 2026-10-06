@@ -2359,3 +2359,149 @@ print((_p.stdout or "").strip(),flush=True)
 if _p.returncode!=0:
     raise RuntimeError("R123 V9 child audit failed "+((_p.stderr or "")+(_p.stdout or ""))[-5000:])
 print('[r123-admin-v9] PASS admin-functions-restored-via-live-routes backups-preserved data-intact',flush=True)
+
+
+# BODYMIND_R123_ONBOARDING_PAYMENT_SYNC_V10
+# A paid athlete/document truth must immediately reconcile the stale onboarding
+# flags used by dashboard/tesserati. Monthly arrears remain operational tasks,
+# but stale "pagamenti da verificare" is never allowed after canonical payment.
+_core_v10=CORE.read_text(encoding='utf-8',errors='replace')
+_changed_v10=False
+
+if 'BODYMIND_R123_ONBOARDING_PAYMENT_SYNC_V10' not in _core_v10:
+    _core_v10 += r'''
+
+# BODYMIND_R123_ONBOARDING_PAYMENT_SYNC_V10
+def _bodymind_reconcile_athlete_status_v10(conn, tid):
+    from datetime import datetime as _bm_dt, date as _bm_date
+    tid=int(tid or 0)
+    if tid<=0: return False
+    row=conn.execute("SELECT * FROM tesserati WHERE id=?",(tid,)).fetchone()
+    if not row: return False
+    try:
+        from .document_sync_core_r143 import truth as _bm_doc_truth
+        d=_bm_doc_truth(conn,row)
+    except Exception as exc:
+        print('[onboarding-sync-v10-doc-warning] '+repr(exc),flush=True)
+        d={'mu':bool(row['iscrizione_firmata'] if 'iscrizione_firmata' in row.keys() else 0),
+           'med_present':bool(row['certificato_scadenza'] if 'certificato_scadenza' in row.keys() else ''),
+           'med_ok':False,'med_state':'Da verificare','tutela':True}
+
+    today=_bm_date.today()
+    p=bodymind_payment_truth(conn,tesserato_id=tid,mese=today.month,anno=today.year)
+    pr=(p.get('rows') or [{}])[0] if (p.get('rows') or []) else {}
+    enroll=bool(pr.get('iscrizione_pagata'))
+    monthly=bool(pr.get('mensile_pagato'))
+
+    mu=bool(d.get('mu'))
+    med_present=bool(d.get('med_present'))
+    med_ok=bool(d.get('med_ok'))
+    tutela=bool(d.get('tutela'))
+    docs_ok=bool(mu and med_ok and tutela)
+    pay_ok=bool(enroll and monthly)
+    overall=bool(docs_ok and pay_ok)
+
+    reasons=[]
+    if not mu: reasons.append('modulo unico da completare')
+    if not med_present: reasons.append('certificato medico mancante')
+    elif not med_ok:
+        state=str(d.get('med_state') or '').strip().lower()
+        reasons.append('certificato medico scaduto' if 'scadut' in state else 'certificato medico da verificare')
+    if not tutela: reasons.append('tutela/consensi da completare')
+    if not enroll: reasons.append('quota iscrizione non registrata')
+    if not monthly: reasons.append('mensile '+str(today.month).zfill(2)+'/'+str(today.year)+' non registrato')
+
+    if overall:
+        status='active'; reason=''
+    elif not docs_ok and not pay_ok:
+        status='waiting_documents_payment'; reason='; '.join(reasons)
+    elif not docs_ok:
+        status='waiting_documents'; reason='; '.join(reasons)
+    else:
+        status='waiting_payment'; reason='; '.join(reasons)
+
+    cols={str(x[1]) for x in conn.execute('PRAGMA table_info(tesserati)').fetchall()}
+    changes={}
+    desired={
+        'blocco_tesseramento':0 if overall else 1,
+        'onboarding_status':status,
+        'onboarding_blocked_reason':reason,
+    }
+    for k,v in desired.items():
+        if k not in cols: continue
+        cur=row[k]
+        if str(cur if cur is not None else '')!=str(v if v is not None else ''):
+            changes[k]=v
+    if not changes:
+        return False
+    if 'updated_at' in cols:
+        changes['updated_at']=_bm_dt.now().isoformat(timespec='seconds')
+    sets=','.join(k+'=?' for k in changes)
+    conn.execute("UPDATE tesserati SET "+sets+" WHERE id=?",tuple(changes.values())+(tid,))
+    return {'tid':tid,'status':status,'reason':reason,'overall':overall}
+
+
+def bodymind_reconcile_all_athlete_statuses_v10(conn):
+    ids=[int(x[0]) for x in conn.execute("SELECT id FROM tesserati WHERE COALESCE(attivo,1)=1 ORDER BY id").fetchall()]
+    changed=[]
+    for tid in ids:
+        x=_bodymind_reconcile_athlete_status_v10(conn,tid)
+        if x: changed.append(x)
+    return changed
+'''
+    _changed_v10=True
+
+# V7 write path: reconcile the same athlete before the transaction commits.
+_old_commit="""        c.commit()
+    except Exception as exc:
+        try:c.rollback()"""
+_new_commit="""        try:
+            _bodymind_reconcile_athlete_status_v10(c,tid)
+        except Exception as _sync_exc:
+            print('[payment-v7-onboarding-sync-warning] '+repr(_sync_exc),flush=True)
+        c.commit()
+    except Exception as exc:
+        try:c.rollback()"""
+# Constrain replacement to the canonical V7 function region.
+_v7a=_core_v10.find("def _bodymind_payment_register_v7():")
+_v7b=_core_v10.find("@app.after_request\\ndef _bodymind_payment_module_v7",_v7a)
+if _v7a>=0 and _v7b>_v7a:
+    _region=_core_v10[_v7a:_v7b]
+    if _old_commit in _region and "payment-v7-onboarding-sync-warning" not in _region:
+        _region=_region.replace(_old_commit,_new_commit,1)
+        _core_v10=_core_v10[:_v7a]+_region+_core_v10[_v7b:]
+        _changed_v10=True
+
+if _changed_v10:
+    CORE.write_text(_core_v10,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+
+# Backup before the one-time reconciliation of stale status flags.
+_v10_backup=BACK/'pre_v10_onboarding_status.db'
+if not _v10_backup.exists():
+    shutil.copy2(DB,_v10_backup)
+
+_v10_qa=r"""
+import json,sqlite3,sys
+sys.path.insert(0,"/data/top2_app")
+import app as _full
+from asd_app.core import app,db,bodymind_reconcile_all_athlete_statuses_v10,bodymind_monthly_due_summary
+c=db(); c.row_factory=sqlite3.Row
+try:
+    changed=bodymind_reconcile_all_athlete_statuses_v10(c)
+    c.commit()
+    monthly=bodymind_monthly_due_summary(c)
+    stale=[dict(x) for x in c.execute(
+      "SELECT id,nome,cognome,onboarding_status,onboarding_blocked_reason FROM tesserati WHERE COALESCE(attivo,1)=1 AND lower(coalesce(onboarding_blocked_reason,'')) LIKE '%pagamenti da verificare%' ORDER BY id"
+    ).fetchall()]
+    integ=str(c.execute("PRAGMA integrity_check").fetchone()[0]); fk=len(c.execute("PRAGMA foreign_key_check").fetchall())
+finally:c.close()
+print("[r123-onboarding-v10-audit] "+json.dumps({"changed":changed,"monthly":monthly,"stale_generic_payment_reasons":stale,"integrity":integ,"fk":fk},ensure_ascii=False),flush=True)
+if integ.lower()!="ok" or fk or stale:
+    raise RuntimeError("V10 onboarding/payment sync failed")
+"""
+_v10p=subprocess.run([sys.executable,"-c",_v10_qa],capture_output=True,text=True,timeout=180)
+print((_v10p.stdout or "").strip(),flush=True)
+if _v10p.returncode!=0:
+    raise RuntimeError("R123 V10 child audit failed "+((_v10p.stderr or "")+(_v10p.stdout or ""))[-6000:])
+print('[r123-onboarding-v10] PASS payment+document truth reconciles tesseramento/dashboard status',flush=True)
