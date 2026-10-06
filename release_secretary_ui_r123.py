@@ -1357,7 +1357,7 @@ if _v11p.returncode!=0:
 print('[r123-expense-v11] PASS isolated insert-insert-edit attachments PRG production-read-only baseline='+repr(_v11_expense_baseline),flush=True)
 
 
-# BODYMIND_R123_DASHBOARD_CANONICAL# BODYMIND_R123_DASHBOARD_CANONICAL
+# BODYMIND_R123_DASHBOARD_CANONICAL
 _core_dash=CORE.read_text(encoding='utf-8',errors='replace')
 # Heal the already-installed canonical dashboard block before deciding whether
 # it needs to be appended. Earlier R123 builds persisted over-escaped raw
@@ -1853,7 +1853,7 @@ if _qip.returncode!=0:
 print('[r123-quote-incassi] PASS exact-period cash due-separated receipt-identifiable read-only',flush=True)
 
 
-_final_qa=r"""_final_qa=r"""
+_final_qa=r"""
 import json,re,sqlite3,sys
 sys.path.insert(0,'/data/top2_app');import app as _full
 from asd_app.core import app,bodymind_payment_truth,load_config,file_url
