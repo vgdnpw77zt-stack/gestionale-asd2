@@ -1259,6 +1259,34 @@ print('[r123-expense-v11] PASS one-expense-module attachments-preview-download p
 
 # BODYMIND_R123_DASHBOARD_CANONICAL
 _core_dash=CORE.read_text(encoding='utf-8',errors='replace')
+# Heal the already-installed canonical dashboard block before deciding whether
+# it needs to be appended. Earlier R123 builds persisted over-escaped raw
+# regexes (\\\\b), so the marker alone is not sufficient evidence that the
+# runtime implementation is healthy.
+_dash_lines=_core_dash.splitlines()
+_dash_fn=''
+_dash_repairs=[]
+for _di,_line in enumerate(_dash_lines):
+    _stripped=_line.lstrip()
+    if _stripped.startswith('def '):
+        _dash_fn=_stripped[4:].split('(',1)[0].strip()
+    _indent=_line[:len(_line)-len(_stripped)]
+    _new_line=None
+    if _dash_fn=='_bodymind_dashboard_add_body_class' and 'm=_bm_re.search' in _stripped and '<body' in _stripped:
+        _new_line=_indent+"m=_bm_re.search(r'<body\\b([^>]*)>',html,_bm_re.I)"
+    elif _dash_fn=='_bodymind_dashboard_add_body_class' and 'tag=m.group(0);cm=_bm_re.search' in _stripped:
+        _new_line=_indent+'tag=m.group(0);cm=_bm_re.search(r"""class=(["\'])(.*?)\\1""",tag,_bm_re.I|_bm_re.S)'
+    elif _dash_fn=='_bodymind_dashboard_canonical' and 'm=_bm_re.search' in _stripped and '<main' in _stripped:
+        _new_line=_indent+"import re as _bm_re;m=_bm_re.search(r'<main\\b[^>]*>',html,_bm_re.I)"
+    if _new_line is not None and _new_line!=_line:
+        _dash_repairs.append((_di+1,_line,_new_line))
+        _dash_lines[_di]=_new_line
+if _dash_repairs:
+    _core_dash='\n'.join(_dash_lines)+('\n' if _core_dash.endswith('\n') else '')
+    CORE.write_text(_core_dash,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+    print('[r123-dashboard-canonical-repair] repaired='+repr([(x[0],x[1].strip(),x[2].strip()) for x in _dash_repairs]),flush=True)
+    _core_dash=CORE.read_text(encoding='utf-8',errors='replace')
 if 'BODYMIND_R123_DASHBOARD_CANONICAL_RUNTIME' not in _core_dash:
     _core_dash += r'''
 
