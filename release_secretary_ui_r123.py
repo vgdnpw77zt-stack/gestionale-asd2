@@ -1317,10 +1317,10 @@ paths=['/','/dashboard','/tesserati','/pagamenti','/documenti','/documenti-autom
 status={p:c.get(p,follow_redirects=False).status_code for p in paths}
 dh=c.get('/dashboard',follow_redirects=True).get_data(as_text=True);hh=c.get('/',follow_redirects=True).get_data(as_text=True);ph=c.get('/pagamenti?vista=mensili',follow_redirects=True).get_data(as_text=True)
 def body(h):
-    m=re.search(r"""<body\b[^>]*class=["']([^"']*)""",h,re.I);return m.group(1).split() if m else []
+    m=re.search(r'<body\b[^>]*class=["\x27]([^"\x27]*)',h,re.I);return m.group(1).split() if m else []
 old_dash=('BODYMIND_R123_DASHBOARD_BACKGROUND_RESTORE_RENDERED','BODYMIND_R156_DASHBOARD_RECOMPOSE_RENDERED','BODYMIND_PAYMENT_TRUTH_DASHBOARD_V3','BODYMIND_MONTHLY_ARREARS_V5_RENDERED')
 old_pay=('BODYMIND_R123_PAYMENT_MOBILE','BODYMIND_R125_PAYMENT_BOARD','BODYMIND_R123_PAYMENT_SPLIT_V2_SURFACE','BODYMIND_R123_CANONICAL_PAYMENT_MODULE_V5','bmpv6-immediate')
-row_state={int(a):(b=='1',d=='1') for a,b,d in re.findall(r"""data-bm-tid=["'](\d+)["']\s+data-bm-enroll=["']([01])["']\s+data-bm-monthly=["']([01])["']""",ph)}
+row_state={int(a):(b=='1',d=='1') for a,b,d in re.findall(r'data-bm-tid=["\x27](\d+)["\x27]\s+data-bm-enroll=["\x27]([01])["\x27]\s+data-bm-monthly=["\x27]([01])["\x27]',ph)}
 db=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True,timeout=20);db.row_factory=sqlite3.Row
 try:
     truth=bodymind_payment_truth(db);expected={int(x['tesserato_id']):(bool(x['iscrizione_pagata']),bool(x['mensile_pagato'])) for x in truth['rows']}
