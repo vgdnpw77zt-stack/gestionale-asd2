@@ -492,18 +492,15 @@ def _bodymind_mobile_home_background_r157(resp):
 <style id="bodymind-r157-mobile-home-background">
 html,html body{
   min-height:100%!important;
-  background:
-    radial-gradient(circle at 8% 2%,rgba(255,255,255,.13) 0%,rgba(255,255,255,.045) 18%,transparent 36%),
-    radial-gradient(circle at 92% 10%,rgba(56,189,248,.24) 0%,rgba(37,99,235,.11) 27%,transparent 48%),
-    radial-gradient(circle at 48% 92%,rgba(16,185,129,.10) 0%,transparent 40%),
-    linear-gradient(155deg,#050d18 0%,#08182a 43%,#102a43 72%,#06111e 100%)!important;
+  background-color:#050d18!important;
+  background-position:center top!important;
+  background-size:cover!important;
+  background-repeat:no-repeat!important;
   background-attachment:fixed!important;
 }
 html body:before{
   content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;
-  background:
-    radial-gradient(ellipse at 50% -8%,rgba(255,255,255,.09),transparent 44%),
-    linear-gradient(118deg,transparent 0 47%,rgba(255,255,255,.025) 47.2% 47.8%,transparent 48%);
+  background:none!important;
 }
 html body>.overlay,html body .overlay{background:transparent!important}
 html body main,html body .wrap,html body .mobile-home,html body .dashboard,html body .dashboard-page{
@@ -541,6 +538,20 @@ html body main,html body .wrap,html body .mobile-home,html body .dashboard,html 
     print('[r157-mobile-home-background] installed /mobile premium background override',flush=True)
 else:
     print('[r157-mobile-home-background] already installed',flush=True)
+
+# Converge an already-persisted R157 function without adding another hook.
+_r157_live=CORE.read_text(encoding='utf-8',errors='replace')
+_r157_old="html,html body{\n  min-height:100%!important;\n  background:\n    radial-gradient(circle at 8% 2%,rgba(255,255,255,.13) 0%,rgba(255,255,255,.045) 18%,transparent 36%),\n    radial-gradient(circle at 92% 10%,rgba(56,189,248,.24) 0%,rgba(37,99,235,.11) 27%,transparent 48%),\n    radial-gradient(circle at 48% 92%,rgba(16,185,129,.10) 0%,transparent 40%),\n    linear-gradient(155deg,#050d18 0%,#08182a 43%,#102a43 72%,#06111e 100%)!important;\n  background-attachment:fixed!important;\n}\nhtml body:before{\n  content:\"\";position:fixed;inset:0;pointer-events:none;z-index:-1;\n  background:\n    radial-gradient(ellipse at 50% -8%,rgba(255,255,255,.09),transparent 44%),\n    linear-gradient(118deg,transparent 0 47%,rgba(255,255,255,.025) 47.2% 47.8%,transparent 48%);\n}"
+_r157_new="html,html body{\n  min-height:100%!important;\n  background-color:#050d18!important;\n  background-position:center top!important;\n  background-size:cover!important;\n  background-repeat:no-repeat!important;\n  background-attachment:fixed!important;\n}\nhtml body:before{\n  content:\"\";position:fixed;inset:0;pointer-events:none;z-index:-1;\n  background:none!important;\n}"
+if _r157_old in _r157_live:
+    _r157_live=_r157_live.replace(_r157_old,_r157_new,1)
+    CORE.write_text(_r157_live,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+    print('[r157-mobile-home-background-convergence] removed gradient image override',flush=True)
+elif _r157_new in _r157_live:
+    print('[r157-mobile-home-background-convergence] already converged',flush=True)
+else:
+    raise RuntimeError('R157 persisted background convergence anchor missing')
 
 # Read-only invariant gate.
 _r157_conn=sqlite3.connect(str(DB),timeout=20)
