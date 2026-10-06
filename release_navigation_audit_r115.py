@@ -33,14 +33,10 @@ if 'BODYMIND_R115_NAV_CONVERGENCE' not in cs:
 # Daily secretary navigation shows only canonical areas. Technical/legacy routes
 # remain available by direct URL and keep all write actions/data unchanged.
 _BODYMIND_R115_ADVANCED_PREFIXES = (
-    '/cuore-operativo',
+    # Keep only technical/duplicate routes hidden. Business-critical modules
+    # (Centro operativo, Document Hub, generator) must remain navigable.
     '/risolvi-automatico',
     '/motore-automazioni',
-    '/onboarding-tesserati',
-    '/document-hub',
-    '/documenti-automatici',
-    '/generatore-documenti',
-    '/documenti/generatore',
     '/timeline-tesserati',
     '/tesserati/timeline',
     '/pagamenti-pro',
@@ -124,8 +120,7 @@ for path in ("/dashboard","/tesserati","/pagamenti","/documenti","/operatore-bod
     body=rr.get_data(as_text=True)
     canonical[path]={"status":rr.status_code,"marker":"BODYMIND_R115_NAV_CONVERGENCE_RENDERED" in body}
     forbidden=(
-      "/cuore-operativo","/risolvi-automatico","/motore-automazioni","/onboarding-tesserati",
-      "/document-hub","/documenti-automatici","/generatore-documenti","/timeline-tesserati",
+      "/risolvi-automatico","/motore-automazioni","/timeline-tesserati",
       "/pagamenti-pro","/pagamenti/online","/pagamenti-automatici"
     )
     canonical[path]["advanced_links_visible"]=sorted(x for x in forbidden if ("href='"+x) in body or ('href="'+x) in body)
@@ -160,4 +155,4 @@ try:
 finally: conn.close()
 if integrity.lower()!='ok' or fk:
     raise RuntimeError('R115 final DB guard failed')
-print('[r115-selftest] PASS canonical-nav advanced-routes-preserved misleading-dossier-label-removed db-ok',flush=True)
+print('[r115-selftest] PASS business-admin-routes-visible technical-duplicates-hidden db-ok',flush=True)

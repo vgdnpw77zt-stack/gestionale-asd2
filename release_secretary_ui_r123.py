@@ -2105,3 +2105,257 @@ finally:
 if _integrity.lower()!='ok' or _fk:
     raise RuntimeError('R123 V8 DB integrity guard failed')
 print('[r123-admin-v8] PASS verify-doc + cash-entry + expenses + collaborators-nav payments='+str(_pc)+' receipts='+str(_rc)+' integrity='+_integrity+' fk='+str(_fk),flush=True)
+
+
+# BODYMIND_R123_ADMIN_RESTORE_V9
+# Restore business-critical administration without restoring stale duplicate UIs.
+# Existing routes/data win; backups are audited, never blindly copied over newer core.
+_core_v9=CORE.read_text(encoding='utf-8',errors='replace')
+_changed_v9=False
+
+# Payment row: real document review queue + archive access.
+_old_doc="""            dh=f"/documenti?tesserato_id={tid}"
+            rows.append((0 if not focus_ok else 1,
+                "<div class='bmpv7-row "+("due" if not focus_ok else "paid")+"'>"
+                +"<div class='bmpv7-person'><b>"+e(_name(a))+"</b><small>Iscrizione: "+("PAGATA" if eok else "da pagare")+" · "+months[mese]+": "+("PAGATO" if mok else "da pagare")+"</small></div>"
+                +"<div class='bmpv7-actions'><a class='doc' href='"+dh+"'>Verifica documento</a><a href='"+eh+"'>"+("Modifica incasso iscrizione" if eok else "Registra incasso iscrizione")+"</a><a href='"+mh+"'>"+("Modifica incasso "+months[mese] if mok else "Registra incasso "+months[mese])+"</a></div>"
+                +"</div>"
+            ))"""
+_new_doc="""            dh=f"/documenti/da-verificare?tesserato_id={tid}"
+            ah=f"/documenti?tesserato_id={tid}"
+            rows.append((0 if not focus_ok else 1,
+                "<div class='bmpv7-row "+("due" if not focus_ok else "paid")+"'>"
+                +"<div class='bmpv7-person'><b>"+e(_name(a))+"</b><small>Iscrizione: "+("PAGATA" if eok else "da pagare")+" · "+months[mese]+": "+("PAGATO" if mok else "da pagare")+"</small></div>"
+                +"<div class='bmpv7-actions'><a class='doc' href='"+dh+"'>Verifica documento</a><a class='doc' href='"+ah+"'>Archivio</a><a href='"+eh+"'>"+("Modifica incasso iscrizione" if eok else "Registra incasso iscrizione")+"</a><a href='"+mh+"'>"+("Modifica incasso "+months[mese] if mok else "Registra incasso "+months[mese])+"</a></div>"
+                +"</div>"
+            ))"""
+if _old_doc in _core_v9:
+    _core_v9=_core_v9.replace(_old_doc,_new_doc,1); _changed_v9=True
+
+# Preserve configured monthly amount/note when opening a new payment form.
+_old_qpaid="""        qpaid=set()
+        for q in qrows:
+            st=str(q.get('stato') or '').lower()
+            if any(x in st for x in ('pagat','saldat','paid','incassat','complet')):
+                qpaid.add(int(q.get('tesserato_id') or 0))"""
+_new_qpaid="""        qpaid=set(); quote_by_tid={}
+        for q in qrows:
+            qtid=int(q.get('tesserato_id') or 0)
+            if qtid and qtid not in quote_by_tid: quote_by_tid[qtid]=q
+            st=str(q.get('stato') or '').lower()
+            if any(x in st for x in ('pagat','saldat','paid','incassat','complet')):
+                qpaid.add(qtid)"""
+if _old_qpaid in _core_v9:
+    _core_v9=_core_v9.replace(_old_qpaid,_new_qpaid,1); _changed_v9=True
+
+_old_amount="""                amount=(str(existing.get('importo') or '') if existing else '')
+                paydate=(str(existing.get('data') or today.isoformat()) if existing else today.isoformat())
+                method=(str(existing.get('metodo_pagamento') or 'contanti') if existing else 'contanti')
+                note=(str(existing.get('note_pagamento') or '') if existing else '')"""
+_new_amount="""                qsel=quote_by_tid.get(selected_tid) if action_tipo=='mensile' else None
+                if existing:
+                    amount=str(existing.get('importo') or '')
+                    note=str(existing.get('note_pagamento') or '')
+                else:
+                    try:
+                        qamount=float(qsel.get('importo_dovuto') or 0) if qsel else 0
+                    except Exception:
+                        qamount=0
+                    amount=(str(qamount) if qamount>0 else '')
+                    note=(str(qsel.get('note') or '') if qsel else '')
+                paydate=(str(existing.get('data') or today.isoformat()) if existing else today.isoformat())
+                method=(str(existing.get('metodo_pagamento') or 'contanti') if existing else 'contanti')"""
+if _old_amount in _core_v9:
+    _core_v9=_core_v9.replace(_old_amount,_new_amount,1); _changed_v9=True
+
+# Expand the dynamic route resolver: prefer existing canonical business pages.
+_old_resolver="""        elif kind=='uscite':
+            if path.rstrip('/')=='/pagamenti/uscite': continue
+            words=('uscit','spes','prima-nota','prima_nota','moviment','cassa')
+            if not any(w in low for w in words): continue
+            # Avoid delete/PDF/detail routes.
+            if any(w in low for w in ('delete','elimina','pdf','<')): continue
+            score=20
+            if 'uscit' in low or 'spes' in low: score+=40
+        else:
+            continue"""
+_new_resolver="""        elif kind=='contabilita':
+            if 'contabil' not in low: continue
+            if any(w in low for w in ('delete','elimina','pdf','<')): continue
+            score=40
+            if path.rstrip('/')=='/contabilita': score+=120
+        elif kind=='ricevute':
+            if 'ricevut' not in low or 'collabor' in low: continue
+            if any(w in low for w in ('delete','elimina','pdf','<')): continue
+            score=35
+            if path.rstrip('/')=='/ricevute': score+=100
+        elif kind=='lul':
+            if not ('lul' in low or ('collabor' in low and 'ademp' in low) or 'uniemens' in low): continue
+            if any(w in low for w in ('delete','elimina','pdf','<')): continue
+            score=35
+        elif kind=='documenti':
+            if path.rstrip('/')!='/documenti': continue
+            score=150
+        elif kind=='document_review':
+            if path.rstrip('/')!='/documenti/da-verificare': continue
+            score=150
+        elif kind=='centro':
+            if path.rstrip('/') not in ('/cuore-operativo','/centro-operativo'): continue
+            score=150
+        elif kind=='uscite':
+            if path.rstrip('/')=='/pagamenti/uscite': continue
+            if path.rstrip('/')=='/contabilita':
+                score=200
+            else:
+                words=('uscit','spes','prima-nota','prima_nota','moviment','cassa','contabil')
+                if not any(w in low for w in words): continue
+                if any(w in low for w in ('delete','elimina','pdf','<')): continue
+                score=20
+                if 'uscit' in low or 'spes' in low or 'contabil' in low: score+=40
+        else:
+            continue"""
+if _old_resolver in _core_v9:
+    _core_v9=_core_v9.replace(_old_resolver,_new_resolver,1); _changed_v9=True
+
+# Payment page admin strip: compact gateways only; payment operations remain ISCRIZIONE/MENSILE.
+_old_vars="""        collab_href=_bodymind_admin_route_v8('collaboratori') or '/collaboratori'
+        collab_receipts_href=_bodymind_admin_route_v8('ricevute_collaboratori') or collab_href
+        expense_href=_bodymind_admin_route_v8('uscite') or '/pagamenti/uscite'"""
+_new_vars="""        collab_href=_bodymind_admin_route_v8('collaboratori') or '/collaboratori'
+        collab_receipts_href=_bodymind_admin_route_v8('ricevute_collaboratori') or collab_href
+        accounting_href=_bodymind_admin_route_v8('contabilita') or '/contabilita'
+        receipts_href=_bodymind_admin_route_v8('ricevute') or '/ricevute'
+        lul_href=_bodymind_admin_route_v8('lul') or collab_href
+        documents_href=_bodymind_admin_route_v8('documenti') or '/documenti'
+        review_href=_bodymind_admin_route_v8('document_review') or '/documenti/da-verificare'
+        center_href=_bodymind_admin_route_v8('centro') or '/cuore-operativo'
+        expense_href=_bodymind_admin_route_v8('uscite') or accounting_href"""
+if _old_vars in _core_v9:
+    _core_v9=_core_v9.replace(_old_vars,_new_vars,1); _changed_v9=True
+
+_old_strip="""          <div class='bmpv8-admin'><a href='{e(expense_href)}'>USCITE</a><a href='{e(collab_href)}'>COLLABORATORI</a><a href='{e(collab_receipts_href)}'>RICEVUTE COLLABORATORI</a></div>"""
+_new_strip="""          <div class='bmpv8-admin'><span>AMMINISTRAZIONE</span><a href='{e(accounting_href)}'>CONTABILITÀ / USCITE</a><a href='{e(receipts_href)}'>RICEVUTE</a><a href='{e(collab_href)}'>COLLABORATORI</a><a href='{e(lul_href)}'>LUL / ADEMPIMENTI</a><a href='{e(documents_href)}'>ARCHIVIO</a><a href='{e(review_href)}'>DA VERIFICARE</a></div>"""
+if _old_strip in _core_v9:
+    _core_v9=_core_v9.replace(_old_strip,_new_strip,1); _changed_v9=True
+
+# Desktop admin nav restored as a stable business area.
+_old_navvars="""        collab=_bodymind_admin_route_v8('collaboratori') or '/collaboratori'
+        receipts=_bodymind_admin_route_v8('ricevute_collaboratori') or collab
+        expense=_bodymind_admin_route_v8('uscite') or '/pagamenti/uscite'"""
+_new_navvars="""        collab=_bodymind_admin_route_v8('collaboratori') or '/collaboratori'
+        collab_receipts=_bodymind_admin_route_v8('ricevute_collaboratori') or collab
+        accounting=_bodymind_admin_route_v8('contabilita') or '/contabilita'
+        receipts=_bodymind_admin_route_v8('ricevute') or '/ricevute'
+        lul=_bodymind_admin_route_v8('lul') or collab
+        documents=_bodymind_admin_route_v8('documenti') or '/documenti'
+        review=_bodymind_admin_route_v8('document_review') or '/documenti/da-verificare'
+        center=_bodymind_admin_route_v8('centro') or '/cuore-operativo'
+        expense=_bodymind_admin_route_v8('uscite') or accounting"""
+if _old_navvars in _core_v9:
+    _core_v9=_core_v9.replace(_old_navvars,_new_navvars,1); _changed_v9=True
+
+_old_navlinks="""          <a href='/pagamenti'>Pagamenti</a>
+          <a href='{e(expense)}'>Uscite</a>
+          <a href='{e(collab)}'>Collaboratori</a>
+          <a href='{e(receipts)}'>Ricevute collaboratori</a>"""
+_new_navlinks="""          <a href='{e(center)}'>Centro operativo</a>
+          <a href='/pagamenti'>Pagamenti</a>
+          <a href='{e(accounting)}'>Contabilità / Uscite</a>
+          <a href='{e(receipts)}'>Ricevute</a>
+          <a href='{e(collab)}'>Collaboratori</a>
+          <a href='{e(lul)}'>LUL / Adempimenti</a>
+          <a href='{e(collab_receipts)}'>Ricevute collaboratori</a>
+          <a href='{e(documents)}'>Archivio documentale</a>
+          <a href='{e(review)}'>Documenti da verificare</a>"""
+if _old_navlinks in _core_v9:
+    _core_v9=_core_v9.replace(_old_navlinks,_new_navlinks,1); _changed_v9=True
+
+if 'BODYMIND_R123_ADMIN_RESTORE_V9' not in _core_v9:
+    _core_v9 += r'''
+
+# BODYMIND_R123_ADMIN_RESTORE_V9
+@app.after_request
+def _bodymind_payment_month_alerts_v9(resp):
+    try:
+        if request.method!='GET' or request.path!='/pagamenti' or int(getattr(resp,'status_code',200) or 200)!=200:
+            return resp
+        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
+            return resp
+        html=resp.get_data(as_text=True)
+        if 'BODYMIND_PAYMENT_MONTH_ALERTS_V9_RENDERED' in html:
+            return resp
+        try:
+            helper=bodymind_monthly_due_summary
+        except Exception:
+            return resp
+        c=db(); c.row_factory=sqlite3.Row
+        try: summary=helper(c)
+        finally:
+            try:c.close()
+            except Exception:pass
+        if not summary:
+            return resp
+        months=['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
+        chips=''.join(
+            "<a class='"+("ok" if int(x['mancanti'])==0 else "due")+"' href='/pagamenti?vista=mensili&mese="+str(x['mese'])+"&anno="+str(x['anno'])+"'><b>"+months[int(x['mese'])]+"</b><span>"+(str(x['mancanti'])+" da pagare" if int(x['mancanti']) else "completo")+"</span></a>"
+            for x in summary
+        )
+        block="<!-- BODYMIND_PAYMENT_MONTH_ALERTS_V9_RENDERED --><div class='bmpv9-months'><strong>Mensili della stagione</strong><div>"+chips+"</div></div><style>.bmpv9-months{margin:9px 0 12px;padding:10px;border-radius:12px;background:#0b1d31}.bmpv9-months>strong{display:block;margin-bottom:7px;font-size:11px;color:#bfdbfe}.bmpv9-months>div{display:flex;gap:7px;flex-wrap:wrap}.bmpv9-months a{display:grid;gap:2px;min-width:110px;padding:8px 10px;border-radius:9px;color:white!important;text-decoration:none;font-size:11px}.bmpv9-months a.due{background:#7f1d1d}.bmpv9-months a.ok{background:#14532d}.bmpv9-months span{color:#e2e8f0}</style>"
+        anchor="<div class='bmpv7-list'>"
+        if 'BODYMIND_R123_PAYMENT_FORM_CANONICAL_V7' in html and anchor in html:
+            html=html.replace(anchor,block+anchor,1)
+            resp.set_data(html)
+    except Exception as exc:
+        print('[payment-month-alerts-v9-warning] '+repr(exc),flush=True)
+    return resp
+'''
+    _changed_v9=True
+
+if _changed_v9:
+    CORE.write_text(_core_v9,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+
+# Fresh-process read-only audit: prove business routes and preserved backups/data.
+_audit_v9=r"""
+import json,sqlite3,sys
+from pathlib import Path
+sys.path.insert(0,"/data/top2_app")
+import app as _full
+from asd_app.core import app
+app.config["TESTING"]=True
+client=app.test_client()
+with client.session_transaction() as sess:
+    sess.update({"logged":True,"logged_in":True,"username":"admin","display_name":"Admin Restore QA","role":"admin","tenant_slug":"default","user_id":1,"is_admin":True,"admin":True})
+routes=[]
+for rule in app.url_map.iter_rules():
+    p=str(rule.rule); ep=str(rule.endpoint)
+    low=(p+" "+ep).lower()
+    if any(k in low for k in ("contabil","collabor","ricevut","lul","ademp","document-hub","documenti/da-verificare","cuore-operativo")):
+        routes.append({"route":p,"endpoint":ep,"methods":sorted(m for m in (rule.methods or set()) if m not in ("HEAD","OPTIONS"))})
+checks={}
+for p in ("/contabilita","/documenti","/documenti/da-verificare","/cuore-operativo","/pagamenti"):
+    rr=client.get(p,follow_redirects=False)
+    checks[p]=rr.status_code
+backs=[]
+root=Path("/data/release_backups")
+if root.exists():
+    for x in sorted(root.iterdir()):
+        n=x.name.lower()
+        if any(k in n for k in ("r110","r115","r123","admin","collab","contab","document")):
+            backs.append(x.name)
+conn=sqlite3.connect("/data/tenants/default/asd.db",timeout=20)
+try:
+    counts={}
+    for t in ("tesserati","pagamenti","ricevute","quote_mensili","documenti","inbound_documents"):
+        counts[t]=int(conn.execute("SELECT COUNT(*) FROM "+t).fetchone()[0]) if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(t,)).fetchone() else None
+    integrity=str(conn.execute("PRAGMA integrity_check").fetchone()[0]); fk=len(conn.execute("PRAGMA foreign_key_check").fetchall())
+finally:conn.close()
+print("[r123-admin-v9-audit] "+json.dumps({"routes":routes,"status":checks,"backups":backs[-40:],"counts":counts,"integrity":integrity,"fk":fk},ensure_ascii=False),flush=True)
+if integrity.lower()!="ok" or fk or any(v not in (200,302) for v in checks.values()):
+    raise RuntimeError("R123 V9 audit failed")
+"""
+_p=subprocess.run([sys.executable,"-c",_audit_v9],capture_output=True,text=True,timeout=120)
+print((_p.stdout or "").strip(),flush=True)
+if _p.returncode!=0:
+    raise RuntimeError("R123 V9 child audit failed "+((_p.stderr or "")+(_p.stdout or ""))[-5000:])
+print('[r123-admin-v9] PASS admin-functions-restored-via-live-routes backups-preserved data-intact',flush=True)

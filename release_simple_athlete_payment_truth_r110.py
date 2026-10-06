@@ -772,3 +772,190 @@ finally:_c.close()
 if _ok.lower()!='ok' or _fk:
     raise RuntimeError('R110 entrypoints-v4 DB guard failed')
 print('[r110-entrypoints-v4-selftest] PASS integrity='+_ok+' fk='+str(_fk),flush=True)
+
+
+# BODYMIND_R110_MONTHLY_ARREARS_V5
+# Historical monthly dues are first-class truth: September and October (and
+# future months in the season) remain distinct tasks until each month is paid.
+_core_v5=CORE.read_text(encoding='utf-8',errors='replace')
+if 'BODYMIND_R110_MONTHLY_ARREARS_V5' not in _core_v5:
+    _core_v5 += r'''
+
+# BODYMIND_R110_MONTHLY_ARREARS_V5
+def bodymind_monthly_due_periods(conn, tesserato_id=None, through_date=None):
+    from datetime import date as _bm_date
+    today=through_date or _bm_date.today()
+    season=today.year if today.month>=9 else today.year-1
+    start_key=season*100+9
+    end_key=today.year*100+today.month
+
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='quote_mensili'").fetchone():
+        return []
+
+    sql="""SELECT * FROM quote_mensili
+           WHERE (anno*100+mese) BETWEEN ? AND ?"""
+    args=[start_key,end_key]
+    if tesserato_id:
+        sql+=" AND tesserato_id=?"
+        args.append(int(tesserato_id))
+    sql+=" ORDER BY anno,mese,tesserato_id,id DESC"
+    qrows=conn.execute(sql,tuple(args)).fetchall()
+
+    latest={}
+    for q in qrows:
+        tid=int(q['tesserato_id'] or 0)
+        mm=int(q['mese'] or 0); yy=int(q['anno'] or 0)
+        key=(tid,yy,mm)
+        if key not in latest:
+            latest[key]=q
+
+    truths={}
+    out=[]
+    for (tid,yy,mm),q in latest.items():
+        st=str(q['stato'] or '').strip().lower() if 'stato' in q.keys() else ''
+        # Only explicit exemptions remove the month from the due schedule.
+        if any(x in st for x in ('non_dovuto','non dovuto','esente','annull','sospes')):
+            continue
+        pkey=(yy,mm)
+        if pkey not in truths:
+            truths[pkey]=bodymind_payment_truth(conn,mese=mm,anno=yy)
+        row=next((x for x in truths[pkey]['rows'] if int(x['tesserato_id'])==tid),None)
+        if not row:
+            continue
+        out.append({
+            'tesserato_id':tid,
+            'nome':row.get('nome',''),
+            'cognome':row.get('cognome',''),
+            'mese':mm,'anno':yy,
+            'pagato':bool(row.get('mensile_pagato')),
+            'importo_dovuto':float(q['importo_dovuto'] or 0) if 'importo_dovuto' in q.keys() else 0.0,
+            'stato_quota':st,
+        })
+    return out
+
+
+def bodymind_monthly_due_summary(conn, through_date=None):
+    rows=bodymind_monthly_due_periods(conn,through_date=through_date)
+    by={}
+    for x in rows:
+        key=(int(x['anno']),int(x['mese']))
+        rec=by.setdefault(key,{'anno':key[0],'mese':key[1],'totale':0,'pagati':0,'mancanti':0})
+        rec['totale']+=1
+        if x['pagato']: rec['pagati']+=1
+        else: rec['mancanti']+=1
+    return [by[k] for k in sorted(by)]
+
+
+_bodymind_payment_flow_v5_base=get_operational_tasks
+def get_operational_tasks(*args, **kwargs):
+    base=_bodymind_payment_flow_v5_base(*args, **kwargs) or []
+    try:
+        from datetime import date as _bm_date
+        import re as _bm_re
+        today=_bm_date.today()
+        conn=db(); conn.row_factory=sqlite3.Row
+        due=bodymind_monthly_due_periods(conn,through_date=today)
+        due_map={(int(x['tesserato_id']),int(x['anno']),int(x['mese'])):x for x in due}
+
+        out=[]
+        seen=set()
+        # Keep all non-monthly tasks. Rebuild monthly tasks from canonical due rows
+        # so September and October can coexist for the same athlete.
+        for item in base:
+            try:get=item.get
+            except Exception:get=lambda k,d=None:item[k] if k in item.keys() else d
+            typ=str(get('tipo','') or get('type','') or get('category','') or get('categoria','')).strip().lower()
+            if typ=='quota_mese_mancante':
+                continue
+            if typ=='pagamento_mancante':
+                tid=int(get('tesserato_id',0) or 0)
+                key=('iscrizione',tid)
+                if key in seen: continue
+                seen.add(key)
+                try:
+                    item=dict(item)
+                    item['href']='/pagamenti?vista=iscrizioni&tesserato_id='+str(tid)+'&azione=registra&tipo=iscrizione'
+                    item['url']=item['href']; item['action_url']=item['href']
+                except Exception: pass
+            out.append(item)
+
+        months=['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
+        for x in due:
+            if x['pagato']:
+                continue
+            tid=int(x['tesserato_id']); mm=int(x['mese']); yy=int(x['anno'])
+            key=('mensile',tid,yy,mm)
+            if key in seen: continue
+            seen.add(key)
+            who=(str(x.get('cognome') or '')+' '+str(x.get('nome') or '')).strip()
+            past=(yy*100+mm)<(today.year*100+today.month)
+            href='/pagamenti?vista=mensili&mese='+str(mm)+'&anno='+str(yy)+'&tesserato_id='+str(tid)+'&azione=registra&tipo=mensile'
+            out.append({
+                'tipo':'quota_mese_mancante',
+                'type':'quota_mese_mancante',
+                'category':'pagamenti',
+                'severity':'red' if past else 'orange',
+                'title':'Mensile '+months[mm]+' '+str(yy)+' da pagare',
+                'message':who+': quota mensile '+str(mm).zfill(2)+'/'+str(yy)+' non registrata.',
+                'tesserato_id':tid,
+                'task_key':'quota_mese:'+str(tid)+':'+str(yy)+':'+str(mm).zfill(2),
+                'source':'bodymind_payment_truth_v5',
+                'href':href,'url':href,'action_url':href,
+            })
+        return out
+    except Exception as exc:
+        print('[monthly-arrears-v5-task-warning] '+repr(exc),flush=True)
+        return base
+
+
+@app.after_request
+def _bodymind_monthly_arrears_dashboard_v5(resp):
+    try:
+        if request.method!='GET' or request.path not in ('/dashboard','/cuore-operativo','/centro-operativo'):
+            return resp
+        if int(getattr(resp,'status_code',200) or 200)!=200 or 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
+            return resp
+        html=resp.get_data(as_text=True)
+        if 'BODYMIND_MONTHLY_ARREARS_V5_RENDERED' in html:
+            return resp
+        c=db(); c.row_factory=sqlite3.Row
+        try: summary=bodymind_monthly_due_summary(c)
+        finally:
+            try:c.close()
+            except Exception:pass
+        if not summary:
+            return resp
+        months=['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
+        chips=''.join(
+            "<a class='bmarr-chip "+("ok" if int(x['mancanti'])==0 else "due")+"' href='/pagamenti?vista=mensili&mese="+str(x['mese'])+"&anno="+str(x['anno'])+"'><b>"+months[int(x['mese'])]+" "+str(x['anno'])+"</b><span>"+(str(x['mancanti'])+" da pagare" if int(x['mancanti']) else "completo")+"</span></a>"
+            for x in summary
+        )
+        block="<!-- BODYMIND_MONTHLY_ARREARS_V5_RENDERED --><div class='bmarr-v5'><span>MENSILI DELLA STAGIONE</span><div>"+chips+"</div></div><style>.bmarr-v5{margin:11px 0 0;padding:10px;border-radius:13px;background:rgba(2,6,23,.38)}.bmarr-v5>span{display:block;margin-bottom:7px;font-size:10px;font-weight:950;letter-spacing:.12em;color:#93c5fd}.bmarr-v5>div{display:flex;gap:7px;flex-wrap:wrap}.bmarr-chip{display:grid;gap:2px;padding:8px 10px;border-radius:10px;color:#fff!important;text-decoration:none;font-size:11px}.bmarr-chip.due{background:#7f1d1d}.bmarr-chip.ok{background:#14532d}.bmarr-chip span{color:#e2e8f0}</style>"
+        anchor="<div class='bmpay-grid'>"
+        if 'BODYMIND_PAYMENT_TRUTH_DASHBOARD_V3' in html and anchor in html:
+            html=html.replace(anchor,block+anchor,1)
+        else:
+            import re as _bm_re
+            m=_bm_re.search(r'<main\b[^>]*>',html,_bm_re.I)
+            if m: html=html[:m.end()]+block+html[m.end():]
+        resp.set_data(html)
+    except Exception as exc:
+        print('[monthly-arrears-v5-dashboard-warning] '+repr(exc),flush=True)
+    return resp
+'''
+    CORE.write_text(_core_v5,encoding='utf-8')
+    compile_file(CORE)
+    print('[r110-monthly-arrears-v5] PASS month-specific historical dues + dashboard/task convergence',flush=True)
+else:
+    print('[r110-monthly-arrears-v5] already installed',flush=True)
+
+# Read-only proof of due months currently represented by quote_mensili.
+_conn=sqlite3.connect(str(DB),timeout=20); _conn.row_factory=sqlite3.Row
+try:
+    _months=[dict(x) for x in _conn.execute(
+        "SELECT anno,mese,COUNT(*) totale,SUM(CASE WHEN lower(coalesce(stato,'')) LIKE '%pagat%' OR lower(coalesce(stato,'')) LIKE '%saldat%' THEN 1 ELSE 0 END) pagate FROM quote_mensili GROUP BY anno,mese ORDER BY anno,mese"
+    ).fetchall()] if _conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='quote_mensili'").fetchone() else []
+    _ok=str(_conn.execute('PRAGMA integrity_check').fetchone()[0]); _fk=len(_conn.execute('PRAGMA foreign_key_check').fetchall())
+finally:_conn.close()
+if _ok.lower()!='ok' or _fk: raise RuntimeError('R110 monthly-arrears-v5 DB guard failed')
+print('[r110-monthly-arrears-v5-audit] months='+repr(_months)+' integrity='+_ok+' fk='+str(_fk),flush=True)
