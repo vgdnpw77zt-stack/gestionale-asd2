@@ -1,5 +1,5 @@
 from __future__ import annotations
-import py_compile, shutil
+import py_compile, shutil, sqlite3
 from pathlib import Path
 
 APP=Path('/data/top2_app')
