@@ -42,10 +42,15 @@ _r123_removed=_r123_strip_runtime_functions(CORE,(
  '_bodymind_uscite_v8','_bodymind_desktop_admin_nav_v8','_bodymind_payment_month_alerts_v9',
  '_bodymind_uscite_schema_v11','_bodymind_uscita_attachment_save_v11','_bodymind_uscite_v11_impl',
  '_bodymind_expense_entry_v11','_bodymind_uscita_attachment_v11',
+ '_bodymind_uscita_write_v11','_bodymind_uscita_attachment_link_v11','bodymind_quote_incassi_canonical',
  '_bodymind_dashboard_background_restore_r123','_bodymind_dashboard_recompose_r156',
 ))
 _marker_text=CORE.read_text(encoding='utf-8',errors='replace')
-for _marker in ('# BODYMIND_R123_PAYMENT_FORM_CANONICAL_V7\n','# BODYMIND_R123_EXPENSE_ATTACHMENTS_V11\n'):
+for _marker in (
+ '# BODYMIND_R123_PAYMENT_FORM_CANONICAL_V7\n',
+ '# BODYMIND_R123_EXPENSE_ATTACHMENTS_V11\n',
+ '# BODYMIND_R123_QUOTE_INCASSI_CANONICAL_V12\n',
+):
     _marker_text=_marker_text.replace(_marker,'')
 CORE.write_text(_marker_text,encoding='utf-8')
 if _r123_removed:
@@ -930,6 +935,21 @@ _v11_backup=BACK/'pre_v11_expense_attachments.db'
 if not _v11_backup.exists():
     shutil.copy2(DB,_v11_backup)
 
+_v11_ro=sqlite3.connect("file:"+str(DB)+"?mode=ro",uri=True,timeout=20); _v11_ro.row_factory=sqlite3.Row
+try:
+    _v11_exists=bool(_v11_ro.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='bodymind_uscite'").fetchone())
+    _v11_expense_baseline={
+      'exists':_v11_exists,
+      'count':(int(_v11_ro.execute("SELECT COUNT(*) FROM bodymind_uscite").fetchone()[0]) if _v11_exists else 0),
+      'max_id':(int(_v11_ro.execute("SELECT COALESCE(MAX(id),0) FROM bodymind_uscite").fetchone()[0] or 0) if _v11_exists else 0),
+      'schema':([tuple(x) for x in _v11_ro.execute("PRAGMA table_info(bodymind_uscite)").fetchall()] if _v11_exists else []),
+      'indexes':([tuple(x) for x in _v11_ro.execute("PRAGMA index_list(bodymind_uscite)").fetchall()] if _v11_exists else []),
+      'foreign_keys':([tuple(x) for x in _v11_ro.execute("PRAGMA foreign_key_list(bodymind_uscite)").fetchall()] if _v11_exists else []),
+      'last_rows':([dict(x) for x in _v11_ro.execute("SELECT id,data,descrizione,categoria,importo,metodo,allegato_nome,created_at,updated_at FROM bodymind_uscite ORDER BY id DESC LIMIT 5").fetchall()] if _v11_exists else []),
+    }
+finally:_v11_ro.close()
+print('[r123-expense-readonly-baseline] '+repr(_v11_expense_baseline),flush=True)
+
 _v11_conn=sqlite3.connect(str(DB),timeout=30)
 try:
     _v11_before={}
@@ -1002,7 +1022,7 @@ def _bodymind_uscite_schema_v11(conn):
             conn.execute("ALTER TABLE bodymind_uscite ADD COLUMN "+col+" "+typ)
 
 
-def _bodymind_uscita_attachment_save_v11(upload, expense_id):
+def _bodymind_uscita_attachment_save_v11(upload, expense_id, root_override=None):
     if not upload or not getattr(upload,'filename',''):
         return None
     from pathlib import Path as _Path
@@ -1016,7 +1036,7 @@ def _bodymind_uscita_attachment_save_v11(upload, expense_id):
     allowed={'.pdf','.png','.jpg','.jpeg','.webp','.heic','.heif','.doc','.docx','.xls','.xlsx'}
     if suffix not in allowed:
         raise ValueError('Formato allegato non supportato.')
-    root=_Path('/data/tenants/default/media/uscite')
+    root=_Path(root_override or '/data/tenants/default/media/uscite')
     root.mkdir(parents=True,exist_ok=True)
     saved_name=str(int(expense_id))+'_'+_uuid.uuid4().hex[:12]+suffix
     dest=root/saved_name
@@ -1030,12 +1050,39 @@ def _bodymind_uscita_attachment_save_v11(upload, expense_id):
     return {'path':str(dest),'name':original,'mime':mime,'size':size}
 
 
+def _bodymind_uscita_write_v11(conn, edit_id, data, descrizione, categoria, importo, metodo, note, now):
+    edit_id=int(edit_id or 0)
+    if edit_id:
+        current=conn.execute("SELECT * FROM bodymind_uscite WHERE id=?",(edit_id,)).fetchone()
+        if not current:
+            raise ValueError('Uscita non trovata.')
+        conn.execute("""
+          UPDATE bodymind_uscite
+             SET data=?,descrizione=?,categoria=?,importo=?,metodo=?,note=?,updated_at=?
+           WHERE id=?
+        """,(data,descrizione,categoria,importo,metodo,note,now,edit_id))
+        return edit_id
+    cur=conn.execute("""
+      INSERT INTO bodymind_uscite(data,descrizione,categoria,importo,metodo,note,created_at,updated_at)
+      VALUES(?,?,?,?,?,?,?,?)
+    """,(data,descrizione,categoria,importo,metodo,note,now,now))
+    return int(cur.lastrowid)
+
+
+def _bodymind_uscita_attachment_link_v11(conn, expense_id, meta, now):
+    conn.execute("""
+      UPDATE bodymind_uscite
+         SET allegato_path=?,allegato_nome=?,allegato_mime=?,allegato_size=?,updated_at=?
+       WHERE id=?
+    """,(meta['path'],meta['name'],meta['mime'],meta['size'],now,int(expense_id)))
+
+
 def _bodymind_uscite_v11_impl():
     from datetime import date as _date, datetime as _dt
     conn=db(); conn.row_factory=sqlite3.Row
     _bodymind_uscite_schema_v11(conn)
-    saved=False; err=''
-    edit_id=parse_int(request.args.get('modifica') or request.form.get('uscita_id'),0)
+    saved=(request.args.get('salvato')=='1'); err=''
+    edit_id=(parse_int(request.form.get('uscita_id'),0) if request.method=='POST' else parse_int(request.args.get('modifica'),0))
 
     if request.method=='POST':
         data=(request.form.get('data') or _date.today().isoformat()).strip()
@@ -1053,34 +1100,20 @@ def _bodymind_uscite_v11_impl():
         else:
             now=_dt.now().isoformat(timespec='seconds')
             try:
-                if edit_id:
-                    current=conn.execute("SELECT * FROM bodymind_uscite WHERE id=?",(edit_id,)).fetchone()
-                    if not current:
-                        raise ValueError('Uscita non trovata.')
-                    conn.execute("""
-                      UPDATE bodymind_uscite
-                         SET data=?,descrizione=?,categoria=?,importo=?,metodo=?,note=?,updated_at=?
-                       WHERE id=?
-                    """,(data,descrizione,categoria,importo,metodo,note,now,edit_id))
-                    expense_id=edit_id
-                else:
-                    cur=conn.execute("""
-                      INSERT INTO bodymind_uscite(data,descrizione,categoria,importo,metodo,note,created_at,updated_at)
-                      VALUES(?,?,?,?,?,?,?,?)
-                    """,(data,descrizione,categoria,importo,metodo,note,now,now))
-                    expense_id=int(cur.lastrowid)
+                expense_id=_bodymind_uscita_write_v11(
+                    conn,edit_id,data,descrizione,categoria,importo,metodo,note,now
+                )
 
                 upload=request.files.get('allegato')
                 if upload and getattr(upload,'filename',''):
                     meta=_bodymind_uscita_attachment_save_v11(upload,expense_id)
-                    conn.execute("""
-                      UPDATE bodymind_uscite
-                         SET allegato_path=?,allegato_nome=?,allegato_mime=?,allegato_size=?,updated_at=?
-                       WHERE id=?
-                    """,(meta['path'],meta['name'],meta['mime'],meta['size'],now,expense_id))
+                    _bodymind_uscita_attachment_link_v11(conn,expense_id,meta,now)
                 conn.commit()
-                saved=True
-                edit_id=expense_id
+                target='/uscite?salvato=1'
+                if request.path=='/pagamenti/uscite': target='/pagamenti/uscite?salvato=1'
+                elif request.path=='/contabilita': target='/contabilita?salvato=1'
+                conn.close()
+                return redirect(target,303)
             except Exception as exc:
                 try:conn.rollback()
                 except Exception:pass
@@ -1239,9 +1272,10 @@ def _bodymind_uscita_attachment_v11(expense_id):
     py_compile.compile(str(CORE),doraise=True)
 
 _v11_qa=r"""
-import json,sqlite3,sys
+import io,json,os,sqlite3,sys,tempfile
 sys.path.insert(0,"/data/top2_app")
 import app as _full
+import asd_app.core as core
 from asd_app.core import app
 app.config["TESTING"]=True
 routes=[(str(r.rule),str(r.endpoint),sorted(m for m in (r.methods or set()) if m not in ("HEAD","OPTIONS"))) for r in app.url_map.iter_rules()]
@@ -1253,25 +1287,77 @@ r1=client.get('/pagamenti/uscite',follow_redirects=False)
 r2=client.get('/contabilita',follow_redirects=False)
 r3=client.get('/uscite',follow_redirects=False)
 body=r1.get_data(as_text=True)
-conn=sqlite3.connect("/data/tenants/default/asd.db",timeout=20)
+prod=sqlite3.connect("file:/data/tenants/default/asd.db?mode=ro",uri=True,timeout=20);prod.row_factory=sqlite3.Row
 try:
-    cols=[str(x[1]) for x in conn.execute("PRAGMA table_info(bodymind_uscite)").fetchall()]
-    counts={t:int(conn.execute("SELECT COUNT(*) FROM "+t).fetchone()[0]) for t in ("tesserati","pagamenti","ricevute")}
-    integrity=str(conn.execute("PRAGMA integrity_check").fetchone()[0]); fk=len(conn.execute("PRAGMA foreign_key_check").fetchall())
-finally:conn.close()
-out={"uscite_status":r1.status_code,"contabilita_status":r2.status_code,"uscite_alias_status":r3.status_code,"marker":"BODYMIND_R123_EXPENSE_ATTACHMENTS_V11" in body,"multipart":"multipart/form-data" in body,"attachment_route":bool(expense_file),"columns":cols,"counts":counts,"integrity":integrity,"fk":fk}
+    baseline={
+      "count":int(prod.execute("SELECT COUNT(*) FROM bodymind_uscite").fetchone()[0]),
+      "max_id":int(prod.execute("SELECT COALESCE(MAX(id),0) FROM bodymind_uscite").fetchone()[0] or 0),
+      "schema":[list(x) for x in prod.execute("PRAGMA table_info(bodymind_uscite)").fetchall()],
+      "indexes":[list(x) for x in prod.execute("PRAGMA index_list(bodymind_uscite)").fetchall()],
+      "foreign_keys":[list(x) for x in prod.execute("PRAGMA foreign_key_list(bodymind_uscite)").fetchall()],
+      "last_rows":[dict(x) for x in prod.execute("SELECT id,data,descrizione,categoria,importo,metodo,allegato_nome,created_at,updated_at FROM bodymind_uscite ORDER BY id DESC LIMIT 5").fetchall()],
+      "counts":{t:int(prod.execute("SELECT COUNT(*) FROM "+t).fetchone()[0]) for t in ("tesserati","pagamenti","ricevute","quote_mensili","documenti","inbound_documents")},
+      "integrity":str(prod.execute("PRAGMA integrity_check").fetchone()[0]),
+      "fk":len(prod.execute("PRAGMA foreign_key_check").fetchall()),
+    }
+finally:prod.close()
+
+mutation={}
+with tempfile.TemporaryDirectory(prefix="bodymind-expense-qa-") as td:
+    qdb=os.path.join(td,"expense.db"); media=os.path.join(td,"media")
+    orig_db=core.db; orig_save=core._bodymind_uscita_attachment_save_v11
+    def qa_db():
+        c=sqlite3.connect(qdb,timeout=10);c.row_factory=sqlite3.Row;return c
+    def qa_save(upload,eid):
+        return orig_save(upload,eid,media)
+    core.db=qa_db;core._bodymind_uscita_attachment_save_v11=qa_save
+    try:
+        def post(payload):
+            with app.test_request_context('/uscite',method='POST',data=payload):
+                return core._bodymind_uscite_v11_impl()
+        a=post({'uscita_id':'0','data':'2026-10-06','descrizione':'QA uscita A','categoria':'Affitto','importo':'700','metodo':'bonifico','note':'A','allegato':(io.BytesIO(b'A-attachment'),'a.pdf')})
+        c=sqlite3.connect(qdb);c.row_factory=sqlite3.Row
+        arow=dict(c.execute("SELECT * FROM bodymind_uscite ORDER BY id LIMIT 1").fetchone()); aid=int(arow['id']); c.close()
+        b=post({'uscita_id':'0','data':'2026-10-06','descrizione':'QA uscita B','categoria':'Pulizie','importo':'100','metodo':'contanti','note':'B','allegato':(io.BytesIO(b'B-attachment'),'b.pdf')})
+        c=sqlite3.connect(qdb);c.row_factory=sqlite3.Row
+        rows=[dict(x) for x in c.execute("SELECT * FROM bodymind_uscite ORDER BY id").fetchall()]
+        bid=int(rows[-1]['id']); a_after_b=dict(c.execute("SELECT * FROM bodymind_uscite WHERE id=?",(aid,)).fetchone()); b_before=dict(c.execute("SELECT * FROM bodymind_uscite WHERE id=?",(bid,)).fetchone()); c.close()
+        eb=post({'uscita_id':str(bid),'data':'2026-10-07','descrizione':'QA uscita B modificata','categoria':'Pulizie','importo':'125','metodo':'carta','note':'B2'})
+        c=sqlite3.connect(qdb);c.row_factory=sqlite3.Row
+        final_rows=[dict(x) for x in c.execute("SELECT * FROM bodymind_uscite ORDER BY id").fetchall()]
+        a_final=dict(c.execute("SELECT * FROM bodymind_uscite WHERE id=?",(aid,)).fetchone()); b_final=dict(c.execute("SELECT * FROM bodymind_uscite WHERE id=?",(bid,)).fetchone())
+        tmp_integrity=str(c.execute("PRAGMA integrity_check").fetchone()[0]);tmp_fk=len(c.execute("PRAGMA foreign_key_check").fetchall());c.close()
+        mutation={
+          "insert_a_redirect":a.status_code==303 and a.location.endswith('/uscite?salvato=1'),
+          "insert_b_redirect":b.status_code==303 and b.location.endswith('/uscite?salvato=1'),
+          "edit_b_redirect":eb.status_code==303 and eb.location.endswith('/uscite?salvato=1'),
+          "count_plus_two":len(rows)==2,
+          "ids_distinct":aid!=bid,
+          "a_unchanged_after_b":arow==a_after_b,
+          "edit_count_unchanged":len(final_rows)==2,
+          "a_unchanged_after_edit":a_after_b==a_final,
+          "only_b_updated":b_final['descrizione']=='QA uscita B modificata' and abs(float(b_final['importo'])-125.0)<0.001 and b_final['data']=='2026-10-07',
+          "attachments_distinct":bool(a_final['allegato_path']) and bool(b_final['allegato_path']) and a_final['allegato_path']!=b_final['allegato_path'],
+          "attachments_exist":os.path.isfile(a_final['allegato_path']) and os.path.isfile(b_final['allegato_path']),
+          "b_attachment_preserved_on_edit":b_final['allegato_path']==b_before['allegato_path'] and b_final['allegato_nome']==b_before['allegato_nome'],
+          "temp_db":tmp_integrity.lower()=='ok' and tmp_fk==0,
+        }
+    finally:
+        core.db=orig_db;core._bodymind_uscita_attachment_save_v11=orig_save
+
+out={"uscite_status":r1.status_code,"contabilita_status":r2.status_code,"uscite_alias_status":r3.status_code,"marker":"BODYMIND_R123_EXPENSE_ATTACHMENTS_V11" in body,"multipart":"multipart/form-data" in body,"new_form_id_zero":"name='uscita_id' value='0'" in body,"attachment_route":bool(expense_file),"baseline":baseline,"mutation":mutation}
 print("[r123-expense-v11-audit] "+json.dumps(out,ensure_ascii=False),flush=True)
-if r1.status_code!=200 or r2.status_code!=200 or r3.status_code!=200 or not out["marker"] or not out["multipart"] or not expense_file or not all(x in cols for x in ("allegato_path","allegato_nome","allegato_mime","allegato_size")) or integrity.lower()!="ok" or fk:
-    raise RuntimeError("V11 expense attachments audit failed")
+if r1.status_code!=200 or r2.status_code!=200 or r3.status_code!=200 or not out["marker"] or not out["multipart"] or not out["new_form_id_zero"] or not expense_file or baseline["integrity"].lower()!="ok" or baseline["fk"] or not all(mutation.values()):
+    raise RuntimeError("V11 expense persistence audit failed")
 """
 _v11p=subprocess.run([sys.executable,"-c",_v11_qa],capture_output=True,text=True,timeout=180)
 print((_v11p.stdout or "").strip(),flush=True)
 if _v11p.returncode!=0:
-    raise RuntimeError("R123 V11 child audit failed "+((_v11p.stderr or "")+(_v11p.stdout or ""))[-6000:])
-print('[r123-expense-v11] PASS one-expense-module attachments-preview-download payments-preserved before='+str(_v11_before)+' after='+str(_v11_after),flush=True)
+    raise RuntimeError("R123 V11 child audit failed "+((_v11p.stderr or "")+(_v11p.stdout or ""))[-9000:])
+print('[r123-expense-v11] PASS isolated insert-insert-edit attachments PRG production-read-only baseline='+repr(_v11_expense_baseline),flush=True)
 
 
-# BODYMIND_R123_DASHBOARD_CANONICAL
+# BODYMIND_R123_DASHBOARD_CANONICAL# BODYMIND_R123_DASHBOARD_CANONICAL
 _core_dash=CORE.read_text(encoding='utf-8',errors='replace')
 # Heal the already-installed canonical dashboard block before deciding whether
 # it needs to be appended. Earlier R123 builds persisted over-escaped raw
@@ -1418,6 +1504,18 @@ def bodymind_quote_incassi_canonical():
     finally:
         conn.close()
 
+    def _cash_row(p):
+        try:get=p.get
+        except Exception:get=lambda k,d=None:p[k] if k in p.keys() else d
+        st=(str(get('stato','') or '')+' '+str(get('online_status','') or '')).lower()
+        if any(x in st for x in ('pending','attesa','cancel','annull','failed','fallit','refunded','rimbors')):
+            return False
+        if any(x in st for x in ('paid','pagat','saldat','complet','incassat')):
+            return True
+        try:amount=float(get('importo',0) or 0)
+        except Exception:amount=0
+        return bool(get('data','') or get('paid_at','')) and amount>0
+
     def _money(value):
         if value is None: return '—'
         try: return ('€ %.2f'%float(value)).replace('.',',')
@@ -1436,8 +1534,6 @@ def bodymind_quote_incassi_canonical():
         q=quote_by_tid.get(tid,'__missing__')
         month_applicable=(q is not None and q!='__missing__') or mp_ok
         if ep_ok: enroll_paid+=1
-        if month_applicable: monthly_due+=1
-        if mp_ok: monthly_paid+=1
 
         ep_amount=(float(ep['importo'] or 0) if ep_ok else None)
         mp_paid_amount=(float(mp['importo'] or 0) if mp_ok else None)
@@ -1470,7 +1566,7 @@ def bodymind_quote_incassi_canonical():
             pm=parse_int(p['mese'],0); py=parse_int(p['anno'],0)
             is_enroll=(causale_l in ('iscrizione','tesseramento') or 'iscrizion' in causale_l)
             is_month=('mensil' in causale_l or causale_l in ('quota','quota_mensile'))
-            if is_month and pm==mese and py==anno:
+            if is_month and pm==mese and py==anno and _cash_row(p):
                 month_movs.append(p)
             if is_enroll:
                 label='Iscrizione '+str(stagione)+'/'+str(stagione+1)
@@ -1484,20 +1580,41 @@ def bodymind_quote_incassi_canonical():
             stato=(str(p['stato'] or '').strip() if 'stato' in p.keys() else '') or (str(p['online_status'] or '').strip() if 'online_status' in p.keys() else '') or 'registrato'
             pdate=str(p['data'] or '—') if 'data' in p.keys() else '—'
             extra=[]
+            receipt_id=(str(p['ricevuta_id']).strip() if 'ricevuta_id' in p.keys() and p['ricevuta_id'] is not None else '')
+            if receipt_id: extra.append('Ricevuta #'+receipt_id)
             if ref: extra.append('Rif. '+ref)
             if note: extra.append('Note: '+note)
             detail_items.append(
                 "<div class='bmqi-movement' data-bm-payment-id='"+str(int(p['id']))+"' data-bm-causale='"+e(causale)+"'>"
-                "<div><b>"+e(label)+"</b><small>Causale: <code>"+e(causale or '—')+"</code></small></div>"
+                "<div><b>"+e(label)+"</b><small>Pagamento #"+str(int(p['id']))+" · Causale: <code>"+e(causale or '—')+"</code></small></div>"
                 "<strong>"+_money(float(p['importo'] or 0))+"</strong>"
                 "<span>"+e(pdate)+" · "+e(method)+" · "+e(stato)+"</span>"
                 +("<em>"+e(' · '.join(extra))+"</em>" if extra else "")+
                 "</div>"
             )
         month_total=sum(float(p['importo'] or 0) for p in month_movs)
+        residual=(max(float(mp_due_amount)-month_total,0.0) if mp_due_amount is not None else None)
+        excess=(max(month_total-float(mp_due_amount),0.0) if mp_due_amount is not None else 0.0)
+        if not month_applicable and month_total<=0:
+            month_state='NON DOVUTO'; month_cls='na'
+        elif mp_due_amount is not None:
+            if month_total>=float(mp_due_amount):
+                month_state='PAGATO'; month_cls='paid'
+            elif month_total>0:
+                month_state='PARZIALE'; month_cls='partial'
+            else:
+                month_state='DA PAGARE'; month_cls='due'
+        elif month_total>0 or mp_ok:
+            month_state='REGISTRATO'; month_cls='paid'
+        else:
+            month_state='DA PAGARE'; month_cls='due'
+        if month_applicable: monthly_due+=1
+        if month_state in ('PAGATO','REGISTRATO'): monthly_paid+=1
         duplicate_warning=(
             "<div class='bmqi-warning'><b>"+str(len(month_movs))+" movimenti mensili per "+months[mese]+" "+str(anno)+"</b>"
-            "<span>Totale storico registrato "+_money(month_total)+". È un dettaglio contabile: non viene usato come importo della quota mensile.</span></div>"
+            "<span>Incassato mensile "+_money(month_total)
+            +(" · dovuto "+_money(mp_due_amount) if mp_due_amount is not None else "")
+            +". Lo storico resta intatto; i movimenti sono mostrati sotto per causale.</span></div>"
             if len(month_movs)>1 else ""
         )
         details_html=(
@@ -1506,20 +1623,19 @@ def bodymind_quote_incassi_canonical():
             ("<div class='bmqi-movements'>"+''.join(detail_items)+"</div>" if detail_items else "<p>Nessun movimento registrato per queste voci.</p>")+
             "</details>"
         )
-        if mp_ok:
-            month_meta='Registrato '+_money(mp_paid_amount)+' · Modifica'
-        elif month_applicable:
-            month_meta='Da registrare'
-        else:
-            month_meta='Non dovuto'
+        month_meta='Incassato mensile '+_money(month_total)
+        if residual is not None: month_meta+=' · Residuo '+_money(residual)
+        if excess>0: month_meta+=' · Oltre il dovuto '+_money(excess)
+        if mp_ok: month_meta+=' · Modifica'
+        elif month_applicable: month_meta+=' · Registra'
 
         rows.append(
           "<article class='bmqi-row' data-bm-tid='"+str(tid)+"' data-bm-enroll-paid='"+('1' if ep_ok else '0')+
           "' data-bm-enroll-amount='"+ep_attr+"' data-bm-month-paid='"+('1' if mp_ok else '0')+
-          "' data-bm-month-amount='"+mp_attr+"'>"
+          "' data-bm-month-amount='"+mp_attr+"' data-bm-month-cash='"+('%.2f'%month_total)+"' data-bm-month-due='"+(('%.2f'%mp_due_amount) if mp_due_amount is not None else '')+"' data-bm-month-residual='"+(('%.2f'%residual) if residual is not None else '')+"'>"
           "<div class='bmqi-name'><b>"+e(name)+"</b><small>"+months[mese]+" "+str(anno)+"</small></div>"
           "<a class='bmqi-pay "+enroll_cls+"' href='"+enroll_href+"'><span>ISCRIZIONE "+str(stagione)+"/"+str(stagione+1)+"</span><strong>"+_money(ep_amount)+"</strong><em>"+enroll_state+"</em><small>"+('Modifica' if ep_ok else 'Registra')+"</small></a>"
-          "<a class='bmqi-pay "+month_cls+"' href='"+month_href+"'><span>MENSILE · "+months[mese].upper()+" "+str(anno)+"</span><strong>"+_money(mp_display)+"</strong><em>"+month_state+"</em><small>"+e(month_meta)+"</small></a>"
+          "<a class='bmqi-pay "+month_cls+"' href='"+month_href+"'><span>MENSILE · "+months[mese].upper()+" "+str(anno)+"</span><strong>Dovuto "+_money(mp_due_amount)+"</strong><em>"+month_state+"</em><small>"+e(month_meta)+"</small></a>"
           +details_html+
           "</article>"
         )
@@ -1561,7 +1677,7 @@ def bodymind_quote_incassi_canonical():
       .bmqi-name{{display:flex;flex-direction:column;justify-content:center;gap:3px;padding:7px}}.bmqi-name b{{font-size:14px}}.bmqi-name small{{color:#94a3b8}}
       .bmqi-pay{{display:grid;grid-template-columns:1fr auto;grid-template-areas:'label amount' 'state action';gap:5px 10px;padding:11px;border-radius:12px;text-decoration:none!important;color:#fff!important;border:1px solid transparent}}
       .bmqi-pay>span{{grid-area:label;font-size:10px;font-weight:950;letter-spacing:.04em}}.bmqi-pay>strong{{grid-area:amount;font-size:18px;text-align:right}}.bmqi-pay>em{{grid-area:state;font-style:normal;font-size:11px;font-weight:950}}.bmqi-pay>small{{grid-area:action;text-align:right;font-weight:900}}
-      .bmqi-pay.paid{{background:rgba(20,83,45,.72);border-color:rgba(74,222,128,.30)}}.bmqi-pay.due{{background:rgba(127,29,29,.54);border-color:rgba(248,113,113,.34)}}.bmqi-pay.na{{background:rgba(51,65,85,.46);border-color:rgba(148,163,184,.22);color:#cbd5e1!important}}
+      .bmqi-pay.paid{{background:rgba(20,83,45,.72);border-color:rgba(74,222,128,.30)}}.bmqi-pay.partial{{background:rgba(120,53,15,.62);border-color:rgba(251,191,36,.34)}}.bmqi-pay.due{{background:rgba(127,29,29,.54);border-color:rgba(248,113,113,.34)}}.bmqi-pay.na{{background:rgba(51,65,85,.46);border-color:rgba(148,163,184,.22);color:#cbd5e1!important}}
       .bmqi-details{{grid-column:1/-1;border-top:1px solid rgba(148,163,184,.16);padding:8px 4px 2px}}.bmqi-details summary{{cursor:pointer;font-weight:950;color:#bfdbfe;padding:7px 4px}}.bmqi-details summary b{{display:inline-flex;min-width:22px;justify-content:center;margin-left:6px;padding:2px 6px;border-radius:999px;background:#163b5f;color:#fff}}.bmqi-warning{{display:grid;gap:3px;margin:5px 0 8px;padding:9px 10px;border-radius:10px;background:rgba(146,64,14,.42);border:1px solid rgba(251,191,36,.38);color:#fef3c7}}.bmqi-warning span{{font-size:11px;line-height:1.35}}.bmqi-movements{{display:grid;gap:6px}}.bmqi-movement{{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 12px;padding:9px 10px;border-radius:10px;background:#07182a;border:1px solid rgba(148,163,184,.14)}}.bmqi-movement>div{{display:grid;gap:2px}}.bmqi-movement b{{font-size:12px}}.bmqi-movement small,.bmqi-movement span,.bmqi-movement em{{font-size:10px;color:#a9bbcf;font-style:normal}}.bmqi-movement strong{{font-size:14px}}.bmqi-movement span,.bmqi-movement em{{grid-column:1/-1}}.bmqi-movement code{{color:#dbeafe}}
       @media(max-width:900px){{.bmqi-row{{grid-template-columns:1fr 1fr}}.bmqi-name{{grid-column:1/-1}}}}
       @media(max-width:620px){{.bmqi{{padding:11px 10px 65px}}.bmqi-head{{display:grid}}.bmqi-summary{{grid-template-columns:1fr}}.bmqi-row{{grid-template-columns:1fr}}.bmqi-name{{grid-column:auto}}.bmqi-period label,.bmqi-period select,.bmqi-period input,.bmqi-period button{{width:100%}}}}
@@ -1573,133 +1689,6 @@ def bodymind_quote_incassi_canonical():
     print('[r123-quote-incassi] installed canonical enrollment+monthly summary',flush=True)
 else:
     print('[r123-quote-incassi] canonical summary already installed',flush=True)
-
-# Converge the already-persisted canonical function in place. This is not a
-# second renderer: it upgrades the one function that /quote-incassi delegates to.
-_core_qi_detail=CORE.read_text(encoding='utf-8',errors='replace')
-if 'BODYMIND_R123_QUOTE_INCASSI_DETAIL_V12' not in _core_qi_detail:
-    import ast as _bm_qi_detail_ast
-    _tree=_bm_qi_detail_ast.parse(_core_qi_detail); _lines=_core_qi_detail.splitlines(True)
-    _nodes=[n for n in _tree.body if isinstance(n,(_bm_qi_detail_ast.FunctionDef,_bm_qi_detail_ast.AsyncFunctionDef)) and n.name=='bodymind_quote_incassi_canonical']
-    if len(_nodes)!=1:
-        raise RuntimeError('canonical quote-incassi function count='+str(len(_nodes)))
-    _n=_nodes[0]; _a=_n.lineno-1; _b=int(getattr(_n,'end_lineno',_n.lineno))
-    _fn=''.join(_lines[_a:_b])
-    _fn=_fn.replace("def bodymind_quote_incassi_canonical():\n    from datetime import date as _bm_date",
-                    "def bodymind_quote_incassi_canonical():\n    # BODYMIND_R123_QUOTE_INCASSI_DETAIL_V12\n    from datetime import date as _bm_date",1)
-    _fn=_fn.replace("""                else:
-                    quote_by_tid[tid]=q
-    finally:
-        conn.close()""","""                else:
-                    quote_by_tid[tid]=q
-
-        # Read-only movement ledger for the selected month + annual enrollment.
-        # This explains historical split/duplicate rows without changing them.
-        movement_by_tid={}
-        _truth_ids=[int(x['tesserato_id']) for x in truth.get('rows',[]) if int(x.get('tesserato_id') or 0)>0]
-        if _truth_ids:
-            _marks=','.join('?' for _ in _truth_ids)
-            _args=list(_truth_ids)+[mese,anno,stagione,stagione+1]
-            _sql=("SELECT * FROM pagamenti WHERE tesserato_id IN ("+_marks+") "
-                  "AND ((mese=? AND anno=?) OR (anno IN (?,?) AND "
-                  "(lower(coalesce(causale,''))='iscrizione' OR lower(coalesce(causale,''))='tesseramento' "
-                  "OR lower(coalesce(causale,'')) LIKE '%iscrizion%'))) "
-                  "ORDER BY tesserato_id,COALESCE(data,''),id")
-            for p in conn.execute(_sql,_args).fetchall():
-                movement_by_tid.setdefault(int(p['tesserato_id']),[]).append(p)
-    finally:
-        conn.close()""",1)
-    _fn=_fn.replace("""        ep_amount=(float(ep['importo'] or 0) if ep_ok else None)
-        mp_paid_amount=(float(mp['importo'] or 0) if mp_ok else None)
-        if mp_ok:
-            mp_display=mp_paid_amount
-        elif q not in (None,'__missing__'):
-            mp_display=float(q['importo_dovuto'] or q['importo_base'] or 0)
-        else:
-            mp_display=None""","""        ep_amount=(float(ep['importo'] or 0) if ep_ok else None)
-        mp_paid_amount=(float(mp['importo'] or 0) if mp_ok else None)
-        mp_due_amount=(float(q['importo_dovuto'] or q['importo_base'] or 0) if q not in (None,'__missing__') else None)
-        if mp_due_amount is not None:
-            mp_display=mp_due_amount
-        elif mp_ok:
-            mp_display=mp_paid_amount
-        else:
-            mp_display=None""",1)
-    _fn=_fn.replace("""        ep_attr=('%.2f'%ep_amount) if ep_amount is not None else ''
-        mp_attr=('%.2f'%mp_paid_amount) if mp_paid_amount is not None else ''
-
-        rows.append(""","""        ep_attr=('%.2f'%ep_amount) if ep_amount is not None else ''
-        mp_attr=('%.2f'%mp_paid_amount) if mp_paid_amount is not None else ''
-
-        movs=movement_by_tid.get(tid,[])
-        month_movs=[]
-        detail_items=[]
-        for p in movs:
-            causale=str(p['causale'] or '').strip()
-            causale_l=causale.lower()
-            pm=parse_int(p['mese'],0); py=parse_int(p['anno'],0)
-            is_enroll=(causale_l in ('iscrizione','tesseramento') or 'iscrizion' in causale_l)
-            is_month=('mensil' in causale_l or causale_l in ('quota','quota_mensile'))
-            if is_month and pm==mese and py==anno:
-                month_movs.append(p)
-            if is_enroll:
-                label='Iscrizione '+str(stagione)+'/'+str(stagione+1)
-            elif is_month and 1<=pm<=12:
-                label='Mensile '+months[pm]+' '+str(py)
-            else:
-                label=causale or 'Altro movimento'
-            method=str(p['metodo_pagamento'] or 'non indicato') if 'metodo_pagamento' in p.keys() else 'non indicato'
-            note=str(p['note_pagamento'] or '').strip() if 'note_pagamento' in p.keys() else ''
-            ref=str(p['riferimento_pagamento'] or '').strip() if 'riferimento_pagamento' in p.keys() else ''
-            stato=(str(p['stato'] or '').strip() if 'stato' in p.keys() else '') or (str(p['online_status'] or '').strip() if 'online_status' in p.keys() else '') or 'registrato'
-            pdate=str(p['data'] or '—') if 'data' in p.keys() else '—'
-            extra=[]
-            if ref: extra.append('Rif. '+ref)
-            if note: extra.append('Note: '+note)
-            detail_items.append(
-                "<div class='bmqi-movement' data-bm-payment-id='"+str(int(p['id']))+"' data-bm-causale='"+e(causale)+"'>"
-                "<div><b>"+e(label)+"</b><small>Causale: <code>"+e(causale or '—')+"</code></small></div>"
-                "<strong>"+_money(float(p['importo'] or 0))+"</strong>"
-                "<span>"+e(pdate)+" · "+e(method)+" · "+e(stato)+"</span>"
-                +("<em>"+e(' · '.join(extra))+"</em>" if extra else "")+
-                "</div>"
-            )
-        month_total=sum(float(p['importo'] or 0) for p in month_movs)
-        duplicate_warning=(
-            "<div class='bmqi-warning'><b>"+str(len(month_movs))+" movimenti mensili per "+months[mese]+" "+str(anno)+"</b>"
-            "<span>Totale storico registrato "+_money(month_total)+". È un dettaglio contabile: non viene usato come importo della quota mensile.</span></div>"
-            if len(month_movs)>1 else ""
-        )
-        details_html=(
-            "<details class='bmqi-details' data-bm-detail-tid='"+str(tid)+"'><summary>Dettaglio movimenti <b>"+str(len(movs))+"</b></summary>"
-            +duplicate_warning+
-            ("<div class='bmqi-movements'>"+''.join(detail_items)+"</div>" if detail_items else "<p>Nessun movimento registrato per queste voci.</p>")+
-            "</details>"
-        )
-        if mp_ok:
-            month_meta='Registrato '+_money(mp_paid_amount)+' · Modifica'
-        elif month_applicable:
-            month_meta='Da registrare'
-        else:
-            month_meta='Non dovuto'
-
-        rows.append(""",1)
-    _fn=_fn.replace("""          "<a class='bmqi-pay "+month_cls+"' href='"+month_href+"'><span>MENSILE · "+months[mese].upper()+" "+str(anno)+"</span><strong>"+_money(mp_display)+"</strong><em>"+month_state+"</em><small>"+('Modifica' if mp_ok else ('Apri' if month_applicable else 'Non dovuto'))+"</small></a>"
-          "</article>""","""          "<a class='bmqi-pay "+month_cls+"' href='"+month_href+"'><span>MENSILE · "+months[mese].upper()+" "+str(anno)+"</span><strong>"+_money(mp_display)+"</strong><em>"+month_state+"</em><small>"+e(month_meta)+"</small></a>"
-          +details_html+
-          "</article>""",1)
-    _fn=_fn.replace("""      .bmqi-pay.paid{{background:rgba(20,83,45,.72);border-color:rgba(74,222,128,.30)}}.bmqi-pay.due{{background:rgba(127,29,29,.54);border-color:rgba(248,113,113,.34)}}.bmqi-pay.na{{background:rgba(51,65,85,.46);border-color:rgba(148,163,184,.22);color:#cbd5e1!important}}
-      @media(max-width:900px)""","""      .bmqi-pay.paid{{background:rgba(20,83,45,.72);border-color:rgba(74,222,128,.30)}}.bmqi-pay.due{{background:rgba(127,29,29,.54);border-color:rgba(248,113,113,.34)}}.bmqi-pay.na{{background:rgba(51,65,85,.46);border-color:rgba(148,163,184,.22);color:#cbd5e1!important}}
-      .bmqi-details{{grid-column:1/-1;border-top:1px solid rgba(148,163,184,.16);padding:8px 4px 2px}}.bmqi-details summary{{cursor:pointer;font-weight:950;color:#bfdbfe;padding:7px 4px}}.bmqi-details summary b{{display:inline-flex;min-width:22px;justify-content:center;margin-left:6px;padding:2px 6px;border-radius:999px;background:#163b5f;color:#fff}}.bmqi-warning{{display:grid;gap:3px;margin:5px 0 8px;padding:9px 10px;border-radius:10px;background:rgba(146,64,14,.42);border:1px solid rgba(251,191,36,.38);color:#fef3c7}}.bmqi-warning span{{font-size:11px;line-height:1.35}}.bmqi-movements{{display:grid;gap:6px}}.bmqi-movement{{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 12px;padding:9px 10px;border-radius:10px;background:#07182a;border:1px solid rgba(148,163,184,.14)}}.bmqi-movement>div{{display:grid;gap:2px}}.bmqi-movement b{{font-size:12px}}.bmqi-movement small,.bmqi-movement span,.bmqi-movement em{{font-size:10px;color:#a9bbcf;font-style:normal}}.bmqi-movement strong{{font-size:14px}}.bmqi-movement span,.bmqi-movement em{{grid-column:1/-1}}.bmqi-movement code{{color:#dbeafe}}
-      @media(max-width:900px)""",1)
-    if 'BODYMIND_R123_QUOTE_INCASSI_DETAIL_V12' not in _fn:
-        raise RuntimeError('quote-incassi detail convergence anchors did not apply')
-    _lines[_a:_b]=[_fn+'\n']
-    CORE.write_text(''.join(_lines),encoding='utf-8')
-    py_compile.compile(str(CORE),doraise=True)
-    print('[r123-quote-incassi-detail] converged canonical function in place',flush=True)
-else:
-    print('[r123-quote-incassi-detail] already canonical',flush=True)
 
 # Replace the historical /quote-incassi implementation at source level.
 # Preserve the registered endpoint/decorators, but make its body delegate to the
@@ -1767,56 +1756,104 @@ sys.path.insert(0,'/data/top2_app');import app as _full
 from asd_app.core import app,bodymind_payment_truth
 app.config['TESTING']=True
 c=app.test_client()
-with c.session_transaction() as s:s.update({'logged':True,'logged_in':True,'username':'admin','display_name':'Quote QA','role':'admin','tenant_slug':'default','user_id':1,'is_admin':True,'admin':True})
+with c.session_transaction() as sess:sess.update({'logged':True,'logged_in':True,'username':'admin','display_name':'Quote QA','role':'admin','tenant_slug':'default','user_id':1,'is_admin':True,'admin':True})
+def paid_row(p):
+    def get(k,d=None):return p[k] if k in p.keys() else d
+    st=(str(get('stato','') or '')+' '+str(get('online_status','') or '')).lower()
+    if any(x in st for x in ('pending','attesa','cancel','annull','failed','fallit','refunded','rimbors')):return False
+    if any(x in st for x in ('paid','pagat','saldat','complet','incassat')):return True
+    try:amount=float(get('importo',0) or 0)
+    except Exception:amount=0
+    return bool(get('data','') or get('paid_at','')) and amount>0
 db=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True,timeout=20);db.row_factory=sqlite3.Row
 try:
-    counts_before={t:int(db.execute('SELECT COUNT(*) FROM '+t).fetchone()[0]) for t in ('tesserati','pagamenti','ricevute','quote_mensili','documenti','inbound_documents')}
+    tables=('tesserati','pagamenti','ricevute','quote_mensili','documenti','inbound_documents')
+    counts_before={t:int(db.execute('SELECT COUNT(*) FROM '+t).fetchone()[0]) for t in tables}
     truth=bodymind_payment_truth(db,mese=10,anno=2026,stagione=2026)
     expected={}
+    cash_expected={};due_expected={};residual_expected={};duplicate_tids=set()
     for x in truth['rows']:
         tid=int(x['tesserato_id'])
         ep=db.execute('SELECT importo FROM pagamenti WHERE id=?',(int(x['iscrizione_payment_id']),)).fetchone() if x.get('iscrizione_payment_id') else None
         mp=db.execute('SELECT importo FROM pagamenti WHERE id=?',(int(x['mensile_payment_id']),)).fetchone() if x.get('mensile_payment_id') else None
         expected[tid]=(bool(x['iscrizione_pagata'] and ep),('%.2f'%float(ep['importo'] or 0) if ep else ''),bool(x['mensile_pagato'] and mp),('%.2f'%float(mp['importo'] or 0) if mp else ''))
+        movs=db.execute("SELECT * FROM pagamenti WHERE tesserato_id=? AND mese=10 AND anno=2026 ORDER BY id",(tid,)).fetchall()
+        month=[p for p in movs if (('mensil' in str(p['causale'] or '').lower()) or str(p['causale'] or '').lower() in ('quota','quota_mensile')) and paid_row(p)]
+        cash_expected[tid]=sum(float(p['importo'] or 0) for p in month)
+        if len(month)>1:duplicate_tids.add(tid)
+        q=db.execute("SELECT * FROM quote_mensili WHERE tesserato_id=? AND mese=10 AND anno=2026 ORDER BY id DESC LIMIT 1",(tid,)).fetchone()
+        due=None
+        if q:
+            st=str(q['stato'] or '').strip().lower()
+            if not any(z in st for z in ('non_dovuto','non dovuto','esente','annull','sospes')):
+                due=float(q['importo_dovuto'] or q['importo_base'] or 0)
+        due_expected[tid]=due
+        residual_expected[tid]=(max(due-cash_expected[tid],0.0) if due is not None else None)
+    target_breakdown=[];target_receipts=[];target_month_cash={}
+    rows=db.execute("SELECT p.*,t.cognome AS qa_cognome,t.nome AS qa_nome FROM pagamenti p JOIN tesserati t ON t.id=p.tesserato_id WHERE lower(t.cognome) IN ('abatini','angelucci','annunziato','frioli','fabiani') AND p.anno IN (2026,2027) ORDER BY lower(t.cognome),lower(t.nome),p.anno,p.mese,p.id").fetchall()
+    wanted=('id','tesserato_id','mese','anno','importo','data','causale','metodo_pagamento','stato','online_status','ricevuta_id','riferimento_pagamento','note_pagamento')
+    for p in rows:
+        d={'cognome':p['qa_cognome'],'nome':p['qa_nome']}
+        for k in wanted:d[k]=(p[k] if k in p.keys() else None)
+        cause=str(d.get('causale') or '').lower();pm=int(d.get('mese') or 0);py=int(d.get('anno') or 0)
+        relevant=((pm==10 and py==2026) or ((cause in ('iscrizione','tesseramento') or 'iscrizion' in cause) and py in (2026,2027)))
+        rid=d.get('ricevuta_id');rec=None
+        if rid:
+            rr=db.execute("SELECT id,pagamento_id,numero_progressivo,anno_progressivo,descrizione,importo,data,metodo_pagamento FROM ricevute WHERE id=? OR pagamento_id=? ORDER BY id DESC LIMIT 1",(rid,d['id'])).fetchone()
+            rec=(dict(rr) if rr else None)
+        d['ricevuta']=rec;target_breakdown.append(d)
+        if relevant and rec:target_receipts.append(rec)
+        if pm==10 and py==2026 and (('mensil' in cause) or cause in ('quota','quota_mensile')) and paid_row(p):
+            key=str(d['cognome']).upper()+' '+str(d['nome']).upper()
+            target_month_cash[key]=target_month_cash.get(key,0.0)+float(d.get('importo') or 0)
+    target_quotes=[]
+    for q in db.execute("SELECT q.*,t.cognome AS qa_cognome,t.nome AS qa_nome FROM quote_mensili q JOIN tesserati t ON t.id=q.tesserato_id WHERE lower(t.cognome) IN ('abatini','angelucci','annunziato','frioli','fabiani') AND q.mese=10 AND q.anno=2026 ORDER BY lower(t.cognome),q.id").fetchall():
+        d={'cognome':q['qa_cognome'],'nome':q['qa_nome']}
+        for k in ('id','tesserato_id','mese','anno','importo_base','sconto','importo_dovuto','stato'):d[k]=(q[k] if k in q.keys() else None)
+        target_quotes.append(d)
     integrity=str(db.execute('PRAGMA integrity_check').fetchone()[0]);fk=len(db.execute('PRAGMA foreign_key_check').fetchall())
-    target_breakdown=[]
-    for p in db.execute("SELECT t.cognome,t.nome,p.causale,p.mese,p.anno,p.importo,p.data "
-                        "FROM pagamenti p JOIN tesserati t ON t.id=p.tesserato_id "
-                        "WHERE lower(t.cognome) IN ('abatini','angelucci','annunziato','frioli','fabiani') "
-                        "AND p.anno IN (2026,2027) "
-                        "ORDER BY lower(t.cognome),lower(t.nome),p.anno,p.mese,p.id").fetchall():
-        target_breakdown.append(dict(p))
-finally:
-    db.close()
+finally:db.close()
 r=c.get('/quote-incassi?mese=10&anno=2026',follow_redirects=True);h=r.get_data(as_text=True)
 rendered={}
-for tid,ep,ea,mp,ma in re.findall(r"data-bm-tid='(\d+)' data-bm-enroll-paid='([01])' data-bm-enroll-amount='([^']*)' data-bm-month-paid='([01])' data-bm-month-amount='([^']*)'",h):
-    rendered[int(tid)]=(ep=='1',ea,mp=='1',ma)
+pat=r"data-bm-tid='(\d+)' data-bm-enroll-paid='([01])' data-bm-enroll-amount='([^']*)' data-bm-month-paid='([01])' data-bm-month-amount='([^']*)' data-bm-month-cash='([^']*)' data-bm-month-due='([^']*)' data-bm-month-residual='([^']*)'"
+for tid,ep,ea,mp,ma,cash,due,residual in re.findall(pat,h):
+    rendered[int(tid)]={'canonical':(ep=='1',ea,mp=='1',ma),'cash':cash,'due':due,'residual':residual}
 db=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True,timeout=20)
 try:counts_after={t:int(db.execute('SELECT COUNT(*) FROM '+t).fetchone()[0]) for t in ('tesserati','pagamenti','ricevute','quote_mensili','documenti','inbound_documents')}
 finally:db.close()
+cash_ok=all(tid in rendered and rendered[tid]['cash']=='%.2f'%cash_expected[tid] for tid in cash_expected)
+due_ok=all(tid in rendered and rendered[tid]['due']==(('%.2f'%due_expected[tid]) if due_expected[tid] is not None else '') for tid in due_expected)
+residual_ok=all(tid in rendered and rendered[tid]['residual']==(('%.2f'%residual_expected[tid]) if residual_expected[tid] is not None else '') for tid in residual_expected)
+canonical_ok=all(tid in rendered and rendered[tid]['canonical']==expected[tid] for tid in expected)
+payment_ids_visible=all(("data-bm-payment-id='"+str(d['id'])+"'") in h and ("Pagamento #"+str(d['id'])) in h for d in target_breakdown if ((int(d.get('mese') or 0)==10 and int(d.get('anno') or 0)==2026) or ('iscrizion' in str(d.get('causale') or '').lower()) or str(d.get('causale') or '').lower()=='tesseramento'))
+receipts_visible=all(("Ricevuta #"+str(x['id'])) in h for x in target_receipts)
 checks={
  'status':r.status_code==200,
  'single':h.count('BODYMIND_R123_QUOTE_INCASSI_CANONICAL_V12')==1,
- 'truth':rendered==expected,
- 'no_legacy_columns':not any(x in h.upper() for x in ('>RESIDUO<','>CREDITO<','>SCONTO<','>INCASSATO<')),
+ 'canonical_truth':canonical_ok,
+ 'monthly_cash_exact_period':cash_ok,
+ 'monthly_due_from_quotes':due_ok,
+ 'monthly_residual':residual_ok,
  'two_semantics':'ISCRIZIONE 2026/2027' in h and 'MENSILE · OTTOBRE 2026' in h,
- 'movement_details':h.count("data-bm-detail-tid=")==len(expected) and 'data-bm-payment-id=' in h,
- 'duplicate_explained':'mensile_parziale_2' in h and 'Totale storico registrato' in h,
- 'due_vs_registered':'Registrato ' in h and 'Dovuto' not in h,
+ 'cash_label':'Incassato mensile' in h and 'Dovuto €' in h,
+ 'movement_details':h.count("data-bm-detail-tid=")==len(expected) and 'Causale:' in h,
+ 'payment_ids_visible':payment_ids_visible,
+ 'receipts_identifiable':receipts_visible,
+ 'duplicate_count':h.count("<div class='bmqi-warning'>")==len(duplicate_tids),
  'read_only':counts_before==counts_after,
  'db':integrity.lower()=='ok' and fk==0,
 }
-print('[r123-quote-incassi-audit] '+json.dumps({'checks':checks,'rows':len(rendered),'counts_before':counts_before,'counts_after':counts_after,'target_breakdown':target_breakdown,'integrity':integrity,'fk':fk},ensure_ascii=False),flush=True)
+print('[r123-quote-incassi-audit] '+json.dumps({'checks':checks,'rows':len(rendered),'counts_before':counts_before,'counts_after':counts_after,'target_month_cash':target_month_cash,'target_breakdown':target_breakdown,'target_quotes':target_quotes,'integrity':integrity,'fk':fk},ensure_ascii=False),flush=True)
 if not all(checks.values()):raise RuntimeError('quote-incassi canonical audit failed '+repr(checks))
 """
 _qip=subprocess.run([sys.executable,'-c',_quote_qa],capture_output=True,text=True,timeout=180)
 print((_qip.stdout or '').strip(),flush=True)
 if _qip.returncode!=0:
-    raise RuntimeError('quote-incassi child audit failed '+((_qip.stderr or '')+(_qip.stdout or ''))[-7000:])
-print('[r123-quote-incassi] PASS separate enrollment/monthly amounts no residual no aggregate cash',flush=True)
+    raise RuntimeError('quote-incassi child audit failed '+((_qip.stderr or '')+(_qip.stdout or ''))[-12000:])
+print('[r123-quote-incassi] PASS exact-period cash due-separated receipt-identifiable read-only',flush=True)
 
-_final_qa=r"""
+
+_final_qa=r"""_final_qa=r"""
 import json,re,sqlite3,sys
 sys.path.insert(0,'/data/top2_app');import app as _full
 from asd_app.core import app,bodymind_payment_truth,load_config,file_url
