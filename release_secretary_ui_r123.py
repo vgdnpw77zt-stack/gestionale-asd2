@@ -3014,3 +3014,248 @@ finally:
 if _bg_integrity.lower()!='ok' or _bg_fk:
     raise RuntimeError('Dashboard background restore DB guard failed')
 print('[r123-dashboard-background] PASS a239-layered-background scoped-dashboard-only counts='+str(_bg_counts)+' integrity='+_bg_integrity+' fk='+str(_bg_fk),flush=True)
+
+
+# BODYMIND_R156_DASHBOARD_RECOMPOSE
+# Dashboard-only UI recomposition. This intentionally does NOT depend on historical
+# A239/A236 body classes: later runtime patches can remove/rename those classes.
+# It changes only rendered HTML/CSS/JS for / and /dashboard and never writes business data.
+_core_r156=CORE.read_text(encoding='utf-8',errors='replace')
+if 'BODYMIND_R156_DASHBOARD_RECOMPOSE_RUNTIME' not in _core_r156:
+    _core_r156 += r'''
+
+# BODYMIND_R156_DASHBOARD_RECOMPOSE_RUNTIME
+@app.after_request
+def _bodymind_dashboard_recompose_r156(resp):
+    try:
+        if request.method!='GET' or request.path not in ('/','/dashboard'):
+            return resp
+        if int(getattr(resp,'status_code',200) or 200)!=200:
+            return resp
+        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
+            return resp
+        html=resp.get_data(as_text=True)
+        if 'BODYMIND_R156_DASHBOARD_RECOMPOSE_RENDERED' in html:
+            return resp
+
+        addon=r"""<!-- BODYMIND_R156_DASHBOARD_RECOMPOSE_RENDERED -->
+<style id="bodymind-r156-dashboard-css">
+html,body{min-height:100%!important}
+html body{
+  background:
+    radial-gradient(circle at 10% 4%,rgba(255,255,255,.11) 0,rgba(255,255,255,.035) 20%,transparent 40%),
+    radial-gradient(circle at 88% 10%,rgba(56,189,248,.18) 0,rgba(30,64,175,.08) 25%,transparent 46%),
+    radial-gradient(circle at 55% 92%,rgba(16,185,129,.09) 0,transparent 40%),
+    linear-gradient(145deg,#06101c 0%,#0a1728 44%,#10263d 72%,#07121f 100%)!important;
+  background-attachment:fixed!important;
+}
+html body:before{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;
+  background:
+    linear-gradient(115deg,transparent 0 46%,rgba(255,255,255,.025) 46.2% 46.8%,transparent 47%),
+    radial-gradient(ellipse at 50% -10%,rgba(255,255,255,.07),transparent 45%);
+}
+body>.overlay,.overlay{background:transparent!important}
+.pro-dashboard,.dashboard,.dashboard-page,main{background:transparent!important}
+.bm-r156-root{position:relative}
+.bm-r156-toolbar{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  margin:8px 0 15px;padding:11px 13px;border:1px solid rgba(125,211,252,.20);
+  border-radius:15px;background:rgba(7,18,31,.72);backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);box-shadow:0 12px 30px rgba(0,0,0,.16)
+}
+.bm-r156-toolbar b{font-size:12px;letter-spacing:.05em;color:#e0f2fe}
+.bm-r156-toolbar span{font-size:11px;color:#93a9c1}
+.bm-r156-toolbar button{
+  border:1px solid rgba(148,163,184,.25);background:#10263d;color:#eaf4ff;
+  min-height:34px;padding:6px 10px;border-radius:9px;font-weight:800;cursor:pointer
+}
+.bm-r156-section{
+  position:relative!important;margin:0 0 14px!important;border-radius:20px!important;
+  border:1px solid rgba(148,163,184,.16)!important;
+  background:linear-gradient(145deg,rgba(7,19,34,.86),rgba(11,30,49,.78))!important;
+  box-shadow:0 18px 45px rgba(0,0,0,.18)!important;
+  backdrop-filter:blur(11px);-webkit-backdrop-filter:blur(11px);
+  overflow:visible!important
+}
+.bm-r156-section>.bm-r156-move{
+  display:flex;align-items:center;justify-content:flex-end;gap:5px;
+  position:absolute;right:9px;top:8px;z-index:30
+}
+.bm-r156-move button{
+  width:30px;height:30px;border-radius:9px;border:1px solid rgba(148,163,184,.22);
+  background:rgba(15,35,57,.9);color:#eaf4ff;font-weight:950;cursor:pointer
+}
+.bm-r156-operational{padding:16px!important}
+.bm-r156-operational h1,.bm-r156-operational h2,.bm-r156-operational h3{padding-right:78px!important}
+.bm-r156-operational .grid,.bm-r156-operational .cards,.bm-r156-operational [class*="grid"]{
+  display:grid!important;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))!important;
+  gap:10px!important;align-items:stretch!important
+}
+.bm-r156-operational .card,.bm-r156-operational [class*="card"],
+.bm-r156-people .card,.bm-r156-people [class*="card"]{
+  min-width:0!important;height:auto!important;overflow:visible!important
+}
+.bm-r156-operational a,.bm-r156-operational button{max-width:100%!important}
+.bm-r156-people{padding:16px!important}
+.bm-r156-people h1,.bm-r156-people h2,.bm-r156-people h3{padding-right:78px!important}
+.bm-r156-status-ok{
+  background:linear-gradient(135deg,rgba(20,83,45,.88),rgba(5,46,22,.76))!important;
+  border-color:rgba(74,222,128,.36)!important
+}
+.bm-r156-status-bad{
+  background:linear-gradient(135deg,rgba(127,29,29,.88),rgba(69,10,10,.76))!important;
+  border-color:rgba(248,113,113,.38)!important
+}
+.bm-r156-status-ok,.bm-r156-status-ok *{color:#ecfdf5!important}
+.bm-r156-status-bad,.bm-r156-status-bad *{color:#fff1f2!important}
+@media(max-width:760px){
+  html body{background-attachment:scroll!important}
+  .bm-r156-section{border-radius:16px!important;margin-bottom:10px!important}
+  .bm-r156-operational,.bm-r156-people{padding:12px!important}
+  .bm-r156-operational .grid,.bm-r156-operational .cards,.bm-r156-operational [class*="grid"]{
+    grid-template-columns:1fr!important;gap:8px!important
+  }
+  .bm-r156-toolbar{margin:6px 0 10px;padding:9px 10px}
+}
+</style>
+<script id="bodymind-r156-dashboard-js">
+(function(){
+  if(window.__bmR156)return; window.__bmR156=true;
+  function norm(s){return (s||'').toLowerCase().replace(/\s+/g,' ').trim()}
+  function root(){
+    return document.querySelector('.pro-dashboard')||
+           document.querySelector('main')||
+           document.querySelector('.dashboard-page')||
+           document.body;
+  }
+  function directBlock(el,r){
+    var n=el;
+    while(n && n.parentElement!==r) n=n.parentElement;
+    return (n && n!==r)?n:null;
+  }
+  function titleOf(b){
+    var h=b.querySelector('h1,h2,h3,h4,.section-title,.kicker');
+    return norm(h?h.textContent:b.textContent.slice(0,80));
+  }
+  function keyOf(b,i){
+    var k=titleOf(b).replace(/[^a-z0-9à-ÿ]+/g,'-').replace(/^-|-$/g,'').slice(0,48);
+    return (k||'sezione')+'-'+i;
+  }
+  function classifyStatus(scope){
+    var nodes=scope.querySelectorAll('.card,[class*="card"],a[class*="person"],a[class*="athlet"],[class*="tesser"]');
+    nodes.forEach(function(n){
+      var t=norm(n.textContent);
+      var cl=norm(n.className);
+      var bad=/mancant|scadut|blocc|da completare|non pagat|irregolar|warning|danger|rosso/.test(t+' '+cl);
+      var ok=/regolare|attiv|complet|pagat|valid|presente|success|good|green|verde/.test(t+' '+cl);
+      if(bad){n.classList.add('bm-r156-status-bad');n.classList.remove('bm-r156-status-ok')}
+      else if(ok){n.classList.add('bm-r156-status-ok');n.classList.remove('bm-r156-status-bad')}
+    });
+  }
+  function install(){
+    var r=root(); if(!r || r.dataset.bmR156==='1')return;
+    r.dataset.bmR156='1'; r.classList.add('bm-r156-root');
+
+    var headings=[].slice.call(r.querySelectorAll('h1,h2,h3,h4,.section-title,.kicker'));
+    var blocks=[];
+    headings.forEach(function(h){
+      var b=directBlock(h,r); if(b && blocks.indexOf(b)<0) blocks.push(b);
+    });
+    if(blocks.length<2){
+      blocks=[].slice.call(r.children).filter(function(x){
+        return !/^(script|style)$/i.test(x.tagName) && norm(x.textContent).length>15;
+      });
+    }
+
+    blocks.forEach(function(b,i){
+      b.classList.add('bm-r156-section');
+      b.dataset.bmSection=keyOf(b,i);
+      var t=titleOf(b);
+      if(t.indexOf('situazione operativa')>=0 || t.indexOf('operativ')>=0){
+        b.classList.add('bm-r156-operational');
+      }
+      if(t.indexOf('persone')>=0 || t.indexOf('tesserat')>=0 || t.indexOf('collaborator')>=0){
+        b.classList.add('bm-r156-people'); classifyStatus(b);
+      }
+      if(!b.querySelector(':scope > .bm-r156-move')){
+        var mv=document.createElement('div'); mv.className='bm-r156-move';
+        mv.innerHTML='<button type="button" data-dir="-1" aria-label="Sposta su">↑</button><button type="button" data-dir="1" aria-label="Sposta giù">↓</button>';
+        mv.addEventListener('click',function(e){
+          var bt=e.target.closest('button'); if(!bt)return;
+          e.preventDefault();e.stopPropagation();
+          var dir=parseInt(bt.dataset.dir||'0',10);
+          var secs=[].slice.call(r.querySelectorAll(':scope > .bm-r156-section'));
+          var idx=secs.indexOf(b); var ni=idx+dir;
+          if(idx<0||ni<0||ni>=secs.length)return;
+          if(dir<0) r.insertBefore(b,secs[ni]); else r.insertBefore(secs[ni],b);
+          save();
+        });
+        b.insertBefore(mv,b.firstChild);
+      }
+      b.draggable=true;
+      b.addEventListener('dragstart',function(e){
+        if(e.dataTransfer){e.dataTransfer.setData('text/plain',b.dataset.bmSection);e.dataTransfer.effectAllowed='move'}
+      });
+      b.addEventListener('dragover',function(e){e.preventDefault()});
+      b.addEventListener('drop',function(e){
+        e.preventDefault();
+        var k=e.dataTransfer?e.dataTransfer.getData('text/plain'):'';
+        var from=r.querySelector(':scope > [data-bm-section="'+CSS.escape(k)+'"]');
+        if(from&&from!==b){r.insertBefore(from,b);save()}
+      });
+    });
+
+    function save(){
+      try{
+        var order=[].slice.call(r.querySelectorAll(':scope > .bm-r156-section')).map(function(x){return x.dataset.bmSection});
+        localStorage.setItem('bodymind.dashboard.sectionOrder.v1',JSON.stringify(order));
+      }catch(_){}
+    }
+    function restore(){
+      try{
+        var order=JSON.parse(localStorage.getItem('bodymind.dashboard.sectionOrder.v1')||'[]');
+        order.forEach(function(k){
+          var el=r.querySelector(':scope > [data-bm-section="'+CSS.escape(k)+'"]'); if(el)r.appendChild(el);
+        });
+      }catch(_){}
+    }
+    restore();
+
+    var bar=document.createElement('div');bar.className='bm-r156-toolbar';
+    bar.innerHTML='<div><b>Dashboard personalizzabile</b><br><span>Usa ↑ ↓ per spostare le sezioni. L’ordine resta salvato su questo dispositivo.</span></div><button type="button">Ripristina ordine</button>';
+    bar.querySelector('button').addEventListener('click',function(){
+      try{localStorage.removeItem('bodymind.dashboard.sectionOrder.v1')}catch(_){}
+      location.reload();
+    });
+    r.insertBefore(bar,r.firstChild);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
+})();
+</script>"""
+        if '</body>' in html:
+            html=html.replace('</body>',addon+'</body>',1)
+        else:
+            html+=addon
+        resp.set_data(html)
+    except Exception as exc:
+        print('[r156-dashboard-warning] '+repr(exc),flush=True)
+    return resp
+'''
+    CORE.write_text(_core_r156,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+    print('[r156-dashboard] installed structural dashboard recomposition',flush=True)
+else:
+    print('[r156-dashboard] already installed',flush=True)
+
+# Read-only invariant gate.
+_r156_conn=sqlite3.connect(str(DB),timeout=20)
+try:
+    _r156_counts={t:int(_r156_conn.execute("SELECT COUNT(*) FROM "+t).fetchone()[0]) for t in ("tesserati","pagamenti","ricevute","documenti")}
+    _r156_integrity=str(_r156_conn.execute("PRAGMA integrity_check").fetchone()[0])
+    _r156_fk=len(_r156_conn.execute("PRAGMA foreign_key_check").fetchall())
+finally:
+    _r156_conn.close()
+if _r156_integrity.lower()!='ok' or _r156_fk:
+    raise RuntimeError('R156 dashboard DB guard failed')
+print('[r156-dashboard-selftest] PASS structural-ui-only counts='+str(_r156_counts)+' integrity='+_r156_integrity+' fk='+str(_r156_fk),flush=True)
