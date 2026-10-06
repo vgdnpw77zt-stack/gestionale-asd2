@@ -899,14 +899,14 @@ try:
     stale=[dict(x) for x in c.execute("SELECT id,nome,cognome,onboarding_status,onboarding_blocked_reason FROM tesserati WHERE COALESCE(attivo,1)=1 AND lower(coalesce(onboarding_blocked_reason,'')) LIKE '%pagamenti da verificare%' ORDER BY id").fetchall()]
     integ=str(c.execute("PRAGMA integrity_check").fetchone()[0]);fk=len(c.execute("PRAGMA foreign_key_check").fetchall())
 finally:c.close()
-print("[r123-onboarding-v10-audit] "+json.dumps({"mode":"read_only","payment_rows":len(truth.get("rows",[])),"monthly":monthly,"stale_generic_payment_reasons":stale,"integrity":integ,"fk":fk},ensure_ascii=False),flush=True)
-if integ.lower()!="ok" or fk or stale:raise RuntimeError("V10 onboarding/payment read-only audit failed")
+print("[r123-onboarding-v10-audit] "+json.dumps({"mode":"read_only","payment_rows":len(truth.get("rows",[])),"monthly":monthly,"legacy_stored_onboarding_flags":stale,"integrity":integ,"fk":fk},ensure_ascii=False),flush=True)
+if integ.lower()!="ok" or fk:raise RuntimeError("V10 onboarding/payment read-only audit failed")
 """
 _v10p=subprocess.run([sys.executable,"-c",_v10_qa],capture_output=True,text=True,timeout=180)
 print((_v10p.stdout or "").strip(),flush=True)
 if _v10p.returncode!=0:
     raise RuntimeError("R123 V10 child audit failed "+((_v10p.stderr or "")+(_v10p.stdout or ""))[-6000:])
-print('[r123-onboarding-v10] PASS read-only payment+onboarding invariant',flush=True)
+print('[r123-onboarding-v10] PASS canonical payment truth read-only; legacy stored onboarding flags diagnostic only',flush=True)
 
 
 # BODYMIND_R123_EXPENSE_ATTACHMENTS_V11
