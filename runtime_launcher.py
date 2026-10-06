@@ -519,6 +519,7 @@ _bodymind_neutralize_static_count_guards()
 
 APP = pathlib.Path("/data/top2_app")
 MARKER = APP / ".TOP2_OFFICIAL"
+# BODYMIND_DEPLOY_HEALTHCHECK_600S_20261006
 if not MARKER.exists():
     raise SystemExit("TOP2_OFFICIAL marker missing; refusing to start")
 
