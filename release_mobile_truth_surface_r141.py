@@ -39,18 +39,6 @@ def _r141_doc_family(row):
         return 'medical'
     return 'other'
 
-def _r141_paid(row):
-    def _v(k):
-        try:return row[k]
-        except Exception:return None
-    st=(str(_v('stato') or '')+' '+str(_v('online_status') or '')).lower()
-    if any(x in st for x in ('pending','attesa','cancel','annull','failed','fallit','refund','rimbors')):
-        return False
-    try: amount=float(_v('importo') or 0)
-    except Exception: amount=0
-    dt=bool(str(_v('data') or '').strip())
-    return any(x in st for x in ('paid','pagat','saldat','complet','incassat')) or (dt and amount>0)
-
 def _r141_truth(conn,row):
     from datetime import date as _D, datetime as _DT
     tid=int(row['id'])
@@ -75,23 +63,14 @@ def _r141_truth(conn,row):
     else:
         cert_detail='Certificato medico mancante'
 
-    pays=conn.execute("SELECT * FROM pagamenti WHERE tesserato_id=? ORDER BY id DESC",(tid,)).fetchall()
     month=today.month; year=today.year
     season=year if month>=7 else year-1
-    mensile=False; tesseramento=False
-    for p in pays:
-        if not _r141_paid(p):
-            continue
-        try: causale=str(p['causale'] or '').strip().lower()
-        except Exception: causale=''
-        try: pm=int(p['mese'] or 0)
-        except Exception: pm=0
-        try: py=int(p['anno'] or 0)
-        except Exception: py=0
-        if (('mensil' in causale) or causale in ('quota','quota_mensile','mensile')) and pm==month and py==year:
-            mensile=True
-        if any(x in causale for x in ('iscrizione','tesseramento')) and py in (season,season+1):
-            tesseramento=True
+    # Payment state must be identical to /pagamenti, Dashboard, Centro operativo,
+    # Task, Tesserati and Operatore. Do not parse payment rows again here.
+    pay_truth=bodymind_payment_truth(conn,tesserato_id=tid,mese=month,anno=year,stagione=season)
+    pay_row=(pay_truth.get('rows') or [{}])[0] if (pay_truth.get('rows') or []) else {}
+    mensile=bool(pay_row.get('mensile_pagato'))
+    tesseramento=bool(pay_row.get('iscrizione_pagata'))
 
     minor=False
     try: minor=bool(int(row['minorenne'] or 0))
@@ -151,7 +130,7 @@ def _r141_nav(active):
 def _r141_style():
     return """<style id='bodymind-r141-style'>
     :root{color-scheme:dark}*{box-sizing:border-box}
-    body{margin:0;background:#071529;color:#eef6ff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+    body.r141-standalone{margin:0;background:#071529;color:#eef6ff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
     .r141-page{max-width:760px;margin:auto;padding:18px 18px 118px}
     .r141-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:18px}
     .r141-top h1{font-size:34px;margin:0 0 5px}.r141-top p{margin:0;color:#aabbd0}
@@ -229,7 +208,7 @@ def _bodymind_r141_mobile_truth_surface(resp):
                 cards.append("<article class='r141-athlete "+statecls+"'><a href='/mobile/atleta/"+str(int(row['id']))+"'><div class='r141-head'><div><h2>"+_e(name)+"</h2><p>"+_e(str(row['corso'] or 'Corso non indicato'))+"</p></div><strong>"+state+"</strong></div><div class='r141-checks'>"+''.join(lines)+"</div>"+reasonhtml+"</a></article>")
 
             qv=_e(request.args.get('q') or '')
-            html="<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'><title>Atlete</title>"+_r141_style()+"</head><body><main class='r141-page'><div class='r141-top'><div><h1>Atlete</h1><p>Stato reale di documenti e pagamenti.</p></div><a class='r141-home' href='/mobile'>⌂ Home</a></div><form class='r141-search' method='get'><input name='q' value='"+qv+"' placeholder='Cerca nome, corso o email'><button>Cerca</button></form><a class='r141-new' href='/mobile/atleta/nuova'>＋ Nuova atleta</a>"+''.join(cards)+"</main>"+_r141_nav('atlete')+"</body></html>"
+            html="<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'><title>Atlete</title>"+_r141_style()+"</head><body class='r141-standalone'><main class='r141-page'><div class='r141-top'><div><h1>Atlete</h1><p>Stato reale di documenti e pagamenti.</p></div><a class='r141-home' href='/mobile'>⌂ Home</a></div><form class='r141-search' method='get'><input name='q' value='"+qv+"' placeholder='Cerca nome, corso o email'><button>Cerca</button></form><a class='r141-new' href='/mobile/atleta/nuova'>＋ Nuova atleta</a>"+''.join(cards)+"</main>"+_r141_nav('atlete')+"</body></html>"
             resp.set_data(html)
             resp.status_code=200
             resp.headers.pop('Location',None)
@@ -283,6 +262,68 @@ else:
     # deploys can leave generated source on /data, so the release must converge
     # existing code instead of treating the marker as sufficient.
     _orig=s
+
+    # R141 originally leaked a flat body background into /mobile when injecting
+    # truth panels. Keep that background only for the standalone athlete page so
+    # the dashboard's underlying theme/background can render again.
+    s=s.replace(
+        "body{margin:0;background:#071529;color:#eef6ff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}",
+        "body.r141-standalone{margin:0;background:#071529;color:#eef6ff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}"
+    )
+    s=s.replace(
+        "<title>Atlete</title>"+_r141_style()+"</head><body><main class='r141-page'>",
+        "<title>Atlete</title>"+_r141_style()+"</head><body class='r141-standalone'><main class='r141-page'>"
+    )
+
+    # Converge the persistent R141 payment fragment to the single canonical
+    # payment service. Document truth remains untouched.
+    _old_r141_pay="""    pays=conn.execute("SELECT * FROM pagamenti WHERE tesserato_id=? ORDER BY id DESC",(tid,)).fetchall()
+    month=today.month; year=today.year
+    season=year if month>=7 else year-1
+    mensile=False; tesseramento=False
+    for p in pays:
+        if not _r141_paid(p):
+            continue
+        try: causale=str(p['causale'] or '').strip().lower()
+        except Exception: causale=''
+        try: pm=int(p['mese'] or 0)
+        except Exception: pm=0
+        try: py=int(p['anno'] or 0)
+        except Exception: py=0
+        if (('mensil' in causale) or causale in ('quota','quota_mensile','mensile')) and pm==month and py==year:
+            mensile=True
+        if any(x in causale for x in ('iscrizione','tesseramento')) and py in (season,season+1):
+            tesseramento=True
+
+"""
+    _new_r141_pay="""    month=today.month; year=today.year
+    season=year if month>=7 else year-1
+    # Payment state must be identical to /pagamenti, Dashboard, Centro operativo,
+    # Task, Tesserati and Operatore. Do not parse payment rows again here.
+    pay_truth=bodymind_payment_truth(conn,tesserato_id=tid,mese=month,anno=year,stagione=season)
+    pay_row=(pay_truth.get('rows') or [{}])[0] if (pay_truth.get('rows') or []) else {}
+    mensile=bool(pay_row.get('mensile_pagato'))
+    tesseramento=bool(pay_row.get('iscrizione_pagata'))
+
+"""
+    if _old_r141_pay in s:
+        s=s.replace(_old_r141_pay,_new_r141_pay,1)
+
+    _old_r141_helper="""def _r141_paid(row):
+    def _v(k):
+        try:return row[k]
+        except Exception:return None
+    st=(str(_v('stato') or '')+' '+str(_v('online_status') or '')).lower()
+    if any(x in st for x in ('pending','attesa','cancel','annull','failed','fallit','refund','rimbors')):
+        return False
+    try: amount=float(_v('importo') or 0)
+    except Exception: amount=0
+    dt=bool(str(_v('data') or '').strip())
+    return any(x in st for x in ('paid','pagat','saldat','complet','incassat')) or (dt and amount>0)
+
+"""
+    if _old_r141_helper in s:
+        s=s.replace(_old_r141_helper,'',1)
     _old_head="""        path=request.path or ''
         if request.method!='GET' or int(getattr(resp,'status_code',200) or 200)!=200:
             return resp
@@ -366,6 +407,9 @@ checks={
  "dashboard_mu":"BODYMIND_R141_DASHBOARD_TRUTH" in dh and "Modulo Unico mancante" in dh,
  "dashboard_cert":"Certificato medico mancante/non valido" in dh,
  "dashboard_names":"r141-dash-name" in dh,
+ "dashboard_background_not_overridden":"body{margin:0;background:#071529" not in dh and "body.r141-standalone{margin:0;background:#071529" in dh,
+ "standalone_background_scoped":"class='r141-standalone'" in ah,
+ "canonical_payment_helper":"pay_truth=bodymind_payment_truth" in Path("/data/top2_app/asd_app/core.py").read_text(encoding="utf-8",errors="replace"),
 }
 # Specific regression: if Balbinetti has no visible physical medical file,
 # the rendered athlete card must not be globally green because of expiry alone.
