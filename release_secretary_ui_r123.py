@@ -1504,34 +1504,51 @@ else:
     print('[r123-quote-incassi] canonical summary already installed',flush=True)
 
 # Replace the historical /quote-incassi implementation at source level.
-# Preserve its registered endpoint/decorators, but make its body delegate to the
-# canonical read-only summary above. This avoids route shadowing and duplicate writes.
+# Preserve the registered endpoint/decorators, but make its body delegate to the
+# canonical read-only summary above. Discover the real route across the persisted
+# runtime instead of assuming it is declared with app.route in one specific file.
 import ast as _bm_qi_ast
-_pay_src=APP/'asd_app/routes_pagamenti.py'
-if not _pay_src.exists():
-    raise RuntimeError('quote-incassi source missing: '+str(_pay_src))
-_pay_text=_pay_src.read_text(encoding='utf-8',errors='replace')
-_pay_tree=_bm_qi_ast.parse(_pay_text)
-_pay_lines=_pay_text.splitlines(True)
-_qi_nodes=[]
-for _node in _pay_tree.body:
-    if not isinstance(_node,(_bm_qi_ast.FunctionDef,_bm_qi_ast.AsyncFunctionDef)):
+_qi_candidates=[]
+_qi_refs=[]
+for _pay_src in sorted((APP/'asd_app').glob('*.py')):
+    try:
+        _pay_text=_pay_src.read_text(encoding='utf-8',errors='replace')
+    except Exception:
         continue
-    _is_quote=False
-    for _dec in _node.decorator_list:
-        if isinstance(_dec,_bm_qi_ast.Call) and isinstance(_dec.func,_bm_qi_ast.Attribute) and _dec.func.attr=='route':
-            for _arg in _dec.args:
-                if isinstance(_arg,_bm_qi_ast.Constant) and _arg.value=='/quote-incassi':
+    if '/quote-incassi' not in _pay_text:
+        continue
+    _qi_refs.append(str(_pay_src))
+    try:
+        _pay_tree=_bm_qi_ast.parse(_pay_text)
+    except Exception:
+        continue
+    _pay_lines=_pay_text.splitlines(True)
+    for _node in _pay_tree.body:
+        if not isinstance(_node,(_bm_qi_ast.FunctionDef,_bm_qi_ast.AsyncFunctionDef)):
+            continue
+        _is_quote=False
+        for _dec in _node.decorator_list:
+            if not isinstance(_dec,_bm_qi_ast.Call):
+                continue
+            _attr=_dec.func.attr if isinstance(_dec.func,_bm_qi_ast.Attribute) else ''
+            if _attr not in ('route','get'):
+                continue
+            _vals=list(_dec.args)+[kw.value for kw in _dec.keywords if kw.arg in ('rule','path')]
+            for _arg in _vals:
+                if isinstance(_arg,_bm_qi_ast.Constant) and isinstance(_arg.value,str) and _arg.value.rstrip('/')=='/quote-incassi':
                     _is_quote=True
-    if _is_quote:
-        _qi_nodes.append(_node)
-if len(_qi_nodes)!=1:
-    raise RuntimeError('expected exactly one /quote-incassi source route, found '+str(len(_qi_nodes)))
-_qi_node=_qi_nodes[0]
+                    break
+            if _is_quote:
+                break
+        if _is_quote:
+            _qi_candidates.append((_pay_src,_pay_text,_pay_lines,_node))
+if len(_qi_candidates)!=1:
+    raise RuntimeError('expected exactly one /quote-incassi source route, found '+str(len(_qi_candidates))+' refs='+repr(_qi_refs))
+_pay_src,_pay_text,_pay_lines,_qi_node=_qi_candidates[0]
 _qi_src=''.join(_pay_lines[_qi_node.lineno-1:int(getattr(_qi_node,'end_lineno',_qi_node.lineno))])
 if 'bodymind_quote_incassi_canonical' not in _qi_src:
     if not _qi_node.body:
-        raise RuntimeError('/quote-incassi route has no body')
+        raise RuntimeError('/quote-incassi route has no body in '+str(_pay_src))
     _body_start=_qi_node.body[0].lineno-1
     _body_end=int(getattr(_qi_node,'end_lineno',_qi_node.lineno))
     _indent=' '*int(_qi_node.body[0].col_offset)
@@ -1542,9 +1559,9 @@ if 'bodymind_quote_incassi_canonical' not in _qi_src:
     _pay_lines[_body_start:_body_end]=_replacement
     _pay_src.write_text(''.join(_pay_lines),encoding='utf-8')
     py_compile.compile(str(_pay_src),doraise=True)
-    print('[r123-quote-incassi-source] replaced historical renderer with canonical delegate',flush=True)
+    print('[r123-quote-incassi-source] replaced historical renderer with canonical delegate source='+str(_pay_src),flush=True)
 else:
-    print('[r123-quote-incassi-source] already canonical',flush=True)
+    print('[r123-quote-incassi-source] already canonical source='+str(_pay_src),flush=True)
 
 _quote_qa=r"""
 import json,re,sqlite3,sys
