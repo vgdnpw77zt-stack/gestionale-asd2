@@ -275,6 +275,13 @@ else:
         "</head><body class='r141-standalone'><main class='r141-page'>",
         1
     )
+    # Older persistent R141 variants can contain additional head markup before
+    # the body. Match the stable page wrapper as a second, idempotent fallback.
+    s=s.replace(
+        "<body><main class='r141-page'>",
+        "<body class='r141-standalone'><main class='r141-page'>",
+        1
+    )
 
     # Converge the persistent R141 payment fragment to the single canonical
     # payment service. Document truth remains untouched.
