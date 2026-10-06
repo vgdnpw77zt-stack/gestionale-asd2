@@ -527,16 +527,10 @@ def bodymind_payment_truth(conn, tesserato_id=None, mese=None, anno=None, stagio
                 by_tid[tid]['mensile_pagato']=True
                 by_tid[tid]['mensile_payment_id']=int(p['id']) if 'id' in p.keys() else None
 
-    # Legacy quote_mensili can prove that a monthly was already marked paid,
-    # but never creates a second cash receipt.
-    if _table_local('quote_mensili'):
-        qrows=conn.execute("SELECT * FROM quote_mensili WHERE mese=? AND anno=?",(mese,anno)).fetchall()
-        for q in qrows:
-            tid=int(q['tesserato_id'] or 0) if 'tesserato_id' in q.keys() else 0
-            if tid not in by_tid: continue
-            st=str(q['stato'] or '').strip().lower() if 'stato' in q.keys() else ''
-            if any(x in st for x in ('pagat','saldat','paid','incassat','complet')):
-                by_tid[tid]['mensile_pagato']=True
+    # quote_mensili describes what is due (and can retain legacy workflow state),
+    # but it is NOT evidence of a cash receipt. A monthly is paid only when a
+    # canonical row exists in pagamenti for the exact athlete + month + year.
+    # This prevents Dashboard/Task/Tesserati/Operatore from inventing an incasso.
 
     rows=list(by_tid.values())
     return {
@@ -605,7 +599,7 @@ def _bodymind_payment_entry_convergence_v3():
 @app.after_request
 def _bodymind_dashboard_payment_truth_v3(resp):
     try:
-        if request.method!='GET' or request.path!='/dashboard' or int(getattr(resp,'status_code',200) or 200)!=200:
+        if request.method!='GET' or request.path not in ('/dashboard','/cuore-operativo','/centro-operativo') or int(getattr(resp,'status_code',200) or 200)!=200:
             return resp
         if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
             return resp

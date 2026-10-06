@@ -1339,18 +1339,22 @@ def _pending_count(conn) -> int:
 
 
 # BODYMIND_PAYMENT_SPLIT_FACTS_V3
-def _payment_split_counts(conn, tid=None):
+def _payment_split_counts(conn, tid=None, month=None, year=None, season=None):
     # Use exactly the same canonical truth used by Dashboard, Centro operativo,
-    # Task, Tesserati and /pagamenti. Keep the old row-counting logic only as
-    # a defensive fallback if the canonical helper is unavailable.
+    # Task, Tesserati and /pagamenti. The requested period is explicit: asking
+    # about October must never fall back to a generic all-time payment count.
     try:
         from .core import bodymind_payment_truth
         today=date.today()
+        mm=int(month or today.month)
+        yy=int(year or today.year)
+        ss=int(season if season is not None else (yy if mm>=7 else yy-1))
         truth=bodymind_payment_truth(
             conn,
             tesserato_id=(int(tid) if tid else None),
-            mese=today.month,
-            anno=today.year,
+            mese=mm,
+            anno=yy,
+            stagione=ss,
         )
         return {
             "iscrizioni":int(truth.get("iscrizioni_pagate",0) or 0),
@@ -1427,12 +1431,13 @@ def _links_for(tid: int|None=None):
     links=[
         {"label":"Tesserati","href":"/tesserati"},
         {"label":"Documenti","href":"/documenti"},
-        {"label":"Quote & Incassi","href":"/quote-incassi"},
+        {"label":"Pagamenti","href":"/pagamenti"},
     ]
     if tid:
         links.insert(0,{"label":"Scheda atleta","href":f"/tesserati/{tid}/scheda"})
         links.insert(1,{"label":"Dossier","href":f"/documenti?tesserato_id={tid}"})
-        links.insert(2,{"label":"Quote atleta","href":f"/quote-incassi/atleta/{tid}"})
+        links.insert(2,{"label":"Iscrizione","href":f"/pagamenti?vista=iscrizioni&tesserato_id={tid}"})
+        links.insert(3,{"label":"Mensile","href":f"/pagamenti?vista=mensili&tesserato_id={tid}"})
     return links
 
 
@@ -2308,14 +2313,15 @@ def _answer(conn, text: str):
             }
 
         if "pagament" in n or "incass" in n:
-            pc=_payment_split_counts(conn)
+            pm,py=_parse_month_year(raw)
+            pc=_payment_split_counts(conn,month=pm,year=py)
+            period=(" "+str(pc['mese']).zfill(2)+"/"+str(pc['anno'])) if pm else ""
             if "iscrizion" in n or "tesserament" in n:
-                txt=f"Nel gestionale risultano {pc['iscrizioni']} pagamenti di iscrizione registrati."
+                txt=f"Per la stagione {pc['stagione']}/{pc['stagione']+1} risultano {pc['iscrizioni']} iscrizioni pagate su {pc['tesserati']} tesserati attivi."
             elif "mensil" in n or "quota mese" in n or "quote mensili" in n:
-                txt=f"Nel gestionale risultano {pc['mensili']} pagamenti mensili registrati."
+                txt=f"Per il mensile{period or (' '+str(pc['mese']).zfill(2)+'/'+str(pc['anno']))} risultano {pc['mensili']} pagati su {pc['tesserati']} tesserati attivi."
             else:
-                extra=(f", {pc['altri']} altri" if pc["altri"] else "")
-                txt=f"Nel gestionale risultano {pc['totale']} incassi: {pc['iscrizioni']} iscrizioni e {pc['mensili']} mensili"+extra+"."
+                txt=f"Nel periodo {pc['mese']:02d}/{pc['anno']} risultano {pc['iscrizioni']} iscrizioni pagate (stagione {pc['stagione']}/{pc['stagione']+1}) e {pc['mensili']} mensili pagati."
             return {
                 "text":txt,
                 "mode":"fast_fact","cloud_ai":False,
@@ -2361,6 +2367,30 @@ def _answer(conn, text: str):
     if ambiguous:
         names=", ".join(_athlete_name(x) for x in ambiguous[:5])
         return {"text":"Ho trovato più possibili tesserati: "+names+". Dimmi nome e cognome completi.","mode":"clarify"}
+
+    # Canonical deterministic payment status for a named athlete. This runs
+    # before cloud planning so "Zattini ha pagato l'iscrizione?" and
+    # "ha pagato ottobre?" read exactly the same truth as /pagamenti.
+    if athlete and any(x in n for x in ("pagat","pagament","incass","iscrizion","tesserament","mensil","quota")):
+        try:
+            from .core import bodymind_payment_truth
+            pm,py=_parse_month_year(raw)
+            today=date.today()
+            mm=int(pm or today.month); yy=int(py or today.year)
+            truth=bodymind_payment_truth(conn,tesserato_id=int(athlete["id"]),mese=mm,anno=yy)
+            row=(truth.get("rows") or [{}])[0] if (truth.get("rows") or []) else {}
+            who=_athlete_name(athlete)
+            if "iscrizion" in n or "tesserament" in n:
+                ok=bool(row.get("iscrizione_pagata"))
+                txt=who+(" risulta in regola con l'iscrizione " if ok else " non risulta aver pagato l'iscrizione ")+str(truth["stagione"])+"/"+str(truth["stagione"]+1)+"."
+                href="/pagamenti?vista=iscrizioni&stagione="+str(truth["stagione"])+"&tesserato_id="+str(int(athlete["id"]))
+            else:
+                ok=bool(row.get("mensile_pagato"))
+                txt=who+(" risulta aver pagato " if ok else " non risulta aver pagato ")+str(mm).zfill(2)+"/"+str(yy)+"."
+                href="/pagamenti?vista=mensili&mese="+str(mm)+"&anno="+str(yy)+"&tesserato_id="+str(int(athlete["id"]))
+            return {"text":txt,"mode":"fast_fact","cloud_ai":False,"links":[{"label":"Apri pagamento atleta","href":href}]}
+        except Exception:
+            pass
 
     # BODYMIND_R40_AGENT_TOOLS
     # BODYMIND_R43_NO_AUTODELETE_DOCUMENTS
