@@ -4,6 +4,7 @@ from pathlib import Path
 
 APP=Path('/data/top2_app')
 CORE=APP/'asd_app/core.py'
+DB=Path('/data/tenants/default/asd.db')
 BACK=Path('/data/release_backups/20261004_r141_mobile_truth_surface')
 BACK.mkdir(parents=True,exist_ok=True)
 
