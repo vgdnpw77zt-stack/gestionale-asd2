@@ -373,6 +373,21 @@ else:
         if _old_resp not in s:
             raise RuntimeError('R141 persistent runtime athlete response anchor missing')
         s=s.replace(_old_resp,_new_resp,1)
+
+    # BODYMIND_R141_STANDALONE_BODY_GUARD
+    # Some persistent variants build the R141 athlete HTML from a legacy route
+    # whose source body is simply <body> (often followed by <header>, not <main>).
+    # Scope the flat R141 background at the final rendered response instead of
+    # guessing which historical template wrapper produced the page.
+    _r141_block=s.find('BODYMIND_R141_MOBILE_TRUTH_SURFACE')
+    _r141_ath=s.find("        if path=='/mobile/atlete':",_r141_block)
+    _r141_resp=s.find("            resp.set_data(html)",_r141_ath)
+    _r141_guard="            # BODYMIND_R141_STANDALONE_BODY_GUARD_RUNTIME\n            if \"class='r141-standalone'\" not in html:\n                html=html.replace('<body>',\"<body class='r141-standalone'>\",1)\n"
+    if _r141_ath<0 or _r141_resp<0:
+        raise RuntimeError('R141 persistent athlete response guard anchor missing')
+    if 'BODYMIND_R141_STANDALONE_BODY_GUARD_RUNTIME' not in s[_r141_ath:_r141_resp+500]:
+        s=s[:_r141_resp]+_r141_guard+s[_r141_resp:]
+
     if s!=_orig:
         shutil.copy2(CORE,BACK/'core_pre_upgrade.py')
         CORE.write_text(s,encoding='utf-8')
