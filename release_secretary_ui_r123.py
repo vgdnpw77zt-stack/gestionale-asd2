@@ -2505,3 +2505,342 @@ print((_v10p.stdout or "").strip(),flush=True)
 if _v10p.returncode!=0:
     raise RuntimeError("R123 V10 child audit failed "+((_v10p.stderr or "")+(_v10p.stdout or ""))[-6000:])
 print('[r123-onboarding-v10] PASS payment+document truth reconciles tesseramento/dashboard status',flush=True)
+
+
+# BODYMIND_R123_EXPENSE_ATTACHMENTS_V11
+# Canonical Uscite module: one expense row, optional supporting document,
+# preview/download, later attachment/update. Payment/enrollment rows are read-only here.
+_v11_backup=BACK/'pre_v11_expense_attachments.db'
+if not _v11_backup.exists():
+    shutil.copy2(DB,_v11_backup)
+
+_v11_conn=sqlite3.connect(str(DB),timeout=30)
+try:
+    _v11_before={}
+    for _t in ('tesserati','pagamenti','ricevute'):
+        _v11_before[_t]=int(_v11_conn.execute("SELECT COUNT(*) FROM "+_t).fetchone()[0]) if _v11_conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(_t,)).fetchone() else 0
+    _v11_conn.execute("""
+      CREATE TABLE IF NOT EXISTS bodymind_uscite(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        data TEXT NOT NULL,
+        descrizione TEXT NOT NULL,
+        categoria TEXT,
+        importo REAL NOT NULL,
+        metodo TEXT,
+        note TEXT,
+        allegato_path TEXT,
+        allegato_nome TEXT,
+        allegato_mime TEXT,
+        allegato_size INTEGER,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    """)
+    _v11_cols={str(x[1]) for x in _v11_conn.execute("PRAGMA table_info(bodymind_uscite)").fetchall()}
+    for _col,_typ in (
+        ('allegato_path','TEXT'),('allegato_nome','TEXT'),
+        ('allegato_mime','TEXT'),('allegato_size','INTEGER')
+    ):
+        if _col not in _v11_cols:
+            _v11_conn.execute("ALTER TABLE bodymind_uscite ADD COLUMN "+_col+" "+_typ)
+    _v11_conn.commit()
+    _v11_after={}
+    for _t in ('tesserati','pagamenti','ricevute'):
+        _v11_after[_t]=int(_v11_conn.execute("SELECT COUNT(*) FROM "+_t).fetchone()[0]) if _v11_conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(_t,)).fetchone() else 0
+    _v11_integrity=str(_v11_conn.execute("PRAGMA integrity_check").fetchone()[0])
+    _v11_fk=len(_v11_conn.execute("PRAGMA foreign_key_check").fetchall())
+finally:
+    _v11_conn.close()
+if _v11_before!=_v11_after or _v11_integrity.lower()!='ok' or _v11_fk:
+    raise RuntimeError('V11 expense attachment schema guard failed before='+str(_v11_before)+' after='+str(_v11_after)+' integrity='+_v11_integrity+' fk='+str(_v11_fk))
+
+_core_v11=CORE.read_text(encoding='utf-8',errors='replace')
+if 'BODYMIND_R123_EXPENSE_ATTACHMENTS_V11' not in _core_v11:
+    _core_v11 += r'''
+
+# BODYMIND_R123_EXPENSE_ATTACHMENTS_V11
+def _bodymind_uscite_schema_v11(conn):
+    conn.execute("""
+      CREATE TABLE IF NOT EXISTS bodymind_uscite(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        data TEXT NOT NULL,
+        descrizione TEXT NOT NULL,
+        categoria TEXT,
+        importo REAL NOT NULL,
+        metodo TEXT,
+        note TEXT,
+        allegato_path TEXT,
+        allegato_nome TEXT,
+        allegato_mime TEXT,
+        allegato_size INTEGER,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    """)
+    cols={str(x[1]) for x in conn.execute("PRAGMA table_info(bodymind_uscite)").fetchall()}
+    for col,typ in (
+        ('allegato_path','TEXT'),('allegato_nome','TEXT'),
+        ('allegato_mime','TEXT'),('allegato_size','INTEGER')
+    ):
+        if col not in cols:
+            conn.execute("ALTER TABLE bodymind_uscite ADD COLUMN "+col+" "+typ)
+
+
+def _bodymind_uscita_attachment_save_v11(upload, expense_id):
+    if not upload or not getattr(upload,'filename',''):
+        return None
+    from pathlib import Path as _Path
+    from werkzeug.utils import secure_filename as _secure_filename
+    import mimetypes as _mimetypes, uuid as _uuid
+
+    original=_secure_filename(str(upload.filename or '').strip())
+    if not original:
+        raise ValueError('Nome allegato non valido.')
+    suffix=_Path(original).suffix.lower()
+    allowed={'.pdf','.png','.jpg','.jpeg','.webp','.heic','.heif','.doc','.docx','.xls','.xlsx'}
+    if suffix not in allowed:
+        raise ValueError('Formato allegato non supportato.')
+    root=_Path('/data/tenants/default/media/uscite')
+    root.mkdir(parents=True,exist_ok=True)
+    saved_name=str(int(expense_id))+'_'+_uuid.uuid4().hex[:12]+suffix
+    dest=root/saved_name
+    upload.save(str(dest))
+    size=int(dest.stat().st_size)
+    if size>20*1024*1024:
+        try:dest.unlink()
+        except Exception:pass
+        raise ValueError('Allegato troppo grande: massimo 20 MB.')
+    mime=(getattr(upload,'mimetype','') or _mimetypes.guess_type(original)[0] or 'application/octet-stream')
+    return {'path':str(dest),'name':original,'mime':mime,'size':size}
+
+
+def _bodymind_uscite_v11_impl():
+    from datetime import date as _date, datetime as _dt
+    conn=db(); conn.row_factory=sqlite3.Row
+    _bodymind_uscite_schema_v11(conn)
+    saved=False; err=''
+    edit_id=parse_int(request.args.get('modifica') or request.form.get('uscita_id'),0)
+
+    if request.method=='POST':
+        data=(request.form.get('data') or _date.today().isoformat()).strip()
+        descrizione=(request.form.get('descrizione') or '').strip()
+        categoria=(request.form.get('categoria') or '').strip()
+        metodo=(request.form.get('metodo') or '').strip()
+        note=(request.form.get('note') or '').strip()[:2000]
+        try: importo=float(str(request.form.get('importo') or '').replace(',','.'))
+        except Exception: importo=-1
+        try:_date.fromisoformat(data)
+        except Exception:data=_date.today().isoformat()
+
+        if not descrizione or importo<0:
+            err='Inserisci descrizione e importo validi.'
+        else:
+            now=_dt.now().isoformat(timespec='seconds')
+            try:
+                if edit_id:
+                    current=conn.execute("SELECT * FROM bodymind_uscite WHERE id=?",(edit_id,)).fetchone()
+                    if not current:
+                        raise ValueError('Uscita non trovata.')
+                    conn.execute("""
+                      UPDATE bodymind_uscite
+                         SET data=?,descrizione=?,categoria=?,importo=?,metodo=?,note=?,updated_at=?
+                       WHERE id=?
+                    """,(data,descrizione,categoria,importo,metodo,note,now,edit_id))
+                    expense_id=edit_id
+                else:
+                    cur=conn.execute("""
+                      INSERT INTO bodymind_uscite(data,descrizione,categoria,importo,metodo,note,created_at,updated_at)
+                      VALUES(?,?,?,?,?,?,?,?)
+                    """,(data,descrizione,categoria,importo,metodo,note,now,now))
+                    expense_id=int(cur.lastrowid)
+
+                upload=request.files.get('allegato')
+                if upload and getattr(upload,'filename',''):
+                    meta=_bodymind_uscita_attachment_save_v11(upload,expense_id)
+                    conn.execute("""
+                      UPDATE bodymind_uscite
+                         SET allegato_path=?,allegato_nome=?,allegato_mime=?,allegato_size=?,updated_at=?
+                       WHERE id=?
+                    """,(meta['path'],meta['name'],meta['mime'],meta['size'],now,expense_id))
+                conn.commit()
+                saved=True
+                edit_id=expense_id
+            except Exception as exc:
+                try:conn.rollback()
+                except Exception:pass
+                err=str(exc) or 'Errore nel salvataggio uscita.'
+
+    editing=conn.execute("SELECT * FROM bodymind_uscite WHERE id=?",(edit_id,)).fetchone() if edit_id else None
+    rows=conn.execute("SELECT * FROM bodymind_uscite ORDER BY data DESC,id DESC LIMIT 300").fetchall()
+    total=float(conn.execute("SELECT COALESCE(SUM(importo),0) FROM bodymind_uscite").fetchone()[0] or 0)
+    conn.close()
+
+    def _val(row,key,default=''):
+        try:return row[key] if row and key in row.keys() and row[key] is not None else default
+        except Exception:return default
+
+    def _eur(v):
+        try:return ('%.2f' % float(v or 0)).replace('.',',')
+        except Exception:return '0,00'
+
+    form_data={
+        'id':int(_val(editing,'id',0) or 0),
+        'data':str(_val(editing,'data',_date.today().isoformat())),
+        'descrizione':str(_val(editing,'descrizione','')),
+        'categoria':str(_val(editing,'categoria','')),
+        'importo':str(_val(editing,'importo','')),
+        'metodo':str(_val(editing,'metodo','contanti') or 'contanti'),
+        'note':str(_val(editing,'note','')),
+        'allegato_nome':str(_val(editing,'allegato_nome','')),
+    }
+
+    items=[]
+    for r in rows:
+        rid=int(r['id'])
+        an=str(_val(r,'allegato_nome',''))
+        ap=str(_val(r,'allegato_path',''))
+        att=''
+        if an and ap:
+            att=("<a class='bmout11-preview' target='_blank' href='/pagamenti/uscite/allegato/"+str(rid)+"'>Anteprima</a>"
+                 +"<a class='bmout11-download' href='/pagamenti/uscite/allegato/"+str(rid)+"?download=1'>Scarica</a>"
+                 +"<small>"+e(an)+"</small>")
+        else:
+            att="<span class='bmout11-none'>Nessun giustificativo</span>"
+        items.append(
+          "<tr><td>"+e(str(r['data']))+"</td>"
+          +"<td><b>"+e(str(r['descrizione']))+"</b><br><small>"+e(str(r['categoria'] or ''))+"</small></td>"
+          +"<td><b>€ "+e(_eur(r['importo']))+"</b></td>"
+          +"<td>"+e(str(r['metodo'] or ''))+"</td>"
+          +"<td><div class='bmout11-files'>"+att+"</div></td>"
+          +"<td><a class='bmout11-edit' href='/pagamenti/uscite?modifica="+str(rid)+"'>Modifica / Allega</a></td></tr>"
+        )
+    table_rows=''.join(items) or "<tr><td colspan='6'>Nessuna uscita registrata.</td></tr>"
+
+    msg="<div class='bmout11-ok'>Uscita salvata correttamente.</div>" if saved else ("<div class='bmout11-err'>"+e(err)+"</div>" if err else "")
+    attached=''
+    if form_data['id'] and form_data['allegato_nome']:
+        attached=("<div class='bmout11-current'>Giustificativo attuale: <b>"+e(form_data['allegato_nome'])+"</b> · "
+                  +"<a target='_blank' href='/pagamenti/uscite/allegato/"+str(form_data['id'])+"'>Anteprima</a> · "
+                  +"<a href='/pagamenti/uscite/allegato/"+str(form_data['id'])+"?download=1'>Scarica</a></div>")
+
+    html=f"""
+    <!-- BODYMIND_R123_EXPENSE_ATTACHMENTS_V11 -->
+    <section class='bmout11'>
+      <div class='bmout11-head'>
+        <div><span>AMMINISTRAZIONE · USCITE</span><h1>{'Modifica uscita' if form_data['id'] else 'Registra uscita'}</h1>
+        <p>Ogni uscita può avere un giustificativo collegato: ricevuta, fattura, tessere ente, scontrino o altro documento.</p></div>
+        <strong>Totale uscite € {e(_eur(total))}</strong>
+      </div>
+      <nav class='bmout11-nav'>
+        <a href='/pagamenti'>Pagamenti</a>
+        <a class='on' href='/pagamenti/uscite'>Uscite</a>
+        <a href='/collaboratori'>Collaboratori</a>
+        <a href='/collaboratori/ricevute'>Ricevute collaboratori</a>
+      </nav>
+      {msg}
+      <form method='post' enctype='multipart/form-data' class='bmout11-form'>
+        <input type='hidden' name='csrf_token' value='{e(csrf_token())}'>
+        <input type='hidden' name='uscita_id' value='{form_data["id"]}'>
+        <label>Data<input type='date' name='data' required value='{e(form_data["data"])}'></label>
+        <label>Descrizione<input name='descrizione' required value='{e(form_data["descrizione"])}' placeholder='Es. Tessere ente sportivo'></label>
+        <label>Categoria<input name='categoria' value='{e(form_data["categoria"])}' placeholder='Tesseramento, affitto, attrezzatura…'></label>
+        <label>Importo €<input type='number' step='0.01' min='0' name='importo' required value='{e(form_data["importo"])}'></label>
+        <label>Metodo<select name='metodo'>
+          {''.join("<option"+(" selected" if form_data["metodo"]==x else "")+">"+x+"</option>" for x in ('contanti','bonifico','carta','addebito','altro'))}
+        </select></label>
+        <label class='wide'>Note<textarea name='note' rows='2' placeholder='Dettagli o eccezioni…'>{e(form_data["note"])}</textarea></label>
+        <label class='wide bmout11-upload'>Giustificativo / ricevuta
+          <input type='file' name='allegato' accept='.pdf,.png,.jpg,.jpeg,.webp,.heic,.heif,.doc,.docx,.xls,.xlsx'>
+          <small>PDF, immagini, Word o Excel · massimo 20 MB. Se modifichi una spesa senza scegliere un nuovo file, il documento già presente resta collegato.</small>
+        </label>
+        {attached}
+        <div class='bmout11-formactions'>
+          <button type='submit'>{'Salva modifiche' if form_data['id'] else 'Registra uscita'}</button>
+          {("<a href='/pagamenti/uscite'>Annulla modifica</a>" if form_data['id'] else "")}
+        </div>
+      </form>
+      <div class='bmout11-table'><table>
+        <thead><tr><th>Data</th><th>Uscita</th><th>Importo</th><th>Metodo</th><th>Giustificativo</th><th></th></tr></thead>
+        <tbody>{table_rows}</tbody>
+      </table></div>
+    </section>
+    <style id='bodymind-expense-v11-style'>
+      .bmout11{{margin:14px 0 24px;padding:20px;border-radius:22px;background:#081626;border:1px solid rgba(96,165,250,.24);color:#f8fafc}}
+      .bmout11-head{{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}}.bmout11-head span{{font-size:10px;letter-spacing:.14em;font-weight:950;color:#7dd3fc}}.bmout11-head h1{{margin:4px 0;font-size:28px}}.bmout11-head p{{margin:0;color:#cbd5e1;max-width:760px}}.bmout11-head>strong{{font-size:20px;white-space:nowrap}}
+      .bmout11-nav{{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}}.bmout11-nav a{{padding:9px 12px;border-radius:10px;background:#10243a;color:#dbeafe!important;text-decoration:none;font-weight:900;font-size:12px}}.bmout11-nav a.on{{background:#2563eb;color:#fff!important}}
+      .bmout11-form{{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px;padding:14px;border-radius:15px;background:#0c2035}}.bmout11-form label{{display:grid;gap:5px;font-size:11px;font-weight:900;color:#cbd5e1}}.bmout11-form input,.bmout11-form select,.bmout11-form textarea{{width:100%;padding:10px;border-radius:9px;border:1px solid #334155;background:#06111f;color:#fff;font-size:14px}}.bmout11-form .wide{{grid-column:1/-1}}.bmout11-upload small{{font-weight:600;color:#94a3b8}}.bmout11-current{{grid-column:1/-1;padding:9px 11px;border-radius:9px;background:#172554;color:#dbeafe}}.bmout11-current a{{color:#93c5fd!important}}
+      .bmout11-formactions{{grid-column:1/-1;display:flex;gap:8px;align-items:center}}.bmout11-formactions button{{min-height:44px;border:0;border-radius:10px;background:#dc2626;color:white;font-weight:950;padding:10px 18px}}.bmout11-formactions a{{padding:10px 14px;border-radius:10px;background:#334155;color:white!important;text-decoration:none;font-weight:900}}
+      .bmout11-table{{overflow:auto;margin-top:14px}}.bmout11-table table{{width:100%;border-collapse:collapse;min-width:900px}}.bmout11-table th,.bmout11-table td{{padding:10px;border-bottom:1px solid #1e293b;text-align:left;vertical-align:top}}.bmout11-files{{display:flex;gap:6px;flex-wrap:wrap;align-items:center}}.bmout11-files a,.bmout11-edit{{padding:7px 9px;border-radius:8px;color:white!important;text-decoration:none;font-size:11px;font-weight:900}}.bmout11-preview{{background:#2563eb}}.bmout11-download{{background:#0f766e}}.bmout11-edit{{background:#475569;display:inline-block}}.bmout11-files small{{width:100%;color:#94a3b8}}.bmout11-none{{color:#94a3b8}}
+      .bmout11-ok,.bmout11-err{{margin:9px 0;padding:10px 12px;border-radius:10px;font-weight:850}}.bmout11-ok{{background:#14532d}}.bmout11-err{{background:#7f1d1d}}
+      @media(max-width:800px){{.bmout11{{padding:12px}}.bmout11-head{{display:grid}}.bmout11-head h1{{font-size:22px}}.bmout11-form{{grid-template-columns:1fr 1fr}}.bmout11-form .wide{{grid-column:1/-1}}}}
+    </style>
+    """
+    return layout(html)
+
+
+@app.before_request
+def _bodymind_expense_entry_v11():
+    # One expense module for every legacy accounting/expense entry point.
+    if request.path in ('/pagamenti/uscite','/contabilita') and request.method in ('GET','POST'):
+        return _bodymind_uscite_v11_impl()
+
+
+@app.route('/pagamenti/uscite/allegato/<int:expense_id>')
+@login_required
+def _bodymind_uscita_attachment_v11(expense_id):
+    from pathlib import Path as _Path
+    from flask import send_file as _send_file
+    conn=db(); conn.row_factory=sqlite3.Row
+    try:
+        _bodymind_uscite_schema_v11(conn)
+        row=conn.execute("SELECT * FROM bodymind_uscite WHERE id=?",(int(expense_id),)).fetchone()
+    finally:
+        try:conn.close()
+        except Exception:pass
+    if not row or not row['allegato_path']:
+        return ('Giustificativo non presente.',404)
+    root=_Path('/data/tenants/default/media/uscite').resolve()
+    p=_Path(str(row['allegato_path'])).resolve()
+    if root!=p and root not in p.parents:
+        return ('Percorso allegato non valido.',403)
+    if not p.exists() or not p.is_file():
+        return ('File allegato non trovato.',404)
+    mime=str(row['allegato_mime'] or 'application/octet-stream')
+    name=str(row['allegato_nome'] or p.name)
+    force=request.args.get('download')=='1'
+    previewable=(mime=='application/pdf' or mime.startswith('image/'))
+    return _send_file(str(p),mimetype=mime,as_attachment=(force or not previewable),download_name=name,conditional=True)
+'''
+    CORE.write_text(_core_v11,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+
+_v11_qa=r"""
+import json,sqlite3,sys
+sys.path.insert(0,"/data/top2_app")
+import app as _full
+from asd_app.core import app
+app.config["TESTING"]=True
+routes=[(str(r.rule),str(r.endpoint),sorted(m for m in (r.methods or set()) if m not in ("HEAD","OPTIONS"))) for r in app.url_map.iter_rules()]
+expense_file=[x for x in routes if x[0]=='/pagamenti/uscite/allegato/<int:expense_id>']
+client=app.test_client()
+with client.session_transaction() as sess:
+    sess.update({"logged":True,"logged_in":True,"username":"admin","display_name":"Expense QA","role":"admin","tenant_slug":"default","user_id":1,"is_admin":True,"admin":True})
+r1=client.get('/pagamenti/uscite',follow_redirects=False)
+r2=client.get('/contabilita',follow_redirects=False)
+body=r1.get_data(as_text=True)
+conn=sqlite3.connect("/data/tenants/default/asd.db",timeout=20)
+try:
+    cols=[str(x[1]) for x in conn.execute("PRAGMA table_info(bodymind_uscite)").fetchall()]
+    counts={t:int(conn.execute("SELECT COUNT(*) FROM "+t).fetchone()[0]) for t in ("tesserati","pagamenti","ricevute")}
+    integrity=str(conn.execute("PRAGMA integrity_check").fetchone()[0]); fk=len(conn.execute("PRAGMA foreign_key_check").fetchall())
+finally:conn.close()
+out={"uscite_status":r1.status_code,"contabilita_status":r2.status_code,"marker":"BODYMIND_R123_EXPENSE_ATTACHMENTS_V11" in body,"multipart":"multipart/form-data" in body,"attachment_route":bool(expense_file),"columns":cols,"counts":counts,"integrity":integrity,"fk":fk}
+print("[r123-expense-v11-audit] "+json.dumps(out,ensure_ascii=False),flush=True)
+if r1.status_code!=200 or r2.status_code!=200 or not out["marker"] or not out["multipart"] or not expense_file or not all(x in cols for x in ("allegato_path","allegato_nome","allegato_mime","allegato_size")) or integrity.lower()!="ok" or fk:
+    raise RuntimeError("V11 expense attachments audit failed")
+"""
+_v11p=subprocess.run([sys.executable,"-c",_v11_qa],capture_output=True,text=True,timeout=180)
+print((_v11p.stdout or "").strip(),flush=True)
+if _v11p.returncode!=0:
+    raise RuntimeError("R123 V11 child audit failed "+((_v11p.stderr or "")+(_v11p.stdout or ""))[-6000:])
+print('[r123-expense-v11] PASS one-expense-module attachments-preview-download payments-preserved before='+str(_v11_before)+' after='+str(_v11_after),flush=True)
