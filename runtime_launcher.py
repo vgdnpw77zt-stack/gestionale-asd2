@@ -641,8 +641,8 @@ runpy.run_path("/opt/bodymind/release_mu_metadata_convergence_r108.py", run_name
 if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
     runpy.run_path("/opt/bodymind/release_payment_simplify_audit_r109.py", run_name="__main__")
 else:
-    print("[startup-convergence] R109 read-only payment audit skipped; R110/R111 canonical payment gates remain active", flush=True)
-runpy.run_path("/opt/bodymind/release_simple_athlete_payment_truth_r110.py", run_name="__main__")
+    print("[startup-convergence] R109 read-only payment audit skipped; canonical payment consolidation gate remains active", flush=True)
+print("[startup-convergence] R110 runtime mutator superseded by canonical source consolidation; not executed",flush=True)
 if os.environ.get("BODYMIND_LEGACY_STARTUP_SMOKES","0") == "1":
     runpy.run_path("/opt/bodymind/release_certificate_truth_r120.py", run_name="__main__")
 else:
@@ -657,7 +657,7 @@ runpy.run_path("/opt/bodymind/release_document_association_fix_r144.py", run_nam
 if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
     runpy.run_path("/opt/bodymind/release_convergence_smoke_r111.py", run_name="__main__")
 else:
-    print("[startup-convergence] R111 convergence integration smoke skipped; R110/R113 canonical gates remain active",flush=True)
+    print("[startup-convergence] R111 convergence integration smoke skipped; canonical payment consolidation gate remains active",flush=True)
 if os.environ.get("BODYMIND_DEEP_STARTUP_AUDITS","0") == "1":
     runpy.run_path("/opt/bodymind/release_desktop_post_regression_r113.py", run_name="__main__")
 else:
@@ -745,8 +745,9 @@ if os.environ.get("BODYMIND_LEGACY_STARTUP_SMOKES","0") == "1":
     runpy.run_path("/opt/bodymind/release_mobile_athlete_truth_r140.py", run_name="__main__")
 else:
     print("[startup-convergence] R140 source rewrite skipped; R141 is the final rendered mobile athlete truth surface",flush=True)
-runpy.run_path("/opt/bodymind/release_secretary_ui_r123.py", run_name="__main__")
+print("[startup-convergence] R123 stacked UI/runtime mutator superseded by canonical source consolidation; not executed",flush=True)
 runpy.run_path("/opt/bodymind/release_mobile_truth_surface_r141.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_runtime_consolidation_20261006.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_route_guard_r39.py", run_name="__main__")
 incoming = pathlib.Path("/data/incoming")
 for name in ("top2.zip", "backup.zip"):
