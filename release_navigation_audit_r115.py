@@ -85,6 +85,37 @@ def _bodymind_r115_navigation_convergence(resp):
 else:
     print('[r115-core] already applied',flush=True)
 
+# BODYMIND_R115_BUSINESS_ADMIN_RESTORE
+# Migrate an already-patched persistent core: previous R115 versions hid
+# business-critical modules together with technical duplicates.
+_cs_restore=CORE.read_text(encoding='utf-8',errors='replace')
+if 'BODYMIND_R115_BUSINESS_ADMIN_RESTORE_APPLIED' not in _cs_restore:
+    _a=_cs_restore.find('_BODYMIND_R115_ADVANCED_PREFIXES = (')
+    _b=_cs_restore.find(')\n\n@app.after_request',_a)
+    if _a>=0 and _b>_a:
+        _block=_cs_restore[_a:_b+1]
+        for _business in (
+            '/cuore-operativo',
+            '/onboarding-tesserati',
+            '/document-hub',
+            '/documenti-automatici',
+            '/generatore-documenti',
+            '/documenti/generatore',
+        ):
+            _block=_block.replace("    '"+_business+"',\n",'')
+        _new=_cs_restore[:_a]+_block+_cs_restore[_b+1:]
+        _new+='\n# BODYMIND_R115_BUSINESS_ADMIN_RESTORE_APPLIED\n'
+        if _new!=_cs_restore:
+            dst=BACK/'core_before_business_admin_restore.py'
+            if not dst.exists(): shutil.copy2(CORE,dst)
+            CORE.write_text(_new,encoding='utf-8')
+            py_compile.compile(str(CORE),doraise=True)
+            print('[r115-business-admin-restore] PASS critical business routes no longer hidden',flush=True)
+    else:
+        print('[r115-business-admin-restore] prefix block not found',flush=True)
+else:
+    print('[r115-business-admin-restore] already applied',flush=True)
+
 # Rename the old Dossier button in the active document-review queue. It already
 # points to canonical /documenti, so only the misleading legacy label changes.
 A202=APP/'asd_app/routes_a202_operational_integrity.py'
