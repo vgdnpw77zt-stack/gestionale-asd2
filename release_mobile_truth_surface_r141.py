@@ -271,8 +271,9 @@ else:
         "body.r141-standalone{margin:0;background:#071529;color:#eef6ff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}"
     )
     s=s.replace(
-        "<title>Atlete</title>"+_r141_style()+"</head><body><main class='r141-page'>",
-        "<title>Atlete</title>"+_r141_style()+"</head><body class='r141-standalone'><main class='r141-page'>"
+        "</head><body><main class='r141-page'>",
+        "</head><body class='r141-standalone'><main class='r141-page'>",
+        1
     )
 
     # Converge the persistent R141 payment fragment to the single canonical
