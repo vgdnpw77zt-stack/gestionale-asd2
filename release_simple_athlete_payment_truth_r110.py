@@ -31,6 +31,30 @@ def compile_file(p):
 # when the specific missing items are already the actionable truth.
 # ------------------------------------------------------------------
 CORE=APP/'asd_app/core.py'
+
+# Remove superseded R110 request/response hooks already persisted in /data.
+def _r110_strip_runtime_functions(path,names):
+    import ast
+    src=path.read_text(encoding='utf-8',errors='replace')
+    tree=ast.parse(src); lines=src.splitlines(True); ranges=[]; wanted=set(names)
+    for node in tree.body:
+        if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)) and node.name in wanted:
+            start=min([node.lineno]+[d.lineno for d in node.decorator_list])-1
+            end=int(getattr(node,'end_lineno',node.lineno)); ranges.append((start,end,node.name))
+    if not ranges:return []
+    dst=BACK/'core_pre_r110_ui_consolidation.py'
+    if not dst.exists():shutil.copy2(path,dst)
+    for start,end,_ in sorted(ranges,reverse=True):del lines[start:end]
+    path.write_text(''.join(lines),encoding='utf-8')
+    return [x[2] for x in ranges]
+
+_r110_removed=_r110_strip_runtime_functions(CORE,(
+ '_bodymind_payment_entry_convergence_v3','_bodymind_dashboard_payment_truth_v3',
+ '_bodymind_payment_entrypoints_v4','_bodymind_monthly_arrears_dashboard_v5',
+))
+if _r110_removed:
+    compile_file(CORE)
+    print('[r110-runtime-consolidation] removed='+repr(sorted(_r110_removed)),flush=True)
 cs=CORE.read_text(encoding='utf-8',errors='replace')
 if 'BODYMIND_R110_TASK_DEDUP' not in cs and 'def get_operational_tasks' in cs:
     backup_file(CORE)
@@ -437,7 +461,7 @@ try:
     _qpaid=0
     if _conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='quote_mensili'").fetchone():
         _qpaid=int(_conn.execute("SELECT COUNT(*) FROM quote_mensili WHERE lower(coalesce(stato,'')) LIKE '%pagat%' OR lower(coalesce(stato,'')) LIKE '%saldat%' OR lower(coalesce(stato,'')) LIKE '%paid%' OR lower(coalesce(stato,'')) LIKE '%incassat%'").fetchone()[0])
-    print('[r110-payment-task-truth-v2] canonical_payments='+str(_pc)+' enrollment_flags='+str(_flags)+' paid_monthly_quotes='+str(_qpaid)+' stale_alerts_closed='+str(len(_close)),flush=True)
+    print('[r110-payment-task-truth-v2] canonical_payments='+str(_pc)+' enrollment_flags='+str(_flags)+' legacy_paid_flags='+str(_qpaid)+' stale_alerts_closed='+str(len(_close)),flush=True)
 finally:
     _conn.close()
 
@@ -584,74 +608,10 @@ def get_operational_tasks(*args, **kwargs):
     except Exception:
         return items
 
-@app.before_request
-def _bodymind_payment_entry_convergence_v3():
-    try:
-        # Old secretary entry points become aliases of the canonical payment module.
-        if request.method=='GET' and request.path in ('/quote-incassi','/quote-incassi/','/pagamenti-pro','/pagamenti-automatici'):
-            from flask import redirect
-            qs=request.query_string.decode('utf-8','ignore')
-            target='/pagamenti'+(('?'+qs) if qs else '')
-            return redirect(target,302)
-    except Exception:
-        return None
-
-@app.after_request
-def _bodymind_dashboard_payment_truth_v3(resp):
-    try:
-        if request.method!='GET' or request.path not in ('/dashboard','/cuore-operativo','/centro-operativo') or int(getattr(resp,'status_code',200) or 200)!=200:
-            return resp
-        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
-            return resp
-        html=resp.get_data(as_text=True)
-        if 'BODYMIND_PAYMENT_TRUTH_DASHBOARD_V3' in html:
-            return resp
-        from datetime import date as _bm_date
-        today=_bm_date.today()
-        c=db(); c.row_factory=sqlite3.Row
-        try:
-            t=bodymind_payment_truth(c,mese=today.month,anno=today.year)
-        finally:
-            try:c.close()
-            except Exception:pass
-        months=['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
-        panel=f"""<!-- BODYMIND_PAYMENT_TRUTH_DASHBOARD_V3 -->
-        <section class='bmpay-unified'>
-          <div class='bmpay-title'><div><span>PAGAMENTI · UNICA VERITÀ</span><h2>Iscrizioni e mensile</h2><p>Gli stessi stati valgono in Dashboard, Centro operativo, Task, Tesserati e Pagamenti.</p></div></div>
-          <div class='bmpay-grid'>
-            <a href='/pagamenti?vista=iscrizioni&stagione={t["stagione"]}'><small>ISCRIZIONI {t["stagione"]}/{t["stagione"]+1}</small><strong>{t["iscrizioni_pagate"]}/{t["totale"]}</strong><span>{t["iscrizioni_mancanti"]} da completare</span></a>
-            <a href='/pagamenti?vista=mensili&mese={t["mese"]}&anno={t["anno"]}'><small>MENSILE · {months[t["mese"]]} {t["anno"]}</small><strong>{t["mensili_pagati"]}/{t["totale"]}</strong><span>{t["mensili_mancanti"]} da completare</span></a>
-            <a href='/tesserati'><small>TESSERATI</small><strong>{t["totale"]}</strong><span>Apri le schede individuali</span></a>
-          </div>
-        </section>
-        <style id='bodymind-payment-truth-dashboard-v3'>
-        .bmpay-unified{{margin:14px 0 18px;padding:18px;border-radius:20px;background:linear-gradient(135deg,#0a1728,#102c46);border:1px solid rgba(96,165,250,.24);color:#f8fafc}}
-        .bmpay-title span{{font-size:10px;font-weight:950;letter-spacing:.14em;color:#7dd3fc}}.bmpay-title h2{{margin:4px 0;font-size:25px}}.bmpay-title p{{margin:0;color:#b7c6d9}}
-        .bmpay-grid{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:13px}}.bmpay-grid a{{display:grid;gap:4px;padding:14px;border-radius:15px;background:#0b1d31;border:1px solid rgba(148,163,184,.16);color:white!important;text-decoration:none}}.bmpay-grid small{{font-size:10px;font-weight:900;color:#93c5fd}}.bmpay-grid strong{{font-size:24px}}.bmpay-grid span{{font-size:11px;color:#cbd5e1}}
-        @media(max-width:760px){{.bmpay-grid{{grid-template-columns:1fr}}}}
-        </style>
-        <script id='bodymind-payment-entry-links-v3'>(function(){{
-          document.querySelectorAll('a[href]').forEach(function(a){{
-            var h=a.getAttribute('href')||'';
-            if(h.indexOf('/quote-incassi')===0 || h.indexOf('/pagamenti-pro')===0 || h.indexOf('/pagamenti-automatici')===0){{
-              a.setAttribute('href','/pagamenti');
-            }}
-          }});
-        }})();</script>"""
-        # Put the one payment module near the top of the dashboard, after <main> if possible.
-        m=re.search(r'<main\b[^>]*>',html,re.I)
-        if m:
-            html=html[:m.end()]+panel+html[m.end():]
-        else:
-            html=html.replace('<body>','<body>'+panel,1) if '<body>' in html else panel+html
-        resp.set_data(html)
-    except Exception as exc:
-        print('[payment-dashboard-v3-warning] '+repr(exc),flush=True)
-    return resp
 '''
     CORE.write_text(_core_v3,encoding='utf-8')
     compile_file(CORE)
-    print('[r110-payment-flow-v3] PASS one-truth helper task-normalization dashboard-module entry-convergence',flush=True)
+    print('[r110-payment-flow-v3] PASS one-truth helper task-normalization backend-only',flush=True)
 else:
     print('[r110-payment-flow-v3] already installed',flush=True)
 
@@ -689,74 +649,6 @@ for _profile_src in (DESK, MOB):
             print('[r110-profile-payment-links-v4] already '+str(_profile_src),flush=True)
         else:
             print('[r110-profile-payment-links-v4] anchor not found '+str(_profile_src),flush=True)
-
-_core_v4=CORE.read_text(encoding='utf-8',errors='replace')
-if 'BODYMIND_R110_CANONICAL_ENTRYPOINTS_V4' not in _core_v4:
-    _core_v4 += r'''
-
-# BODYMIND_R110_CANONICAL_ENTRYPOINTS_V4
-@app.after_request
-def _bodymind_payment_entrypoints_v4(resp):
-    try:
-        if request.method!='GET' or int(getattr(resp,'status_code',200) or 200)!=200:
-            return resp
-        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
-            return resp
-        html=resp.get_data(as_text=True)
-        if not html:
-            return resp
-
-        # Every visible legacy entry becomes an alias of the canonical module.
-        import re as _bm_re
-        html=_bm_re.sub(r"href=([\"'])(/quote-incassi/?|/pagamenti-pro/?|/pagamenti-automatici/?)([^\"']*)\\1",
-                        lambda m:'href='+m.group(1)+'/pagamenti'+(m.group(3) or '')+m.group(1),html,flags=_bm_re.I)
-
-        # Dashboard and Centro operativo display the same truth component.
-        if request.path in ('/dashboard','/cuore-operativo','/centro-operativo'):
-            if 'BODYMIND_PAYMENT_TRUTH_DASHBOARD_V3' not in html:
-                from datetime import date as _bm_date
-                today=_bm_date.today()
-                c=db(); c.row_factory=sqlite3.Row
-                try:
-                    t=bodymind_payment_truth(c,mese=today.month,anno=today.year)
-                finally:
-                    try:c.close()
-                    except Exception:pass
-                months=['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
-                panel=f"""<!-- BODYMIND_PAYMENT_TRUTH_DASHBOARD_V3 -->
-                <section class='bmpay-unified'>
-                  <div class='bmpay-title'><div><span>PAGAMENTI · MODULO UNICO</span><h2>Iscrizioni e mensile</h2><p>Questa è la stessa situazione usata da Tesserati, Task e Pagamenti.</p></div></div>
-                  <div class='bmpay-grid'>
-                    <a href='/pagamenti?vista=iscrizioni&stagione={t["stagione"]}'><small>ISCRIZIONI {t["stagione"]}/{t["stagione"]+1}</small><strong>{t["iscrizioni_pagate"]}/{t["totale"]}</strong><span>{t["iscrizioni_mancanti"]} da completare</span></a>
-                    <a href='/pagamenti?vista=mensili&mese={t["mese"]}&anno={t["anno"]}'><small>MENSILE · {months[t["mese"]]} {t["anno"]}</small><strong>{t["mensili_pagati"]}/{t["totale"]}</strong><span>{t["mensili_mancanti"]} da completare</span></a>
-                    <a href='/tesserati'><small>TESSERATI</small><strong>{t["totale"]}</strong><span>Apri una persona e gestisci gli stessi due stati</span></a>
-                  </div>
-                </section>
-                <style id='bodymind-payment-entrypoints-v4'>
-                .bmpay-unified{{margin:14px 0 18px;padding:18px;border-radius:20px;background:linear-gradient(135deg,#0a1728,#102c46);border:1px solid rgba(96,165,250,.24);color:#f8fafc}}
-                .bmpay-title span{{font-size:10px;font-weight:950;letter-spacing:.14em;color:#7dd3fc}}.bmpay-title h2{{margin:4px 0;font-size:25px}}.bmpay-title p{{margin:0;color:#b7c6d9}}
-                .bmpay-grid{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:13px}}.bmpay-grid a{{display:grid;gap:4px;padding:14px;border-radius:15px;background:#0b1d31;border:1px solid rgba(148,163,184,.16);color:white!important;text-decoration:none}}.bmpay-grid small{{font-size:10px;font-weight:900;color:#93c5fd}}.bmpay-grid strong{{font-size:24px}}.bmpay-grid span{{font-size:11px;color:#cbd5e1}}
-                @media(max-width:760px){{.bmpay-grid{{grid-template-columns:1fr}}}}
-                </style>"""
-                m=_bm_re.search(r'<main\b[^>]*>',html,_bm_re.I)
-                if m: html=html[:m.end()]+panel+html[m.end():]
-                elif '<body' in html:
-                    bm=_bm_re.search(r'<body\b[^>]*>',html,_bm_re.I)
-                    if bm: html=html[:bm.end()]+panel+html[bm.end():]
-                else: html=panel+html
-
-        if 'BODYMIND_PAYMENT_ENTRYPOINTS_V4_RENDERED' not in html:
-            html=html.replace('</body>','<!-- BODYMIND_PAYMENT_ENTRYPOINTS_V4_RENDERED --></body>',1) if '</body>' in html else html+'<!-- BODYMIND_PAYMENT_ENTRYPOINTS_V4_RENDERED -->'
-        resp.set_data(html)
-    except Exception as exc:
-        print('[payment-entrypoints-v4-warning] '+repr(exc),flush=True)
-    return resp
-'''
-    CORE.write_text(_core_v4,encoding='utf-8')
-    compile_file(CORE)
-    print('[r110-entrypoints-v4] PASS dashboard-center-tesserati legacy-links converge to /pagamenti',flush=True)
-else:
-    print('[r110-entrypoints-v4] already installed',flush=True)
 
 _c=sqlite3.connect(str(DB),timeout=20)
 try:
@@ -902,40 +794,6 @@ def get_operational_tasks(*args, **kwargs):
         return base
 
 
-@app.after_request
-def _bodymind_monthly_arrears_dashboard_v5(resp):
-    try:
-        if request.method!='GET' or request.path not in ('/dashboard','/cuore-operativo','/centro-operativo'):
-            return resp
-        if int(getattr(resp,'status_code',200) or 200)!=200 or 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
-            return resp
-        html=resp.get_data(as_text=True)
-        if 'BODYMIND_MONTHLY_ARREARS_V5_RENDERED' in html:
-            return resp
-        c=db(); c.row_factory=sqlite3.Row
-        try: summary=bodymind_monthly_due_summary(c)
-        finally:
-            try:c.close()
-            except Exception:pass
-        if not summary:
-            return resp
-        months=['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
-        chips=''.join(
-            "<a class='bmarr-chip "+("ok" if int(x['mancanti'])==0 else "due")+"' href='/pagamenti?vista=mensili&mese="+str(x['mese'])+"&anno="+str(x['anno'])+"'><b>"+months[int(x['mese'])]+" "+str(x['anno'])+"</b><span>"+(str(x['mancanti'])+" da pagare" if int(x['mancanti']) else "completo")+"</span></a>"
-            for x in summary
-        )
-        block="<!-- BODYMIND_MONTHLY_ARREARS_V5_RENDERED --><div class='bmarr-v5'><span>MENSILI DELLA STAGIONE</span><div>"+chips+"</div></div><style>.bmarr-v5{margin:11px 0 0;padding:10px;border-radius:13px;background:rgba(2,6,23,.38)}.bmarr-v5>span{display:block;margin-bottom:7px;font-size:10px;font-weight:950;letter-spacing:.12em;color:#93c5fd}.bmarr-v5>div{display:flex;gap:7px;flex-wrap:wrap}.bmarr-chip{display:grid;gap:2px;padding:8px 10px;border-radius:10px;color:#fff!important;text-decoration:none;font-size:11px}.bmarr-chip.due{background:#7f1d1d}.bmarr-chip.ok{background:#14532d}.bmarr-chip span{color:#e2e8f0}</style>"
-        anchor="<div class='bmpay-grid'>"
-        if 'BODYMIND_PAYMENT_TRUTH_DASHBOARD_V3' in html and anchor in html:
-            html=html.replace(anchor,block+anchor,1)
-        else:
-            import re as _bm_re
-            m=_bm_re.search(r'<main\b[^>]*>',html,_bm_re.I)
-            if m: html=html[:m.end()]+block+html[m.end():]
-        resp.set_data(html)
-    except Exception as exc:
-        print('[monthly-arrears-v5-dashboard-warning] '+repr(exc),flush=True)
-    return resp
 '''
     CORE.write_text(_core_v5,encoding='utf-8')
     compile_file(CORE)

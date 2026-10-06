@@ -11,6 +11,47 @@ CORE=APP/'asd_app/core.py'
 if not APP.joinpath('.TOP2_OFFICIAL').exists(): raise SystemExit('TOP2_OFFICIAL marker missing')
 if not CORE.exists(): raise RuntimeError('R123 core.py missing')
 
+_r123_guard=sqlite3.connect("file:"+str(DB)+"?mode=ro",uri=True,timeout=20)
+try:
+    _r123_counts_before={t:int(_r123_guard.execute("SELECT COUNT(*) FROM "+t).fetchone()[0]) for t in ("tesserati","pagamenti","ricevute","quote_mensili","documenti","inbound_documents")}
+finally:_r123_guard.close()
+
+# Remove superseded R123 functions from persistent source before Flask imports them.
+def _r123_strip_runtime_functions(path,names):
+    import ast
+    text=path.read_text(encoding='utf-8',errors='replace')
+    tree=ast.parse(text); lines=text.splitlines(True); ranges=[]; wanted=set(names)
+    for node in tree.body:
+        if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)) and node.name in wanted:
+            start=min([node.lineno]+[d.lineno for d in node.decorator_list])-1
+            end=int(getattr(node,'end_lineno',node.lineno)); ranges.append((start,end,node.name))
+    if not ranges:return []
+    dst=BACK/'core_pre_canonical_consolidation.py'
+    if not dst.exists():shutil.copy2(path,dst)
+    for start,end,_ in sorted(ranges,reverse=True):del lines[start:end]
+    path.write_text(''.join(lines),encoding='utf-8')
+    return [x[2] for x in ranges]
+
+_r123_removed=_r123_strip_runtime_functions(CORE,(
+ '_bodymind_r123_payment_simplify','_bodymind_r125_payment_premium_status',
+ '_bodymind_r126_payment_history_names','_bodymind_r127_history_card_names_nav',
+ '_bodymind_r130_payment_mobile_hard_fix','_bodymind_r131_history_name_visible_div',
+ '_bodymind_r123_payment_split_v2','_bodymind_r123_payment_split_v3',
+ '_bodymind_r123_canonical_payment_module_v5','_bodymind_payment_register_v7',
+ '_bodymind_payment_module_v7','_bodymind_admin_route_v8','_bodymind_uscite_schema_v8',
+ '_bodymind_uscite_v8','_bodymind_desktop_admin_nav_v8','_bodymind_payment_month_alerts_v9',
+ '_bodymind_uscite_schema_v11','_bodymind_uscita_attachment_save_v11','_bodymind_uscite_v11_impl',
+ '_bodymind_expense_entry_v11','_bodymind_uscita_attachment_v11',
+ '_bodymind_dashboard_background_restore_r123','_bodymind_dashboard_recompose_r156',
+))
+_marker_text=CORE.read_text(encoding='utf-8',errors='replace')
+for _marker in ('# BODYMIND_R123_PAYMENT_FORM_CANONICAL_V7\n','# BODYMIND_R123_EXPENSE_ATTACHMENTS_V11\n'):
+    _marker_text=_marker_text.replace(_marker,'')
+CORE.write_text(_marker_text,encoding='utf-8')
+if _r123_removed:
+    py_compile.compile(str(CORE),doraise=True)
+    print('[r123-runtime-consolidation] removed='+repr(sorted(_r123_removed)),flush=True)
+
 src=CORE.read_text(encoding='utf-8',errors='replace')
 if 'BODYMIND_R123_SECRETARY_UI' not in src:
     dst=BACK/'core.py'
@@ -132,42 +173,6 @@ def bodymind_r123_presenze_semplici():
     <script>function r123All(v){{document.querySelectorAll('.r123-check').forEach(function(x){{x.checked=v}})}}</script>"""
     return layout(html)
 
-@app.after_request
-def _bodymind_r123_payment_simplify(resp):
-    try:
-        if request.method!='GET' or request.path!='/pagamenti' or int(getattr(resp,'status_code',200) or 200)!=200:
-            return resp
-        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
-            return resp
-        html=resp.get_data(as_text=True)
-        mese,anno=current_month_year()
-        mese=parse_int(request.args.get('mese',mese),mese); anno=parse_int(request.args.get('anno',anno),anno)
-        season=get_membership_season(mese,anno)
-        rows=[dict(x) for x in get_missing_iscrizione_rows(anno,mese)]
-        rows=sorted(rows,key=lambda r:((str(r.get('cognome') or '')).strip().lower(),(str(r.get('nome') or '')).strip().lower()))
-        if rows:
-            items=''.join("<a class='r123-pay-person' href='/pagamenti?tesserato_id="+str(int(r.get('id') or 0))+"&mese="+str(mese)+"&anno="+str(anno)+"'><div class='r123-pay-id'><b>"+e((str(r.get('cognome') or '')+' '+str(r.get('nome') or '')).strip())+"</b><small>"+e(str(r.get('telefono') or r.get('telefono_genitore') or 'Telefono non indicato'))+"</small></div><span>Registra quota iscrizione</span></a>" for r in rows)
-        else:
-            items="<div class='r123-pay-empty'>Tutte le tesserate risultano in regola con la quota iscrizione.</div>"
-        box=f"""<!-- BODYMIND_R123_PAYMENT_MOBILE --><section class='r123-pay-box'><div class='r123-pay-kicker'>OPERATIVITÀ IMMEDIATA</div><h3>Tesserate senza quota iscrizione · stagione {e(season['label'])}</h3><div class='r123-pay-list'>{items}</div></section>
-        <style>.r123-pay-box{{margin:12px 0;padding:15px;border-radius:16px;background:#0d1d31;border:1px solid rgba(148,163,184,.18)}}.r123-pay-kicker{{font-size:11px;font-weight:950;letter-spacing:.1em;color:#93c5fd}}.r123-pay-box h3{{margin:5px 0 10px}}.r123-pay-list{{display:grid;gap:7px}}.r123-pay-person{{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 12px;border-radius:12px;background:#12283f;color:white!important;text-decoration:none}}.r123-pay-id{{display:grid;gap:3px;min-width:0}}.r123-pay-id b{{font-size:14px;line-height:1.2}}.r123-pay-id small{{color:#cbd5e1;font-size:12px}}.r123-pay-person span{{font-size:11px;color:#93c5fd}}.r123-pay-empty{{color:#86efac;font-weight:800}}@media(max-width:560px){{.r123-pay-person{{align-items:flex-start;flex-direction:column}}}}</style>
-        <script>(function(){{
-          var targets=['tesseramento / iscrizione','seleziona periodo e tesserato','tesserati senza quota iscrizione/tesseramento'];
-          function hideByText(txt){{
-            document.querySelectorAll('h1,h2,h3,h4,.kicker,.section-title,label,p,div').forEach(function(el){{
-              if((el.textContent||'').trim().toLowerCase().indexOf(txt)>=0){{
-                var p=el.closest('.card,.metric-box,.panel,section,.filter-panel,.grid-2');
-                if(p && !p.classList.contains('r123-pay-box')) p.style.display='none';
-              }}
-            }});
-          }}
-          targets.forEach(hideByText);
-        }})();</script>"""
-        html=html.replace('</body>',box+'</body>',1) if '</body>' in html else html+box
-        resp.set_data(html)
-    except Exception as exc:
-        print('[r123-payment-warning] '+repr(exc),flush=True)
-    return resp
 '''
     CORE.write_text(src,encoding='utf-8')
     py_compile.compile(str(CORE),doraise=True)
@@ -282,576 +287,6 @@ if not _patched_payment_identity:
     # down merely because the historical quick-row source changed shape.
     print('[r124-payment-identity] canonical source shape changed; overlay remains authoritative',flush=True)
 
-# BODYMIND_R125_PAYMENT_PREMIUM_STATUS
-# Premium operational payment board: current month truth from canonical pagamenti.
-core_pay=CORE.read_text(encoding='utf-8',errors='replace')
-if 'BODYMIND_R125_PAYMENT_PREMIUM_STATUS' not in core_pay:
-    dst=BACK/'core_pre_r125_payment_premium.py'
-    if not dst.exists(): shutil.copy2(CORE,dst)
-    core_pay += r'''
-
-# BODYMIND_R125_PAYMENT_PREMIUM_STATUS
-@app.after_request
-def _bodymind_r125_payment_premium_status(resp):
-    try:
-        if request.method!='GET' or request.path!='/pagamenti' or int(getattr(resp,'status_code',200) or 200)!=200:
-            return resp
-        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
-            return resp
-        html=resp.get_data(as_text=True)
-        if 'BODYMIND_R125_PAYMENT_BOARD' in html:
-            return resp
-
-        mese,anno=current_month_year()
-        mese=parse_int(request.args.get('mese',mese),mese)
-        anno=parse_int(request.args.get('anno',anno),anno)
-
-        c=db(); c.row_factory=sqlite3.Row
-        try:
-            tcols={str(x[1]) for x in c.execute('PRAGMA table_info(tesserati)').fetchall()}
-            athletes=[dict(x) for x in c.execute("SELECT * FROM tesserati ORDER BY TRIM(cognome) COLLATE NOCASE,TRIM(nome) COLLATE NOCASE").fetchall()]
-            pays=[dict(x) for x in c.execute("SELECT * FROM pagamenti WHERE mese=? AND anno=? ORDER BY id DESC",(mese,anno)).fetchall()]
-        finally:
-            c.close()
-
-        def _paid_row(p):
-            st=(str(p.get('stato') or '')+' '+str(p.get('online_status') or '')).lower()
-            bad=any(x in st for x in ('pending','attesa','cancel','annull','failed','fallit','refunded','rimbors'))
-            good=any(x in st for x in ('paid','pagat','saldat','complet','incassat'))
-            try: amount=float(p.get('importo') or 0)
-            except Exception: amount=0
-            cause=str(p.get('causale') or '').lower()
-            monthly=('mensil' in cause) or cause in ('quota','quota_mensile','mensile')
-            return monthly and (not bad) and (good or (bool(p.get('data')) and amount>0))
-
-        paid_by={}
-        for p in pays:
-            tid=int(p.get('tesserato_id') or 0)
-            if tid>0 and tid not in paid_by and _paid_row(p):
-                paid_by[tid]=p
-
-        red=[]; green=[]
-        for a in athletes:
-            tid=int(a.get('id') or 0)
-            name=((str(a.get('cognome') or '')+' '+str(a.get('nome') or '')).strip()) or ('Tesserata #'+str(tid))
-            phone=str(a.get('telefono') or a.get('telefono_genitore') or '').strip()
-            pay=paid_by.get(tid)
-            item={'id':tid,'name':name,'phone':phone,'pay':pay}
-            (green if pay else red).append(item)
-
-        def _card(item,ok):
-            tid=item['id']; name=e(item['name']); phone=e(item['phone'] or 'Telefono non indicato')
-            href='/pagamenti?tesserato_id='+str(tid)+'&mese='+str(mese)+'&anno='+str(anno)
-            if ok:
-                p=item['pay'] or {}
-                try: amount=float(p.get('importo') or 0)
-                except Exception: amount=0
-                detail=('€ %.2f' % amount).replace('.',',') if amount>0 else 'Pagamento registrato'
-                if p.get('data'): detail+=' · '+e(str(p.get('data')))
-                return "<a class='r125-pay-card is-paid' href='"+href+"'><span class='r125-dot'>✓</span><div class='r125-id'><b>"+name+"</b><small>"+phone+"</small></div><div class='r125-side'><strong>PAGATO</strong><small>"+detail+"</small></div></a>"
-            return "<a class='r125-pay-card is-unpaid' href='"+href+"'><span class='r125-dot'>!</span><div class='r125-id'><b>"+name+"</b><small>"+phone+"</small></div><div class='r125-side'><strong>DA PAGARE</strong><small>Registra pagamento</small></div></a>"
-
-        red_html=''.join(_card(x,False) for x in red) or "<div class='r125-empty ok'>Nessuna quota mensile da recuperare.</div>"
-        green_html=''.join(_card(x,True) for x in green) or "<div class='r125-empty'>Nessun pagamento mensile registrato.</div>"
-        month_names=['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
-        month_label=(month_names[mese] if 1<=mese<=12 else str(mese))+' '+str(anno)
-
-        board=f"""<!-- BODYMIND_R125_PAYMENT_BOARD -->
-        <section class='r125-board'>
-          <div class='r125-head'>
-            <div><span class='r125-kicker'>STATO PAGAMENTI</span><h2>{e(month_label)}</h2><p>Rosso = da pagare · Verde = pagato</p></div>
-            <div class='r125-counts'><span class='bad'>{len(red)} da pagare</span><span class='good'>{len(green)} pagati</span></div>
-          </div>
-          <div class='r125-tabs'>
-            <button type='button' class='active' data-r125='all'>Tutti</button>
-            <button type='button' data-r125='unpaid'>Da pagare <b>{len(red)}</b></button>
-            <button type='button' data-r125='paid'>Pagati <b>{len(green)}</b></button>
-          </div>
-          <div class='r125-grid' data-r125-group='unpaid'>
-            <div class='r125-section-title'><span class='red-dot'></span> Da pagare</div>{red_html}
-          </div>
-          <div class='r125-grid' data-r125-group='paid'>
-            <div class='r125-section-title'><span class='green-dot'></span> Pagati</div>{green_html}
-          </div>
-        </section>
-        <style>
-        .r125-board{{margin:14px 0 18px;padding:16px;border-radius:22px;background:linear-gradient(145deg,#08111f,#0d1d31 52%,#10263f);border:1px solid rgba(148,163,184,.16);box-shadow:0 22px 55px rgba(0,0,0,.28);color:#f8fafc}}
-        .r125-head{{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:14px}}.r125-kicker{{font-size:11px;letter-spacing:.14em;font-weight:950;color:#7dd3fc}}.r125-head h2{{margin:3px 0 3px;font-size:24px}}.r125-head p{{margin:0;color:#94a3b8;font-size:13px}}.r125-counts{{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}}.r125-counts span{{padding:8px 10px;border-radius:999px;font-size:12px;font-weight:950}}.r125-counts .bad{{background:rgba(220,38,38,.18);color:#fecaca;border:1px solid rgba(248,113,113,.35)}}.r125-counts .good{{background:rgba(22,163,74,.18);color:#bbf7d0;border:1px solid rgba(74,222,128,.35)}}.r125-tabs{{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:14px}}.r125-tabs button{{border:1px solid rgba(148,163,184,.18);background:#0b1728;color:#cbd5e1;border-radius:12px;padding:10px 8px;font-weight:900}}.r125-tabs button.active{{background:#1d4ed8;color:white;border-color:#60a5fa}}.r125-grid{{display:grid;gap:8px;margin-top:10px}}.r125-section-title{{display:flex;align-items:center;gap:8px;margin:4px 2px 2px;font-size:12px;font-weight:950;letter-spacing:.06em;text-transform:uppercase;color:#cbd5e1}}.red-dot,.green-dot{{width:9px;height:9px;border-radius:50%}}.red-dot{{background:#ef4444;box-shadow:0 0 12px rgba(239,68,68,.65)}}.green-dot{{background:#22c55e;box-shadow:0 0 12px rgba(34,197,94,.65)}}.r125-pay-card{{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:10px;align-items:center;padding:12px 13px;border-radius:16px;text-decoration:none!important;color:white!important;transition:transform .15s ease,border-color .15s ease}}.r125-pay-card:active{{transform:scale(.99)}}.r125-pay-card.is-unpaid{{background:linear-gradient(135deg,rgba(127,29,29,.84),rgba(69,10,10,.72));border:1px solid rgba(248,113,113,.4)}}.r125-pay-card.is-paid{{background:linear-gradient(135deg,rgba(20,83,45,.86),rgba(5,46,22,.74));border:1px solid rgba(74,222,128,.4)}}.r125-dot{{display:grid;place-items:center;width:32px;height:32px;border-radius:50%;font-weight:950;font-size:16px}}.is-unpaid .r125-dot{{background:#dc2626}}.is-paid .r125-dot{{background:#16a34a}}.r125-id{{display:grid;gap:3px;min-width:0}}.r125-id b{{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}.r125-id small{{font-size:12px;color:#cbd5e1}}.r125-side{{display:grid;justify-items:end;gap:2px;text-align:right}}.r125-side strong{{font-size:11px;letter-spacing:.06em}}.is-unpaid .r125-side strong{{color:#fecaca}}.is-paid .r125-side strong{{color:#bbf7d0}}.r125-side small{{font-size:11px;color:#cbd5e1}}.r125-empty{{padding:14px;border-radius:14px;background:#0b1728;color:#cbd5e1}}.r125-empty.ok{{color:#86efac}}@media(max-width:600px){{.r125-board{{margin:10px 0 14px;padding:12px;border-radius:18px}}.r125-head{{display:grid}}.r125-counts{{justify-content:flex-start}}.r125-pay-card{{grid-template-columns:34px minmax(0,1fr);grid-template-areas:'dot id' 'dot side'}}.r125-dot{{grid-area:dot}}.r125-id{{grid-area:id}}.r125-side{{grid-area:side;justify-items:start;text-align:left}}.r125-tabs button{{font-size:12px;padding:9px 5px}}}}
-        </style>
-        <script>(function(){{
-          var board=document.querySelector('.r125-board'); if(!board) return;
-          var buttons=board.querySelectorAll('[data-r125]');
-          buttons.forEach(function(btn){{btn.addEventListener('click',function(){{
-            buttons.forEach(function(b){{b.classList.remove('active')}}); btn.classList.add('active');
-            var v=btn.getAttribute('data-r125');
-            board.querySelectorAll('[data-r125-group]').forEach(function(g){{
-              g.style.display=(v==='all'||g.getAttribute('data-r125-group')===v)?'grid':'none';
-            }});
-          }})}});
-        }})();</script>"""
-        # Place this before the rest of payment operations whenever possible.
-        if '<main' in html:
-            pos=html.find('>',html.find('<main'))
-            html=html[:pos+1]+board+html[pos+1:]
-        elif '</body>' in html:
-            html=html.replace('</body>',board+'</body>',1)
-        else:
-            html+=board
-        resp.set_data(html)
-    except Exception as exc:
-        print('[r125-payment-board-warning] '+repr(exc),flush=True)
-    return resp
-'''
-    CORE.write_text(core_pay,encoding='utf-8')
-    py_compile.compile(str(CORE),doraise=True)
-    print('[r125-payment-board] PASS premium red/green monthly board installed',flush=True)
-
-# BODYMIND_R126_HISTORY_NAMES
-# Historical payment cards must always show the linked athlete identity prominently.
-core_hist=CORE.read_text(encoding='utf-8',errors='replace')
-if 'BODYMIND_R126_HISTORY_NAMES' not in core_hist:
-    dst=BACK/'core_pre_r126_history_names.py'
-    if not dst.exists(): shutil.copy2(CORE,dst)
-    core_hist += r'''
-
-# BODYMIND_R126_HISTORY_NAMES
-@app.after_request
-def _bodymind_r126_payment_history_names(resp):
-    try:
-        if request.method!='GET' or request.path!='/pagamenti' or int(getattr(resp,'status_code',200) or 200)!=200:
-            return resp
-        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
-            return resp
-        html=resp.get_data(as_text=True)
-        if 'NOME / STATO' not in html.upper() or 'r126-history-name' in html:
-            return resp
-
-        c=db(); c.row_factory=sqlite3.Row
-        try:
-            rows=[dict(x) for x in c.execute("""SELECT p.id,p.tesserato_id,p.data,p.importo,p.causale,p.mese,p.anno,
-                     t.nome,t.cognome
-                FROM pagamenti p
-                LEFT JOIN tesserati t ON t.id=p.tesserato_id
-                ORDER BY CASE WHEN p.data IS NULL OR TRIM(p.data)='' THEN 1 ELSE 0 END,
-                         p.data DESC,p.id DESC""").fetchall()]
-        finally:
-            c.close()
-
-        # The legacy payment history renders one NOME / STATO heading per payment card.
-        # Inject identity directly after that heading, in the same order as the
-        # canonical history query. If an athlete was intentionally deleted, keep a
-        # transparent fallback instead of inventing a name.
-        import re as _r126_re
-        idx={'n':0}
-        def _inject(match):
-            n=idx['n']; idx['n']+=1
-            if n>=len(rows):
-                return match.group(0)
-            r=rows[n]
-            name=((str(r.get('cognome') or '')+' '+str(r.get('nome') or '')).strip()
-                  or ('Tesserata #'+str(int(r.get('tesserato_id') or 0))))
-            return match.group(0)+"<div class='r126-history-name'>"+e(name)+"</div>"
-
-        pattern=_r126_re.compile(r'(?is)(<[^>]+>\s*NOME\s*/\s*STATO\s*</[^>]+>)')
-        html,count=pattern.subn(_inject,html)
-        if count:
-            css="""<style>
-            .r126-history-name{margin:8px 0 10px;font-size:20px;line-height:1.15;font-weight:950;letter-spacing:.01em;color:#f8fafc}
-            @media(max-width:600px){.r126-history-name{font-size:18px;margin-top:7px}}
-            </style>"""
-            html=html.replace('</body>',css+'</body>',1) if '</body>' in html else html+css
-            resp.set_data(html)
-    except Exception as exc:
-        print('[r126-history-name-warning] '+repr(exc),flush=True)
-    return resp
-'''
-    CORE.write_text(core_hist,encoding='utf-8')
-    py_compile.compile(str(CORE),doraise=True)
-    print('[r126-history-name] PASS payment history identity overlay installed',flush=True)
-
-# BODYMIND_R127_HISTORY_CARD_NAMES_NAV
-# Fix two mobile payment UX defects without changing payment data:
-# 1) every historical payment card gets its own athlete name;
-# 2) bottom navigation highlights Pagamenti, not Presenze, on /pagamenti.
-core_r127=CORE.read_text(encoding='utf-8',errors='replace')
-if 'BODYMIND_R127_HISTORY_CARD_NAMES_NAV' not in core_r127:
-    dst=BACK/'core_pre_r127_history_nav.py'
-    if not dst.exists(): shutil.copy2(CORE,dst)
-    core_r127 += r'''
-
-# BODYMIND_R127_HISTORY_CARD_NAMES_NAV
-@app.after_request
-def _bodymind_r127_history_card_names_nav(resp):
-    try:
-        if request.method!='GET' or request.path!='/pagamenti' or int(getattr(resp,'status_code',200) or 200)!=200:
-            return resp
-        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
-            return resp
-        html=resp.get_data(as_text=True)
-        if 'BODYMIND_R127_HISTORY_SCRIPT' in html:
-            return resp
-
-        c=db(); c.row_factory=sqlite3.Row
-        try:
-            prow=[dict(x) for x in c.execute("""SELECT p.id AS payment_id,p.tesserato_id,
-                       t.nome,t.cognome
-                  FROM pagamenti p
-                  LEFT JOIN tesserati t ON t.id=p.tesserato_id
-                  ORDER BY p.id""").fetchall()]
-            arows=[dict(x) for x in c.execute("SELECT id,nome,cognome FROM tesserati").fetchall()]
-        finally:
-            c.close()
-
-        pay_names={}
-        for r in prow:
-            pid=int(r.get('payment_id') or 0)
-            tid=int(r.get('tesserato_id') or 0)
-            nm=((str(r.get('cognome') or '')+' '+str(r.get('nome') or '')).strip()
-                or ('Tesserata #'+str(tid)))
-            if pid>0: pay_names[str(pid)]=nm
-        athlete_names={}
-        for r in arows:
-            tid=int(r.get('id') or 0)
-            nm=(str(r.get('cognome') or '')+' '+str(r.get('nome') or '')).strip()
-            if tid>0 and nm: athlete_names[str(tid)]=nm
-
-        _json=__import__('json')
-        pjson=_json.dumps(pay_names,ensure_ascii=False)
-        ajson=_json.dumps(athlete_names,ensure_ascii=False)
-
-        addon=f"""<!-- BODYMIND_R127_HISTORY_SCRIPT -->
-        <style>
-        .r127-history-name{{font-size:20px;font-weight:950;line-height:1.15;color:#f8fafc;margin:8px 0 12px;letter-spacing:.01em}}
-        .r127-nav-current{{background:linear-gradient(180deg,rgba(14,165,233,.24),rgba(3,105,161,.20))!important;border-color:rgba(56,189,248,.62)!important;color:#fff!important;box-shadow:inset 0 0 0 1px rgba(56,189,248,.18)!important}}
-        .r127-nav-clear{{background:transparent!important;border-color:transparent!important;box-shadow:none!important}}
-        /* BODYMIND_R129_PAYMENT_MOBILE_VISIBILITY
-           The payment HTML already contains the athlete name inside the first
-           table cell. Legacy responsive CSS was hiding the strong/b tag while
-           leaving badges visible. Force the actual identity to remain visible. */
-        @media(max-width:900px){{
-          body .card table tr td:first-child>strong,
-          body .card table tr td:first-child>b,
-          body .table-wrap table tr td:first-child>strong,
-          body .table-wrap table tr td:first-child>b{{
-            display:block!important;visibility:visible!important;opacity:1!important;
-            position:static!important;clip:auto!important;clip-path:none!important;
-            width:auto!important;height:auto!important;overflow:visible!important;
-            font-size:18px!important;line-height:1.2!important;font-weight:950!important;
-            color:#f8fafc!important;margin:0 0 9px!important;text-indent:0!important;
-          }}
-          nav.nav a[href^="/presenze"],
-          .nav a[href^="/presenze"],
-          [class*="bottom"] a[href^="/presenze"]{{
-            background:transparent!important;border-color:transparent!important;
-            box-shadow:none!important;color:#dbe7f5!important;
-          }}
-          nav.nav a[href^="/pagamenti"],
-          .nav a[href^="/pagamenti"],
-          [class*="bottom"] a[href^="/pagamenti"]{{
-            background:linear-gradient(180deg,rgba(14,165,233,.28),rgba(3,105,161,.22))!important;
-            border:1px solid rgba(56,189,248,.68)!important;color:#fff!important;
-            box-shadow:inset 0 0 0 1px rgba(56,189,248,.16)!important;
-          }}
-        }}
-        @media(max-width:600px){{.r127-history-name{{font-size:18px}}}}
-        </style>
-        <script>
-        (function(){{
-          var paymentNames={pjson};
-          var athleteNames={ajson};
-
-          function exactText(el,txt){{
-            return ((el.textContent||'').replace(/\s+/g,' ').trim().toUpperCase()===txt);
-          }}
-          function findCard(label){{
-            var p=label.parentElement,depth=0;
-            while(p && depth<9){{
-              var tx=(p.innerText||'').toUpperCase();
-              var causes=(tx.match(/CAUSALE/g)||[]).length;
-              if(tx.indexOf('CAUSALE')>=0 && tx.indexOf('IMPORTO')>=0 && tx.indexOf('DATA')>=0 && causes===1) return p;
-              p=p.parentElement; depth++;
-            }}
-            return label.parentElement;
-          }}
-          function numberFrom(v,patterns){{
-            v=String(v||'');
-            for(var i=0;i<patterns.length;i++){{var m=v.match(patterns[i]); if(m) return m[1];}}
-            return '';
-          }}
-          function identify(card){{
-            var el=card.querySelector('input[name="pagamento_id"],input[name="payment_id"],input[name="id"]');
-            if(el && el.value && paymentNames[String(el.value)]) return {{name:paymentNames[String(el.value)],kind:'payment'}};
-            var tid=card.querySelector('input[name="tesserato_id"]');
-            if(tid && tid.value && athleteNames[String(tid.value)]) return {{name:athleteNames[String(tid.value)],kind:'athlete'}};
-            var nodes=card.querySelectorAll('a[href],form[action],[data-payment-id],[data-id],[data-tesserato-id]');
-            for(var i=0;i<nodes.length;i++){{
-              var n=nodes[i];
-              var raw=(n.getAttribute('href')||'')+' '+(n.getAttribute('action')||'')+' '+(n.getAttribute('data-payment-id')||'')+' '+(n.getAttribute('data-id')||'');
-              var pid=numberFrom(raw,[/(?:pagamento_id|payment_id|[?&]id)=([0-9]+)/i,/\/pagamenti\/(?:elimina|delete|promemoria|ricevuta)\/?([0-9]+)/i]);
-              if(pid && paymentNames[String(pid)]) return {{name:paymentNames[String(pid)],kind:'payment'}};
-              var rt=(n.getAttribute('data-tesserato-id')||'')+' '+raw;
-              var at=numberFrom(rt,[/(?:tesserato_id|tesserato)=([0-9]+)/i,/\/tesserati\/([0-9]+)/i,/\/mobile\/atleta\/([0-9]+)/i]);
-              if(at && athleteNames[String(at)]) return {{name:athleteNames[String(at)],kind:'athlete'}};
-            }}
-            return null;
-          }}
-
-          // Remove the old one-off R126 label that could appear only above the first record.
-          document.querySelectorAll('.r126-history-name').forEach(function(x){{x.remove();}});
-
-          var labels=[];
-          document.querySelectorAll('h1,h2,h3,h4,h5,h6,div,span,dt,th,strong').forEach(function(el){{
-            if(exactText(el,'NOME / STATO')) labels.push(el);
-          }});
-          var seen=[];
-          labels.forEach(function(label){{
-            var card=findCard(label);
-            if(!card || seen.indexOf(card)>=0) return;
-            seen.push(card);
-            var id=identify(card);
-            if(!id || !id.name) return;
-            if(card.querySelector('.r127-history-name')) return;
-            var name=document.createElement('div');
-            name.className='r127-history-name';
-            name.textContent=id.name;
-            label.insertAdjacentElement('afterend',name);
-          }});
-
-          // If a legacy card has no NOME / STATO label, still identify it from
-          // its own payment/tesserato id and put the name at the top of that card.
-          document.querySelectorAll('form[action],a[href]').forEach(function(node){{
-            var card=node.closest('.card,[class*="payment"],[class*="row"],article,section');
-            if(!card || card.querySelector('.r127-history-name')) return;
-            var tx=(card.innerText||'').toUpperCase();
-            if(tx.indexOf('CAUSALE')<0 || tx.indexOf('IMPORTO')<0) return;
-            var id=identify(card); if(!id || !id.name) return;
-            var name=document.createElement('div'); name.className='r127-history-name'; name.textContent=id.name;
-            card.insertBefore(name,card.firstChild);
-          }});
-
-          // Correct bottom-navigation active state on the payment page.
-          var navCandidates=document.querySelectorAll('nav a,nav button,[class*="bottom"] a,[class*="nav"] a');
-          navCandidates.forEach(function(el){{
-            var txt=(el.textContent||'').replace(/\s+/g,' ').trim().toLowerCase();
-            var href=(el.getAttribute&&el.getAttribute('href'))||'';
-            if(txt.indexOf('presenze')>=0 || href.indexOf('/presenze')===0){{
-              el.classList.remove('active','current','selected');
-              el.classList.add('r127-nav-clear');
-              el.removeAttribute('aria-current');
-            }}
-            if(txt.indexOf('pagamenti')>=0 || href.indexOf('/pagamenti')===0){{
-              el.classList.remove('r127-nav-clear');
-              el.classList.add('active','r127-nav-current');
-              el.setAttribute('aria-current','page');
-            }}
-          }});
-        }})();
-        </script>"""
-        html=html.replace('</body>',addon+'</body>',1) if '</body>' in html else html+addon
-        resp.set_data(html)
-    except Exception as exc:
-        print('[r127-history-nav-warning] '+repr(exc),flush=True)
-    return resp
-'''
-    CORE.write_text(core_r127,encoding='utf-8')
-    py_compile.compile(str(CORE),doraise=True)
-    print('[r127-history-nav] PASS per-card names + payment nav state installed',flush=True)
-
-# R129 upgrade existing R127 runtime: prior deployments already contain the
-# R127 marker, so update its CSS in-place before the fresh-process QA.
-_core_r129=CORE.read_text(encoding='utf-8',errors='replace')
-if False and 'BODYMIND_R127_HISTORY_CARD_NAMES_NAV' in _core_r129 and 'BODYMIND_R129_PAYMENT_MOBILE_VISIBILITY' not in _core_r129:
-    _old=""".r127-history-name{font-size:20px;font-weight:950;line-height:1.15;color:#f8fafc;margin:8px 0 12px;letter-spacing:.01em}
-        .r127-nav-current{background:linear-gradient(180deg,rgba(16,185,129,.26),rgba(5,150,105,.18))!important;border-color:rgba(52,211,153,.5)!important;color:#fff!important}
-        .r127-nav-clear{background:transparent!important}
-        @media(max-width:600px){.r127-history-name{font-size:18px}}"""
-    _new=""".r127-history-name{font-size:20px;font-weight:950;line-height:1.15;color:#f8fafc;margin:8px 0 12px;letter-spacing:.01em}
-        .r127-nav-current{background:linear-gradient(180deg,rgba(14,165,233,.24),rgba(3,105,161,.20))!important;border-color:rgba(56,189,248,.62)!important;color:#fff!important;box-shadow:inset 0 0 0 1px rgba(56,189,248,.18)!important}
-        .r127-nav-clear{background:transparent!important;border-color:transparent!important;box-shadow:none!important}
-        /* BODYMIND_R129_PAYMENT_MOBILE_VISIBILITY */
-        @media(max-width:900px){
-          body .card table tr td:first-child>strong,
-          body .card table tr td:first-child>b,
-          body .table-wrap table tr td:first-child>strong,
-          body .table-wrap table tr td:first-child>b{
-            display:block!important;visibility:visible!important;opacity:1!important;
-            position:static!important;clip:auto!important;clip-path:none!important;
-            width:auto!important;height:auto!important;overflow:visible!important;
-            font-size:18px!important;line-height:1.2!important;font-weight:950!important;
-            color:#f8fafc!important;margin:0 0 9px!important;text-indent:0!important;
-          }
-          nav.nav a[href^="/presenze"],.nav a[href^="/presenze"],[class*="bottom"] a[href^="/presenze"]{
-            background:transparent!important;border-color:transparent!important;box-shadow:none!important;color:#dbe7f5!important;
-          }
-          nav.nav a[href^="/pagamenti"],.nav a[href^="/pagamenti"],[class*="bottom"] a[href^="/pagamenti"]{
-            background:linear-gradient(180deg,rgba(14,165,233,.28),rgba(3,105,161,.22))!important;
-            border:1px solid rgba(56,189,248,.68)!important;color:#fff!important;
-            box-shadow:inset 0 0 0 1px rgba(56,189,248,.16)!important;
-          }
-        }
-        @media(max-width:600px){.r127-history-name{font-size:18px}}"""
-    if _old in _core_r129:
-        _core_r129=_core_r129.replace(_old,_new,1)
-    else:
-        # Fallback: inject the override immediately before the R127 closing style.
-        _needle="@media(max-width:600px){.r127-history-name{font-size:18px}}"
-        if _needle in _core_r129:
-            _core_r129=_core_r129.replace(_needle,_new.splitlines()[-1],1)
-            _core_r129=_core_r129.replace("</style>","""/* BODYMIND_R129_PAYMENT_MOBILE_VISIBILITY */
-        @media(max-width:900px){
-          body .card table tr td:first-child>strong,body .card table tr td:first-child>b,
-          body .table-wrap table tr td:first-child>strong,body .table-wrap table tr td:first-child>b{
-            display:block!important;visibility:visible!important;opacity:1!important;position:static!important;
-            clip:auto!important;clip-path:none!important;width:auto!important;height:auto!important;overflow:visible!important;
-            font-size:18px!important;line-height:1.2!important;font-weight:950!important;color:#f8fafc!important;margin:0 0 9px!important;text-indent:0!important}
-          nav.nav a[href^="/presenze"],.nav a[href^="/presenze"],[class*="bottom"] a[href^="/presenze"]{
-            background:transparent!important;border-color:transparent!important;box-shadow:none!important;color:#dbe7f5!important}
-          nav.nav a[href^="/pagamenti"],.nav a[href^="/pagamenti"],[class*="bottom"] a[href^="/pagamenti"]{
-            background:linear-gradient(180deg,rgba(14,165,233,.28),rgba(3,105,161,.22))!important;
-            border:1px solid rgba(56,189,248,.68)!important;color:#fff!important;box-shadow:inset 0 0 0 1px rgba(56,189,248,.16)!important}
-        }</style>""",1)
-        else:
-            raise RuntimeError('R129 existing R127 CSS anchor missing')
-    CORE.write_text(_core_r129,encoding='utf-8')
-    py_compile.compile(str(CORE),doraise=True)
-    print('[r129-upgrade] PASS existing R127 runtime CSS upgraded',flush=True)
-else:
-    print('[r129-upgrade] already present or R127 not installed yet',flush=True)
-
-# BODYMIND_R130_PAYMENT_MOBILE_HARD_FIX
-# Independent hard fix: do not depend on any prior R126/R127 markup migration.
-core_r130=CORE.read_text(encoding='utf-8',errors='replace')
-if 'BODYMIND_R130_PAYMENT_MOBILE_HARD_FIX' not in core_r130:
-    core_r130 += r'''
-
-# BODYMIND_R130_PAYMENT_MOBILE_HARD_FIX
-@app.after_request
-def _bodymind_r130_payment_mobile_hard_fix(resp):
-    try:
-        if request.method!='GET' or request.path!='/pagamenti' or int(getattr(resp,'status_code',200) or 200)!=200:
-            return resp
-        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
-            return resp
-        html=resp.get_data(as_text=True)
-        css="""<style id='bodymind-r130-payment-fix'>
-        @media(max-width:900px){
-          /* Historical payments already contain the athlete identity in the first
-             td. Legacy responsive CSS hid only the strong/b name and left badges. */
-          .card table tr td:first-child>strong,
-          .card table tr td:first-child>b,
-          .table-wrap table tr td:first-child>strong,
-          .table-wrap table tr td:first-child>b{
-            display:block!important;
-            visibility:visible!important;
-            opacity:1!important;
-            position:static!important;
-            transform:none!important;
-            clip:auto!important;
-            clip-path:none!important;
-            width:auto!important;
-            max-width:none!important;
-            height:auto!important;
-            max-height:none!important;
-            overflow:visible!important;
-            white-space:normal!important;
-            font-size:18px!important;
-            line-height:1.2!important;
-            font-weight:950!important;
-            color:#f8fafc!important;
-            margin:0 0 9px!important;
-            text-indent:0!important;
-          }
-
-          /* On /pagamenti the bottom navigation must visually select Pagamenti,
-             never Presenze. These selectors override older page/theme rules. */
-          nav.nav a[href^="/presenze"],
-          .nav a[href^="/presenze"],
-          [class*="bottom"] a[href^="/presenze"]{
-            background:transparent!important;
-            background-image:none!important;
-            border-color:transparent!important;
-            box-shadow:none!important;
-            color:#dbe7f5!important;
-          }
-          nav.nav a[href^="/pagamenti"],
-          .nav a[href^="/pagamenti"],
-          [class*="bottom"] a[href^="/pagamenti"]{
-            background:linear-gradient(180deg,rgba(14,165,233,.30),rgba(3,105,161,.24))!important;
-            border:1px solid rgba(56,189,248,.70)!important;
-            box-shadow:inset 0 0 0 1px rgba(56,189,248,.18)!important;
-            color:#fff!important;
-          }
-        }</style>"""
-        if "id='bodymind-r130-payment-fix'" not in html:
-            html=html.replace('</head>',css+'</head>',1) if '</head>' in html else css+html
-        resp.set_data(html)
-    except Exception as exc:
-        print('[r130-payment-fix-warning] '+repr(exc),flush=True)
-    return resp
-'''
-    CORE.write_text(core_r130,encoding='utf-8')
-    py_compile.compile(str(CORE),doraise=True)
-    print('[r130-payment-fix] PASS mobile historical names/nav hard fix installed',flush=True)
-else:
-    print('[r130-payment-fix] already present',flush=True)
-
-# BODYMIND_R131_HISTORY_NAME_VISIBLE_DIV
-# The history table already contains the correct name in <strong>, but the
-# legacy mobile table CSS hides that element. Duplicate the text into a plain
-# div inside EACH history row server-side, so mobile cannot lose the identity.
-core_r131=CORE.read_text(encoding='utf-8',errors='replace')
-if 'BODYMIND_R131_HISTORY_NAME_VISIBLE_DIV' not in core_r131:
-    core_r131 += r'''
-
-# BODYMIND_R131_HISTORY_NAME_VISIBLE_DIV
-@app.after_request
-def _bodymind_r131_history_name_visible_div(resp):
-    try:
-        if request.method!='GET' or request.path!='/pagamenti' or int(getattr(resp,'status_code',200) or 200)!=200:
-            return resp
-        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
-            return resp
-        html=resp.get_data(as_text=True)
-        if 'Elenco pagamenti' not in html:
-            return resp
-
-        import re as _r131_re
-        head,sep,tail=html.partition('Elenco pagamenti')
-        # Only touch the historical payments area. Each row already has the
-        # authoritative athlete name as the first-cell <strong> value.
-        pat=_r131_re.compile(r"(?is)(<tr[^>]*class=['\"][^'\"]*table-row-ok[^'\"]*['\"][^>]*>\s*<td>\s*)(<strong>(.*?)</strong>)")
-        def _add_name(m):
-            raw=m.group(3)
-            plain=_r131_re.sub(r'<[^>]+>','',raw).strip()
-            if not plain:
-                return m.group(0)
-            return m.group(1)+"<div class='r131-history-name'>"+raw+"</div>"+m.group(2)
-        tail,count=pat.subn(_add_name,tail)
-        html=head+sep+tail
-        if count:
-            css="""<style id='bodymind-r131-history-name'>
-            .r131-history-name{
-              display:block!important;visibility:visible!important;opacity:1!important;
-              position:static!important;clip:auto!important;clip-path:none!important;
-              width:auto!important;height:auto!important;overflow:visible!important;
-              color:#f8fafc!important;font-size:20px!important;line-height:1.15!important;
-              font-weight:950!important;letter-spacing:.01em!important;margin:8px 0 12px!important;
-              text-transform:uppercase!important;
-            }
-            @media(max-width:600px){.r131-history-name{font-size:18px!important}}
-            </style>"""
-            html=html.replace('</head>',css+'</head>',1) if '</head>' in html else css+html
-        resp.set_data(html)
-    except Exception as exc:
-        print('[r131-history-name-warning] '+repr(exc),flush=True)
-    return resp
-'''
-    CORE.write_text(core_r131,encoding='utf-8')
-    py_compile.compile(str(CORE),doraise=True)
-    print('[r131-history-name] PASS server-side visible name div installed',flush=True)
-else:
-    print('[r131-history-name] already present',flush=True)
-
 # BODYMIND_R133_PRESENCE_TABS_FIX
 # Safari-safe course-group switching with a distinct register for each group.
 core_r133=CORE.read_text(encoding='utf-8',errors='replace')
@@ -912,650 +347,11 @@ if 'BODYMIND_R133_PRESENCE_TABS_FIX' not in core_r133:
 else:
     print('[r133-presence] already present',flush=True)
 
-# Fresh import/UI gate.
-qa=r'''
-import sqlite3,sys
-sys.path.insert(0,"/data/top2_app")
-import app as _full
-from asd_app.core import app
-app.config["TESTING"]=True
-c=app.test_client()
-with c.session_transaction() as s:
-    s.update({"logged":True,"username":"admin","display_name":"R123 QA","role":"admin","tenant_slug":"default"})
-p=c.get("/pagamenti")
-a=c.get("/presenze",follow_redirects=False)
-b=c.get("/presenze-semplici?gruppo=pro")
-ph=p.get_data(as_text=True); bh=b.get_data(as_text=True)
-_group_pages={}
-for _g in ("base","kids","adult","pro"):
-    _rr=c.get("/presenze-semplici?gruppo="+_g)
-    _tx=_rr.get_data(as_text=True)
-    _group_pages[_g]=(_rr.status_code==200 and ("value='"+_g+"' class='r123-tab active'") in _tx and "r133-selected" in _tx)
-group_switch_ok=all(_group_pages.values())
-from asd_app.core import get_missing_iscrizione_rows,current_month_year
-_mm,_yy=current_month_year()
-_missing=[dict(x) for x in get_missing_iscrizione_rows(_yy,_mm)]
-_identity_ok=True
-if _missing:
-    _r=_missing[0]
-    _nm=((str(_r.get('cognome') or '')+' '+str(_r.get('nome') or '')).strip())
-    _tel=str(_r.get('telefono') or _r.get('telefono_genitore') or 'Telefono non indicato')
-    _identity_ok=bool(_nm and _nm in ph and _tel in ph)
-conn=sqlite3.connect("/data/tenants/default/asd.db",timeout=20)
-try:
-    integrity=str(conn.execute("PRAGMA integrity_check").fetchone()[0]); fk=len(conn.execute("PRAGMA foreign_key_check").fetchall())
-finally: conn.close()
-ath_count=conn2=None
-# direct list should include a known athlete regardless of legacy course assignment
-direct_ok=("BODYMIND_R123_PRESENZE_SIMPLE" in bh and "r123-athlete" in bh)
-premium_pay_ok=("BODYMIND_R125_PAYMENT_BOARD" in ph and "DA PAGARE" in ph and "PAGATO" in ph)
-history_labels=ph.upper().count("NOME / STATO")
-history_names=ph.count("r126-history-name")
-history_name_ok=(history_labels==0 or history_names>=history_labels)
-r127_script_ok=("BODYMIND_R127_HISTORY_SCRIPT" in ph and "r127-nav-current" in ph and "paymentNames=" in ph)
-r129_css_ok=("bodymind-r130-payment-fix" in ph and 'a[href^="/pagamenti"]' in ph and 'td:first-child>strong' in ph)
-r131_history_ok=("r131-history-name" in ph)
-ok=(p.status_code==200 and group_switch_ok and "BODYMIND_R123_PAYMENT_MOBILE" in ph and premium_pay_ok and r127_script_ok and r129_css_ok and r131_history_ok and _identity_ok and a.status_code in (301,302,307,308) and "/presenze-semplici" in str(a.headers.get("Location","")) and b.status_code==200 and direct_ok and "Giornata operativa" not in bh and all(x in bh for x in ("Base","Kids","Adult","Pro / Agoniste")) and integrity.lower()=="ok" and fk==0)
-print("[r123-selftest] group_switch_ok=%s groups=%s status_payment=%s premium_pay_ok=%s legacy_history_name_ok=%s r127_script_ok=%s r129_css_ok=%s r131_history_ok=%s identity_ok=%s presence_redirect=%s simple=%s db=%s fk=%s ok=%s"%(group_switch_ok,_group_pages,p.status_code,premium_pay_ok,history_name_ok,r127_script_ok,r129_css_ok,r131_history_ok,_identity_ok,a.status_code,b.status_code,integrity,fk,ok),flush=True)
-if not ok: raise RuntimeError("R123 QA failed")
-'''
-proc=subprocess.run([sys.executable,'-c',qa],capture_output=True,text=True,timeout=120)
-print((proc.stdout or '').strip(),flush=True)
-if proc.returncode!=0: raise RuntimeError('R123 child QA failed '+((proc.stderr or '')+(proc.stdout or ''))[-4000:])
-
-
-# BODYMIND_R123_PAYMENT_SPLIT_V2
-# Replace duplicate payment dashboards with one split secretary surface.
-_core_split=CORE.read_text(encoding='utf-8',errors='replace')
-if 'BODYMIND_R123_PAYMENT_SPLIT_V2' not in _core_split:
-    _core_split += r'''
-
-# BODYMIND_R123_PAYMENT_SPLIT_V2
-@app.after_request
-def _bodymind_r123_payment_split_v2(resp):
-    try:
-        if request.method!='GET' or request.path!='/pagamenti' or int(getattr(resp,'status_code',200) or 200)!=200:
-            return resp
-        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
-            return resp
-        html=resp.get_data(as_text=True)
-        if 'BODYMIND_R123_PAYMENT_SPLIT_V2_SURFACE' in html:
-            return resp
-
-        from datetime import date as _d
-        today=_d.today()
-        mese=parse_int(request.args.get('mese',today.month),today.month)
-        anno=parse_int(request.args.get('anno',today.year),today.year)
-        if mese<1 or mese>12: mese=today.month
-        if anno<2020 or anno>2100: anno=today.year
-        vista=(request.args.get('vista') or 'iscrizioni').strip().lower()
-        if vista not in ('iscrizioni','mensili','tutti'): vista='iscrizioni'
-        season=anno if mese>=7 else anno-1
-
-        c=db(); c.row_factory=sqlite3.Row
-        try:
-            tcols={str(x[1]) for x in c.execute('PRAGMA table_info(tesserati)').fetchall()}
-            athletes=[dict(x) for x in c.execute("SELECT * FROM tesserati WHERE COALESCE(attivo,1)=1 ORDER BY TRIM(cognome) COLLATE NOCASE,TRIM(nome) COLLATE NOCASE").fetchall()]
-            payments=[dict(x) for x in c.execute("SELECT * FROM pagamenti ORDER BY id DESC").fetchall()] if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='pagamenti'").fetchone() else []
-            quote_rows=[dict(x) for x in c.execute("SELECT * FROM quote_mensili WHERE mese=? AND anno=? ORDER BY id DESC",(mese,anno)).fetchall()] if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='quote_mensili'").fetchone() else []
-        finally:
-            try:c.close()
-            except Exception:pass
-
-        def _paid(p):
-            st=(str(p.get('stato') or '')+' '+str(p.get('online_status') or '')).lower()
-            if any(x in st for x in ('pending','attesa','cancel','annull','failed','fallit','refunded','rimbors')): return False
-            if any(x in st for x in ('paid','pagat','saldat','complet','incassat')): return True
-            try: amount=float(p.get('importo') or 0)
-            except Exception: amount=0
-            return bool(p.get('data') or p.get('paid_at')) and amount>0
-
-        enroll_pay={}
-        month_pay={}
-        all_paid=[]
-        for p in payments:
-            if not _paid(p): continue
-            tid=int(p.get('tesserato_id') or 0)
-            cause=str(p.get('causale') or '').strip().lower()
-            yr=int(p.get('anno') or 0)
-            mm=int(p.get('mese') or 0)
-            all_paid.append(p)
-            if cause in ('iscrizione','tesseramento') and yr in (season,season+1) and tid not in enroll_pay:
-                enroll_pay[tid]=p
-            if (cause=='mensile' or 'mensil' in cause or cause in ('quota','quota_mensile')) and mm==mese and yr==anno and tid not in month_pay:
-                month_pay[tid]=p
-
-        quote_paid={}
-        for q in quote_rows:
-            tid=int(q.get('tesserato_id') or 0)
-            st=str(q.get('stato') or '').lower()
-            if tid and any(x in st for x in ('pagat','saldat','paid','incassat','complet')) and tid not in quote_paid:
-                quote_paid[tid]=q
-
-        def _name(a):
-            return ((str(a.get('cognome') or '')+' '+str(a.get('nome') or '')).strip()) or ('Tesserata #'+str(int(a.get('id') or 0)))
-        def _money(v):
-            try:return ('€ %.2f' % float(v or 0)).replace('.',',')
-            except Exception:return ''
-        def _card(a,kind):
-            tid=int(a.get('id') or 0); name=e(_name(a)); phone=e(str(a.get('telefono') or a.get('telefono_genitore') or ''))
-            href='/pagamenti?tesserato_id='+str(tid)+'&mese='+str(mese)+'&anno='+str(anno)+'&vista='+kind
-            if kind=='iscrizioni':
-                p=enroll_pay.get(tid)
-                legacy=bool(int(a.get('iscrizione_pagata') or 0) if 'iscrizione_pagata' in a else 0) or bool(int(a.get('tesseramento_pagato') or 0) if 'tesseramento_pagato' in a else 0)
-                ok=bool(p or legacy)
-                detail=(_money(p.get('importo'))+' · '+str(p.get('data') or '')).strip(' ·') if p else ('Già registrata' if legacy else 'Da registrare')
-                badge='PAGATA' if ok else 'DA PAGARE'
-            else:
-                p=month_pay.get(tid); q=quote_paid.get(tid); ok=bool(p or q)
-                detail=(_money(p.get('importo'))+' · '+str(p.get('data') or '')).strip(' ·') if p else ((_money(q.get('importo_dovuto'))+' · già registrato').strip(' ·') if q else 'Da registrare')
-                badge='PAGATO' if ok else 'DA PAGARE'
-            cls='paid' if ok else 'due'
-            return "<a class='bmps-card "+cls+"' href='"+href+"'><div><b>"+name+"</b>"+("<small>"+phone+"</small>" if phone else "")+"</div><span><strong>"+badge+"</strong><small>"+e(detail)+"</small></span></a>"
-
-        if vista=='iscrizioni':
-            cards=''.join(_card(a,'iscrizioni') for a in athletes)
-            paid_n=sum(1 for a in athletes if int(a.get('id') or 0) in enroll_pay or bool(int(a.get('iscrizione_pagata') or 0) if 'iscrizione_pagata' in a else 0) or bool(int(a.get('tesseramento_pagato') or 0) if 'tesseramento_pagato' in a else 0))
-            title='Iscrizioni · stagione '+str(season)+'/'+str(season+1)
-        elif vista=='mensili':
-            cards=''.join(_card(a,'mensili') for a in athletes)
-            paid_n=sum(1 for a in athletes if int(a.get('id') or 0) in month_pay or int(a.get('id') or 0) in quote_paid)
-            names=['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
-            title='Mensili · '+names[mese]+' '+str(anno)
-        else:
-            rows=[]
-            byid={int(a.get('id') or 0):a for a in athletes}
-            for p in all_paid:
-                a=byid.get(int(p.get('tesserato_id') or 0),{})
-                cause=str(p.get('causale') or 'pagamento').strip().title()
-                rows.append("<div class='bmps-history'><b>"+e(_name(a))+"</b><span>"+e(cause)+"</span><strong>"+e(_money(p.get('importo')))+"</strong><small>"+e(str(p.get('data') or ''))+"</small></div>")
-            cards=''.join(rows) or "<div class='bmps-empty'>Nessun incasso canonico registrato.</div>"
-            paid_n=len(all_paid); title='Tutti gli incassi'
-
-        total=len(athletes)
-        query='&mese='+str(mese)+'&anno='+str(anno)
-        surface=f"""<!-- BODYMIND_R123_PAYMENT_SPLIT_V2_SURFACE -->
-        <section class='bmps'>
-          <div class='bmps-head'><div><span>PAGAMENTI BODYMIND</span><h2>{e(title)}</h2></div><div class='bmps-count'>{paid_n}{(' / '+str(total)) if vista!='tutti' else ''}</div></div>
-          <nav class='bmps-tabs'>
-            <a class='{'active' if vista=='iscrizioni' else ''}' href='/pagamenti?vista=iscrizioni{query}'>Iscrizioni</a>
-            <a class='{'active' if vista=='mensili' else ''}' href='/pagamenti?vista=mensili{query}'>Mensili</a>
-            <a class='{'active' if vista=='tutti' else ''}' href='/pagamenti?vista=tutti{query}'>Tutti</a>
-          </nav>
-          <div class='bmps-list'>{cards}</div>
-        </section>
-        <style id='bodymind-payment-split-v2'>
-        .r123-pay-box,.r125-board{{display:none!important}}
-        .bmps{{margin:12px 0 18px;padding:14px;border-radius:20px;background:#091524;border:1px solid rgba(148,163,184,.18);color:#f8fafc}}
-        .bmps-head{{display:flex;justify-content:space-between;align-items:center;gap:10px}}.bmps-head span{{font-size:10px;letter-spacing:.13em;font-weight:950;color:#7dd3fc}}.bmps-head h2{{margin:3px 0 0;font-size:22px}}.bmps-count{{font-size:22px;font-weight:950}}
-        .bmps-tabs{{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:13px 0}}.bmps-tabs a{{padding:11px 7px;border-radius:12px;background:#12243a;color:#cbd5e1!important;text-align:center;text-decoration:none;font-weight:900}}.bmps-tabs a.active{{background:#2563eb;color:white!important}}
-        .bmps-list{{display:grid;gap:8px}}.bmps-card{{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:12px 13px;border-radius:15px;text-decoration:none!important;color:white!important;border:1px solid transparent}}.bmps-card>div,.bmps-card>span{{display:grid;gap:3px}}.bmps-card>span{{justify-items:end;text-align:right}}.bmps-card small{{font-size:11px;color:#cbd5e1}}.bmps-card strong{{font-size:11px;letter-spacing:.05em}}.bmps-card.paid{{background:rgba(20,83,45,.78);border-color:rgba(74,222,128,.38)}}.bmps-card.due{{background:rgba(127,29,29,.72);border-color:rgba(248,113,113,.36)}}.bmps-history{{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:11px;border-radius:13px;background:#102238}}.bmps-history small{{grid-column:1/-1;color:#94a3b8}}.bmps-empty{{padding:14px;color:#cbd5e1}}
-        @media(max-width:600px){{.bmps{{padding:11px}}.bmps-head h2{{font-size:19px}}.bmps-card{{grid-template-columns:1fr}}.bmps-card>span{{justify-items:start;text-align:left}}.bmps-history{{grid-template-columns:1fr auto}}}}
-        </style>"""
-        marker="BODYMIND_R123_PAYMENT_MOBILE"
-        idx=html.find(marker)
-        if idx>=0:
-            pos=html.rfind('<section',0,idx)
-            html=html[:pos]+surface+html[pos:] if pos>=0 else surface+html
-        else:
-            html=html.replace('<main','<main',1)
-            bodypos=html.find('>')
-            html=html[:bodypos+1]+surface+html[bodypos+1:] if bodypos>=0 else surface+html
-        resp.set_data(html)
-    except Exception as exc:
-        print('[payment-split-v2-warning] '+repr(exc),flush=True)
-    return resp
-'''
-    CORE.write_text(_core_split,encoding='utf-8')
-    py_compile.compile(str(CORE),doraise=True)
-    print('[r123-payment-split-v2] PASS split Iscrizioni/Mensili/Tutti installed',flush=True)
-else:
-    print('[r123-payment-split-v2] already installed',flush=True)
-
-
-# BODYMIND_R123_PAYMENT_SPLIT_V3
-# Desktop-first payment semantics: enrollment is annual/seasonal; monthly is
-# strictly one calendar month at a time. Existing rows are preserved.
-_core_split_v3=CORE.read_text(encoding='utf-8',errors='replace')
-if 'BODYMIND_R123_PAYMENT_SPLIT_V3' not in _core_split_v3:
-    _core_split_v3 += r'''
-
-# BODYMIND_R123_PAYMENT_SPLIT_V3
-@app.after_request
-def _bodymind_r123_payment_split_v3(resp):
-    try:
-        if request.method!='GET' or request.path!='/pagamenti' or int(getattr(resp,'status_code',200) or 200)!=200:
-            return resp
-        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
-            return resp
-        html=resp.get_data(as_text=True)
-        if 'BODYMIND_R123_PAYMENT_SPLIT_V3_SURFACE' in html:
-            return resp
-
-        from datetime import date as _d
-        today=_d.today()
-        mese=parse_int(request.args.get('mese',today.month),today.month)
-        anno=parse_int(request.args.get('anno',today.year),today.year)
-        if mese<1 or mese>12: mese=today.month
-        if anno<2020 or anno>2100: anno=today.year
-        vista=(request.args.get('vista') or 'iscrizioni').strip().lower()
-        if vista not in ('iscrizioni','mensili','tutti'): vista='iscrizioni'
-        season_start=parse_int(request.args.get('stagione',anno if mese>=7 else anno-1),anno if mese>=7 else anno-1)
-
-        # Add a semantic header immediately before the V2 board, without
-        # altering the canonical payment POST route.
-        months=['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
-        month_opts=''.join("<option value='"+str(i)+"'"+(" selected" if i==mese else "")+">"+months[i]+"</option>" for i in range(1,13))
-        year_opts=''.join("<option value='"+str(y)+"'"+(" selected" if y==anno else "")+">"+str(y)+"</option>" for y in range(today.year-1,today.year+3))
-        season_opts=''.join("<option value='"+str(y)+"'"+(" selected" if y==season_start else "")+">"+str(y)+"/"+str(y+1)+"</option>" for y in range(today.year-2,today.year+3))
-
-        if vista=='iscrizioni':
-            expl=f"""<div class='bmps3-explain annual'>
-              <div><span>ISCRIZIONE ANNUALE</span><h3>Stagione {season_start}/{season_start+1}</h3>
-              <p>Una sola quota per stagione. Puoi incassarla ad agosto, settembre o in un altro mese: non diventa mai una quota mensile.</p></div>
-              <form method='get' class='bmps3-period'><input type='hidden' name='vista' value='iscrizioni'>
-                <label>Stagione<select name='stagione' onchange='this.form.submit()'>{season_opts}</select></label>
-                <label>Mese incasso<select name='mese'>{month_opts}</select></label>
-                <label>Anno incasso<select name='anno'>{year_opts}</select></label>
-                <button type='submit'>Applica</button>
-              </form>
-            </div>"""
-        elif vista=='mensili':
-            expl=f"""<div class='bmps3-explain monthly'>
-              <div><span>QUOTA MENSILE</span><h3>{months[mese]} {anno}</h3>
-              <p>Ogni mese è indipendente. Un pagamento di ottobre non copre novembre e non sostituisce l'iscrizione annuale.</p></div>
-              <form method='get' class='bmps3-period'><input type='hidden' name='vista' value='mensili'>
-                <label>Mese<select name='mese' onchange='this.form.submit()'>{month_opts}</select></label>
-                <label>Anno<select name='anno' onchange='this.form.submit()'>{year_opts}</select></label>
-              </form>
-            </div>"""
-        else:
-            expl="""<div class='bmps3-explain all'><div><span>STORICO INCASSI</span><h3>Tutti i pagamenti</h3><p>Elenco storico. La classificazione resta separata tra Iscrizione annuale e Mensile.</p></div></div>"""
-
-        anchor="<!-- BODYMIND_R123_PAYMENT_SPLIT_V2_SURFACE -->"
-        if anchor in html:
-            html=html.replace(anchor,"<!-- BODYMIND_R123_PAYMENT_SPLIT_V3_SURFACE -->"+expl+anchor,1)
-        else:
-            html=expl+html
-
-        # Force the existing payment form to the active semantic mode. This
-        # prevents monthly registrations from accidentally being saved with
-        # the legacy hidden causale=iscrizione.
-        js=f"""<script id='bodymind-payment-split-v3-js'>(function(){{
-          var vista={vista!r};
-          var mese={int(mese)}, anno={int(anno)}, stagione={int(season_start)};
-          function setField(form,name,value){{
-            var el=form.querySelector('[name=\"'+name+'\"]');
-            if(!el) return;
-            el.value=String(value);
-            try{{ el.dispatchEvent(new Event('change',{{bubbles:true}})); }}catch(e){{}}
-          }}
-          document.querySelectorAll('form').forEach(function(form){{
-            var cause=form.querySelector('input[name=\"causale\"],select[name=\"causale\"]');
-            if(!cause) return;
-            var txt=(form.innerText||'').toLowerCase();
-            var hasPaymentFields=form.querySelector('[name=\"tesserato_id\"],[name=\"importo\"]');
-            if(!hasPaymentFields && txt.indexOf('importo')<0) return;
-            var oldBadge=form.querySelector('.bmps4-mode');
-            if(oldBadge) oldBadge.remove();
-            var badge=document.createElement('div');
-            badge.className='bmps4-mode';
-            if(vista==='mensili'){{
-              cause.value='mensile';
-              setField(form,'mese',mese); setField(form,'anno',anno);
-              badge.innerHTML='<b>Stai registrando: MENSILE</b><span>'+String(mese).padStart(2,'0')+'/'+anno+' · questa quota vale solo per questo mese</span>';
-            }} else if(vista==='iscrizioni'){{
-              cause.value='iscrizione';
-              setField(form,'mese',mese);
-              var payYear=(mese>=7)?stagione:(stagione+1);
-              setField(form,'anno',payYear);
-              badge.innerHTML='<b>Stai registrando: ISCRIZIONE ANNUALE</b><span>Stagione '+stagione+'/'+(stagione+1)+' · mese incasso '+String(mese).padStart(2,'0')+'/'+payYear+'</span>';
-            }} else {{
-              return;
-            }}
-            var first=form.firstElementChild;
-            if(first) form.insertBefore(badge,first); else form.appendChild(badge);
-            try{{
-              cause.setAttribute('data-bodymind-locked-causale','1');
-              if(cause.tagName==='SELECT') cause.style.pointerEvents='none';
-              cause.setAttribute('aria-readonly','true');
-            }}catch(e){{}}
-          }});
-        }})();</script>"""
-        html=html.replace('</body>',js+'</body>',1) if '</body>' in html else html+js
-
-        css="""<style id='bodymind-payment-split-v3-css'>
-        .bmps3-explain{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px;align-items:center;margin:14px 0 12px;padding:20px 22px;border-radius:20px;color:#f8fafc;border:1px solid rgba(148,163,184,.18);box-shadow:0 18px 50px rgba(0,0,0,.18)}
-        .bmps3-explain.annual{background:linear-gradient(135deg,#10233a,#16324d)}
-        .bmps3-explain.monthly{background:linear-gradient(135deg,#122c24,#174733)}
-        .bmps3-explain.all{background:linear-gradient(135deg,#211a38,#322653)}
-        .bmps3-explain span{display:block;font-size:11px;font-weight:950;letter-spacing:.14em;color:#93c5fd}.bmps3-explain h3{font-size:26px;margin:4px 0 5px}.bmps3-explain p{margin:0;max-width:780px;color:#cbd5e1;line-height:1.5}
-        .bmps3-period{display:flex;gap:8px;align-items:end;flex-wrap:wrap;justify-content:flex-end}.bmps3-period label{display:grid;gap:4px;font-size:11px;font-weight:900;color:#cbd5e1}.bmps3-period select,.bmps3-period button{min-height:42px;border-radius:11px;border:1px solid rgba(148,163,184,.28);background:#071426;color:#fff;padding:8px 10px;font-weight:800}.bmps3-period button{background:#2563eb;border-color:#60a5fa;cursor:pointer}.bmps4-mode{grid-column:1/-1;display:grid;gap:3px;margin:0 0 10px;padding:11px 13px;border-radius:12px;background:#071426;border:1px solid rgba(96,165,250,.35)}.bmps4-mode b{font-size:12px;letter-spacing:.04em;color:#fff}.bmps4-mode span{font-size:11px;color:#bfdbfe}
-        @media(min-width:901px){.bmps{padding:20px!important}.bmps-head h2{font-size:28px!important}.bmps-tabs{max-width:680px}.bmps-card{padding:15px 17px!important}.bmps-card b{font-size:15px}}
-        @media(max-width:900px){.bmps3-explain{grid-template-columns:1fr;padding:14px}.bmps3-period{justify-content:flex-start}.bmps3-explain h3{font-size:21px}}
-        </style>"""
-        html=html.replace('</head>',css+'</head>',1) if '</head>' in html else css+html
-        resp.set_data(html)
-    except Exception as exc:
-        print('[payment-split-v3-warning] '+repr(exc),flush=True)
-    return resp
-'''
-    CORE.write_text(_core_split_v3,encoding='utf-8')
-    py_compile.compile(str(CORE),doraise=True)
-    print('[r123-payment-split-v3] PASS annual-enrollment monthly-period form-forcing desktop-clarity',flush=True)
-else:
-    print('[r123-payment-split-v3] already installed',flush=True)
-
-# BODYMIND_R123_PAYMENT_FORM_CLARITY_V4
-print('[r123-payment-form-clarity-v4] PASS explicit annual/monthly registration mode',flush=True)
-
-
-# BODYMIND_R123_CANONICAL_PAYMENT_MODULE_V5
-# Final convergence: one operational payment module, two modes only.
-# Disable old V2/V3 renderers in persisted core before app import, then install
-# one canonical surface. Historical rows stay untouched.
-_core_v5=CORE.read_text(encoding='utf-8',errors='replace')
-_changed_v5=False
-for _old in (
-    "@app.after_request\ndef _bodymind_r123_payment_split_v2(resp):",
-    "@app.after_request\ndef _bodymind_r123_payment_split_v3(resp):",
-):
-    if _old in _core_v5:
-        _core_v5=_core_v5.replace(_old,_old.replace("@app.after_request\n",""),1)
-        _changed_v5=True
-
-if 'BODYMIND_R123_CANONICAL_PAYMENT_MODULE_V5' not in _core_v5:
-    _core_v5 += r'''
-
-# BODYMIND_R123_CANONICAL_PAYMENT_MODULE_V5
-@app.after_request
-def _bodymind_r123_canonical_payment_module_v5(resp):
-    try:
-        if request.method!='GET' or request.path!='/pagamenti' or int(getattr(resp,'status_code',200) or 200)!=200:
-            return resp
-        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
-            return resp
-        html=resp.get_data(as_text=True)
-        from datetime import date as _d
-        today=_d.today()
-        mese=parse_int(request.args.get('mese',today.month),today.month)
-        anno=parse_int(request.args.get('anno',today.year),today.year)
-        if mese<1 or mese>12: mese=today.month
-        if anno<2020 or anno>2100: anno=today.year
-        vista=(request.args.get('vista') or 'iscrizioni').strip().lower()
-        if vista not in ('iscrizioni','mensili'): vista='iscrizioni'
-        season=parse_int(request.args.get('stagione',anno if mese>=7 else anno-1),anno if mese>=7 else anno-1)
-        selected_tid=parse_int(request.args.get('tesserato_id',0),0)
-
-        c=db(); c.row_factory=sqlite3.Row
-        try:
-            athletes=[dict(x) for x in c.execute(
-                "SELECT * FROM tesserati WHERE COALESCE(attivo,1)=1 ORDER BY TRIM(cognome) COLLATE NOCASE,TRIM(nome) COLLATE NOCASE"
-            ).fetchall()]
-            payments=[dict(x) for x in c.execute("SELECT * FROM pagamenti ORDER BY id DESC").fetchall()] if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='pagamenti'").fetchone() else []
-            qrows=[dict(x) for x in c.execute("SELECT * FROM quote_mensili WHERE mese=? AND anno=? ORDER BY id DESC",(mese,anno)).fetchall()] if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='quote_mensili'").fetchone() else []
-        finally:
-            try:c.close()
-            except Exception:pass
-
-        def _paid(p):
-            st=(str(p.get('stato') or '')+' '+str(p.get('online_status') or '')).lower()
-            if any(x in st for x in ('pending','attesa','cancel','annull','failed','fallit','refunded','rimbors')): return False
-            if any(x in st for x in ('paid','pagat','saldat','complet','incassat')): return True
-            try: amount=float(p.get('importo') or 0)
-            except Exception: amount=0
-            return bool(p.get('data') or p.get('paid_at')) and amount>0
-
-        enroll={}; monthly={}
-        for p in payments:
-            if not _paid(p): continue
-            tid=int(p.get('tesserato_id') or 0)
-            cause=str(p.get('causale') or '').strip().lower()
-            pm=int(p.get('mese') or 0); py=int(p.get('anno') or 0)
-            if (cause in ('iscrizione','tesseramento') or 'iscrizion' in cause) and py in (season,season+1) and tid not in enroll:
-                enroll[tid]=p
-            if (cause=='mensile' or 'mensil' in cause or cause in ('quota','quota_mensile')) and pm==mese and py==anno and tid not in monthly:
-                monthly[tid]=p
-        qpaid=set()
-        for q in qrows:
-            st=str(q.get('stato') or '').lower()
-            if any(x in st for x in ('pagat','saldat','paid','incassat','complet')):
-                qpaid.add(int(q.get('tesserato_id') or 0))
-
-        months=['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
-        def _name(a):
-            return ((str(a.get('cognome') or '')+' '+str(a.get('nome') or '')).strip()) or ('Tesserata #'+str(int(a.get('id') or 0)))
-        def _money(v):
-            try:return ('€ %.2f' % float(v or 0)).replace('.',',')
-            except Exception:return ''
-
-        cards=[]
-        paid_n=0
-        for a in athletes:
-            tid=int(a.get('id') or 0)
-            if selected_tid and tid!=selected_tid: continue
-            ep=enroll.get(tid)
-            elegacy=bool(int(a.get('iscrizione_pagata') or 0)) if 'iscrizione_pagata' in a else False
-            elegacy=elegacy or (bool(int(a.get('tesseramento_pagato') or 0)) if 'tesseramento_pagato' in a else False)
-            enroll_ok=bool(ep or elegacy)
-            mp=monthly.get(tid)
-            month_ok=bool(mp or tid in qpaid)
-
-            if vista=='iscrizioni':
-                ok=enroll_ok
-                detail=(_money(ep.get('importo'))+' · '+str(ep.get('data') or '')).strip(' ·') if ep else ('Già registrata' if elegacy else 'Iscrizione da registrare')
-            else:
-                ok=month_ok
-                detail=(_money(mp.get('importo'))+' · '+str(mp.get('data') or '')).strip(' ·') if mp else ('Già registrato' if tid in qpaid else ('Mensile '+months[mese]+' da registrare'))
-            if ok: paid_n+=1
-
-            enroll_href=f"/pagamenti?vista=iscrizioni&stagione={season}&mese={mese}&anno={anno}&tesserato_id={tid}&azione=registra"
-            monthly_href=f"/pagamenti?vista=mensili&mese={mese}&anno={anno}&tesserato_id={tid}&azione=registra"
-            actions=(
-                "<a class='bmpv5-act "+("done" if enroll_ok else "primary")+"' href='"+enroll_href+"'>"+("Iscrizione ✓" if enroll_ok else "Registra iscrizione")+"</a>"
-                +"<a class='bmpv5-act "+("done" if month_ok else "secondary")+"' href='"+monthly_href+"'>"+(("Mensile "+months[mese]+" ✓") if month_ok else ("Registra mensile "+months[mese]))+"</a>"
-            )
-            cards.append("<div class='bmpv5-card "+("paid" if ok else "due")+"'><div class='bmpv5-person'><b>"+e(_name(a))+"</b><small>"+e(detail)+"</small></div><strong>"+("PAGATO" if ok else "DA PAGARE")+"</strong><div class='bmpv5-actions'>"+actions+"</div></div>")
-
-        total_visible=len(cards)
-        mode_title=("Iscrizione · stagione "+str(season)+"/"+str(season+1)) if vista=='iscrizioni' else ("Mensile · "+months[mese]+" "+str(anno))
-        selector=""
-        if vista=='iscrizioni':
-            selector=f"""<form class='bmpv5-period' method='get'>
-              <input type='hidden' name='vista' value='iscrizioni'>
-              <label>Stagione<input name='stagione' type='number' value='{season}' min='2020' max='2100'></label>
-              <label>Mese incasso<select name='mese'>{''.join("<option value='"+str(i)+"'"+(" selected" if i==mese else "")+">"+months[i]+"</option>" for i in range(1,13))}</select></label>
-              <label>Anno<input name='anno' type='number' value='{anno}' min='2020' max='2100'></label>
-              <button>Mostra</button>
-            </form>"""
-        else:
-            selector=f"""<form class='bmpv5-period' method='get'>
-              <input type='hidden' name='vista' value='mensili'>
-              <label>Mese<select name='mese'>{''.join("<option value='"+str(i)+"'"+(" selected" if i==mese else "")+">"+months[i]+"</option>" for i in range(1,13))}</select></label>
-              <label>Anno<input name='anno' type='number' value='{anno}' min='2020' max='2100'></label>
-              <button>Mostra</button>
-            </form>"""
-
-        surface=f"""<!-- BODYMIND_R123_CANONICAL_PAYMENT_MODULE_V5 -->
-        <section class='bmpv5'>
-          <div class='bmpv5-head'>
-            <div><span>PAGAMENTI BODYMIND</span><h1>{e(mode_title)}</h1><p>Un solo modulo. Gli stessi dati valgono ovunque.</p></div>
-            <div class='bmpv5-count'>{paid_n}/{total_visible}</div>
-          </div>
-          <nav class='bmpv5-tabs'>
-            <a class='{'active' if vista=='iscrizioni' else ''}' href='/pagamenti?vista=iscrizioni&stagione={season}&mese={mese}&anno={anno}'>ISCRIZIONE</a>
-            <a class='{'active' if vista=='mensili' else ''}' href='/pagamenti?vista=mensili&mese={mese}&anno={anno}'>MENSILE</a>
-          </nav>
-          {selector}
-          {("<div class='bmpv5-entry' id='bmpv5Entry'><div class='bmpv5-entry-head'><b>REGISTRA "+("ISCRIZIONE" if vista=="iscrizioni" else "MENSILE "+months[mese].upper())+"</b><span>Completa importo, metodo e data, poi salva.</span></div><div id='bmpv5EntrySlot'></div></div>" if selected_tid and (request.args.get('azione') or '')=='registra' else "")}
-          <div class='bmpv5-list'>{''.join(cards) if cards else "<div class='bmpv5-empty'>Nessuna tesserata trovata.</div>"}</div>
-        </section>
-        <style id='bodymind-payment-module-v5'>
-        /* Hide every superseded payment dashboard/surface; keep real POST forms/history available below. */
-        .r123-pay-box,.r125-board,.bmps,.bmps3-explain{{display:none!important}}
-        .bmpv5{{margin:14px 0 18px;padding:20px;border-radius:22px;background:#091728;border:1px solid rgba(96,165,250,.24);color:#f8fafc}}
-        .bmpv5-head{{display:flex;justify-content:space-between;gap:16px;align-items:center}}.bmpv5-head span{{font-size:10px;letter-spacing:.14em;font-weight:950;color:#7dd3fc}}.bmpv5-head h1{{margin:4px 0;font-size:28px}}.bmpv5-head p{{margin:0;color:#b7c6d9}}.bmpv5-count{{font-size:26px;font-weight:950}}
-        .bmpv5-tabs{{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}}.bmpv5-tabs a{{padding:14px;border-radius:14px;background:#10243b;color:#cbd5e1!important;text-decoration:none;text-align:center;font-weight:950}}.bmpv5-tabs a.active{{background:#2563eb;color:white!important}}
-        .bmpv5-period{{display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin-bottom:12px;padding:11px;border-radius:14px;background:#0c2035}}.bmpv5-period label{{display:grid;gap:4px;font-size:11px;font-weight:900;color:#cbd5e1}}.bmpv5-period input,.bmpv5-period select,.bmpv5-period button{{min-height:42px;border-radius:10px;border:1px solid rgba(148,163,184,.25);background:#06111f;color:#fff;padding:8px 10px}}.bmpv5-period button{{background:#2563eb;font-weight:900}}
-        .bmpv5-entry{{margin:0 0 14px;padding:14px;border-radius:16px;background:#071426;border:1px solid rgba(96,165,250,.42);box-shadow:0 10px 30px rgba(2,6,23,.28)}}.bmpv5-entry-head{{display:grid;gap:3px;margin-bottom:10px}}.bmpv5-entry-head b{{font-size:13px;letter-spacing:.05em;color:#fff}}.bmpv5-entry-head span{{font-size:12px;color:#bfdbfe}}#bmpv5EntrySlot>form{{margin:0!important;max-width:none!important;width:100%!important;display:block!important;visibility:visible!important;opacity:1!important}}#bmpv5EntrySlot form [type=submit],#bmpv5EntrySlot form button[type=submit]{{min-height:44px!important;background:#2563eb!important;color:#fff!important;font-weight:950!important}}
-        .bmpv5-list{{display:grid;gap:8px}}.bmpv5-card{{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 14px;align-items:center;padding:13px 15px;border-radius:14px;color:#fff;border:1px solid transparent}}.bmpv5-person{{display:grid;gap:3px}}.bmpv5-card small{{color:#cbd5e1}}.bmpv5-card.paid{{background:rgba(20,83,45,.78);border-color:rgba(74,222,128,.35)}}.bmpv5-card.due{{background:rgba(127,29,29,.70);border-color:rgba(248,113,113,.32)}}.bmpv5-card>strong{{font-size:11px}}.bmpv5-actions{{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap}}.bmpv5-act{{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:9px 12px;border-radius:11px;text-decoration:none!important;font-size:12px;font-weight:950}}.bmpv5-act.primary{{background:#2563eb;color:#fff!important}}.bmpv5-act.secondary{{background:#0f766e;color:#fff!important}}.bmpv5-act.done{{background:rgba(15,23,42,.55);color:#d1fae5!important;border:1px solid rgba(74,222,128,.28)}}
-        @media(max-width:700px){{.bmpv5{{padding:13px}}.bmpv5-head{{align-items:flex-start}}.bmpv5-head h1{{font-size:21px}}.bmpv5-period{{display:grid;grid-template-columns:1fr 1fr}}.bmpv5-period button{{grid-column:1/-1}}.bmpv5-card{{grid-template-columns:1fr}}.bmpv5-actions{{display:grid;grid-template-columns:1fr}}}}
-        </style>
-        <script id='bodymind-payment-mode-v5'>(function(){{
-          var vista={vista!r}, mese={mese}, anno={anno}, stagione={season}, selectedTid={selected_tid};
-          document.querySelectorAll('form').forEach(function(form){{
-            var cause=form.querySelector('input[name="causale"],select[name="causale"]');
-            if(!cause) return;
-            var has=form.querySelector('[name="tesserato_id"],[name="importo"]');
-            if(!has && (form.innerText||'').toLowerCase().indexOf('importo')<0) return;
-            cause.value=(vista==='mensili'?'mensile':'iscrizione');
-            var m=form.querySelector('[name="mese"]'), y=form.querySelector('[name="anno"]'), t=form.querySelector('[name="tesserato_id"]');
-            if(m) m.value=String(mese);
-            if(y) y.value=String(vista==='mensili'?anno:(mese>=7?stagione:stagione+1));
-            if(t && selectedTid) {{
-              t.value=String(selectedTid);
-              try{{ t.dispatchEvent(new Event('change',{{bubbles:true}})); }}catch(e){{}}
-            }}
-            var badge=form.querySelector('.bmpv5-formbadge');
-            if(!badge){{badge=document.createElement('div');badge.className='bmpv5-formbadge';form.insertBefore(badge,form.firstElementChild);}}
-            badge.innerHTML=vista==='mensili'
-              ? '<b>MENSILE</b><span>'+String(mese).padStart(2,'0')+'/'+anno+'</span>'
-              : '<b>ISCRIZIONE</b><span>Stagione '+stagione+'/'+(stagione+1)+'</span>';
-            if(selectedTid && new URLSearchParams(location.search).get('azione')==='registra') {{
-              form.setAttribute('data-bodymind-active-payment-form','1');
-            }}
-          }});
-          if(selectedTid && new URLSearchParams(location.search).get('azione')==='registra') {{
-            var active=document.querySelector('form[data-bodymind-active-payment-form="1"]');
-            var slot=document.getElementById('bmpv5EntrySlot');
-            if(active && slot) {{
-              active.style.outline='none';
-              active.style.outlineOffset='0';
-              active.style.display='block';
-              active.style.visibility='visible';
-              active.style.opacity='1';
-              slot.appendChild(active);
-              var amount=active.querySelector('[name="importo"]');
-              if(amount) {{
-                try{{amount.focus({{preventScroll:true}})}}catch(e){{}}
-              }}
-            }} else if(slot) {{
-              slot.innerHTML='<div style="padding:10px;border-radius:10px;background:#3f1d1d;color:#fecaca;font-weight:800">Form di registrazione non trovato: nessun dato è stato modificato.</div>';
-            }}
-          }}
-        }})();</script>
-        <style>.bmpv5-formbadge{{display:flex;justify-content:space-between;gap:10px;margin-bottom:10px;padding:10px 12px;border-radius:11px;background:#07182a;border:1px solid rgba(96,165,250,.32)}}.bmpv5-formbadge span{{color:#bfdbfe}}</style>"""
-
-        # Insert once at the top of the active page.
-        m=re.search(r'<main\b[^>]*>',html,re.I)
-        if m: html=html[:m.end()]+surface+html[m.end():]
-        else:
-            b=re.search(r'<body\b[^>]*>',html,re.I)
-            html=html[:b.end()]+surface+html[b.end():] if b else surface+html
-        resp.set_data(html)
-    except Exception as exc:
-        print('[payment-module-v5-warning] '+repr(exc),flush=True)
-    return resp
-'''
-    _changed_v5=True
-
-if _changed_v5:
-    CORE.write_text(_core_v5,encoding='utf-8')
-    py_compile.compile(str(CORE),doraise=True)
-print('[r123-payment-module-v5] PASS one-module two-modes-only old-surfaces-disabled',flush=True)
-
-
-# BODYMIND_R123_PAYMENT_OPERATIVITY_V6
-_core_v6=CORE.read_text(encoding='utf-8',errors='replace')
-if 'BODYMIND_R123_CANONICAL_PAYMENT_MODULE_V5' in _core_v6 and 'BODYMIND_R123_PAYMENT_OPERATIVITY_V6' not in _core_v6:
-    anchor="""        cards=[]
-        paid_n=0
-"""
-    inject="""        # BODYMIND_R123_PAYMENT_OPERATIVITY_V6
-        _miss_enroll=[]; _miss_month=[]
-        for _a in athletes:
-            _tid=int(_a.get('id') or 0)
-            _ep=enroll.get(_tid)
-            _legacy=(bool(int(_a.get('iscrizione_pagata') or 0)) if 'iscrizione_pagata' in _a else False) or (bool(int(_a.get('tesseramento_pagato') or 0)) if 'tesseramento_pagato' in _a else False)
-            if not (_ep or _legacy):
-                _h=f"/pagamenti?vista=iscrizioni&stagione={season}&mese={mese}&anno={anno}&tesserato_id={_tid}&azione=registra"
-                _miss_enroll.append("<div class='bmpv6-miss'><b>"+e(_name(_a))+"</b><a href='"+_h+"'>Registra iscrizione</a></div>")
-            _mp=monthly.get(_tid)
-            if not (_mp or _tid in qpaid):
-                _h=f"/pagamenti?vista=mensili&mese={mese}&anno={anno}&tesserato_id={_tid}&azione=registra"
-                _miss_month.append("<div class='bmpv6-miss'><b>"+e(_name(_a))+"</b><a href='"+_h+"'>Registra mensile "+e(months[mese])+"</a></div>")
-        immediate=f\"\"\"<section class='bmpv6-immediate'>
-          <div class='bmpv6-head'><div><span>OPERATIVITÀ IMMEDIATA</span><h2>Da registrare</h2></div><small>Unica verità per tutto il gestionale</small></div>
-          <div class='bmpv6-cols'>
-            <div><div class='bmpv6-colhead'><b>SENZA ISCRIZIONE</b><strong>{len(_miss_enroll)}</strong></div>{''.join(_miss_enroll) if _miss_enroll else "<p class='bmpv6-ok'>Nessuna iscrizione mancante.</p>"}</div>
-            <div><div class='bmpv6-colhead'><b>SENZA MENSILE · {e(months[mese])} {anno}</b><strong>{len(_miss_month)}</strong></div>{''.join(_miss_month) if _miss_month else "<p class='bmpv6-ok'>Nessun mensile mancante.</p>"}</div>
-          </div>
-        </section><div id='bmpv5-form-mount'></div>
-        <script id='bmpv6-form-mounter'>(function(){{
-          var tid={selected_tid}, mode={vista!r}, mm={mese}, yy={anno}, ss={season};
-          if(!tid || new URLSearchParams(location.search).get('azione')!=='registra') return;
-          var forms=[].slice.call(document.querySelectorAll('form'));
-          var active=forms.find(function(form){{
-            return form.querySelector('[name="tesserato_id"]') && (form.querySelector('[name="importo"]') || (form.innerText||'').toLowerCase().indexOf('importo')>=0);
-          }});
-          if(!active) return;
-          var t=active.querySelector('[name="tesserato_id"]'), c=active.querySelector('[name="causale"]'), m=active.querySelector('[name="mese"]'), y=active.querySelector('[name="anno"]');
-          if(t) t.value=String(tid);
-          if(c) c.value=(mode==='mensili'?'mensile':'iscrizione');
-          if(m) m.value=String(mm);
-          if(y) y.value=String(mode==='mensili'?yy:(mm>=7?ss:ss+1));
-          var mount=document.getElementById('bmpv5-form-mount');
-          if(mount && active.parentNode!==mount) mount.appendChild(active);
-        }})();</script>\"\"\"
-
-        cards=[]
-        paid_n=0
-"""
-    if anchor not in _core_v6: raise RuntimeError('V6 cards anchor missing')
-    _core_v6=_core_v6.replace(anchor,inject,1)
-    surf="""          {selector}
-          <div class='bmpv5-list'>"""
-    if surf not in _core_v6: raise RuntimeError('V6 surface anchor missing')
-    _core_v6=_core_v6.replace(surf,"""          {selector}
-          {immediate}
-          <div class='bmpv5-list'>""",1)
-    css=""".bmpv5-period button{{background:#2563eb;font-weight:900}}
-        .bmpv5-list"""
-    css2=""".bmpv5-period button{{background:#2563eb;font-weight:900}}
-        .bmpv6-immediate{{margin:14px 0;padding:14px;border-radius:16px;background:#071321;border:1px solid rgba(148,163,184,.18)}}.bmpv6-head{{display:flex;justify-content:space-between;gap:12px;align-items:end;margin-bottom:10px}}.bmpv6-head span{{font-size:10px;font-weight:950;letter-spacing:.12em;color:#fbbf24}}.bmpv6-head h2{{margin:3px 0 0;font-size:20px}}.bmpv6-head small{{color:#94a3b8}}.bmpv6-cols{{display:grid;grid-template-columns:1fr 1fr;gap:10px}}.bmpv6-cols>div{{padding:10px;border-radius:13px;background:#0c2035}}.bmpv6-colhead{{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}}.bmpv6-colhead b{{font-size:11px}}.bmpv6-colhead strong{{min-width:28px;height:28px;display:grid;place-items:center;border-radius:999px;background:#7f1d1d}}.bmpv6-miss{{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px 9px;margin-top:6px;border-radius:10px;background:#111f31}}.bmpv6-miss b{{font-size:12px}}.bmpv6-miss a{{padding:8px 10px;border-radius:9px;background:#2563eb;color:white!important;text-decoration:none;font-size:11px;font-weight:950}}.bmpv6-ok{{padding:9px;border-radius:9px;background:#14532d;color:#dcfce7;font-size:12px}}#bmpv5-form-mount:not(:empty){{margin:14px 0;padding:14px;border-radius:16px;background:#0b1d31;border:2px solid rgba(96,165,250,.55)}}
-        .bmpv5-list"""
-    if css not in _core_v6: raise RuntimeError('V6 css anchor missing')
-    _core_v6=_core_v6.replace(css,css2,1)
-    mover="""              active.style.outlineOffset='6px';
-            }}"""
-    mover2="""              active.style.outlineOffset='6px';
-              var mount=document.getElementById('bmpv5-form-mount');
-              if(mount && active.parentNode!==mount) mount.appendChild(active);
-            }}"""
-    if mover in _core_v6:
-        _core_v6=_core_v6.replace(mover,mover2,1)
-    _core_v6=_core_v6.replace("@media(max-width:700px){{.bmpv5{{padding:13px}}","@media(max-width:700px){{.bmpv6-cols{{grid-template-columns:1fr}}.bmpv6-head{{align-items:flex-start;flex-direction:column}}.bmpv6-miss{{grid-template-columns:1fr}}.bmpv5{{padding:13px}}",1)
-    CORE.write_text(_core_v6,encoding='utf-8')
-    py_compile.compile(str(CORE),doraise=True)
-    print('[r123-payment-operativity-v6] PASS immediate-missing-lists direct-register existing-form-mounted',flush=True)
-else:
-    print('[r123-payment-operativity-v6] already or waiting for V5',flush=True)
-
-# BODYMIND_R123_INLINE_PAYMENT_ENTRY_V6
-print('[r123-inline-payment-entry-v6] PASS real payment form moved into canonical module',flush=True)
-
-
 # BODYMIND_R123_PAYMENT_FORM_CANONICAL_V7
 # Replace the V5/V6 "move an existing form" behavior with one real canonical
 # registration/edit form. One module, two modes, same write path everywhere.
 _core_v7=CORE.read_text(encoding='utf-8',errors='replace')
 _changed_v7=False
-
-# Disable the old payment renderer if still registered.
-_old_v5="@app.after_request\ndef _bodymind_r123_canonical_payment_module_v5(resp):"
-if _old_v5 in _core_v7:
-    _core_v7=_core_v7.replace(_old_v5,_old_v5.replace("@app.after_request\n",""),1)
-    _changed_v7=True
 
 if 'BODYMIND_R123_PAYMENT_FORM_CANONICAL_V7' not in _core_v7:
     _core_v7 += r'''
@@ -1739,6 +535,13 @@ def _bodymind_payment_module_v7(resp):
             truth=bodymind_payment_truth(c,mese=mese,anno=anno,stagione=stagione)
             payment_state={int(x['tesserato_id']):dict(x) for x in truth.get('rows',[])}
             payment_rows={int(x['id']):dict(x) for x in c.execute("SELECT * FROM pagamenti ORDER BY id DESC").fetchall()}
+            quote_by_tid={}
+            if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='quote_mensili'").fetchone():
+                for q in c.execute("SELECT * FROM quote_mensili WHERE mese=? AND anno=? ORDER BY id DESC",(mese,anno)).fetchall():
+                    q=dict(q); qtid=int(q.get('tesserato_id') or 0)
+                    if qtid and qtid not in quote_by_tid:quote_by_tid[qtid]=q
+            try:month_summary=bodymind_monthly_due_summary(c)
+            except Exception:month_summary=[]
         finally:
             try:c.close()
             except Exception:pass
@@ -1761,10 +564,12 @@ def _bodymind_payment_module_v7(resp):
             if not focus_ok:due_count+=1
             eh=f"/pagamenti?vista=iscrizioni&stagione={stagione}&mese={mese}&anno={anno}&tesserato_id={tid}&azione=registra&tipo=iscrizione"
             mh=f"/pagamenti?vista=mensili&mese={mese}&anno={anno}&tesserato_id={tid}&azione=registra&tipo=mensile"
+            dh=f"/documenti/da-verificare?tesserato_id={tid}"
+            ah=f"/documenti?tesserato_id={tid}"
             rows.append((0 if not focus_ok else 1,
-                "<div class='bmpv7-row "+("due" if not focus_ok else "paid")+"'>"
+                "<div class='bmpv7-row "+("due" if not focus_ok else "paid")+"' data-bm-tid='"+str(tid)+"' data-bm-enroll='"+("1" if eok else "0")+"' data-bm-monthly='"+("1" if mok else "0")+"'>"
                 +"<div class='bmpv7-person'><b>"+e(_name(a))+"</b><small>Iscrizione: "+("PAGATA" if eok else "da pagare")+" · "+months[mese]+": "+("PAGATO" if mok else "da pagare")+"</small></div>"
-                +"<div class='bmpv7-actions'><a href='"+eh+"'>"+("Modifica iscrizione" if eok else "Registra iscrizione")+"</a><a href='"+mh+"'>"+("Modifica mensile "+months[mese] if mok else "Registra mensile "+months[mese])+"</a></div>"
+                +"<div class='bmpv7-actions'><a class='doc' href='"+dh+"'>Verifica documento</a><a class='doc' href='"+ah+"'>Archivio</a><a href='"+eh+"'>"+("Modifica incasso iscrizione" if eok else "Registra incasso iscrizione")+"</a><a href='"+mh+"'>"+("Modifica incasso "+months[mese] if mok else "Registra incasso "+months[mese])+"</a></div>"
                 +"</div>"
             ))
         rows.sort(key=lambda x:x[0])
@@ -1777,10 +582,17 @@ def _bodymind_payment_module_v7(resp):
                 existing_id=state.get('iscrizione_payment_id') if action_tipo=='iscrizione' else state.get('mensile_payment_id')
                 existing=payment_rows.get(int(existing_id or 0))
                 pid=int(existing.get('id') or 0) if existing else 0
-                amount=(str(existing.get('importo') or '') if existing else '')
+                qsel=quote_by_tid.get(selected_tid) if action_tipo=='mensile' else None
+                if existing:
+                    amount=str(existing.get('importo') or '')
+                    note=str(existing.get('note_pagamento') or '')
+                else:
+                    try:qamount=float(qsel.get('importo_dovuto') or 0) if qsel else 0
+                    except Exception:qamount=0
+                    amount=(str(qamount) if qamount>0 else '')
+                    note=(str(qsel.get('note') or '') if qsel else '')
                 paydate=(str(existing.get('data') or today.isoformat()) if existing else today.isoformat())
                 method=(str(existing.get('metodo_pagamento') or 'contanti') if existing else 'contanti')
-                note=(str(existing.get('note_pagamento') or '') if existing else '')
                 title=('ISCRIZIONE '+str(stagione)+'/'+str(stagione+1)) if action_tipo=='iscrizione' else ('MENSILE '+months[mese].upper()+' '+str(anno))
                 form_html=f"""<form class='bmpv7-form' method='post' action='/pagamenti/registra-unico'>
                   <input type='hidden' name='csrf_token' value='{e(csrf_token())}'>
@@ -1802,6 +614,10 @@ def _bodymind_payment_module_v7(resp):
 
         saved="<div class='bmpv7-saved'>Pagamento salvato. Dashboard, Task e Centro operativo leggono ora lo stesso stato.</div>" if request.args.get('salvato')=='1' else ""
         error="<div class='bmpv7-error'>Il pagamento non è stato salvato. Controlla i dati e riprova.</div>" if request.args.get('errore') else ""
+        month_strip=''
+        if month_summary:
+            month_chips=''.join("<a class='"+("ok" if int(x['mancanti'])==0 else "due")+"' href='/pagamenti?vista=mensili&mese="+str(x['mese'])+"&anno="+str(x['anno'])+"'><b>"+months[int(x['mese'])]+" "+str(x['anno'])+"</b><span>"+(str(x['mancanti'])+" da pagare" if int(x['mancanti']) else "completo")+"</span></a>" for x in month_summary)
+            month_strip="<div class='bmpv7-months'><strong>MENSILI DELLA STAGIONE</strong><div>"+month_chips+"</div></div>"
 
         selector=f"""<form class='bmpv7-period' method='get' action='/pagamenti'>
           <input type='hidden' name='vista' value='{e(vista)}'>
@@ -1815,30 +631,23 @@ def _bodymind_payment_module_v7(resp):
         <section class='bmpv7'>
           <div class='bmpv7-head'><div><span>PAGAMENTI BODYMIND · MODULO UNICO</span><h1>{'ISCRIZIONE' if vista=='iscrizioni' else 'MENSILE '+months[mese].upper()}</h1><p>Prima chi deve pagare. Accanto a ogni atleta puoi registrare sia iscrizione sia mensile.</p></div><strong>{due_count} da pagare</strong></div>
           <nav class='bmpv7-tabs'><a class='{'on' if vista=='iscrizioni' else ''}' href='/pagamenti?vista=iscrizioni&stagione={stagione}&mese={mese}&anno={anno}'>ISCRIZIONE</a><a class='{'on' if vista=='mensili' else ''}' href='/pagamenti?vista=mensili&mese={mese}&anno={anno}'>MENSILE</a></nav>
-          {selector}{saved}{error}{form_html}
+          <div class='bmpv7-admin'><span>AMMINISTRAZIONE</span><a href='/uscite'>USCITE</a><a href='/ricevute'>RICEVUTE</a><a href='/collaboratori'>COLLABORATORI</a><a href='/collaboratori/ricevute'>RICEVUTE COLLABORATORI</a><a href='/documenti'>ARCHIVIO</a><a href='/documenti/da-verificare'>DA VERIFICARE</a></div>
+          {selector}{month_strip}{saved}{error}{form_html}
           <div class='bmpv7-list'>{''.join(x[1] for x in rows)}</div>
         </section>
         <style id='bodymind-payment-v7'>
-        .r123-pay-box,.r125-board,.bmps,.bmpv5,.bmpv6-immediate,.bmps3-explain{{display:none!important}}
         .bmpv7{{margin:14px 0 22px;padding:18px;border-radius:22px;background:#081626;border:1px solid rgba(96,165,250,.24);color:#f8fafc}}.bmpv7-head{{display:flex;justify-content:space-between;gap:14px;align-items:center}}.bmpv7-head span{{font-size:10px;letter-spacing:.14em;font-weight:950;color:#7dd3fc}}.bmpv7-head h1{{margin:4px 0;font-size:27px}}.bmpv7-head p{{margin:0;color:#b7c6d9}}.bmpv7-head>strong{{font-size:22px}}
         .bmpv7-tabs{{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}}.bmpv7-tabs a{{padding:14px;border-radius:13px;background:#10243a;color:#cbd5e1!important;text-decoration:none;text-align:center;font-weight:950}}.bmpv7-tabs a.on{{background:#2563eb;color:white!important}}
         .bmpv7-period{{display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin-bottom:12px;padding:10px;border-radius:13px;background:#0c2035}}.bmpv7-period label{{display:grid;gap:4px;font-size:11px;font-weight:900}}.bmpv7-period input,.bmpv7-period select,.bmpv7-period button{{min-height:42px;border-radius:9px;border:1px solid rgba(148,163,184,.25);background:#06111f;color:#fff;padding:8px 10px}}.bmpv7-period button{{background:#2563eb;font-weight:900}}
         .bmpv7-form{{margin:12px 0 16px;padding:15px;border-radius:16px;background:#0d2138;border:2px solid rgba(96,165,250,.48)}}.bmpv7-formhead{{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:12px}}.bmpv7-formhead span{{font-size:10px;font-weight:950;color:#7dd3fc}}.bmpv7-formhead h2{{margin:3px 0;font-size:20px}}.bmpv7-formhead a{{color:#bfdbfe!important}}.bmpv7-fields{{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px}}.bmpv7-fields label{{display:grid;gap:5px;font-size:11px;font-weight:900;color:#cbd5e1}}.bmpv7-fields input,.bmpv7-fields select,.bmpv7-fields textarea{{width:100%;border-radius:9px;border:1px solid rgba(148,163,184,.25);background:#06111f;color:#fff;padding:9px;font-size:15px}}.bmpv7-fields .wide{{grid-column:1/-1}}.bmpv7-save{{margin-top:10px;min-height:45px;padding:10px 18px;border:0;border-radius:10px;background:#16a34a;color:#fff;font-weight:950}}
-        .bmpv7-list{{display:grid;gap:8px}}.bmpv7-row{{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 14px;align-items:center;padding:12px 14px;border-radius:14px}}.bmpv7-row.due{{background:rgba(127,29,29,.66);border:1px solid rgba(248,113,113,.28)}}.bmpv7-row.paid{{background:rgba(20,83,45,.55);border:1px solid rgba(74,222,128,.24)}}.bmpv7-person{{display:grid;gap:3px}}.bmpv7-person small{{color:#cbd5e1}}.bmpv7-actions{{display:flex;gap:7px;flex-wrap:wrap}}.bmpv7-actions a{{padding:9px 11px;border-radius:9px;background:#2563eb;color:#fff!important;text-decoration:none;font-size:11px;font-weight:950}}.bmpv7-actions a+ a{{background:#0f766e}}.bmpv7-saved,.bmpv7-error{{margin:10px 0;padding:10px 12px;border-radius:10px;font-weight:850}}.bmpv7-saved{{background:#14532d;color:#dcfce7}}.bmpv7-error{{background:#7f1d1d;color:#fee2e2}}
+        .bmpv7-list{{display:grid;gap:8px}}.bmpv7-row{{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 14px;align-items:center;padding:12px 14px;border-radius:14px}}.bmpv7-row.due{{background:rgba(127,29,29,.66);border:1px solid rgba(248,113,113,.28)}}.bmpv7-row.paid{{background:rgba(20,83,45,.55);border:1px solid rgba(74,222,128,.24)}}.bmpv7-person{{display:grid;gap:3px}}.bmpv7-person small{{color:#cbd5e1}}.bmpv7-actions{{display:flex;gap:7px;flex-wrap:wrap}}.bmpv7-actions a{{padding:9px 11px;border-radius:9px;background:#2563eb;color:#fff!important;text-decoration:none;font-size:11px;font-weight:950}}.bmpv7-actions a+ a{{background:#0f766e}}.bmpv7-actions a.doc{{background:#334155!important}}.bmpv7-admin{{display:flex;gap:8px;flex-wrap:wrap;margin:-4px 0 13px;align-items:center}}.bmpv7-admin span{{font-size:10px;font-weight:950;color:#94a3b8;letter-spacing:.1em}}.bmpv7-admin a{{padding:9px 11px;border-radius:9px;background:#172554;color:#dbeafe!important;text-decoration:none;font-size:11px;font-weight:900}}.bmpv7-months{{margin:0 0 12px;padding:10px;border-radius:13px;background:#0b1d31}}.bmpv7-months>strong{{display:block;margin-bottom:7px;font-size:10px;letter-spacing:.12em;color:#93c5fd}}.bmpv7-months>div{{display:flex;gap:7px;flex-wrap:wrap}}.bmpv7-months a{{display:grid;gap:2px;padding:8px 10px;border-radius:10px;color:#fff!important;text-decoration:none;font-size:11px}}.bmpv7-months a.due{{background:#7f1d1d}}.bmpv7-months a.ok{{background:#14532d}}.bmpv7-months span{{color:#e2e8f0}}.bmpv7-saved,.bmpv7-error{{margin:10px 0;padding:10px 12px;border-radius:10px;font-weight:850}}.bmpv7-saved{{background:#14532d;color:#dcfce7}}.bmpv7-error{{background:#7f1d1d;color:#fee2e2}}
         @media(max-width:780px){{.bmpv7{{padding:12px}}.bmpv7-head{{align-items:flex-start}}.bmpv7-head h1{{font-size:21px}}.bmpv7-fields{{grid-template-columns:1fr 1fr}}.bmpv7-fields .wide{{grid-column:1/-1}}.bmpv7-row{{grid-template-columns:1fr}}.bmpv7-actions{{display:grid;grid-template-columns:1fr}}}}
-        </style>
-        <script id='bodymind-payment-v7-clean'>(function(){{
-          document.querySelectorAll('form').forEach(function(f){{
-            if(!f.closest('.bmpv7') && !f.closest('header') && !f.closest('nav')) f.style.display='none';
-          }});
-        }})();</script>"""
+        </style>"""
 
         import re as _re
-        m=_re.search(r'<main\b[^>]*>',html,_re.I)
-        if m:html=html[:m.end()]+surface+html[m.end():]
-        else:
-            b=_re.search(r'<body\b[^>]*>',html,_re.I)
-            html=html[:b.end()]+surface+html[b.end():] if b else surface+html
+        m=_re.search(r'(<main\\b[^>]*>)(.*?)(</main>)',html,_re.I|_re.S)
+        if not m:raise RuntimeError('canonical payment main element missing')
+        html=html[:m.start(2)]+surface+html[m.end(2):]
         resp.set_data(html)
     except Exception as exc:
         print('[payment-v7-render-warning] '+repr(exc),flush=True)
@@ -1850,492 +659,6 @@ if _changed_v7:
     CORE.write_text(_core_v7,encoding='utf-8')
     py_compile.compile(str(CORE),doraise=True)
 print('[r123-payment-v7] PASS real editable form no-loop same-write-path',flush=True)
-
-
-# BODYMIND_R123_ADMIN_CONVERGENCE_V8
-# Keep V7 as the single payment renderer/write path, enrich it with document
-# verification + explicit cash-entry actions, restore desktop Collaboratori
-# navigation, and expose Uscite without changing existing payment rows.
-_core_v8=CORE.read_text(encoding='utf-8',errors='replace')
-_changed_v8=False
-
-# 1) Per-athlete actions in the canonical payment list.
-_old_actions = """            eh=f"/pagamenti?vista=iscrizioni&stagione={stagione}&mese={mese}&anno={anno}&tesserato_id={tid}&azione=registra&tipo=iscrizione"
-            mh=f"/pagamenti?vista=mensili&mese={mese}&anno={anno}&tesserato_id={tid}&azione=registra&tipo=mensile"
-            rows.append((0 if not focus_ok else 1,
-                "<div class='bmpv7-row "+("due" if not focus_ok else "paid")+"'>"
-                +"<div class='bmpv7-person'><b>"+e(_name(a))+"</b><small>Iscrizione: "+("PAGATA" if eok else "da pagare")+" · "+months[mese]+": "+("PAGATO" if mok else "da pagare")+"</small></div>"
-                +"<div class='bmpv7-actions'><a href='"+eh+"'>"+("Modifica iscrizione" if eok else "Registra iscrizione")+"</a><a href='"+mh+"'>"+("Modifica mensile "+months[mese] if mok else "Registra mensile "+months[mese])+"</a></div>"
-                +"</div>"
-            ))"""
-_new_actions = """            eh=f"/pagamenti?vista=iscrizioni&stagione={stagione}&mese={mese}&anno={anno}&tesserato_id={tid}&azione=registra&tipo=iscrizione"
-            mh=f"/pagamenti?vista=mensili&mese={mese}&anno={anno}&tesserato_id={tid}&azione=registra&tipo=mensile"
-            dh=f"/documenti?tesserato_id={tid}"
-            rows.append((0 if not focus_ok else 1,
-                "<div class='bmpv7-row "+("due" if not focus_ok else "paid")+"'>"
-                +"<div class='bmpv7-person'><b>"+e(_name(a))+"</b><small>Iscrizione: "+("PAGATA" if eok else "da pagare")+" · "+months[mese]+": "+("PAGATO" if mok else "da pagare")+"</small></div>"
-                +"<div class='bmpv7-actions'><a class='doc' href='"+dh+"'>Verifica documento</a><a href='"+eh+"'>"+("Modifica incasso iscrizione" if eok else "Registra incasso iscrizione")+"</a><a href='"+mh+"'>"+("Modifica incasso "+months[mese] if mok else "Registra incasso "+months[mese])+"</a></div>"
-                +"</div>"
-            ))"""
-if _old_actions in _core_v8:
-    _core_v8=_core_v8.replace(_old_actions,_new_actions,1)
-    _changed_v8=True
-
-# 2) Add admin destinations to the canonical V7 surface.
-_old_error = """        error="<div class='bmpv7-error'>Il pagamento non è stato salvato. Controlla i dati e riprova.</div>" if request.args.get('errore') else ""
-"""
-_new_error = """        error="<div class='bmpv7-error'>Il pagamento non è stato salvato. Controlla i dati e riprova.</div>" if request.args.get('errore') else ""
-        collab_href=_bodymind_admin_route_v8('collaboratori') or '/collaboratori'
-        collab_receipts_href=_bodymind_admin_route_v8('ricevute_collaboratori') or collab_href
-        expense_href=_bodymind_admin_route_v8('uscite') or '/pagamenti/uscite'
-"""
-if _old_error in _core_v8:
-    _core_v8=_core_v8.replace(_old_error,_new_error,1)
-    _changed_v8=True
-
-_old_nav = """          <nav class='bmpv7-tabs'><a class='{'on' if vista=='iscrizioni' else ''}' href='/pagamenti?vista=iscrizioni&stagione={stagione}&mese={mese}&anno={anno}'>ISCRIZIONE</a><a class='{'on' if vista=='mensili' else ''}' href='/pagamenti?vista=mensili&mese={mese}&anno={anno}'>MENSILE</a></nav>
-          {selector}{saved}{error}{form_html}"""
-_new_nav = """          <nav class='bmpv7-tabs'><a class='{'on' if vista=='iscrizioni' else ''}' href='/pagamenti?vista=iscrizioni&stagione={stagione}&mese={mese}&anno={anno}'>ISCRIZIONE</a><a class='{'on' if vista=='mensili' else ''}' href='/pagamenti?vista=mensili&mese={mese}&anno={anno}'>MENSILE</a></nav>
-          <div class='bmpv8-admin'><a href='{e(expense_href)}'>USCITE</a><a href='{e(collab_href)}'>COLLABORATORI</a><a href='{e(collab_receipts_href)}'>RICEVUTE COLLABORATORI</a></div>
-          {selector}{saved}{error}{form_html}"""
-if _old_nav in _core_v8:
-    _core_v8=_core_v8.replace(_old_nav,_new_nav,1)
-    _changed_v8=True
-
-_old_css = """.bmpv7-actions a{{padding:9px 11px;border-radius:9px;background:#2563eb;color:#fff!important;text-decoration:none;font-size:11px;font-weight:950}}.bmpv7-actions a+ a{{background:#0f766e}}"""
-_new_css = """.bmpv7-actions a{{padding:9px 11px;border-radius:9px;background:#2563eb;color:#fff!important;text-decoration:none;font-size:11px;font-weight:950}}.bmpv7-actions a+ a{{background:#0f766e}}.bmpv7-actions a.doc{{background:#334155!important}}.bmpv8-admin{{display:flex;gap:8px;flex-wrap:wrap;margin:-4px 0 13px}}.bmpv8-admin a{{padding:9px 12px;border-radius:10px;background:#172554;color:#dbeafe!important;text-decoration:none;font-size:11px;font-weight:950;border:1px solid rgba(96,165,250,.26)}}"""
-if _old_css in _core_v8:
-    _core_v8=_core_v8.replace(_old_css,_new_css,1)
-    _changed_v8=True
-
-if 'BODYMIND_R123_ADMIN_CONVERGENCE_V8' not in _core_v8:
-    _core_v8 += r'''
-
-# BODYMIND_R123_ADMIN_CONVERGENCE_V8
-def _bodymind_admin_route_v8(kind):
-    """Resolve existing business routes at runtime instead of inventing URLs."""
-    best=[]
-    for rule in app.url_map.iter_rules():
-        try:
-            path=str(rule.rule); ep=str(rule.endpoint).lower()
-            methods=set(rule.methods or set())
-        except Exception:
-            continue
-        if 'GET' not in methods or '<' in path:
-            continue
-        low=(path+' '+ep).lower()
-        score=0
-        if kind=='collaboratori':
-            if 'collabor' not in low: continue
-            if 'ricevut' in low or 'pdf' in low or 'delete' in low or 'elimina' in low: continue
-            score=20
-            if path.rstrip('/')=='/collaboratori': score+=100
-        elif kind=='ricevute_collaboratori':
-            if 'collabor' not in low or 'ricevut' not in low: continue
-            if 'pdf' in low or 'delete' in low or 'elimina' in low: continue
-            score=30
-        elif kind=='uscite':
-            if path.rstrip('/')=='/pagamenti/uscite': continue
-            words=('uscit','spes','prima-nota','prima_nota','moviment','cassa')
-            if not any(w in low for w in words): continue
-            # Avoid delete/PDF/detail routes.
-            if any(w in low for w in ('delete','elimina','pdf','<')): continue
-            score=20
-            if 'uscit' in low or 'spes' in low: score+=40
-        else:
-            continue
-        best.append((score,len(path),path))
-    if not best:
-        return ''
-    best.sort(key=lambda x:(-x[0],x[1],x[2]))
-    return best[0][2]
-
-
-def _bodymind_uscite_schema_v8(conn):
-    conn.execute("""
-      CREATE TABLE IF NOT EXISTS bodymind_uscite(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        data TEXT NOT NULL,
-        descrizione TEXT NOT NULL,
-        categoria TEXT,
-        importo REAL NOT NULL,
-        metodo TEXT,
-        note TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      )
-    """)
-
-
-@app.route('/pagamenti/uscite',methods=['GET','POST'])
-@login_required
-def _bodymind_uscite_v8():
-    # Prefer an already existing accounting/expense module if the app has one.
-    existing=_bodymind_admin_route_v8('uscite')
-    if existing and existing!='/pagamenti/uscite' and request.method=='GET' and request.args.get('fallback')!='1':
-        return redirect(existing,302)
-
-    from datetime import date as _date, datetime as _dt
-    conn=db(); conn.row_factory=sqlite3.Row
-    _bodymind_uscite_schema_v8(conn)
-    saved=False; err=''
-    if request.method=='POST':
-        data=(request.form.get('data') or _date.today().isoformat()).strip()
-        descrizione=(request.form.get('descrizione') or '').strip()
-        categoria=(request.form.get('categoria') or '').strip()
-        metodo=(request.form.get('metodo') or '').strip()
-        note=(request.form.get('note') or '').strip()[:1500]
-        try: importo=float(str(request.form.get('importo') or '').replace(',','.'))
-        except Exception: importo=-1
-        try: _date.fromisoformat(data)
-        except Exception: data=_date.today().isoformat()
-        if not descrizione or importo<0:
-            err='Inserisci descrizione e importo validi.'
-        else:
-            now=_dt.now().isoformat(timespec='seconds')
-            conn.execute(
-                "INSERT INTO bodymind_uscite(data,descrizione,categoria,importo,metodo,note,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
-                (data,descrizione,categoria,importo,metodo,note,now,now)
-            )
-            conn.commit(); saved=True
-    rows=conn.execute("SELECT * FROM bodymind_uscite ORDER BY data DESC,id DESC LIMIT 200").fetchall()
-    total=float(conn.execute("SELECT COALESCE(SUM(importo),0) FROM bodymind_uscite").fetchone()[0] or 0)
-    conn.close()
-    items=''.join(
-        "<tr><td>"+e(str(r['data']))+"</td><td><b>"+e(str(r['descrizione']))+"</b><br><small>"+e(str(r['categoria'] or ''))+"</small></td><td>€ "+e(("%.2f" % float(r['importo'] or 0)).replace('.',','))+"</td><td>"+e(str(r['metodo'] or ''))+"</td></tr>"
-        for r in rows
-    ) or "<tr><td colspan='4'>Nessuna uscita registrata.</td></tr>"
-    msg="<div class='bmout-ok'>Uscita registrata.</div>" if saved else ("<div class='bmout-err'>"+e(err)+"</div>" if err else "")
-    html=f"""
-    <section class='bmout'>
-      <div class='bmout-head'><div><span>AMMINISTRAZIONE</span><h1>Uscite</h1><p>Spese e uscite di cassa. Gli incassi di atlete restano nel modulo Pagamenti.</p></div><strong>Totale € {("%.2f" % total).replace('.',',')}</strong></div>
-      <div class='bmout-links'><a href='/pagamenti'>Pagamenti</a><a href='{e(_bodymind_admin_route_v8("collaboratori") or "/collaboratori")}'>Collaboratori</a></div>
-      {msg}
-      <form method='post' class='bmout-form'>
-        <input type='hidden' name='csrf_token' value='{e(csrf_token())}'>
-        <label>Data<input type='date' name='data' value='{_date.today().isoformat()}' required></label>
-        <label>Descrizione<input name='descrizione' required placeholder='Es. affitto sala'></label>
-        <label>Categoria<input name='categoria' placeholder='Affitto, attrezzatura, utenze…'></label>
-        <label>Importo €<input type='number' step='0.01' min='0' name='importo' required></label>
-        <label>Metodo<select name='metodo'><option>contanti</option><option>bonifico</option><option>carta</option><option>altro</option></select></label>
-        <label class='wide'>Note<textarea name='note' rows='2'></textarea></label>
-        <button>Registra uscita</button>
-      </form>
-      <div class='bmout-table'><table><thead><tr><th>Data</th><th>Uscita</th><th>Importo</th><th>Metodo</th></tr></thead><tbody>{items}</tbody></table></div>
-    </section>
-    <style>
-    .bmout{{padding:18px;border-radius:20px;background:#081626;color:#f8fafc}}.bmout-head{{display:flex;justify-content:space-between;gap:12px;align-items:center}}.bmout-head span{{font-size:10px;color:#7dd3fc;font-weight:950;letter-spacing:.14em}}.bmout-head h1{{margin:4px 0}}.bmout-head p{{margin:0;color:#cbd5e1}}.bmout-links{{display:flex;gap:8px;margin:13px 0}}.bmout-links a{{padding:9px 12px;border-radius:9px;background:#1d4ed8;color:white!important;text-decoration:none;font-weight:900}}.bmout-form{{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px;padding:13px;background:#0c2035;border-radius:14px}}.bmout-form label{{display:grid;gap:5px;font-size:11px;font-weight:900}}.bmout-form input,.bmout-form select,.bmout-form textarea{{width:100%;padding:9px;border-radius:9px;border:1px solid #334155;background:#06111f;color:#fff}}.bmout-form .wide{{grid-column:1/-1}}.bmout-form button{{min-height:43px;border:0;border-radius:9px;background:#dc2626;color:#fff;font-weight:950}}.bmout-table{{overflow:auto;margin-top:12px}}.bmout-table table{{width:100%;border-collapse:collapse}}.bmout-table th,.bmout-table td{{padding:9px;border-bottom:1px solid #1e293b;text-align:left}}.bmout-ok,.bmout-err{{padding:9px 11px;border-radius:9px;margin:8px 0}}.bmout-ok{{background:#14532d}}.bmout-err{{background:#7f1d1d}}
-    @media(max-width:800px){{.bmout-form{{grid-template-columns:1fr 1fr}}.bmout-form .wide{{grid-column:1/-1}}}}
-    </style>
-    """
-    return layout(html)
-
-
-@app.after_request
-def _bodymind_desktop_admin_nav_v8(resp):
-    try:
-        if request.method!='GET' or int(getattr(resp,'status_code',200) or 200)!=200:
-            return resp
-        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
-            return resp
-        html=resp.get_data(as_text=True)
-        if 'BODYMIND_DESKTOP_ADMIN_NAV_V8' in html:
-            return resp
-        collab=_bodymind_admin_route_v8('collaboratori') or '/collaboratori'
-        receipts=_bodymind_admin_route_v8('ricevute_collaboratori') or collab
-        expense=_bodymind_admin_route_v8('uscite') or '/pagamenti/uscite'
-        inject=f"""<!-- BODYMIND_DESKTOP_ADMIN_NAV_V8 -->
-        <div id='bmAdminNavV8'>
-          <span>AMMINISTRAZIONE</span>
-          <a href='/pagamenti'>Pagamenti</a>
-          <a href='{e(expense)}'>Uscite</a>
-          <a href='{e(collab)}'>Collaboratori</a>
-          <a href='{e(receipts)}'>Ricevute collaboratori</a>
-        </div>
-        <style>
-        #bmAdminNavV8{{display:none}}
-        @media(min-width:901px){{#bmAdminNavV8.bm-admin-mounted{{display:grid;gap:4px;margin:10px 8px;padding:9px;border-radius:12px;background:rgba(15,23,42,.62);border:1px solid rgba(148,163,184,.16)}}#bmAdminNavV8 span{{font-size:9px;letter-spacing:.13em;color:#94a3b8;font-weight:950}}#bmAdminNavV8 a{{padding:7px 8px;border-radius:8px;color:inherit!important;text-decoration:none;font-size:12px;font-weight:800}}#bmAdminNavV8 a:hover{{background:rgba(59,130,246,.14)}}}}
-        </style>
-        <script>(function(){{var box=document.getElementById('bmAdminNavV8');if(!box)return;var side=document.querySelector('aside nav,aside,.sidebar,[class*="sidebar"]');if(side){{side.appendChild(box);box.classList.add('bm-admin-mounted');}}else{{box.remove();}}}})();</script>"""
-        if '</body>' in html: html=html.replace('</body>',inject+'</body>',1)
-        else: html+=inject
-        resp.set_data(html)
-    except Exception as exc:
-        print('[admin-nav-v8-warning] '+repr(exc),flush=True)
-    return resp
-'''
-    _changed_v8=True
-
-if _changed_v8:
-    CORE.write_text(_core_v8,encoding='utf-8')
-    py_compile.compile(str(CORE),doraise=True)
-
-# Read-only integrity check: existing payments/receipts must remain untouched here.
-_c=sqlite3.connect(str(DB),timeout=20)
-try:
-    _integrity=str(_c.execute('PRAGMA integrity_check').fetchone()[0])
-    _fk=len(_c.execute('PRAGMA foreign_key_check').fetchall())
-    _pc=int(_c.execute('SELECT COUNT(*) FROM pagamenti').fetchone()[0]) if _c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='pagamenti'").fetchone() else 0
-    _rc=int(_c.execute('SELECT COUNT(*) FROM ricevute').fetchone()[0]) if _c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='ricevute'").fetchone() else 0
-finally:
-    _c.close()
-if _integrity.lower()!='ok' or _fk:
-    raise RuntimeError('R123 V8 DB integrity guard failed')
-print('[r123-admin-v8] PASS verify-doc + cash-entry + expenses + collaborators-nav payments='+str(_pc)+' receipts='+str(_rc)+' integrity='+_integrity+' fk='+str(_fk),flush=True)
-
-
-# BODYMIND_R123_ADMIN_RESTORE_V9
-# Restore business-critical administration without restoring stale duplicate UIs.
-# Existing routes/data win; backups are audited, never blindly copied over newer core.
-_core_v9=CORE.read_text(encoding='utf-8',errors='replace')
-_changed_v9=False
-
-# Payment row: real document review queue + archive access.
-_old_doc="""            dh=f"/documenti?tesserato_id={tid}"
-            rows.append((0 if not focus_ok else 1,
-                "<div class='bmpv7-row "+("due" if not focus_ok else "paid")+"'>"
-                +"<div class='bmpv7-person'><b>"+e(_name(a))+"</b><small>Iscrizione: "+("PAGATA" if eok else "da pagare")+" · "+months[mese]+": "+("PAGATO" if mok else "da pagare")+"</small></div>"
-                +"<div class='bmpv7-actions'><a class='doc' href='"+dh+"'>Verifica documento</a><a href='"+eh+"'>"+("Modifica incasso iscrizione" if eok else "Registra incasso iscrizione")+"</a><a href='"+mh+"'>"+("Modifica incasso "+months[mese] if mok else "Registra incasso "+months[mese])+"</a></div>"
-                +"</div>"
-            ))"""
-_new_doc="""            dh=f"/documenti/da-verificare?tesserato_id={tid}"
-            ah=f"/documenti?tesserato_id={tid}"
-            rows.append((0 if not focus_ok else 1,
-                "<div class='bmpv7-row "+("due" if not focus_ok else "paid")+"'>"
-                +"<div class='bmpv7-person'><b>"+e(_name(a))+"</b><small>Iscrizione: "+("PAGATA" if eok else "da pagare")+" · "+months[mese]+": "+("PAGATO" if mok else "da pagare")+"</small></div>"
-                +"<div class='bmpv7-actions'><a class='doc' href='"+dh+"'>Verifica documento</a><a class='doc' href='"+ah+"'>Archivio</a><a href='"+eh+"'>"+("Modifica incasso iscrizione" if eok else "Registra incasso iscrizione")+"</a><a href='"+mh+"'>"+("Modifica incasso "+months[mese] if mok else "Registra incasso "+months[mese])+"</a></div>"
-                +"</div>"
-            ))"""
-if _old_doc in _core_v9:
-    _core_v9=_core_v9.replace(_old_doc,_new_doc,1); _changed_v9=True
-
-# Preserve configured monthly amount/note when opening a new payment form.
-_old_qpaid="""        qpaid=set()
-        for q in qrows:
-            st=str(q.get('stato') or '').lower()
-            if any(x in st for x in ('pagat','saldat','paid','incassat','complet')):
-                qpaid.add(int(q.get('tesserato_id') or 0))"""
-_new_qpaid="""        qpaid=set(); quote_by_tid={}
-        for q in qrows:
-            qtid=int(q.get('tesserato_id') or 0)
-            if qtid and qtid not in quote_by_tid: quote_by_tid[qtid]=q
-            st=str(q.get('stato') or '').lower()
-            if any(x in st for x in ('pagat','saldat','paid','incassat','complet')):
-                qpaid.add(qtid)"""
-if _old_qpaid in _core_v9:
-    _core_v9=_core_v9.replace(_old_qpaid,_new_qpaid,1); _changed_v9=True
-
-_old_amount="""                amount=(str(existing.get('importo') or '') if existing else '')
-                paydate=(str(existing.get('data') or today.isoformat()) if existing else today.isoformat())
-                method=(str(existing.get('metodo_pagamento') or 'contanti') if existing else 'contanti')
-                note=(str(existing.get('note_pagamento') or '') if existing else '')"""
-_new_amount="""                qsel=quote_by_tid.get(selected_tid) if action_tipo=='mensile' else None
-                if existing:
-                    amount=str(existing.get('importo') or '')
-                    note=str(existing.get('note_pagamento') or '')
-                else:
-                    try:
-                        qamount=float(qsel.get('importo_dovuto') or 0) if qsel else 0
-                    except Exception:
-                        qamount=0
-                    amount=(str(qamount) if qamount>0 else '')
-                    note=(str(qsel.get('note') or '') if qsel else '')
-                paydate=(str(existing.get('data') or today.isoformat()) if existing else today.isoformat())
-                method=(str(existing.get('metodo_pagamento') or 'contanti') if existing else 'contanti')"""
-if _old_amount in _core_v9:
-    _core_v9=_core_v9.replace(_old_amount,_new_amount,1); _changed_v9=True
-
-# Expand the dynamic route resolver: prefer existing canonical business pages.
-_old_resolver="""        elif kind=='uscite':
-            if path.rstrip('/')=='/pagamenti/uscite': continue
-            words=('uscit','spes','prima-nota','prima_nota','moviment','cassa')
-            if not any(w in low for w in words): continue
-            # Avoid delete/PDF/detail routes.
-            if any(w in low for w in ('delete','elimina','pdf','<')): continue
-            score=20
-            if 'uscit' in low or 'spes' in low: score+=40
-        else:
-            continue"""
-_new_resolver="""        elif kind=='contabilita':
-            if 'contabil' not in low: continue
-            if any(w in low for w in ('delete','elimina','pdf','<')): continue
-            score=40
-            if path.rstrip('/')=='/contabilita': score+=120
-        elif kind=='ricevute':
-            if 'ricevut' not in low or 'collabor' in low: continue
-            if any(w in low for w in ('delete','elimina','pdf','<')): continue
-            score=35
-            if path.rstrip('/')=='/ricevute': score+=100
-        elif kind=='lul':
-            if not ('lul' in low or ('collabor' in low and 'ademp' in low) or 'uniemens' in low): continue
-            if any(w in low for w in ('delete','elimina','pdf','<')): continue
-            score=35
-        elif kind=='documenti':
-            if path.rstrip('/')!='/documenti': continue
-            score=150
-        elif kind=='document_review':
-            if path.rstrip('/')!='/documenti/da-verificare': continue
-            score=150
-        elif kind=='centro':
-            if path.rstrip('/') not in ('/cuore-operativo','/centro-operativo'): continue
-            score=150
-        elif kind=='uscite':
-            if path.rstrip('/')=='/pagamenti/uscite': continue
-            if path.rstrip('/')=='/contabilita':
-                score=200
-            else:
-                words=('uscit','spes','prima-nota','prima_nota','moviment','cassa','contabil')
-                if not any(w in low for w in words): continue
-                if any(w in low for w in ('delete','elimina','pdf','<')): continue
-                score=20
-                if 'uscit' in low or 'spes' in low or 'contabil' in low: score+=40
-        else:
-            continue"""
-if _old_resolver in _core_v9:
-    _core_v9=_core_v9.replace(_old_resolver,_new_resolver,1); _changed_v9=True
-
-# Payment page admin strip: compact gateways only; payment operations remain ISCRIZIONE/MENSILE.
-_old_vars="""        collab_href=_bodymind_admin_route_v8('collaboratori') or '/collaboratori'
-        collab_receipts_href=_bodymind_admin_route_v8('ricevute_collaboratori') or collab_href
-        expense_href=_bodymind_admin_route_v8('uscite') or '/pagamenti/uscite'"""
-_new_vars="""        collab_href=_bodymind_admin_route_v8('collaboratori') or '/collaboratori'
-        collab_receipts_href=_bodymind_admin_route_v8('ricevute_collaboratori') or collab_href
-        accounting_href=_bodymind_admin_route_v8('contabilita') or '/contabilita'
-        receipts_href=_bodymind_admin_route_v8('ricevute') or '/ricevute'
-        lul_href=_bodymind_admin_route_v8('lul') or collab_href
-        documents_href=_bodymind_admin_route_v8('documenti') or '/documenti'
-        review_href=_bodymind_admin_route_v8('document_review') or '/documenti/da-verificare'
-        center_href=_bodymind_admin_route_v8('centro') or '/cuore-operativo'
-        expense_href=_bodymind_admin_route_v8('uscite') or accounting_href"""
-if _old_vars in _core_v9:
-    _core_v9=_core_v9.replace(_old_vars,_new_vars,1); _changed_v9=True
-
-_old_strip="""          <div class='bmpv8-admin'><a href='{e(expense_href)}'>USCITE</a><a href='{e(collab_href)}'>COLLABORATORI</a><a href='{e(collab_receipts_href)}'>RICEVUTE COLLABORATORI</a></div>"""
-_new_strip="""          <div class='bmpv8-admin'><span>AMMINISTRAZIONE</span><a href='{e(accounting_href)}'>CONTABILITÀ / USCITE</a><a href='{e(receipts_href)}'>RICEVUTE</a><a href='{e(collab_href)}'>COLLABORATORI</a><a href='{e(lul_href)}'>LUL / ADEMPIMENTI</a><a href='{e(documents_href)}'>ARCHIVIO</a><a href='{e(review_href)}'>DA VERIFICARE</a></div>"""
-if _old_strip in _core_v9:
-    _core_v9=_core_v9.replace(_old_strip,_new_strip,1); _changed_v9=True
-
-# Desktop admin nav restored as a stable business area.
-_old_navvars="""        collab=_bodymind_admin_route_v8('collaboratori') or '/collaboratori'
-        receipts=_bodymind_admin_route_v8('ricevute_collaboratori') or collab
-        expense=_bodymind_admin_route_v8('uscite') or '/pagamenti/uscite'"""
-_new_navvars="""        collab=_bodymind_admin_route_v8('collaboratori') or '/collaboratori'
-        collab_receipts=_bodymind_admin_route_v8('ricevute_collaboratori') or collab
-        accounting=_bodymind_admin_route_v8('contabilita') or '/contabilita'
-        receipts=_bodymind_admin_route_v8('ricevute') or '/ricevute'
-        lul=_bodymind_admin_route_v8('lul') or collab
-        documents=_bodymind_admin_route_v8('documenti') or '/documenti'
-        review=_bodymind_admin_route_v8('document_review') or '/documenti/da-verificare'
-        center=_bodymind_admin_route_v8('centro') or '/cuore-operativo'
-        expense=_bodymind_admin_route_v8('uscite') or accounting"""
-if _old_navvars in _core_v9:
-    _core_v9=_core_v9.replace(_old_navvars,_new_navvars,1); _changed_v9=True
-
-_old_navlinks="""          <a href='/pagamenti'>Pagamenti</a>
-          <a href='{e(expense)}'>Uscite</a>
-          <a href='{e(collab)}'>Collaboratori</a>
-          <a href='{e(receipts)}'>Ricevute collaboratori</a>"""
-_new_navlinks="""          <a href='{e(center)}'>Centro operativo</a>
-          <a href='/pagamenti'>Pagamenti</a>
-          <a href='{e(accounting)}'>Contabilità / Uscite</a>
-          <a href='{e(receipts)}'>Ricevute</a>
-          <a href='{e(collab)}'>Collaboratori</a>
-          <a href='{e(lul)}'>LUL / Adempimenti</a>
-          <a href='{e(collab_receipts)}'>Ricevute collaboratori</a>
-          <a href='{e(documents)}'>Archivio documentale</a>
-          <a href='{e(review)}'>Documenti da verificare</a>"""
-if _old_navlinks in _core_v9:
-    _core_v9=_core_v9.replace(_old_navlinks,_new_navlinks,1); _changed_v9=True
-
-if 'BODYMIND_R123_ADMIN_RESTORE_V9' not in _core_v9:
-    _core_v9 += r'''
-
-# BODYMIND_R123_ADMIN_RESTORE_V9
-@app.after_request
-def _bodymind_payment_month_alerts_v9(resp):
-    try:
-        if request.method!='GET' or request.path!='/pagamenti' or int(getattr(resp,'status_code',200) or 200)!=200:
-            return resp
-        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
-            return resp
-        html=resp.get_data(as_text=True)
-        if 'BODYMIND_PAYMENT_MONTH_ALERTS_V9_RENDERED' in html:
-            return resp
-        try:
-            helper=bodymind_monthly_due_summary
-        except Exception:
-            return resp
-        c=db(); c.row_factory=sqlite3.Row
-        try: summary=helper(c)
-        finally:
-            try:c.close()
-            except Exception:pass
-        if not summary:
-            return resp
-        months=['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
-        chips=''.join(
-            "<a class='"+("ok" if int(x['mancanti'])==0 else "due")+"' href='/pagamenti?vista=mensili&mese="+str(x['mese'])+"&anno="+str(x['anno'])+"'><b>"+months[int(x['mese'])]+"</b><span>"+(str(x['mancanti'])+" da pagare" if int(x['mancanti']) else "completo")+"</span></a>"
-            for x in summary
-        )
-        block="<!-- BODYMIND_PAYMENT_MONTH_ALERTS_V9_RENDERED --><div class='bmpv9-months'><strong>Mensili della stagione</strong><div>"+chips+"</div></div><style>.bmpv9-months{margin:9px 0 12px;padding:10px;border-radius:12px;background:#0b1d31}.bmpv9-months>strong{display:block;margin-bottom:7px;font-size:11px;color:#bfdbfe}.bmpv9-months>div{display:flex;gap:7px;flex-wrap:wrap}.bmpv9-months a{display:grid;gap:2px;min-width:110px;padding:8px 10px;border-radius:9px;color:white!important;text-decoration:none;font-size:11px}.bmpv9-months a.due{background:#7f1d1d}.bmpv9-months a.ok{background:#14532d}.bmpv9-months span{color:#e2e8f0}</style>"
-        anchor="<div class='bmpv7-list'>"
-        if 'BODYMIND_R123_PAYMENT_FORM_CANONICAL_V7' in html and anchor in html:
-            html=html.replace(anchor,block+anchor,1)
-            resp.set_data(html)
-    except Exception as exc:
-        print('[payment-month-alerts-v9-warning] '+repr(exc),flush=True)
-    return resp
-'''
-    _changed_v9=True
-
-if _changed_v9:
-    CORE.write_text(_core_v9,encoding='utf-8')
-    py_compile.compile(str(CORE),doraise=True)
-
-# Fresh-process read-only audit: prove business routes and preserved backups/data.
-_audit_v9=r"""
-import json,sqlite3,sys
-from pathlib import Path
-sys.path.insert(0,"/data/top2_app")
-import app as _full
-from asd_app.core import app
-app.config["TESTING"]=True
-client=app.test_client()
-with client.session_transaction() as sess:
-    sess.update({"logged":True,"logged_in":True,"username":"admin","display_name":"Admin Restore QA","role":"admin","tenant_slug":"default","user_id":1,"is_admin":True,"admin":True})
-routes=[]
-for rule in app.url_map.iter_rules():
-    p=str(rule.rule); ep=str(rule.endpoint)
-    low=(p+" "+ep).lower()
-    if any(k in low for k in ("contabil","collabor","ricevut","lul","ademp","document-hub","documenti/da-verificare","cuore-operativo")):
-        routes.append({"route":p,"endpoint":ep,"methods":sorted(m for m in (rule.methods or set()) if m not in ("HEAD","OPTIONS"))})
-checks={}
-for p in ("/contabilita","/documenti","/documenti/da-verificare","/cuore-operativo","/pagamenti"):
-    rr=client.get(p,follow_redirects=False)
-    checks[p]=rr.status_code
-backs=[]
-root=Path("/data/release_backups")
-if root.exists():
-    for x in sorted(root.iterdir()):
-        n=x.name.lower()
-        if any(k in n for k in ("r110","r115","r123","admin","collab","contab","document")):
-            backs.append(x.name)
-conn=sqlite3.connect("/data/tenants/default/asd.db",timeout=20)
-try:
-    counts={}
-    for t in ("tesserati","pagamenti","ricevute","quote_mensili","documenti","inbound_documents"):
-        counts[t]=int(conn.execute("SELECT COUNT(*) FROM "+t).fetchone()[0]) if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(t,)).fetchone() else None
-    integrity=str(conn.execute("PRAGMA integrity_check").fetchone()[0]); fk=len(conn.execute("PRAGMA foreign_key_check").fetchall())
-finally:conn.close()
-print("[r123-admin-v9-audit] "+json.dumps({"routes":routes,"status":checks,"backups":backs[-40:],"counts":counts,"integrity":integrity,"fk":fk},ensure_ascii=False),flush=True)
-if integrity.lower()!="ok" or fk or any(v not in (200,302) for v in checks.values()):
-    raise RuntimeError("R123 V9 audit failed")
-"""
-_p=subprocess.run([sys.executable,"-c",_audit_v9],capture_output=True,text=True,timeout=120)
-print((_p.stdout or "").strip(),flush=True)
-if _p.returncode!=0:
-    raise RuntimeError("R123 V9 child audit failed "+((_p.stderr or "")+(_p.stdout or ""))[-5000:])
-print('[r123-admin-v9] PASS admin-functions-restored-via-live-routes backups-preserved data-intact',flush=True)
 
 
 # BODYMIND_R123_CANONICAL_PAYMENT_CONVERGENCE
@@ -2566,35 +889,24 @@ if _changed_v10:
     CORE.write_text(_core_v10,encoding='utf-8')
     py_compile.compile(str(CORE),doraise=True)
 
-# Backup before the one-time reconciliation of stale status flags.
-_v10_backup=BACK/'pre_v10_onboarding_status.db'
-if not _v10_backup.exists():
-    shutil.copy2(DB,_v10_backup)
-
 _v10_qa=r"""
 import json,sqlite3,sys
-sys.path.insert(0,"/data/top2_app")
-import app as _full
-from asd_app.core import app,db,bodymind_reconcile_all_athlete_statuses_v10,bodymind_monthly_due_summary
-c=db(); c.row_factory=sqlite3.Row
+sys.path.insert(0,"/data/top2_app");import app as _full
+from asd_app.core import bodymind_payment_truth,bodymind_monthly_due_summary
+c=sqlite3.connect("file:/data/tenants/default/asd.db?mode=ro",uri=True,timeout=20);c.row_factory=sqlite3.Row
 try:
-    changed=bodymind_reconcile_all_athlete_statuses_v10(c)
-    c.commit()
-    monthly=bodymind_monthly_due_summary(c)
-    stale=[dict(x) for x in c.execute(
-      "SELECT id,nome,cognome,onboarding_status,onboarding_blocked_reason FROM tesserati WHERE COALESCE(attivo,1)=1 AND lower(coalesce(onboarding_blocked_reason,'')) LIKE '%pagamenti da verificare%' ORDER BY id"
-    ).fetchall()]
-    integ=str(c.execute("PRAGMA integrity_check").fetchone()[0]); fk=len(c.execute("PRAGMA foreign_key_check").fetchall())
+    monthly=bodymind_monthly_due_summary(c);truth=bodymind_payment_truth(c)
+    stale=[dict(x) for x in c.execute("SELECT id,nome,cognome,onboarding_status,onboarding_blocked_reason FROM tesserati WHERE COALESCE(attivo,1)=1 AND lower(coalesce(onboarding_blocked_reason,'')) LIKE '%pagamenti da verificare%' ORDER BY id").fetchall()]
+    integ=str(c.execute("PRAGMA integrity_check").fetchone()[0]);fk=len(c.execute("PRAGMA foreign_key_check").fetchall())
 finally:c.close()
-print("[r123-onboarding-v10-audit] "+json.dumps({"changed":changed,"monthly":monthly,"stale_generic_payment_reasons":stale,"integrity":integ,"fk":fk},ensure_ascii=False),flush=True)
-if integ.lower()!="ok" or fk or stale:
-    raise RuntimeError("V10 onboarding/payment sync failed")
+print("[r123-onboarding-v10-audit] "+json.dumps({"mode":"read_only","payment_rows":len(truth.get("rows",[])),"monthly":monthly,"stale_generic_payment_reasons":stale,"integrity":integ,"fk":fk},ensure_ascii=False),flush=True)
+if integ.lower()!="ok" or fk or stale:raise RuntimeError("V10 onboarding/payment read-only audit failed")
 """
 _v10p=subprocess.run([sys.executable,"-c",_v10_qa],capture_output=True,text=True,timeout=180)
 print((_v10p.stdout or "").strip(),flush=True)
 if _v10p.returncode!=0:
     raise RuntimeError("R123 V10 child audit failed "+((_v10p.stderr or "")+(_v10p.stdout or ""))[-6000:])
-print('[r123-onboarding-v10] PASS payment+document truth reconciles tesseramento/dashboard status',flush=True)
+print('[r123-onboarding-v10] PASS read-only payment+onboarding invariant',flush=True)
 
 
 # BODYMIND_R123_EXPENSE_ATTACHMENTS_V11
@@ -2872,7 +1184,7 @@ def _bodymind_uscite_v11_impl():
 def _bodymind_expense_entry_v11():
     # One expense module for every legacy accounting/expense entry point.
     # Unauthenticated requests continue to the original protected endpoint.
-    if request.path in ('/pagamenti/uscite','/contabilita') and request.method in ('GET','POST'):
+    if request.path in ('/uscite','/pagamenti/uscite','/contabilita') and request.method in ('GET','POST'):
         try:
             from flask import session as _session
             authenticated=bool(_session.get('logged') or _session.get('logged_in') or _session.get('user_id'))
@@ -2925,6 +1237,7 @@ with client.session_transaction() as sess:
     sess.update({"logged":True,"logged_in":True,"username":"admin","display_name":"Expense QA","role":"admin","tenant_slug":"default","user_id":1,"is_admin":True,"admin":True})
 r1=client.get('/pagamenti/uscite',follow_redirects=False)
 r2=client.get('/contabilita',follow_redirects=False)
+r3=client.get('/uscite',follow_redirects=False)
 body=r1.get_data(as_text=True)
 conn=sqlite3.connect("/data/tenants/default/asd.db",timeout=20)
 try:
@@ -2932,9 +1245,9 @@ try:
     counts={t:int(conn.execute("SELECT COUNT(*) FROM "+t).fetchone()[0]) for t in ("tesserati","pagamenti","ricevute")}
     integrity=str(conn.execute("PRAGMA integrity_check").fetchone()[0]); fk=len(conn.execute("PRAGMA foreign_key_check").fetchall())
 finally:conn.close()
-out={"uscite_status":r1.status_code,"contabilita_status":r2.status_code,"marker":"BODYMIND_R123_EXPENSE_ATTACHMENTS_V11" in body,"multipart":"multipart/form-data" in body,"attachment_route":bool(expense_file),"columns":cols,"counts":counts,"integrity":integrity,"fk":fk}
+out={"uscite_status":r1.status_code,"contabilita_status":r2.status_code,"uscite_alias_status":r3.status_code,"marker":"BODYMIND_R123_EXPENSE_ATTACHMENTS_V11" in body,"multipart":"multipart/form-data" in body,"attachment_route":bool(expense_file),"columns":cols,"counts":counts,"integrity":integrity,"fk":fk}
 print("[r123-expense-v11-audit] "+json.dumps(out,ensure_ascii=False),flush=True)
-if r1.status_code!=200 or r2.status_code!=200 or not out["marker"] or not out["multipart"] or not expense_file or not all(x in cols for x in ("allegato_path","allegato_nome","allegato_mime","allegato_size")) or integrity.lower()!="ok" or fk:
+if r1.status_code!=200 or r2.status_code!=200 or r3.status_code!=200 or not out["marker"] or not out["multipart"] or not expense_file or not all(x in cols for x in ("allegato_path","allegato_nome","allegato_mime","allegato_size")) or integrity.lower()!="ok" or fk:
     raise RuntimeError("V11 expense attachments audit failed")
 """
 _v11p=subprocess.run([sys.executable,"-c",_v11_qa],capture_output=True,text=True,timeout=180)
@@ -2944,318 +1257,89 @@ if _v11p.returncode!=0:
 print('[r123-expense-v11] PASS one-expense-module attachments-preview-download payments-preserved before='+str(_v11_before)+' after='+str(_v11_after),flush=True)
 
 
-# BODYMIND_R123_DASHBOARD_BACKGROUND_RESTORE
-# UI-only convergence: restore the layered A239 dashboard atmosphere that was
-# flattened by later global body backgrounds. No routes, data or mobile operator
-# behavior are changed. The first radial layer is recovered from the historical
-# rendered production CSS; the remaining layers use the same established navy palette.
-_core_bg=CORE.read_text(encoding='utf-8',errors='replace')
-if 'BODYMIND_R123_DASHBOARD_BACKGROUND_RESTORE_RUNTIME' not in _core_bg:
-    _core_bg += r'''
-# BODYMIND_R123_DASHBOARD_BACKGROUND_RESTORE_RUNTIME
+# BODYMIND_R123_DASHBOARD_CANONICAL
+_core_dash=CORE.read_text(encoding='utf-8',errors='replace')
+if 'BODYMIND_R123_DASHBOARD_CANONICAL_RUNTIME' not in _core_dash:
+    _core_dash += r'''
+
+# BODYMIND_R123_DASHBOARD_CANONICAL_RUNTIME
+def _bodymind_dashboard_add_body_class(html):
+    import re as _bm_re
+    m=_bm_re.search(r'<body\\b([^>]*)>',html,_bm_re.I)
+    if not m:return html
+    tag=m.group(0);cm=_bm_re.search(r'class=(["\\\'])(.*?)\\1',tag,_bm_re.I|_bm_re.S)
+    if cm:
+        classes=cm.group(2).split()
+        if 'bodymind-dashboard-canonical' not in classes:classes.append('bodymind-dashboard-canonical')
+        newtag=tag[:cm.start(2)]+' '.join(classes)+tag[cm.end(2):]
+    else:newtag=tag[:-1]+" class='bodymind-dashboard-canonical'>"
+    return html[:m.start()]+newtag+html[m.end():]
+
 @app.after_request
-def _bodymind_dashboard_background_restore_r123(resp):
+def _bodymind_dashboard_canonical(resp):
     try:
-        if request.method!='GET' or request.path not in ('/','/dashboard'):
-            return resp
-        if int(getattr(resp,'status_code',200) or 200)!=200:
-            return resp
-        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
-            return resp
+        if request.method!='GET' or request.path not in ('/','/dashboard'):return resp
+        if int(getattr(resp,'status_code',200) or 200)!=200 or 'text/html' not in str(resp.headers.get('Content-Type','')).lower():return resp
         html=resp.get_data(as_text=True)
-        if 'BODYMIND_R123_DASHBOARD_BACKGROUND_RESTORE_RENDERED' in html:
-            return resp
-        css="""<style id='bodymind-r123-dashboard-background'>
-        /* BODYMIND_R123_DASHBOARD_BACKGROUND_RESTORE_RENDERED */
-        html body.a239-theme-root,
-        html body.a236-enterprise-active{
-          background:
-            radial-gradient(circle at 12% 6%, rgba(255,255,255,.10) 0%, rgba(255,255,255,.04) 18%, transparent 38%),
-            radial-gradient(circle at 88% 12%, rgba(59,130,246,.14) 0%, rgba(30,64,175,.07) 24%, transparent 44%),
-            radial-gradient(circle at 54% 86%, rgba(14,165,233,.08) 0%, transparent 42%),
-            linear-gradient(145deg,#07111f 0%,#0a1728 42%,#0d2034 72%,#071321 100%) !important;
-          background-attachment:fixed!important;
-          min-height:100vh;
-        }
-        html body.a239-theme-root > .overlay,
-        html body.a236-enterprise-active > .overlay{
-          background:transparent!important;
-        }
-        @media(max-width:760px){
-          html body.a239-theme-root,
-          html body.a236-enterprise-active{
-            background:
-              radial-gradient(circle at 12% 6%, rgba(255,255,255,.08) 0%, rgba(255,255,255,.03) 18%, transparent 36%),
-              linear-gradient(160deg,#07111f 0%,#0a1728 52%,#071321 100%) !important;
-            background-attachment:scroll!important;
-          }
-        }
-        </style>"""
-        if '</head>' in html:
-            html=html.replace('</head>',css+'</head>',1)
-        else:
-            html=css+html
-        resp.set_data(html)
-    except Exception as exc:
-        print('[dashboard-background-r123-warning] '+repr(exc),flush=True)
+        if 'BODYMIND_R123_DASHBOARD_CANONICAL_RENDERED' in html:return resp
+        html=_bodymind_dashboard_add_body_class(html)
+        from datetime import date as _date
+        today=_date.today();c=db();c.row_factory=sqlite3.Row
+        try:
+            t=bodymind_payment_truth(c,mese=today.month,anno=today.year)
+            try:summary=bodymind_monthly_due_summary(c)
+            except Exception:summary=[]
+        finally:
+            try:c.close()
+            except Exception:pass
+        months=['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
+        chips=''.join("<a class='"+("ok" if int(x['mancanti'])==0 else "due")+"' href='/pagamenti?vista=mensili&mese="+str(x['mese'])+"&anno="+str(x['anno'])+"'><b>"+months[int(x['mese'])]+" "+str(x['anno'])+"</b><span>"+(str(x['mancanti'])+" da pagare" if int(x['mancanti']) else "completo")+"</span></a>" for x in summary)
+        panel=f"""<!-- BODYMIND_R123_DASHBOARD_CANONICAL_RENDERED --><section class='bmdc-payments'><div><span>PAGAMENTI · VERITÀ CANONICA</span><h2>Iscrizioni e mensile</h2><p>Stessa sorgente usata da Pagamenti, Tesserati, Operatore e onboarding.</p></div><div class='bmdc-paygrid'><a href='/pagamenti?vista=iscrizioni&stagione={t['stagione']}'><small>ISCRIZIONI {t['stagione']}/{t['stagione']+1}</small><strong>{t['iscrizioni_pagate']}/{t['totale']}</strong><em>{t['iscrizioni_mancanti']} da completare</em></a><a href='/pagamenti?vista=mensili&mese={t['mese']}&anno={t['anno']}'><small>MENSILE · {months[t['mese']]} {t['anno']}</small><strong>{t['mensili_pagati']}/{t['totale']}</strong><em>{t['mensili_mancanti']} da completare</em></a></div>{("<div class='bmdc-months'>"+chips+"</div>" if chips else "")}</section>"""
+        css="""<style id='bodymind-dashboard-canonical-style'>body.bodymind-dashboard-canonical{background:radial-gradient(circle at 12% 6%,rgba(255,255,255,.10) 0%,rgba(255,255,255,.04) 18%,transparent 38%),radial-gradient(circle at 88% 12%,rgba(59,130,246,.14) 0%,rgba(30,64,175,.07) 24%,transparent 44%),radial-gradient(circle at 54% 86%,rgba(14,165,233,.08) 0%,transparent 42%),linear-gradient(145deg,#07111f 0%,#0a1728 42%,#0d2034 72%,#071321 100%)!important;background-attachment:fixed!important;min-height:100vh}body.bodymind-dashboard-canonical>.overlay,body.bodymind-dashboard-canonical .pro-dashboard,body.bodymind-dashboard-canonical .dashboard,body.bodymind-dashboard-canonical .dashboard-page,body.bodymind-dashboard-canonical main{background:transparent!important}.bmdc-payments{margin:12px 0 16px;padding:16px;border-radius:20px;background:linear-gradient(145deg,rgba(7,19,34,.88),rgba(11,30,49,.80));border:1px solid rgba(96,165,250,.24);box-shadow:0 18px 45px rgba(0,0,0,.18);color:#f8fafc}.bmdc-payments>div>span{font-size:10px;letter-spacing:.14em;font-weight:950;color:#7dd3fc}.bmdc-payments h2{margin:4px 0}.bmdc-payments p{margin:0;color:#b7c6d9}.bmdc-paygrid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px}.bmdc-paygrid a{display:grid;gap:3px;padding:13px;border-radius:14px;background:#0b1d31;border:1px solid rgba(148,163,184,.16);color:#fff!important;text-decoration:none}.bmdc-paygrid small{color:#93c5fd;font-weight:900}.bmdc-paygrid strong{font-size:24px}.bmdc-paygrid em{font-style:normal;color:#cbd5e1;font-size:11px}.bmdc-months{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.bmdc-months a{display:grid;gap:2px;padding:8px 10px;border-radius:10px;color:#fff!important;text-decoration:none;font-size:11px}.bmdc-months a.due{background:#7f1d1d}.bmdc-months a.ok{background:#14532d}.bmdc-months span{color:#e2e8f0}@media(max-width:760px){body.bodymind-dashboard-canonical{background:radial-gradient(circle at 12% 6%,rgba(255,255,255,.08) 0%,rgba(255,255,255,.03) 18%,transparent 36%),linear-gradient(160deg,#07111f 0%,#0a1728 52%,#071321 100%)!important;background-attachment:scroll!important}.bmdc-paygrid{grid-template-columns:1fr}}</style>"""
+        if '</head>' in html:html=html.replace('</head>',css+'</head>',1)
+        import re as _bm_re;m=_bm_re.search(r'<main\\b[^>]*>',html,_bm_re.I)
+        if not m:raise RuntimeError('canonical dashboard main element missing')
+        html=html[:m.end()]+panel+html[m.end():];resp.set_data(html)
+    except Exception as exc:print('[dashboard-canonical-warning] '+repr(exc),flush=True)
     return resp
 '''
-    CORE.write_text(_core_bg,encoding='utf-8')
-    py_compile.compile(str(CORE),doraise=True)
+    CORE.write_text(_core_dash,encoding='utf-8');py_compile.compile(str(CORE),doraise=True)
+    print('[r123-dashboard-canonical] installed one server-side dashboard authority',flush=True)
+else:print('[r123-dashboard-canonical] already installed',flush=True)
 
-# Static/read-only guard: this UI change must not touch business data.
-_bg_conn=sqlite3.connect(str(DB),timeout=20)
+_final_qa=r"""
+import json,re,sqlite3,sys
+sys.path.insert(0,'/data/top2_app');import app as _full
+from asd_app.core import app,bodymind_payment_truth
+app.config['TESTING']=True;c=app.test_client()
+with c.session_transaction() as s:s.update({'logged':True,'logged_in':True,'username':'admin','display_name':'Canonical QA','role':'admin','tenant_slug':'default','user_id':1,'is_admin':True,'admin':True})
+paths=['/','/dashboard','/tesserati','/pagamenti','/documenti','/documenti-automatici','/contabilita','/uscite','/collaboratori','/operatore-bodymind','/mobile','/mobile/atlete']
+status={p:c.get(p,follow_redirects=False).status_code for p in paths}
+dh=c.get('/dashboard',follow_redirects=True).get_data(as_text=True);hh=c.get('/',follow_redirects=True).get_data(as_text=True);ph=c.get('/pagamenti?vista=mensili',follow_redirects=True).get_data(as_text=True)
+def body(h):
+    m=re.search(r'<body\\b[^>]*class=["\\\']([^"\\\']*)',h,re.I);return m.group(1).split() if m else []
+old_dash=('BODYMIND_R123_DASHBOARD_BACKGROUND_RESTORE_RENDERED','BODYMIND_R156_DASHBOARD_RECOMPOSE_RENDERED','BODYMIND_PAYMENT_TRUTH_DASHBOARD_V3','BODYMIND_MONTHLY_ARREARS_V5_RENDERED')
+old_pay=('BODYMIND_R123_PAYMENT_MOBILE','BODYMIND_R125_PAYMENT_BOARD','BODYMIND_R123_PAYMENT_SPLIT_V2_SURFACE','BODYMIND_R123_CANONICAL_PAYMENT_MODULE_V5','bmpv6-immediate')
+row_state={int(a):(b=='1',d=='1') for a,b,d in re.findall(r'data-bm-tid=["\\\'](\\d+)["\\\']\\s+data-bm-enroll=["\\\']([01])["\\\']\\s+data-bm-monthly=["\\\']([01])["\\\']',ph)}
+db=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True,timeout=20);db.row_factory=sqlite3.Row
 try:
-    _bg_counts={t:int(_bg_conn.execute("SELECT COUNT(*) FROM "+t).fetchone()[0]) for t in ("tesserati","pagamenti","ricevute")}
-    _bg_integrity=str(_bg_conn.execute("PRAGMA integrity_check").fetchone()[0])
-    _bg_fk=len(_bg_conn.execute("PRAGMA foreign_key_check").fetchall())
-finally:
-    _bg_conn.close()
-if _bg_integrity.lower()!='ok' or _bg_fk:
-    raise RuntimeError('Dashboard background restore DB guard failed')
-print('[r123-dashboard-background] PASS a239-layered-background scoped-dashboard-only counts='+str(_bg_counts)+' integrity='+_bg_integrity+' fk='+str(_bg_fk),flush=True)
+    truth=bodymind_payment_truth(db);expected={int(x['tesserato_id']):(bool(x['iscrizione_pagata']),bool(x['mensile_pagato'])) for x in truth['rows']}
+    counts={t:int(db.execute('SELECT COUNT(*) FROM '+t).fetchone()[0]) for t in ('tesserati','pagamenti','ricevute','quote_mensili','documenti','inbound_documents')}
+    integrity=str(db.execute('PRAGMA integrity_check').fetchone()[0]);fk=len(db.execute('PRAGMA foreign_key_check').fetchall());legacy_only=[];season=int(truth['stagione'])
+    for x in truth['rows']:
+        tid=int(x['tesserato_id']);pay=db.execute("""SELECT 1 FROM pagamenti WHERE tesserato_id=? AND anno IN (?,?) AND (lower(coalesce(causale,''))='iscrizione' OR lower(coalesce(causale,''))='tesseramento' OR lower(coalesce(causale,'')) LIKE '%iscrizion%') AND lower(coalesce(stato,'')||' '||coalesce(online_status,'')) NOT LIKE '%pending%' AND lower(coalesce(stato,'')||' '||coalesce(online_status,'')) NOT LIKE '%annull%' AND lower(coalesce(stato,'')||' '||coalesce(online_status,'')) NOT LIKE '%failed%' LIMIT 1""",(tid,season,season+1)).fetchone()
+        if bool(x['iscrizione_pagata']) and not pay:legacy_only.append(tid)
+finally:db.close()
+checks={'routes':all(v in (200,301,302,303,307,308) for v in status.values()),'dashboard_body':all('bodymind-dashboard-canonical' in body(x) for x in (dh,hh)),'dashboard_single':dh.count('BODYMIND_R123_DASHBOARD_CANONICAL_RENDERED')==1 and hh.count('BODYMIND_R123_DASHBOARD_CANONICAL_RENDERED')==1,'dashboard_old_absent':not any(x in dh or x in hh for x in old_dash),'payment_single':ph.count('BODYMIND_R123_PAYMENT_FORM_CANONICAL_V7')==1,'payment_old_absent':not any(x in ph for x in old_pay),'payment_truth_matches':row_state==expected,'db':integrity.lower()=='ok' and fk==0}
+print('[r123-final-rendered-audit] '+json.dumps({'checks':checks,'status':status,'body_dashboard':body(dh),'body_home':body(hh),'payment_rows':len(row_state),'truth_rows':len(expected),'legacy_enrollment_flags_without_canonical_payment':legacy_only,'counts':counts,'integrity':integrity,'fk':fk},ensure_ascii=False),flush=True)
+if not all(checks.values()):raise RuntimeError('R123 final rendered audit failed '+repr(checks))
+"""
+_q=subprocess.run([sys.executable,'-c',_final_qa],capture_output=True,text=True,timeout=180);print((_q.stdout or '').strip(),flush=True)
+if _q.returncode!=0:raise RuntimeError('R123 final rendered child audit failed '+((_q.stderr or '')+(_q.stdout or ''))[-7000:])
 
-
-# BODYMIND_R156_DASHBOARD_RECOMPOSE
-# Dashboard-only UI recomposition. This intentionally does NOT depend on historical
-# A239/A236 body classes: later runtime patches can remove/rename those classes.
-# It changes only rendered HTML/CSS/JS for / and /dashboard and never writes business data.
-_core_r156=CORE.read_text(encoding='utf-8',errors='replace')
-if 'BODYMIND_R156_DASHBOARD_RECOMPOSE_RUNTIME' not in _core_r156:
-    _core_r156 += r'''
-
-# BODYMIND_R156_DASHBOARD_RECOMPOSE_RUNTIME
-@app.after_request
-def _bodymind_dashboard_recompose_r156(resp):
-    try:
-        if request.method!='GET' or request.path not in ('/','/dashboard'):
-            return resp
-        if int(getattr(resp,'status_code',200) or 200)!=200:
-            return resp
-        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
-            return resp
-        html=resp.get_data(as_text=True)
-        if 'BODYMIND_R156_DASHBOARD_RECOMPOSE_RENDERED' in html:
-            return resp
-
-        addon=r"""<!-- BODYMIND_R156_DASHBOARD_RECOMPOSE_RENDERED -->
-<style id="bodymind-r156-dashboard-css">
-html,body{min-height:100%!important}
-html body{
-  background:
-    radial-gradient(circle at 10% 4%,rgba(255,255,255,.11) 0,rgba(255,255,255,.035) 20%,transparent 40%),
-    radial-gradient(circle at 88% 10%,rgba(56,189,248,.18) 0,rgba(30,64,175,.08) 25%,transparent 46%),
-    radial-gradient(circle at 55% 92%,rgba(16,185,129,.09) 0,transparent 40%),
-    linear-gradient(145deg,#06101c 0%,#0a1728 44%,#10263d 72%,#07121f 100%)!important;
-  background-attachment:fixed!important;
-}
-html body:before{
-  content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;
-  background:
-    linear-gradient(115deg,transparent 0 46%,rgba(255,255,255,.025) 46.2% 46.8%,transparent 47%),
-    radial-gradient(ellipse at 50% -10%,rgba(255,255,255,.07),transparent 45%);
-}
-body>.overlay,.overlay{background:transparent!important}
-.pro-dashboard,.dashboard,.dashboard-page,main{background:transparent!important}
-.bm-r156-root{position:relative}
-.bm-r156-toolbar{
-  display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
-  margin:8px 0 15px;padding:11px 13px;border:1px solid rgba(125,211,252,.20);
-  border-radius:15px;background:rgba(7,18,31,.72);backdrop-filter:blur(12px);
-  -webkit-backdrop-filter:blur(12px);box-shadow:0 12px 30px rgba(0,0,0,.16)
-}
-.bm-r156-toolbar b{font-size:12px;letter-spacing:.05em;color:#e0f2fe}
-.bm-r156-toolbar span{font-size:11px;color:#93a9c1}
-.bm-r156-toolbar button{
-  border:1px solid rgba(148,163,184,.25);background:#10263d;color:#eaf4ff;
-  min-height:34px;padding:6px 10px;border-radius:9px;font-weight:800;cursor:pointer
-}
-.bm-r156-section{
-  position:relative!important;margin:0 0 14px!important;border-radius:20px!important;
-  border:1px solid rgba(148,163,184,.16)!important;
-  background:linear-gradient(145deg,rgba(7,19,34,.86),rgba(11,30,49,.78))!important;
-  box-shadow:0 18px 45px rgba(0,0,0,.18)!important;
-  backdrop-filter:blur(11px);-webkit-backdrop-filter:blur(11px);
-  overflow:visible!important
-}
-.bm-r156-section>.bm-r156-move{
-  display:flex;align-items:center;justify-content:flex-end;gap:5px;
-  position:absolute;right:9px;top:8px;z-index:30
-}
-.bm-r156-move button{
-  width:30px;height:30px;border-radius:9px;border:1px solid rgba(148,163,184,.22);
-  background:rgba(15,35,57,.9);color:#eaf4ff;font-weight:950;cursor:pointer
-}
-.bm-r156-operational{padding:16px!important}
-.bm-r156-operational h1,.bm-r156-operational h2,.bm-r156-operational h3{padding-right:78px!important}
-.bm-r156-operational .grid,.bm-r156-operational .cards,.bm-r156-operational [class*="grid"]{
-  display:grid!important;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))!important;
-  gap:10px!important;align-items:stretch!important
-}
-.bm-r156-operational .card,.bm-r156-operational [class*="card"],
-.bm-r156-people .card,.bm-r156-people [class*="card"]{
-  min-width:0!important;height:auto!important;overflow:visible!important
-}
-.bm-r156-operational a,.bm-r156-operational button{max-width:100%!important}
-.bm-r156-people{padding:16px!important}
-.bm-r156-people h1,.bm-r156-people h2,.bm-r156-people h3{padding-right:78px!important}
-.bm-r156-status-ok{
-  background:linear-gradient(135deg,rgba(20,83,45,.88),rgba(5,46,22,.76))!important;
-  border-color:rgba(74,222,128,.36)!important
-}
-.bm-r156-status-bad{
-  background:linear-gradient(135deg,rgba(127,29,29,.88),rgba(69,10,10,.76))!important;
-  border-color:rgba(248,113,113,.38)!important
-}
-.bm-r156-status-ok,.bm-r156-status-ok *{color:#ecfdf5!important}
-.bm-r156-status-bad,.bm-r156-status-bad *{color:#fff1f2!important}
-@media(max-width:760px){
-  html body{background-attachment:scroll!important}
-  .bm-r156-section{border-radius:16px!important;margin-bottom:10px!important}
-  .bm-r156-operational,.bm-r156-people{padding:12px!important}
-  .bm-r156-operational .grid,.bm-r156-operational .cards,.bm-r156-operational [class*="grid"]{
-    grid-template-columns:1fr!important;gap:8px!important
-  }
-  .bm-r156-toolbar{margin:6px 0 10px;padding:9px 10px}
-}
-</style>
-<script id="bodymind-r156-dashboard-js">
-(function(){
-  if(window.__bmR156)return; window.__bmR156=true;
-  function norm(s){return (s||'').toLowerCase().replace(/\s+/g,' ').trim()}
-  function root(){
-    return document.querySelector('.pro-dashboard')||
-           document.querySelector('main')||
-           document.querySelector('.dashboard-page')||
-           document.body;
-  }
-  function directBlock(el,r){
-    var n=el;
-    while(n && n.parentElement!==r) n=n.parentElement;
-    return (n && n!==r)?n:null;
-  }
-  function titleOf(b){
-    var h=b.querySelector('h1,h2,h3,h4,.section-title,.kicker');
-    return norm(h?h.textContent:b.textContent.slice(0,80));
-  }
-  function keyOf(b,i){
-    var k=titleOf(b).replace(/[^a-z0-9à-ÿ]+/g,'-').replace(/^-|-$/g,'').slice(0,48);
-    return (k||'sezione')+'-'+i;
-  }
-  function classifyStatus(scope){
-    var nodes=scope.querySelectorAll('.card,[class*="card"],a[class*="person"],a[class*="athlet"],[class*="tesser"]');
-    nodes.forEach(function(n){
-      var t=norm(n.textContent);
-      var cl=norm(n.className);
-      var bad=/mancant|scadut|blocc|da completare|non pagat|irregolar|warning|danger|rosso/.test(t+' '+cl);
-      var ok=/regolare|attiv|complet|pagat|valid|presente|success|good|green|verde/.test(t+' '+cl);
-      if(bad){n.classList.add('bm-r156-status-bad');n.classList.remove('bm-r156-status-ok')}
-      else if(ok){n.classList.add('bm-r156-status-ok');n.classList.remove('bm-r156-status-bad')}
-    });
-  }
-  function install(){
-    var r=root(); if(!r || r.dataset.bmR156==='1')return;
-    r.dataset.bmR156='1'; r.classList.add('bm-r156-root');
-
-    var headings=[].slice.call(r.querySelectorAll('h1,h2,h3,h4,.section-title,.kicker'));
-    var blocks=[];
-    headings.forEach(function(h){
-      var b=directBlock(h,r); if(b && blocks.indexOf(b)<0) blocks.push(b);
-    });
-    if(blocks.length<2){
-      blocks=[].slice.call(r.children).filter(function(x){
-        return !/^(script|style)$/i.test(x.tagName) && norm(x.textContent).length>15;
-      });
-    }
-
-    blocks.forEach(function(b,i){
-      b.classList.add('bm-r156-section');
-      b.dataset.bmSection=keyOf(b,i);
-      var t=titleOf(b);
-      if(t.indexOf('situazione operativa')>=0 || t.indexOf('operativ')>=0){
-        b.classList.add('bm-r156-operational');
-      }
-      if(t.indexOf('persone')>=0 || t.indexOf('tesserat')>=0 || t.indexOf('collaborator')>=0){
-        b.classList.add('bm-r156-people'); classifyStatus(b);
-      }
-      if(!b.querySelector(':scope > .bm-r156-move')){
-        var mv=document.createElement('div'); mv.className='bm-r156-move';
-        mv.innerHTML='<button type="button" data-dir="-1" aria-label="Sposta su">↑</button><button type="button" data-dir="1" aria-label="Sposta giù">↓</button>';
-        mv.addEventListener('click',function(e){
-          var bt=e.target.closest('button'); if(!bt)return;
-          e.preventDefault();e.stopPropagation();
-          var dir=parseInt(bt.dataset.dir||'0',10);
-          var secs=[].slice.call(r.querySelectorAll(':scope > .bm-r156-section'));
-          var idx=secs.indexOf(b); var ni=idx+dir;
-          if(idx<0||ni<0||ni>=secs.length)return;
-          if(dir<0) r.insertBefore(b,secs[ni]); else r.insertBefore(secs[ni],b);
-          save();
-        });
-        b.insertBefore(mv,b.firstChild);
-      }
-      b.draggable=true;
-      b.addEventListener('dragstart',function(e){
-        if(e.dataTransfer){e.dataTransfer.setData('text/plain',b.dataset.bmSection);e.dataTransfer.effectAllowed='move'}
-      });
-      b.addEventListener('dragover',function(e){e.preventDefault()});
-      b.addEventListener('drop',function(e){
-        e.preventDefault();
-        var k=e.dataTransfer?e.dataTransfer.getData('text/plain'):'';
-        var from=r.querySelector(':scope > [data-bm-section="'+CSS.escape(k)+'"]');
-        if(from&&from!==b){r.insertBefore(from,b);save()}
-      });
-    });
-
-    function save(){
-      try{
-        var order=[].slice.call(r.querySelectorAll(':scope > .bm-r156-section')).map(function(x){return x.dataset.bmSection});
-        localStorage.setItem('bodymind.dashboard.sectionOrder.v1',JSON.stringify(order));
-      }catch(_){}
-    }
-    function restore(){
-      try{
-        var order=JSON.parse(localStorage.getItem('bodymind.dashboard.sectionOrder.v1')||'[]');
-        order.forEach(function(k){
-          var el=r.querySelector(':scope > [data-bm-section="'+CSS.escape(k)+'"]'); if(el)r.appendChild(el);
-        });
-      }catch(_){}
-    }
-    restore();
-
-    var bar=document.createElement('div');bar.className='bm-r156-toolbar';
-    bar.innerHTML='<div><b>Dashboard personalizzabile</b><br><span>Usa ↑ ↓ per spostare le sezioni. L’ordine resta salvato su questo dispositivo.</span></div><button type="button">Ripristina ordine</button>';
-    bar.querySelector('button').addEventListener('click',function(){
-      try{localStorage.removeItem('bodymind.dashboard.sectionOrder.v1')}catch(_){}
-      location.reload();
-    });
-    r.insertBefore(bar,r.firstChild);
-  }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
-})();
-</script>"""
-        if '</body>' in html:
-            html=html.replace('</body>',addon+'</body>',1)
-        else:
-            html+=addon
-        resp.set_data(html)
-    except Exception as exc:
-        print('[r156-dashboard-warning] '+repr(exc),flush=True)
-    return resp
-'''
-    CORE.write_text(_core_r156,encoding='utf-8')
-    py_compile.compile(str(CORE),doraise=True)
-    print('[r156-dashboard] installed structural dashboard recomposition',flush=True)
-else:
-    print('[r156-dashboard] already installed',flush=True)
-
-# Read-only invariant gate.
-_r156_conn=sqlite3.connect(str(DB),timeout=20)
+_r123_guard=sqlite3.connect("file:"+str(DB)+"?mode=ro",uri=True,timeout=20)
 try:
-    _r156_counts={t:int(_r156_conn.execute("SELECT COUNT(*) FROM "+t).fetchone()[0]) for t in ("tesserati","pagamenti","ricevute","documenti")}
-    _r156_integrity=str(_r156_conn.execute("PRAGMA integrity_check").fetchone()[0])
-    _r156_fk=len(_r156_conn.execute("PRAGMA foreign_key_check").fetchall())
-finally:
-    _r156_conn.close()
-if _r156_integrity.lower()!='ok' or _r156_fk:
-    raise RuntimeError('R156 dashboard DB guard failed')
-print('[r156-dashboard-selftest] PASS structural-ui-only counts='+str(_r156_counts)+' integrity='+_r156_integrity+' fk='+str(_r156_fk),flush=True)
+    _r123_counts_after={t:int(_r123_guard.execute("SELECT COUNT(*) FROM "+t).fetchone()[0]) for t in ("tesserati","pagamenti","ricevute","quote_mensili","documenti","inbound_documents")}
+finally:_r123_guard.close()
+if _r123_counts_before!=_r123_counts_after:raise RuntimeError('R123 refactor changed business row counts before='+repr(_r123_counts_before)+' after='+repr(_r123_counts_after))
+print('[r123-final-rendered] PASS canonical-dashboard canonical-payment no-mask data-counts-unchanged',flush=True)
