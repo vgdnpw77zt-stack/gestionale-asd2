@@ -431,7 +431,7 @@ checks={
  "dashboard_cert":"Certificato medico mancante/non valido" in dh,
  "dashboard_names":"r141-dash-name" in dh,
  "dashboard_background_not_overridden":"body{margin:0;background:#071529" not in dh and "body.r141-standalone{margin:0;background:#071529" in dh,
- "standalone_background_scoped":"class='r141-standalone'" in ah,
+ "standalone_background_scoped":"body.r141-standalone{margin:0;background:#071529" in ah and "body{margin:0;background:#071529" not in ah,
  "canonical_payment_helper":"pay_truth=bodymind_payment_truth" in Path("/data/top2_app/asd_app/core.py").read_text(encoding="utf-8",errors="replace"),
 }
 # Specific regression: if Balbinetti has no visible physical medical file,
