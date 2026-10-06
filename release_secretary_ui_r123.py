@@ -645,7 +645,7 @@ def _bodymind_payment_module_v7(resp):
         </style>"""
 
         import re as _re
-        m=_re.search(r'(<main\\b[^>]*>)(.*?)(</main>)',html,_re.I|_re.S)
+        m=_re.search(r'(<main\b[^>]*>)(.*?)(</main>)',html,_re.I|_re.S)
         if not m:raise RuntimeError('canonical payment main element missing')
         html=html[:m.start(2)]+surface+html[m.end(2):]
         resp.set_data(html)
@@ -877,7 +877,7 @@ _new_commit="""        try:
         try:c.rollback()"""
 # Constrain replacement to the canonical V7 function region.
 _v7a=_core_v10.find("def _bodymind_payment_register_v7():")
-_v7b=_core_v10.find("@app.after_request\\ndef _bodymind_payment_module_v7",_v7a)
+_v7b=_core_v10.find("def _bodymind_payment_module_v7",_v7a)
 if _v7a>=0 and _v7b>_v7a:
     _region=_core_v10[_v7a:_v7b]
     if _old_commit in _region and "payment-v7-onboarding-sync-warning" not in _region:
@@ -1265,9 +1265,9 @@ if 'BODYMIND_R123_DASHBOARD_CANONICAL_RUNTIME' not in _core_dash:
 # BODYMIND_R123_DASHBOARD_CANONICAL_RUNTIME
 def _bodymind_dashboard_add_body_class(html):
     import re as _bm_re
-    m=_bm_re.search(r'<body\\b([^>]*)>',html,_bm_re.I)
+    m=_bm_re.search(r'<body\b([^>]*)>',html,_bm_re.I)
     if not m:return html
-    tag=m.group(0);cm=_bm_re.search(r'class=(["\\\'])(.*?)\\1',tag,_bm_re.I|_bm_re.S)
+    tag=m.group(0);cm=_bm_re.search(r"""class=(["'])(.*?)\1""",tag,_bm_re.I|_bm_re.S)
     if cm:
         classes=cm.group(2).split()
         if 'bodymind-dashboard-canonical' not in classes:classes.append('bodymind-dashboard-canonical')
@@ -1297,7 +1297,7 @@ def _bodymind_dashboard_canonical(resp):
         panel=f"""<!-- BODYMIND_R123_DASHBOARD_CANONICAL_RENDERED --><section class='bmdc-payments'><div><span>PAGAMENTI · VERITÀ CANONICA</span><h2>Iscrizioni e mensile</h2><p>Stessa sorgente usata da Pagamenti, Tesserati, Operatore e onboarding.</p></div><div class='bmdc-paygrid'><a href='/pagamenti?vista=iscrizioni&stagione={t['stagione']}'><small>ISCRIZIONI {t['stagione']}/{t['stagione']+1}</small><strong>{t['iscrizioni_pagate']}/{t['totale']}</strong><em>{t['iscrizioni_mancanti']} da completare</em></a><a href='/pagamenti?vista=mensili&mese={t['mese']}&anno={t['anno']}'><small>MENSILE · {months[t['mese']]} {t['anno']}</small><strong>{t['mensili_pagati']}/{t['totale']}</strong><em>{t['mensili_mancanti']} da completare</em></a></div>{("<div class='bmdc-months'>"+chips+"</div>" if chips else "")}</section>"""
         css="""<style id='bodymind-dashboard-canonical-style'>body.bodymind-dashboard-canonical{background:radial-gradient(circle at 12% 6%,rgba(255,255,255,.10) 0%,rgba(255,255,255,.04) 18%,transparent 38%),radial-gradient(circle at 88% 12%,rgba(59,130,246,.14) 0%,rgba(30,64,175,.07) 24%,transparent 44%),radial-gradient(circle at 54% 86%,rgba(14,165,233,.08) 0%,transparent 42%),linear-gradient(145deg,#07111f 0%,#0a1728 42%,#0d2034 72%,#071321 100%)!important;background-attachment:fixed!important;min-height:100vh}body.bodymind-dashboard-canonical>.overlay,body.bodymind-dashboard-canonical .pro-dashboard,body.bodymind-dashboard-canonical .dashboard,body.bodymind-dashboard-canonical .dashboard-page,body.bodymind-dashboard-canonical main{background:transparent!important}.bmdc-payments{margin:12px 0 16px;padding:16px;border-radius:20px;background:linear-gradient(145deg,rgba(7,19,34,.88),rgba(11,30,49,.80));border:1px solid rgba(96,165,250,.24);box-shadow:0 18px 45px rgba(0,0,0,.18);color:#f8fafc}.bmdc-payments>div>span{font-size:10px;letter-spacing:.14em;font-weight:950;color:#7dd3fc}.bmdc-payments h2{margin:4px 0}.bmdc-payments p{margin:0;color:#b7c6d9}.bmdc-paygrid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px}.bmdc-paygrid a{display:grid;gap:3px;padding:13px;border-radius:14px;background:#0b1d31;border:1px solid rgba(148,163,184,.16);color:#fff!important;text-decoration:none}.bmdc-paygrid small{color:#93c5fd;font-weight:900}.bmdc-paygrid strong{font-size:24px}.bmdc-paygrid em{font-style:normal;color:#cbd5e1;font-size:11px}.bmdc-months{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.bmdc-months a{display:grid;gap:2px;padding:8px 10px;border-radius:10px;color:#fff!important;text-decoration:none;font-size:11px}.bmdc-months a.due{background:#7f1d1d}.bmdc-months a.ok{background:#14532d}.bmdc-months span{color:#e2e8f0}@media(max-width:760px){body.bodymind-dashboard-canonical{background:radial-gradient(circle at 12% 6%,rgba(255,255,255,.08) 0%,rgba(255,255,255,.03) 18%,transparent 36%),linear-gradient(160deg,#07111f 0%,#0a1728 52%,#071321 100%)!important;background-attachment:scroll!important}.bmdc-paygrid{grid-template-columns:1fr}}</style>"""
         if '</head>' in html:html=html.replace('</head>',css+'</head>',1)
-        import re as _bm_re;m=_bm_re.search(r'<main\\b[^>]*>',html,_bm_re.I)
+        import re as _bm_re;m=_bm_re.search(r'<main\b[^>]*>',html,_bm_re.I)
         if not m:raise RuntimeError('canonical dashboard main element missing')
         html=html[:m.end()]+panel+html[m.end():];resp.set_data(html)
     except Exception as exc:print('[dashboard-canonical-warning] '+repr(exc),flush=True)
@@ -1317,10 +1317,10 @@ paths=['/','/dashboard','/tesserati','/pagamenti','/documenti','/documenti-autom
 status={p:c.get(p,follow_redirects=False).status_code for p in paths}
 dh=c.get('/dashboard',follow_redirects=True).get_data(as_text=True);hh=c.get('/',follow_redirects=True).get_data(as_text=True);ph=c.get('/pagamenti?vista=mensili',follow_redirects=True).get_data(as_text=True)
 def body(h):
-    m=re.search(r'<body\\b[^>]*class=["\\\']([^"\\\']*)',h,re.I);return m.group(1).split() if m else []
+    m=re.search(r"""<body\b[^>]*class=["']([^"']*)""",h,re.I);return m.group(1).split() if m else []
 old_dash=('BODYMIND_R123_DASHBOARD_BACKGROUND_RESTORE_RENDERED','BODYMIND_R156_DASHBOARD_RECOMPOSE_RENDERED','BODYMIND_PAYMENT_TRUTH_DASHBOARD_V3','BODYMIND_MONTHLY_ARREARS_V5_RENDERED')
 old_pay=('BODYMIND_R123_PAYMENT_MOBILE','BODYMIND_R125_PAYMENT_BOARD','BODYMIND_R123_PAYMENT_SPLIT_V2_SURFACE','BODYMIND_R123_CANONICAL_PAYMENT_MODULE_V5','bmpv6-immediate')
-row_state={int(a):(b=='1',d=='1') for a,b,d in re.findall(r'data-bm-tid=["\\\'](\\d+)["\\\']\\s+data-bm-enroll=["\\\']([01])["\\\']\\s+data-bm-monthly=["\\\']([01])["\\\']',ph)}
+row_state={int(a):(b=='1',d=='1') for a,b,d in re.findall(r"""data-bm-tid=["'](\d+)["']\s+data-bm-enroll=["']([01])["']\s+data-bm-monthly=["']([01])["']""",ph)}
 db=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True,timeout=20);db.row_factory=sqlite3.Row
 try:
     truth=bodymind_payment_truth(db);expected={int(x['tesserato_id']):(bool(x['iscrizione_pagata']),bool(x['mensile_pagato'])) for x in truth['rows']}
