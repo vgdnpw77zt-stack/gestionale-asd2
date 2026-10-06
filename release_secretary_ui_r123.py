@@ -1353,6 +1353,251 @@ def _bodymind_dashboard_canonical(resp):
     print('[r123-dashboard-canonical] installed one server-side dashboard authority',flush=True)
 else:print('[r123-dashboard-canonical] already installed',flush=True)
 
+
+# BODYMIND_R123_QUOTE_INCASSI_CANONICAL_V12
+# /quote-incassi is a secretary summary, not a second accounting engine:
+# exactly one annual enrollment payment and one selected monthly payment.
+# Amounts marked paid come only from canonical pagamenti rows.
+_core_qi=CORE.read_text(encoding='utf-8',errors='replace')
+if 'BODYMIND_R123_QUOTE_INCASSI_CANONICAL_V12' not in _core_qi:
+    _core_qi += r'''
+
+# BODYMIND_R123_QUOTE_INCASSI_CANONICAL_V12
+def bodymind_quote_incassi_canonical():
+    from datetime import date as _bm_date
+    if request.method!='GET':
+        return redirect('/quote-incassi',303)
+
+    today=_bm_date.today()
+    mese=parse_int(request.args.get('mese'),today.month)
+    anno=parse_int(request.args.get('anno'),today.year)
+    if mese<1 or mese>12: mese=today.month
+    if anno<2020 or anno>2100: anno=today.year
+    stagione=anno if mese>=7 else anno-1
+    months=['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
+
+    conn=db(); conn.row_factory=sqlite3.Row
+    try:
+        truth=bodymind_payment_truth(conn,mese=mese,anno=anno,stagione=stagione)
+        payment_ids=[]
+        for x in truth.get('rows',[]):
+            for k in ('iscrizione_payment_id','mensile_payment_id'):
+                if x.get(k): payment_ids.append(int(x[k]))
+        payments={}
+        if payment_ids:
+            marks=','.join('?' for _ in payment_ids)
+            for p in conn.execute('SELECT * FROM pagamenti WHERE id IN ('+marks+')',payment_ids).fetchall():
+                payments[int(p['id'])]=p
+
+        quote_by_tid={}
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='quote_mensili'").fetchone():
+            for q in conn.execute("SELECT * FROM quote_mensili WHERE mese=? AND anno=? ORDER BY id DESC",(mese,anno)).fetchall():
+                tid=int(q['tesserato_id'] or 0)
+                if not tid or tid in quote_by_tid: continue
+                state=str(q['stato'] or '').strip().lower()
+                if any(x in state for x in ('non_dovuto','non dovuto','esente','annull','sospes')):
+                    quote_by_tid[tid]=None
+                else:
+                    quote_by_tid[tid]=q
+    finally:
+        conn.close()
+
+    def _money(value):
+        if value is None: return '—'
+        try: return ('€ %.2f'%float(value)).replace('.',',')
+        except Exception: return '—'
+
+    rows=[]
+    enroll_paid=0
+    monthly_paid=0
+    monthly_due=0
+    for x in truth.get('rows',[]):
+        tid=int(x['tesserato_id'])
+        ep=payments.get(int(x.get('iscrizione_payment_id') or 0))
+        mp=payments.get(int(x.get('mensile_payment_id') or 0))
+        ep_ok=bool(x.get('iscrizione_pagata') and ep)
+        mp_ok=bool(x.get('mensile_pagato') and mp)
+        q=quote_by_tid.get(tid,'__missing__')
+        month_applicable=(q is not None and q!='__missing__') or mp_ok
+        if ep_ok: enroll_paid+=1
+        if month_applicable: monthly_due+=1
+        if mp_ok: monthly_paid+=1
+
+        ep_amount=(float(ep['importo'] or 0) if ep_ok else None)
+        mp_paid_amount=(float(mp['importo'] or 0) if mp_ok else None)
+        if mp_ok:
+            mp_display=mp_paid_amount
+        elif q not in (None,'__missing__'):
+            mp_display=float(q['importo_dovuto'] or q['importo_base'] or 0)
+        else:
+            mp_display=None
+
+        enroll_href='/pagamenti?vista=iscrizioni&stagione='+str(stagione)+'&tesserato_id='+str(tid)+'&azione=registra&tipo=iscrizione'
+        month_href='/pagamenti?vista=mensili&mese='+str(mese)+'&anno='+str(anno)+'&tesserato_id='+str(tid)+'&azione=registra&tipo=mensile'
+        enroll_state='PAGATA' if ep_ok else 'DA PAGARE'
+        if mp_ok: month_state='PAGATO'
+        elif not month_applicable: month_state='NON DOVUTO'
+        else: month_state='DA PAGARE'
+        enroll_cls='paid' if ep_ok else 'due'
+        month_cls='paid' if mp_ok else ('na' if not month_applicable else 'due')
+        name=((str(x.get('cognome') or '')+' '+str(x.get('nome') or '')).strip())
+        ep_attr=('%.2f'%ep_amount) if ep_amount is not None else ''
+        mp_attr=('%.2f'%mp_paid_amount) if mp_paid_amount is not None else ''
+
+        rows.append(
+          "<article class='bmqi-row' data-bm-tid='"+str(tid)+"' data-bm-enroll-paid='"+('1' if ep_ok else '0')+
+          "' data-bm-enroll-amount='"+ep_attr+"' data-bm-month-paid='"+('1' if mp_ok else '0')+
+          "' data-bm-month-amount='"+mp_attr+"'>"
+          "<div class='bmqi-name'><b>"+e(name)+"</b><small>"+months[mese]+" "+str(anno)+"</small></div>"
+          "<a class='bmqi-pay "+enroll_cls+"' href='"+enroll_href+"'><span>ISCRIZIONE "+str(stagione)+"/"+str(stagione+1)+"</span><strong>"+_money(ep_amount)+"</strong><em>"+enroll_state+"</em><small>"+('Modifica' if ep_ok else 'Registra')+"</small></a>"
+          "<a class='bmqi-pay "+month_cls+"' href='"+month_href+"'><span>MENSILE · "+months[mese].upper()+" "+str(anno)+"</span><strong>"+_money(mp_display)+"</strong><em>"+month_state+"</em><small>"+('Modifica' if mp_ok else ('Apri' if month_applicable else 'Non dovuto'))+"</small></a>"
+          "</article>"
+        )
+
+    month_opts=''.join("<option value='"+str(i)+"' "+('selected' if i==mese else '')+">"+months[i]+"</option>" for i in range(1,13))
+    html=f"""<!-- BODYMIND_R123_QUOTE_INCASSI_CANONICAL_V12 -->
+    <main class='bmqi'>
+      <header class='bmqi-head'>
+        <div><small>QUOTE E PAGAMENTI</small><h1>Iscrizione + mensile</h1><p>Due sole voci per atleta. Gli importi pagati arrivano dai movimenti reali registrati.</p></div>
+        <a href='/pagamenti'>Pagamenti</a>
+      </header>
+      <form class='bmqi-period' method='get' action='/quote-incassi'>
+        <label>Mese<select name='mese'>{month_opts}</select></label>
+        <label>Anno<input name='anno' inputmode='numeric' value='{anno}'></label>
+        <button type='submit'>Mostra</button>
+      </form>
+      <section class='bmqi-summary'>
+        <div><small>ISCRIZIONI {stagione}/{stagione+1}</small><strong>{enroll_paid}/{len(truth.get('rows',[]))}</strong><span>pagate</span></div>
+        <div><small>MENSILE · {months[mese].upper()} {anno}</small><strong>{monthly_paid}/{monthly_due}</strong><span>pagati</span></div>
+      </section>
+      <section class='bmqi-list'>{''.join(rows)}</section>
+    </main>
+    <style>
+      .bmqi{{max-width:1180px;margin:0 auto;padding:14px 14px 70px}}
+      .bmqi-head{{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;margin-bottom:12px}}
+      .bmqi-head small{{font-size:10px;font-weight:950;letter-spacing:.12em;color:#7dd3fc}}
+      .bmqi-head h1{{margin:4px 0 3px;font-size:25px}}
+      .bmqi-head p{{margin:0;color:#a9bbcf}}
+      .bmqi-head>a{{padding:10px 13px;border-radius:11px;background:#163b5f;color:#fff!important;text-decoration:none;font-weight:900}}
+      .bmqi-period{{display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin:10px 0;padding:10px;border-radius:13px;background:#0b1d31}}
+      .bmqi-period label{{display:grid;gap:4px;font-size:11px;font-weight:900}}
+      .bmqi-period select,.bmqi-period input,.bmqi-period button{{min-height:40px;border-radius:9px;border:1px solid rgba(148,163,184,.24);background:#06111f;color:#fff;padding:8px 10px}}
+      .bmqi-period button{{background:#2563eb;font-weight:950}}
+      .bmqi-summary{{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}}
+      .bmqi-summary>div{{display:grid;gap:2px;padding:11px 13px;border-radius:13px;background:#0d2138;border:1px solid rgba(125,211,252,.18)}}
+      .bmqi-summary small{{font-weight:900;color:#93c5fd}}.bmqi-summary strong{{font-size:21px}}.bmqi-summary span{{font-size:11px;color:#cbd5e1}}
+      .bmqi-list{{display:grid;gap:8px}}
+      .bmqi-row{{display:grid;grid-template-columns:minmax(180px,.65fr) minmax(200px,1fr) minmax(200px,1fr);gap:8px;align-items:stretch;padding:10px;border-radius:15px;background:rgba(8,24,42,.88);border:1px solid rgba(148,163,184,.16)}}
+      .bmqi-name{{display:flex;flex-direction:column;justify-content:center;gap:3px;padding:7px}}.bmqi-name b{{font-size:14px}}.bmqi-name small{{color:#94a3b8}}
+      .bmqi-pay{{display:grid;grid-template-columns:1fr auto;grid-template-areas:'label amount' 'state action';gap:5px 10px;padding:11px;border-radius:12px;text-decoration:none!important;color:#fff!important;border:1px solid transparent}}
+      .bmqi-pay>span{{grid-area:label;font-size:10px;font-weight:950;letter-spacing:.04em}}.bmqi-pay>strong{{grid-area:amount;font-size:18px;text-align:right}}.bmqi-pay>em{{grid-area:state;font-style:normal;font-size:11px;font-weight:950}}.bmqi-pay>small{{grid-area:action;text-align:right;font-weight:900}}
+      .bmqi-pay.paid{{background:rgba(20,83,45,.72);border-color:rgba(74,222,128,.30)}}.bmqi-pay.due{{background:rgba(127,29,29,.54);border-color:rgba(248,113,113,.34)}}.bmqi-pay.na{{background:rgba(51,65,85,.46);border-color:rgba(148,163,184,.22);color:#cbd5e1!important}}
+      @media(max-width:900px){{.bmqi-row{{grid-template-columns:1fr 1fr}}.bmqi-name{{grid-column:1/-1}}}}
+      @media(max-width:620px){{.bmqi{{padding:11px 10px 65px}}.bmqi-head{{display:grid}}.bmqi-summary{{grid-template-columns:1fr}}.bmqi-row{{grid-template-columns:1fr}}.bmqi-name{{grid-column:auto}}.bmqi-period label,.bmqi-period select,.bmqi-period input,.bmqi-period button{{width:100%}}}}
+    </style>"""
+    return layout(html)
+'''
+    CORE.write_text(_core_qi,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+    print('[r123-quote-incassi] installed canonical enrollment+monthly summary',flush=True)
+else:
+    print('[r123-quote-incassi] canonical summary already installed',flush=True)
+
+# Replace the historical /quote-incassi implementation at source level.
+# Preserve its registered endpoint/decorators, but make its body delegate to the
+# canonical read-only summary above. This avoids route shadowing and duplicate writes.
+import ast as _bm_qi_ast
+_pay_src=APP/'asd_app/routes_pagamenti.py'
+if not _pay_src.exists():
+    raise RuntimeError('quote-incassi source missing: '+str(_pay_src))
+_pay_text=_pay_src.read_text(encoding='utf-8',errors='replace')
+_pay_tree=_bm_qi_ast.parse(_pay_text)
+_pay_lines=_pay_text.splitlines(True)
+_qi_nodes=[]
+for _node in _pay_tree.body:
+    if not isinstance(_node,(_bm_qi_ast.FunctionDef,_bm_qi_ast.AsyncFunctionDef)):
+        continue
+    _is_quote=False
+    for _dec in _node.decorator_list:
+        if isinstance(_dec,_bm_qi_ast.Call) and isinstance(_dec.func,_bm_qi_ast.Attribute) and _dec.func.attr=='route':
+            for _arg in _dec.args:
+                if isinstance(_arg,_bm_qi_ast.Constant) and _arg.value=='/quote-incassi':
+                    _is_quote=True
+    if _is_quote:
+        _qi_nodes.append(_node)
+if len(_qi_nodes)!=1:
+    raise RuntimeError('expected exactly one /quote-incassi source route, found '+str(len(_qi_nodes)))
+_qi_node=_qi_nodes[0]
+_qi_src=''.join(_pay_lines[_qi_node.lineno-1:int(getattr(_qi_node,'end_lineno',_qi_node.lineno))])
+if 'bodymind_quote_incassi_canonical' not in _qi_src:
+    if not _qi_node.body:
+        raise RuntimeError('/quote-incassi route has no body')
+    _body_start=_qi_node.body[0].lineno-1
+    _body_end=int(getattr(_qi_node,'end_lineno',_qi_node.lineno))
+    _indent=' '*int(_qi_node.body[0].col_offset)
+    _replacement=[
+        _indent+"from .core import bodymind_quote_incassi_canonical\n",
+        _indent+"return bodymind_quote_incassi_canonical()\n",
+    ]
+    _pay_lines[_body_start:_body_end]=_replacement
+    _pay_src.write_text(''.join(_pay_lines),encoding='utf-8')
+    py_compile.compile(str(_pay_src),doraise=True)
+    print('[r123-quote-incassi-source] replaced historical renderer with canonical delegate',flush=True)
+else:
+    print('[r123-quote-incassi-source] already canonical',flush=True)
+
+_quote_qa=r"""
+import json,re,sqlite3,sys
+sys.path.insert(0,'/data/top2_app');import app as _full
+from asd_app.core import app,bodymind_payment_truth
+app.config['TESTING']=True
+c=app.test_client()
+with c.session_transaction() as s:s.update({'logged':True,'logged_in':True,'username':'admin','display_name':'Quote QA','role':'admin','tenant_slug':'default','user_id':1,'is_admin':True,'admin':True})
+db=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True,timeout=20);db.row_factory=sqlite3.Row
+try:
+    counts_before={t:int(db.execute('SELECT COUNT(*) FROM '+t).fetchone()[0]) for t in ('tesserati','pagamenti','ricevute','quote_mensili','documenti','inbound_documents')}
+    truth=bodymind_payment_truth(db,mese=10,anno=2026,stagione=2026)
+    expected={}
+    for x in truth['rows']:
+        tid=int(x['tesserato_id'])
+        ep=db.execute('SELECT importo FROM pagamenti WHERE id=?',(int(x['iscrizione_payment_id']),)).fetchone() if x.get('iscrizione_payment_id') else None
+        mp=db.execute('SELECT importo FROM pagamenti WHERE id=?',(int(x['mensile_payment_id']),)).fetchone() if x.get('mensile_payment_id') else None
+        expected[tid]=(bool(x['iscrizione_pagata'] and ep),('%.2f'%float(ep['importo'] or 0) if ep else ''),bool(x['mensile_pagato'] and mp),('%.2f'%float(mp['importo'] or 0) if mp else ''))
+    integrity=str(db.execute('PRAGMA integrity_check').fetchone()[0]);fk=len(db.execute('PRAGMA foreign_key_check').fetchall())
+    target_breakdown=[]
+    for p in db.execute("""SELECT t.cognome,t.nome,p.causale,p.mese,p.anno,p.importo,p.data
+                           FROM pagamenti p JOIN tesserati t ON t.id=p.tesserato_id
+                          WHERE lower(t.cognome) IN ('abatini','angelucci','annunziato','frioli','fabiani')
+                            AND p.anno IN (2026,2027)
+                          ORDER BY lower(t.cognome),lower(t.nome),p.anno,p.mese,p.id""").fetchall():
+        target_breakdown.append(dict(p))
+finally:
+    db.close()
+r=c.get('/quote-incassi?mese=10&anno=2026',follow_redirects=True);h=r.get_data(as_text=True)
+rendered={}
+for tid,ep,ea,mp,ma in re.findall(r"data-bm-tid='(\d+)' data-bm-enroll-paid='([01])' data-bm-enroll-amount='([^']*)' data-bm-month-paid='([01])' data-bm-month-amount='([^']*)'",h):
+    rendered[int(tid)]=(ep=='1',ea,mp=='1',ma)
+db=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True,timeout=20)
+try:counts_after={t:int(db.execute('SELECT COUNT(*) FROM '+t).fetchone()[0]) for t in ('tesserati','pagamenti','ricevute','quote_mensili','documenti','inbound_documents')}
+finally:db.close()
+checks={
+ 'status':r.status_code==200,
+ 'single':h.count('BODYMIND_R123_QUOTE_INCASSI_CANONICAL_V12')==1,
+ 'truth':rendered==expected,
+ 'no_legacy_columns':not any(x in h.upper() for x in ('>RESIDUO<','>CREDITO<','>SCONTO<','>INCASSATO<')),
+ 'two_semantics':'ISCRIZIONE 2026/2027' in h and 'MENSILE · OTTOBRE 2026' in h,
+ 'read_only':counts_before==counts_after,
+ 'db':integrity.lower()=='ok' and fk==0,
+}
+print('[r123-quote-incassi-audit] '+json.dumps({'checks':checks,'rows':len(rendered),'counts_before':counts_before,'counts_after':counts_after,'target_breakdown':target_breakdown,'integrity':integrity,'fk':fk},ensure_ascii=False),flush=True)
+if not all(checks.values()):raise RuntimeError('quote-incassi canonical audit failed '+repr(checks))
+"""
+_qip=subprocess.run([sys.executable,'-c',_quote_qa],capture_output=True,text=True,timeout=180)
+print((_qip.stdout or '').strip(),flush=True)
+if _qip.returncode!=0:
+    raise RuntimeError('quote-incassi child audit failed '+((_qip.stderr or '')+(_qip.stdout or ''))[-7000:])
+print('[r123-quote-incassi] PASS separate enrollment/monthly amounts no residual no aggregate cash',flush=True)
+
 _final_qa=r"""
 import json,re,sqlite3,sys
 sys.path.insert(0,'/data/top2_app');import app as _full
