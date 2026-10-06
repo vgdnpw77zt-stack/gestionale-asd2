@@ -1356,7 +1356,7 @@ else:print('[r123-dashboard-canonical] already installed',flush=True)
 _final_qa=r"""
 import json,re,sqlite3,sys
 sys.path.insert(0,'/data/top2_app');import app as _full
-from asd_app.core import app,bodymind_payment_truth
+from asd_app.core import app,bodymind_payment_truth,load_config,file_url
 app.config['TESTING']=True;c=app.test_client()
 with c.session_transaction() as s:s.update({'logged':True,'logged_in':True,'username':'admin','display_name':'Canonical QA','role':'admin','tenant_slug':'default','user_id':1,'is_admin':True,'admin':True})
 paths=['/','/dashboard','/tesserati','/pagamenti','/documenti','/documenti-automatici','/contabilita','/uscite','/collaboratori','/operatore-bodymind','/mobile','/mobile/atlete']
