@@ -592,7 +592,7 @@ def _bodymind_payment_module_v7(resp):
                 if vista=='iscrizioni' and (not _enroll or int(_p.get('anno') or 0) not in (stagione,stagione+1)): continue
                 _pid=int(_p.get('id') or 0); _typ='mensile' if _monthly else 'iscrizione'
                 _edit=f"/pagamenti?vista={vista}&mese={mese}&anno={anno}&stagione={stagione}&tesserato_id={tid}&azione=registra&tipo={_typ}&payment_id={_pid}"
-                movement_links.append("<a class='doc' href='"+_edit+"'>Modifica pagamento · "+_money(_p.get('importo'))+"</a><form class='bmpv14-inline-delete' method='post' action='/pagamenti/elimina'><input type='hidden' name='csrf_token' value='"+e(csrf_token())+"'><input type='hidden' name='payment_id' value='"+str(_pid)+"'><button type='submit' onclick=\"return confirm('Eliminare questo pagamento inserito per errore? Verrà annullato e non conterà più negli incassi.')\">Elimina pagamento</button></form>")
+                movement_links.append("<a class='doc' href='"+_edit+"'>Apri pagamento · "+_money(_p.get('importo'))+"</a>")
             rows.append((0 if not focus_ok else 1,
                 "<div class='bmpv7-row "+row_state+"' data-bm-tid='"+str(tid)+"' data-bm-enroll='"+("1" if eok else "0")+"' data-bm-monthly='"+("1" if mok else "0")+"'>"
                 +"<div class='bmpv7-person'><b>"+e(_name(a))+"</b>"
@@ -645,6 +645,13 @@ def _bodymind_payment_module_v7(resp):
                   </div>
                   <button class='bmpv7-save' type='submit'>{'Aggiorna pagamento' if pid else 'Salva pagamento'}</button>
                 </form>"""
+                if pid:
+                    delete_label='Elimina iscrizione' if action_tipo=='iscrizione' else 'Elimina mensile'
+                    form_html+=f"""<form class='bmpv7-delete' method='post' action='/pagamenti/elimina'>
+                      <input type='hidden' name='csrf_token' value='{e(csrf_token())}'>
+                      <input type='hidden' name='payment_id' value='{pid}'>
+                      <button type='submit' onclick="return confirm('Eliminare questa registrazione? Verrà annullata e non conterà più negli incassi.')">{e(delete_label)}</button>
+                    </form>"""
 
         saved="<div class='bmpv7-saved'>Pagamento salvato. Dashboard, Task e Centro operativo leggono ora lo stesso stato.</div>" if request.args.get('salvato')=='1' else ""
         error="<div class='bmpv7-error'>Il pagamento non è stato salvato. Controlla i dati e riprova.</div>" if request.args.get('errore') else ""
@@ -673,7 +680,7 @@ def _bodymind_payment_module_v7(resp):
         .bmpv7{{min-width:0;margin:12px 0 22px;padding:16px;border-radius:20px;background:#081626;border:1px solid rgba(96,165,250,.24);color:#f8fafc;overflow:hidden}}.bmpv7-head{{display:flex;justify-content:space-between;gap:14px;align-items:center}}.bmpv7-head span{{font-size:10px;letter-spacing:.14em;font-weight:950;color:#7dd3fc}}.bmpv7-head h1{{margin:4px 0;font-size:clamp(21px,2.3vw,27px)}}.bmpv7-head p{{margin:0;color:#b7c6d9;max-width:760px;line-height:1.45}}.bmpv7-head>strong{{font-size:20px;white-space:nowrap}}
         .bmpv7-tabs{{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:13px 0}}.bmpv7-tabs a{{padding:12px;border-radius:12px;background:#10243a;color:#cbd5e1!important;text-decoration:none;text-align:center;font-weight:950}}.bmpv7-tabs a.on{{background:#2563eb;color:white!important}}
         .bmpv7-period{{display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin-bottom:12px;padding:10px;border-radius:13px;background:#0c2035}}.bmpv7-period label{{display:grid;gap:4px;font-size:11px;font-weight:900}}.bmpv7-period input,.bmpv7-period select,.bmpv7-period button{{min-height:40px;border-radius:9px;border:1px solid rgba(148,163,184,.25);background:#06111f;color:#fff;padding:8px 10px}}.bmpv7-period button{{background:#2563eb;font-weight:900}}
-        .bmpv7-form{{margin:12px 0 16px;padding:14px;border-radius:15px;background:#0d2138;border:2px solid rgba(96,165,250,.48)}}.bmpv7-formhead{{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:12px}}.bmpv7-formhead span{{font-size:10px;font-weight:950;color:#7dd3fc}}.bmpv7-formhead h2{{margin:3px 0;font-size:20px}}.bmpv7-formhead a{{color:#bfdbfe!important}}.bmpv7-fields{{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}}.bmpv7-fields label{{display:grid;gap:5px;min-width:0;font-size:11px;font-weight:900;color:#cbd5e1}}.bmpv7-fields input,.bmpv7-fields select,.bmpv7-fields textarea{{width:100%;min-width:0;border-radius:9px;border:1px solid rgba(148,163,184,.25);background:#06111f;color:#fff;padding:9px;font-size:14px}}.bmpv7-fields .wide{{grid-column:1/-1}}.bmpv7-save{{margin-top:10px;min-height:44px;padding:10px 18px;border:0;border-radius:10px;background:#16a34a;color:#fff;font-weight:950}}
+        .bmpv7-form{{margin:12px 0 16px;padding:14px;border-radius:15px;background:#0d2138;border:2px solid rgba(96,165,250,.48)}}.bmpv7-formhead{{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:12px}}.bmpv7-formhead span{{font-size:10px;font-weight:950;color:#7dd3fc}}.bmpv7-formhead h2{{margin:3px 0;font-size:20px}}.bmpv7-formhead a{{color:#bfdbfe!important}}.bmpv7-fields{{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}}.bmpv7-fields label{{display:grid;gap:5px;min-width:0;font-size:11px;font-weight:900;color:#cbd5e1}}.bmpv7-fields input,.bmpv7-fields select,.bmpv7-fields textarea{{width:100%;min-width:0;border-radius:9px;border:1px solid rgba(148,163,184,.25);background:#06111f;color:#fff;padding:9px;font-size:14px}}.bmpv7-fields .wide{{grid-column:1/-1}}.bmpv7-save{{margin-top:10px;min-height:44px;padding:10px 18px;border:0;border-radius:10px;background:#16a34a;color:#fff;font-weight:950}}.bmpv7-delete{{margin:8px 0 16px;padding:0 14px 14px;background:#0d2138;border-left:2px solid rgba(96,165,250,.48);border-right:2px solid rgba(96,165,250,.48);border-bottom:2px solid rgba(96,165,250,.48);border-radius:0 0 15px 15px}}.bmpv7-delete button{{width:100%;min-height:44px;border:1px solid #ef4444;border-radius:10px;background:#450a0a;color:#fecaca;font-weight:950;cursor:pointer}}
         .bmpv7-list{{display:grid;gap:8px;min-width:0}}.bmpv7-row{{display:grid;grid-template-columns:minmax(280px,.9fr) minmax(360px,1.1fr);gap:10px 14px;align-items:center;min-width:0;padding:12px 13px;border-radius:14px;background:rgba(11,29,49,.86);border:1px solid rgba(148,163,184,.16)}}.bmpv7-row.due{{background:rgba(82,20,28,.72);border-color:rgba(248,113,113,.38)}}.bmpv7-row.paid{{background:rgba(17,70,40,.62);border-color:rgba(74,222,128,.30)}}.bmpv7-row.mixed{{background:rgba(11,29,49,.94);border-color:rgba(125,211,252,.20)}}.bmpv7-person{{display:grid;gap:8px;min-width:0}}.bmpv7-person>b{{font-size:14px;overflow-wrap:anywhere}}.bmpv7-statuses{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}}.bmpv7-status{{display:grid;grid-template-columns:9px minmax(0,1fr) auto;gap:6px;align-items:center;min-width:0;padding:7px 8px;border-radius:9px;border:1px solid rgba(148,163,184,.18);font-size:10px}}.bmpv7-status i{{width:8px;height:8px;border-radius:50%;background:#dc2626;box-shadow:0 0 0 3px rgba(220,38,38,.14)}}.bmpv7-status b{{min-width:0;font-size:10px;letter-spacing:.02em;overflow-wrap:anywhere}}.bmpv7-status em{{font-style:normal;font-weight:950;white-space:nowrap}}.bmpv7-status.due{{background:rgba(127,29,29,.62);border-color:rgba(248,113,113,.34);color:#fee2e2}}.bmpv7-status.ok{{background:rgba(20,83,45,.72);border-color:rgba(74,222,128,.30);color:#dcfce7}}.bmpv7-status.ok i{{background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.14)}}.bmpv7-status.na{{background:rgba(51,65,85,.44);border-color:rgba(148,163,184,.22);color:#cbd5e1}}.bmpv7-status.na i{{background:#64748b;box-shadow:none}}
         .bmpv7-actions{{display:grid;grid-template-columns:repeat(2,minmax(145px,1fr));gap:6px;justify-self:end;width:min(100%,510px)}}.bmpv7-actions a,.bmpv7-action-na{{display:flex;align-items:center;justify-content:center;min-height:38px;padding:8px 9px;border-radius:9px;text-align:center;font-size:10px;font-weight:950;line-height:1.2}}.bmpv7-actions a{{background:#2563eb;color:#fff!important;text-decoration:none}}.bmpv7-actions a+ a{{background:#0f766e}}.bmpv7-actions a.doc{{background:#334155!important}}.bmpv7-action-na{{background:#334155;color:#cbd5e1;border:1px solid rgba(148,163,184,.22)}}.bmpv7-admin{{display:flex;gap:6px;flex-wrap:wrap;margin:-3px 0 12px;align-items:center}}.bmpv7-admin span{{font-size:10px;font-weight:950;color:#94a3b8;letter-spacing:.1em}}.bmpv7-admin a{{padding:8px 9px;border-radius:9px;background:#172554;color:#dbeafe!important;text-decoration:none;font-size:10px;font-weight:900}}.bmpv7-months{{margin:0 0 12px;padding:10px;border-radius:13px;background:#0b1d31}}.bmpv7-months>strong{{display:block;margin-bottom:7px;font-size:10px;letter-spacing:.12em;color:#93c5fd}}.bmpv7-months>div{{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:6px}}.bmpv7-months a{{display:grid;gap:2px;padding:7px 9px;border-radius:9px;color:#fff!important;text-decoration:none;font-size:10px}}.bmpv7-months a.due{{background:#7f1d1d}}.bmpv7-months a.ok{{background:#14532d}}.bmpv7-months span{{color:#e2e8f0}}.bmpv7-saved,.bmpv7-error{{margin:10px 0;padding:10px 12px;border-radius:10px;font-weight:850}}.bmpv7-saved{{background:#14532d;color:#dcfce7}}.bmpv7-error{{background:#7f1d1d;color:#fee2e2}}
         @media(max-width:1400px){{.bmpv7-row{{grid-template-columns:1fr}}.bmpv7-actions{{justify-self:stretch;width:100%;grid-template-columns:repeat(4,minmax(0,1fr))}}.bmpv7-fields{{grid-template-columns:repeat(3,minmax(0,1fr))}}}}
@@ -1997,28 +2004,12 @@ def _bodymind_payment_admin_surface_v13(resp):
         html=resp.get_data(as_text=True)
 
         if request.path=='/pagamenti':
-            # The canonical V7 edit form already writes by payment_id. Expose the
-            # destructive-looking action as a protected POST that performs an
-            # auditable annulment, never a blind SQL DELETE.
-            marker="<button class='bmpv7-save' type='submit'>"
-            if marker in html and "name='payment_id' value='0'" not in html and "/pagamenti/elimina" not in html:
-                import re as _re
-                m=_re.search(r"<input type='hidden' name='payment_id' value='(\d+)'>",html)
-                t=_re.search(r"<input type='hidden' name='tesserato_id' value='(\d+)'>",html)
-                if m and int(m.group(1))>0:
-                    delete_form=("<form class='bmpv13-delete' method='post' action='/pagamenti/elimina'>"
-                      "<input type='hidden' name='csrf_token' value='"+e(csrf_token())+"'>"
-                      "<input type='hidden' name='payment_id' value='"+m.group(1)+"'>"
-                      "<button type='submit' onclick=\"return confirm('Eliminare questo pagamento inserito per errore? La registrazione sarà annullata e resterà tracciata.')\">Elimina pagamento</button></form>")
-                    end=html.find("</form>",html.find("class='bmpv7-form'"))
-                    if end>=0:
-                        end+=7; html=html[:end]+delete_form+html[end:]
+            # Delete controls are rendered inside the canonical payment editor.
             if request.args.get('eliminato')=='1':
                 notice="<div class='bmpv7-saved'>Pagamento eliminato dalla contabilità attiva e conservato come annullato nello storico.</div>"
                 anchor="<section class='bmpv7'>"
                 if anchor in html:html=html.replace(anchor,anchor+notice,1)
             css="""<style id='bodymind-payment-admin-v13'>
-            .bmpv13-delete{margin:8px 0 16px}.bmpv13-delete button{width:100%;min-height:44px;border:1px solid #ef4444;border-radius:12px;background:#450a0a;color:#fecaca;font-weight:900;cursor:pointer}
             .sidebar a,.sidebar-menu a,.nav-sidebar a,[class*="sidebar"] a{pointer-events:auto!important}
             </style>"""
             if '</head>' in html and "bodymind-payment-admin-v13" not in html:
