@@ -2071,3 +2071,166 @@ if _v13p.returncode!=0:
 print('[r123-payment-admin-v13] PASS edit-existing annul-with-audit clickable-payment-nav mobile-label-contrast',flush=True)
 
 # BODYMIND_R123_PAYMENT_EXACT_ID_V14
+
+
+# BODYMIND_R123_RECEIPT_PAYMENT_METHOD_V16
+# Preserve the existing receipt PDF layout, but make the payment method a
+# first-class line immediately above the rendered amount on every receipt PDF.
+# The route is wrapped at source level before Flask imports it; no after_request
+# mutation and no historical accounting rows are rewritten.
+import ast as _bm_ast, re as _bm_re
+_receipt_candidates=[]
+for _rp in (APP/'asd_app').rglob('*.py'):
+    try:
+        _rs=_rp.read_text(encoding='utf-8',errors='replace')
+        _rt=_bm_ast.parse(_rs)
+    except Exception:
+        continue
+    for _node in _rt.body:
+        if not isinstance(_node,(_bm_ast.FunctionDef,_bm_ast.AsyncFunctionDef)):
+            continue
+        for _dec in _node.decorator_list:
+            if not isinstance(_dec,_bm_ast.Call) or not _dec.args:
+                continue
+            _arg=_dec.args[0]
+            if isinstance(_arg,_bm_ast.Constant) and isinstance(_arg.value,str) and _arg.value.startswith('/ricevute/pdf/'):
+                _receipt_candidates.append((_rp,_rs,_node,_dec,_arg.value))
+if len(_receipt_candidates)!=1:
+    raise RuntimeError('V16 expected one canonical receipt PDF route, found '+repr([(str(x[0]),x[2].name,x[4]) for x in _receipt_candidates]))
+
+_RPDF,_rs,_rnode,_rdec,_rrule=_receipt_candidates[0]
+_param_match=_bm_re.search(r'<int:([A-Za-z_][A-Za-z0-9_]*)>',_rrule)
+if not _param_match:
+    raise RuntimeError('V16 receipt route has no integer receipt id: '+_rrule)
+_rparam=_param_match.group(1)
+_marker='# BODYMIND_RECEIPT_PAYMENT_METHOD_SOURCE_V16'
+
+if _marker not in _rs:
+    _lines=_rs.splitlines(True)
+    _route_start=int(_rdec.lineno)-1
+    _route_end=int(getattr(_rdec,'end_lineno',_rdec.lineno))
+    _def_line=int(_rnode.lineno)-1
+    _fn_end=int(getattr(_rnode,'end_lineno',_rnode.lineno))
+    _route_src=''.join(_lines[_route_start:_route_end])
+    _fn_src=''.join(_lines[_def_line:_fn_end])
+    _legacy_name='_bodymind_receipt_pdf_legacy_v16'
+    _fn_src=_bm_re.sub(r'^(\s*)(async\s+def|def)\s+'+_bm_re.escape(_rnode.name)+r'\s*\(',r'\1\2 '+_legacy_name+'(',_fn_src,count=1,flags=_bm_re.M)
+    _replacement=_fn_src
+    _wrapper=f"""
+{_marker}
+@app.route({_rrule!r},methods=['GET'],endpoint={_rnode.name!r})
+@login_required
+def _bodymind_receipt_pdf_with_method_v16({_rparam}):
+    from io import BytesIO as _BytesIO
+    from flask import make_response as _make_response
+    from pypdf import PdfReader as _PdfReader, PdfWriter as _PdfWriter
+    from reportlab.pdfgen import canvas as _rl_canvas
+    from .core import db as _bm_db
+
+    _rid=int({_rparam})
+    _legacy={_legacy_name}(_rid)
+    _resp=_make_response(_legacy)
+    if 'application/pdf' not in str(_resp.headers.get('Content-Type','')).lower():
+        return _resp
+
+    _c=_bm_db(); _c.row_factory=sqlite3.Row
+    try:
+        _r=_c.execute("SELECT * FROM ricevute WHERE id=?",(_rid,)).fetchone()
+        if not _r:
+            return _resp
+        _method=str(_r['metodo_pagamento'] or '').strip() if 'metodo_pagamento' in _r.keys() else ''
+        _pid=int(_r['pagamento_id'] or 0) if 'pagamento_id' in _r.keys() else 0
+        if not _method and _pid:
+            _p=_c.execute("SELECT metodo_pagamento FROM pagamenti WHERE id=?",(_pid,)).fetchone()
+            if _p:_method=str(_p['metodo_pagamento'] or '').strip()
+        if not _method:
+            _p=_c.execute("SELECT metodo_pagamento FROM pagamenti WHERE ricevuta_id=? ORDER BY id DESC LIMIT 1",(_rid,)).fetchone()
+            if _p:_method=str(_p['metodo_pagamento'] or '').strip()
+    finally:
+        _c.close()
+    if not _method:
+        _method='non indicato'
+    _norm={{'bonifico':'Bonifico','contanti':'Contanti','sumup':'SumUp','carta/sumup':'Carta / SumUp','carta':'Carta'}}
+    _shown=_norm.get(_method.lower(),_method)
+
+    try:
+        _resp.direct_passthrough=False
+        _raw=_resp.get_data()
+        _reader=_PdfReader(_BytesIO(_raw))
+        if not _reader.pages:
+            return _resp
+        _page=_reader.pages[0]
+        _hits=[]
+        def _visit(_text,_cm,_tm,_font,_size):
+            if 'importo' in str(_text or '').lower():
+                try:_hits.append((float(_tm[4]),float(_tm[5]),float(_size or 10)))
+                except Exception:pass
+        try:_page.extract_text(visitor_text=_visit)
+        except Exception:pass
+        _pw=float(_page.mediabox.width); _ph=float(_page.mediabox.height)
+        if _hits:
+            _x,_y,_fs=_hits[-1]
+            _mx=max(36.0,min(_pw-220.0,_x))
+            _my=max(36.0,min(_ph-36.0,_y+max(16.0,_fs*1.7)))
+        else:
+            _mx=54.0; _my=_ph-230.0
+        _ov=_BytesIO()
+        _cv=_rl_canvas.Canvas(_ov,pagesize=(_pw,_ph))
+        _cv.setFont('Helvetica-Bold',9)
+        _cv.drawString(_mx,_my,'Metodo di pagamento: '+_shown)
+        _cv.save(); _ov.seek(0)
+        _overlay=_PdfReader(_ov)
+        _page.merge_page(_overlay.pages[0])
+        _writer=_PdfWriter()
+        for _pg in _reader.pages:_writer.add_page(_pg)
+        _out=_BytesIO(); _writer.write(_out)
+        _resp.set_data(_out.getvalue())
+        _resp.headers['Content-Length']=str(len(_resp.get_data()))
+        _resp.headers['Content-Type']='application/pdf'
+    except Exception as _exc:
+        print('[receipt-v16-overlay-warning] '+repr(_exc),flush=True)
+    return _resp
+"""
+    # Replace the original route-decorated function with the undecorated legacy
+    # implementation plus one canonical wrapper using the original endpoint.
+    _start=min([int(d.lineno) for d in _rnode.decorator_list]+[int(_rnode.lineno)])-1
+    _end=int(getattr(_rnode,'end_lineno',_rnode.lineno))
+    _rs=''.join(_lines[:_start])+_replacement+_wrapper+''.join(_lines[_end:])
+    _RPDF.write_text(_rs,encoding='utf-8')
+    py_compile.compile(str(_RPDF),doraise=True)
+    print('[receipt-v16-source] patched '+str(_RPDF)+' route='+_rrule,flush=True)
+else:
+    print('[receipt-v16-source] already canonical '+str(_RPDF),flush=True)
+
+# Read-only rendered-PDF QA against one real enrollment/monthly receipt.
+_receipt_qa=r"""
+import io,sqlite3,sys
+from pypdf import PdfReader
+sys.path.insert(0,'/data/top2_app');import app as _full
+from asd_app.core import app
+app.config['TESTING']=True
+db=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True,timeout=20);db.row_factory=sqlite3.Row
+try:
+    r=db.execute("""SELECT r.id,r.metodo_pagamento,p.metodo_pagamento AS pm
+      FROM ricevute r LEFT JOIN pagamenti p ON p.id=r.pagamento_id
+      WHERE COALESCE(r.annullata,0)=0
+        AND (lower(coalesce(p.causale,'')) LIKE '%mensil%' OR lower(coalesce(p.causale,'')) LIKE '%iscrizion%' OR lower(coalesce(p.causale,''))='tesseramento')
+      ORDER BY r.id DESC LIMIT 1""").fetchone()
+    integrity=str(db.execute('PRAGMA integrity_check').fetchone()[0]);fk=len(db.execute('PRAGMA foreign_key_check').fetchall())
+finally:db.close()
+if not r:raise RuntimeError('V16 no receipt available for PDF QA')
+method=str(r['metodo_pagamento'] or r['pm'] or '').strip()
+c=app.test_client()
+with c.session_transaction() as s:s.update({'logged':True,'logged_in':True,'username':'admin','role':'admin','tenant_slug':'default','user_id':1,'is_admin':True,'admin':True})
+resp=c.get('/ricevute/pdf/'+str(int(r['id'])),follow_redirects=False)
+raw=resp.get_data(); reader=PdfReader(io.BytesIO(raw))
+text='\\n'.join((p.extract_text() or '') for p in reader.pages)
+checks={'http':resp.status_code==200,'pdf':raw[:4]==b'%PDF','method_label':'Metodo di pagamento:' in text,'method_value':(not method) or method.lower() in text.lower(),'db':integrity.lower()=='ok' and fk==0}
+print('[receipt-v16-audit] '+repr(checks)+' receipt_id='+str(int(r['id']))+' method='+repr(method),flush=True)
+if not all(checks.values()):raise RuntimeError('V16 receipt PDF audit failed '+repr(checks))
+"""
+_rq=subprocess.run([sys.executable,'-c',_receipt_qa],capture_output=True,text=True,timeout=180)
+print((_rq.stdout or '').strip(),flush=True)
+if _rq.returncode!=0:
+    raise RuntimeError('V16 receipt child audit failed '+((_rq.stderr or '')+(_rq.stdout or ''))[-7000:])
+print('[receipt-v16] PASS payment-method-visible all receipt PDFs existing+future read-only-QA',flush=True)
