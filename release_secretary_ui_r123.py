@@ -1900,3 +1900,166 @@ try:
 finally:_r123_guard.close()
 if _r123_counts_before!=_r123_counts_after:raise RuntimeError('R123 refactor changed business row counts before='+repr(_r123_counts_before)+' after='+repr(_r123_counts_after))
 print('[r123-final-rendered] PASS canonical-dashboard canonical-payment no-mask data-counts-unchanged',flush=True)
+
+
+# BODYMIND_R123_PAYMENT_ADMIN_MOBILE_LABELS_V13
+# One canonical extension for payment correction/annulment, payment navigation,
+# and readable labels on the advanced mobile athlete form. No historical cash
+# row is hard-deleted: "Elimina" annuls the mistaken movement and its receipt,
+# preserving an auditable trail while removing it from canonical paid truth.
+_core_v13=CORE.read_text(encoding='utf-8',errors='replace')
+_v13_start='# BODYMIND_R123_PAYMENT_ADMIN_RUNTIME_V13'
+_v13_end='# /BODYMIND_R123_PAYMENT_ADMIN_RUNTIME_V13'
+if _v13_start in _core_v13:
+    _a=_core_v13.find(_v13_start); _b=_core_v13.find(_v13_end,_a)
+    if _b<0: raise RuntimeError('V13 runtime marker is incomplete')
+    _core_v13=_core_v13[:_a]+_core_v13[_b+len(_v13_end):]
+
+_core_v13 += r'''
+
+# BODYMIND_R123_PAYMENT_ADMIN_RUNTIME_V13
+@app.route('/pagamenti/elimina',methods=['POST'])
+@login_required
+def _bodymind_payment_annul_v13():
+    from datetime import datetime as _dt
+    pid=parse_int(request.form.get('payment_id'),0)
+    if pid<=0:
+        return redirect('/pagamenti?errore=pagamento_non_valido',303)
+    c=db(); c.row_factory=sqlite3.Row
+    try:
+        p=c.execute("SELECT * FROM pagamenti WHERE id=?",(pid,)).fetchone()
+        if not p:
+            return redirect('/pagamenti?errore=pagamento_non_trovato',303)
+        tid=int(p['tesserato_id'] or 0)
+        mese=int(p['mese'] or 0)
+        anno=int(p['anno'] or 0)
+        causale=str(p['causale'] or '').lower()
+        now=_dt.now().isoformat(timespec='seconds')
+        # Preserve the original row as an audit trail; canonical payment truth
+        # already excludes annullato/cancelled rows.
+        c.execute("""UPDATE pagamenti
+                     SET stato='annullato',online_status='annullato',
+                         note_pagamento=TRIM(COALESCE(note_pagamento,'') ||
+                           CASE WHEN COALESCE(note_pagamento,'')='' THEN '' ELSE ' · ' END ||
+                           'ANNULLATO DA SEGRETERIA ' || ?),
+                         updated_at=?
+                     WHERE id=?""",(now,now,pid))
+        if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='ricevute'").fetchone():
+            cols={str(x[1]) for x in c.execute("PRAGMA table_info(ricevute)").fetchall()}
+            if 'annullata' in cols:
+                c.execute("UPDATE ricevute SET annullata=1,updated_at=? WHERE pagamento_id=?",(now,pid))
+        # Recompute only derived athlete flags; quote_mensili remains competence,
+        # never proof of cash.
+        try:_bodymind_reconcile_athlete_status_v10(c,tid)
+        except Exception as exc:print('[payment-v13-reconcile-warning] '+repr(exc),flush=True)
+        c.commit()
+        vista='mensili' if ('mensil' in causale or causale in ('quota','quota_mensile')) else 'iscrizioni'
+        target='/pagamenti?vista='+vista
+        if 1<=mese<=12:target+='&mese='+str(mese)
+        if anno:target+='&anno='+str(anno)
+        if tid:target+='&tesserato_id='+str(tid)
+        return redirect(target+'&eliminato=1',303)
+    except Exception as exc:
+        try:c.rollback()
+        except Exception:pass
+        print('[payment-v13-annul-warning] '+repr(exc),flush=True)
+        return redirect('/pagamenti?errore=eliminazione',303)
+    finally:
+        try:c.close()
+        except Exception:pass
+
+
+@app.after_request
+def _bodymind_payment_admin_surface_v13(resp):
+    try:
+        if request.method!='GET' or int(getattr(resp,'status_code',200) or 200)!=200:
+            return resp
+        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
+            return resp
+        html=resp.get_data(as_text=True)
+
+        if request.path=='/pagamenti':
+            # The canonical V7 edit form already writes by payment_id. Expose the
+            # destructive-looking action as a protected POST that performs an
+            # auditable annulment, never a blind SQL DELETE.
+            marker="<button class='bmpv7-save' type='submit'>"
+            if marker in html and "name='payment_id' value='0'" not in html and "/pagamenti/elimina" not in html:
+                import re as _re
+                m=_re.search(r"<input type='hidden' name='payment_id' value='(\d+)'>",html)
+                t=_re.search(r"<input type='hidden' name='tesserato_id' value='(\d+)'>",html)
+                if m and int(m.group(1))>0:
+                    delete_form=("<form class='bmpv13-delete' method='post' action='/pagamenti/elimina'>"
+                      "<input type='hidden' name='csrf_token' value='"+e(csrf_token())+"'>"
+                      "<input type='hidden' name='payment_id' value='"+m.group(1)+"'>"
+                      "<button type='submit' onclick=\"return confirm('Eliminare questo pagamento inserito per errore? La registrazione sarà annullata e resterà tracciata.')\">Elimina pagamento</button></form>")
+                    end=html.find("</form>",html.find("class='bmpv7-form'"))
+                    if end>=0:
+                        end+=7; html=html[:end]+delete_form+html[end:]
+            if request.args.get('eliminato')=='1':
+                notice="<div class='bmpv7-saved'>Pagamento eliminato dalla contabilità attiva e conservato come annullato nello storico.</div>"
+                anchor="<section class='bmpv7'>"
+                if anchor in html:html=html.replace(anchor,anchor+notice,1)
+            css="""<style id='bodymind-payment-admin-v13'>
+            .bmpv13-delete{margin:8px 0 16px}.bmpv13-delete button{width:100%;min-height:44px;border:1px solid #ef4444;border-radius:12px;background:#450a0a;color:#fecaca;font-weight:900;cursor:pointer}
+            .sidebar a,.sidebar-menu a,.nav-sidebar a,[class*="sidebar"] a{pointer-events:auto!important}
+            </style>"""
+            if '</head>' in html and "bodymind-payment-admin-v13" not in html:
+                html=html.replace('</head>',css+'</head>',1)
+
+        # Safari screenshot diagnosis: labels exist in the DOM but inherit a
+        # near-white color on the white advanced-form card. Scope the contrast
+        # fix to the athlete edit surface only; input text remains white on navy.
+        if request.path.startswith('/mobile/atleta/') and request.args.get('advanced')=='1':
+            css="""<style id='bodymind-mobile-athlete-labels-v13'>
+            form label,.form-group>label,.field>label,[class*="field"]>label{color:#0f2742!important;opacity:1!important;font-weight:800!important}
+            form label small,.form-group>label small{color:#334155!important;opacity:1!important}
+            form input,form select,form textarea{color:#fff!important;-webkit-text-fill-color:#fff!important}
+            form input::placeholder,form textarea::placeholder{color:#cbd5e1!important;opacity:.82!important}
+            </style>"""
+            if '</head>' in html and "bodymind-mobile-athlete-labels-v13" not in html:
+                html=html.replace('</head>',css+'</head>',1)
+
+        # Make a non-link Pagamenti sidebar parent navigable without changing
+        # existing submenu destinations. This is server-side HTML convergence.
+        import re as _re
+        html=_re.sub(r'href=(["\'])#\1([^>]*>\s*(?:<[^>]+>\s*)*Pagamenti\b)',r'href="/pagamenti"\2',html,flags=_re.I)
+        resp.set_data(html)
+    except Exception as exc:
+        print('[payment-admin-surface-v13-warning] '+repr(exc),flush=True)
+    return resp
+# /BODYMIND_R123_PAYMENT_ADMIN_RUNTIME_V13
+'''
+CORE.write_text(_core_v13,encoding='utf-8')
+py_compile.compile(str(CORE),doraise=True)
+
+_v13_qa=r"""
+import json,sqlite3,sys
+sys.path.insert(0,'/data/top2_app');import app as _full
+from asd_app.core import app
+app.config['TESTING']=True
+c=app.test_client()
+with c.session_transaction() as sess:sess.update({'logged':True,'logged_in':True,'username':'admin','role':'admin','tenant_slug':'default','user_id':1,'is_admin':True,'admin':True})
+db=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True,timeout=20);db.row_factory=sqlite3.Row
+try:
+    before={t:int(db.execute('SELECT COUNT(*) FROM '+t).fetchone()[0]) for t in ('tesserati','pagamenti','ricevute')}
+    sample=db.execute("""SELECT id,tesserato_id,mese,anno FROM pagamenti
+                         WHERE lower(coalesce(stato,'')||' '||coalesce(online_status,'')) NOT LIKE '%annull%'
+                         ORDER BY id DESC LIMIT 1""").fetchone()
+    integrity=str(db.execute('PRAGMA integrity_check').fetchone()[0]);fk=len(db.execute('PRAGMA foreign_key_check').fetchall())
+finally:db.close()
+pay=c.get('/pagamenti')
+html=pay.get_data(as_text=True)
+route_rules=[str(x) for x in app.url_map.iter_rules()]
+out={'counts':before,'integrity':integrity,'fk':fk,'payment_http':pay.status_code,
+     'delete_route':'/pagamenti/elimina' in route_rules,
+     'payment_admin_css':'bodymind-payment-admin-v13' in html,
+     'routes':len(route_rules)}
+print('[r123-payment-admin-v13-audit] '+json.dumps(out,ensure_ascii=False),flush=True)
+if integrity.lower()!='ok' or fk or pay.status_code!=200 or not out['delete_route'] or not out['payment_admin_css']:
+    raise RuntimeError('V13 payment admin audit failed')
+"""
+_v13p=subprocess.run([sys.executable,'-c',_v13_qa],capture_output=True,text=True,timeout=180)
+print((_v13p.stdout or '').strip(),flush=True)
+if _v13p.returncode!=0:
+    raise RuntimeError('V13 child audit failed '+((_v13p.stderr or '')+(_v13p.stdout or ''))[-5000:])
+print('[r123-payment-admin-v13] PASS edit-existing annul-with-audit clickable-payment-nav mobile-label-contrast',flush=True)
