@@ -529,6 +529,7 @@ def _bodymind_payment_module_v7(resp):
         vista=(request.args.get('vista') or 'iscrizioni').strip().lower()
         if vista not in ('iscrizioni','mensili'):vista='iscrizioni'
         selected_tid=parse_int(request.args.get('tesserato_id'),0)
+        selected_payment_id=parse_int(request.args.get('payment_id'),0)
         action=(request.args.get('azione') or '').strip().lower()
         action_tipo=(request.args.get('tipo') or '').strip().lower()
         if action_tipo not in ('iscrizione','mensile'):
@@ -578,6 +579,20 @@ def _bodymind_payment_module_v7(resp):
             mh=f"/pagamenti?vista=mensili&mese={mese}&anno={anno}&tesserato_id={tid}&azione=registra&tipo=mensile"
             dh=f"/documenti/da-verificare?tesserato_id={tid}"
             ah=f"/documenti?tesserato_id={tid}"
+            # BODYMIND_R123_PAYMENT_EXACT_ID_V14: expose each real movement, never only an aggregate.
+            movement_links=[]
+            for _p in payment_rows.values():
+                if int(_p.get('tesserato_id') or 0)!=tid: continue
+                _st=(str(_p.get('stato') or '')+' '+str(_p.get('online_status') or '')).lower()
+                if 'annull' in _st or 'cancel' in _st: continue
+                _cause=str(_p.get('causale') or '').lower()
+                _monthly=('mensil' in _cause or _cause in ('quota','quota_mensile'))
+                _enroll=('iscrizion' in _cause or _cause=='tesseramento')
+                if vista=='mensili' and (not _monthly or int(_p.get('mese') or 0)!=mese or int(_p.get('anno') or 0)!=anno): continue
+                if vista=='iscrizioni' and (not _enroll or int(_p.get('anno') or 0) not in (stagione,stagione+1)): continue
+                _pid=int(_p.get('id') or 0); _typ='mensile' if _monthly else 'iscrizione'
+                _edit=f"/pagamenti?vista={vista}&mese={mese}&anno={anno}&stagione={stagione}&tesserato_id={tid}&azione=registra&tipo={_typ}&payment_id={_pid}"
+                movement_links.append("<a class='doc' href='"+_edit+"'>Modifica #"+str(_pid)+" · "+_money(_p.get('importo'))+"</a>")
             rows.append((0 if not focus_ok else 1,
                 "<div class='bmpv7-row "+row_state+"' data-bm-tid='"+str(tid)+"' data-bm-enroll='"+("1" if eok else "0")+"' data-bm-monthly='"+("1" if mok else "0")+"'>"
                 +"<div class='bmpv7-person'><b>"+e(_name(a))+"</b>"
@@ -585,6 +600,7 @@ def _bodymind_payment_module_v7(resp):
                 +"<span class='bmpv7-status "+("ok" if eok else "due")+"'><i></i><b>ISCRIZIONE "+str(stagione)+"/"+str(stagione+1)+"</b><em>"+("PAGATA" if eok else "DA PAGARE")+"</em></span>"
                 +("<span class='bmpv7-status "+("ok" if mok else "due")+"'><i></i><b>"+months[mese].upper()+" "+str(anno)+"</b><em>"+("PAGATO" if mok else "DA PAGARE")+"</em></span>" if monthly_due else "<span class='bmpv7-status na'><i></i><b>"+months[mese].upper()+" "+str(anno)+"</b><em>NON DOVUTO</em></span>")
                 +"</div></div>"
+                +("<div class='bmpv7-actions'>"+''.join(movement_links)+"</div>" if movement_links else "")
                 +"<div class='bmpv7-actions'><a class='doc' href='"+dh+"'>Verifica documento</a><a class='doc' href='"+ah+"'>Archivio</a><a href='"+eh+"'>"+("Correggi iscrizione" if eok else "Registra iscrizione")+"</a>"+(("<a href='"+mh+"'>"+("Correggi "+months[mese] if mok else "Registra "+months[mese])+"</a>") if monthly_due else "<span class='bmpv7-action-na'>"+months[mese]+" non dovuto</span>")+"</div>"
                 +"</div>"
             ))
@@ -595,8 +611,10 @@ def _bodymind_payment_module_v7(resp):
             athlete=next((a for a in athletes if int(a.get('id') or 0)==selected_tid),None)
             if athlete:
                 state=payment_state.get(selected_tid,{})
-                existing_id=state.get('iscrizione_payment_id') if action_tipo=='iscrizione' else state.get('mensile_payment_id')
+                existing_id=selected_payment_id or (state.get('iscrizione_payment_id') if action_tipo=='iscrizione' else state.get('mensile_payment_id'))
                 existing=payment_rows.get(int(existing_id or 0))
+                if existing and int(existing.get('tesserato_id') or 0)!=selected_tid:
+                    existing=None
                 pid=int(existing.get('id') or 0) if existing else 0
                 qsel=quote_by_tid.get(selected_tid) if action_tipo=='mensile' else None
                 if existing:
@@ -2060,3 +2078,5 @@ print((_v13p.stdout or '').strip(),flush=True)
 if _v13p.returncode!=0:
     raise RuntimeError('V13 child audit failed '+((_v13p.stderr or '')+(_v13p.stdout or ''))[-5000:])
 print('[r123-payment-admin-v13] PASS edit-existing annul-with-audit clickable-payment-nav mobile-label-contrast',flush=True)
+
+# BODYMIND_R123_PAYMENT_EXACT_ID_V14
