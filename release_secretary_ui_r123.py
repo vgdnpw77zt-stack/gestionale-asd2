@@ -592,7 +592,7 @@ def _bodymind_payment_module_v7(resp):
                 if vista=='iscrizioni' and (not _enroll or int(_p.get('anno') or 0) not in (stagione,stagione+1)): continue
                 _pid=int(_p.get('id') or 0); _typ='mensile' if _monthly else 'iscrizione'
                 _edit=f"/pagamenti?vista={vista}&mese={mese}&anno={anno}&stagione={stagione}&tesserato_id={tid}&azione=registra&tipo={_typ}&payment_id={_pid}"
-                movement_links.append("<a class='doc' href='"+_edit+"'>Modifica #"+str(_pid)+" · "+_money(_p.get('importo'))+"</a>")
+                movement_links.append("<a class='doc' href='"+_edit+"'>Modifica #"+str(_pid)+" · "+_money(_p.get('importo'))+"</a><form class='bmpv14-inline-delete' method='post' action='/pagamenti/elimina'><input type='hidden' name='csrf_token' value='"+e(csrf_token())+"'><input type='hidden' name='payment_id' value='"+str(_pid)+"'><button type='submit' onclick=\"return confirm('Eliminare questo pagamento inserito per errore? Verrà annullato e non conterà più negli incassi.')\">Elimina #"+str(_pid)+"</button></form>")
             rows.append((0 if not focus_ok else 1,
                 "<div class='bmpv7-row "+row_state+"' data-bm-tid='"+str(tid)+"' data-bm-enroll='"+("1" if eok else "0")+"' data-bm-monthly='"+("1" if mok else "0")+"'>"
                 +"<div class='bmpv7-person'><b>"+e(_name(a))+"</b>"
