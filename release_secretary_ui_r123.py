@@ -2042,9 +2042,6 @@ with c.session_transaction() as sess:sess.update({'logged':True,'logged_in':True
 db=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True,timeout=20);db.row_factory=sqlite3.Row
 try:
     before={t:int(db.execute('SELECT COUNT(*) FROM '+t).fetchone()[0]) for t in ('tesserati','pagamenti','ricevute')}
-    sample=db.execute("""SELECT id,tesserato_id,mese,anno FROM pagamenti
-                         WHERE lower(coalesce(stato,'')||' '||coalesce(online_status,'')) NOT LIKE '%annull%'
-                         ORDER BY id DESC LIMIT 1""").fetchone()
     integrity=str(db.execute('PRAGMA integrity_check').fetchone()[0]);fk=len(db.execute('PRAGMA foreign_key_check').fetchall())
 finally:db.close()
 pay=c.get('/pagamenti')
