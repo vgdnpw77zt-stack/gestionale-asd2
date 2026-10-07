@@ -64,3 +64,32 @@ def _bodymind_r145_canonical_mobile_profile(resp):
     print('[r145-profile] installed canonical mobile profile response',flush=True)
 else:
     print('[r145-profile] already installed',flush=True)
+
+
+# BODYMIND_R145_ADVANCED_FORM_READABILITY_V2
+# Fix labels in the canonical advanced athlete form source (not post-render).
+_profile_hits=[]
+for _p in (APP/'asd_app').rglob('*.py'):
+    try:_ps=_p.read_text(encoding='utf-8',errors='replace')
+    except Exception:continue
+    if 'BODYMIND_R100_PROFILE_SAVE_VERIFY' in _ps and 'def fix12_mobile_atleta' in _ps:
+        _profile_hits.append((_p,_ps))
+if len(_profile_hits)!=1:
+    raise RuntimeError('R145 readability expected one canonical athlete source')
+_PROFILE,_ps=_profile_hits[0]
+_fs=_ps.find('def fix12_mobile_atleta')
+_fe=_ps.find('\n@app.',_fs)
+if _fe<0:_fe=len(_ps)
+_fb=_ps[_fs:_fe]
+if 'data-bm-readable-label="1"' not in _fb:
+    _old='<div class="field"><label>'
+    if _old not in _fb:
+        raise RuntimeError('R145 readability field-label anchor missing')
+    _new='<div class="field"><label data-bm-readable-label="1" style="color:#10243a!important;-webkit-text-fill-color:#10243a!important;opacity:1!important;font-weight:800!important">'
+    _fb=_fb.replace(_old,_new)
+    _ps=_ps[:_fs]+_fb+_ps[_fe:]
+    _PROFILE.write_text(_ps,encoding='utf-8')
+    py_compile.compile(str(_PROFILE),doraise=True)
+    print('[r145-advanced-labels] PASS canonical source labels dark/readable',flush=True)
+else:
+    print('[r145-advanced-labels] already canonical',flush=True)
