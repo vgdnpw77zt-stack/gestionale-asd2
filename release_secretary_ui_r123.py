@@ -2211,11 +2211,7 @@ from asd_app.core import app
 app.config['TESTING']=True
 db=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True,timeout=20);db.row_factory=sqlite3.Row
 try:
-    r=db.execute("""SELECT r.id,r.metodo_pagamento,p.metodo_pagamento AS pm
-      FROM ricevute r LEFT JOIN pagamenti p ON p.id=r.pagamento_id
-      WHERE COALESCE(r.annullata,0)=0
-        AND (lower(coalesce(p.causale,'')) LIKE '%mensil%' OR lower(coalesce(p.causale,'')) LIKE '%iscrizion%' OR lower(coalesce(p.causale,''))='tesseramento')
-      ORDER BY r.id DESC LIMIT 1""").fetchone()
+    r=db.execute("SELECT r.id,r.metodo_pagamento,p.metodo_pagamento AS pm FROM ricevute r LEFT JOIN pagamenti p ON p.id=r.pagamento_id WHERE COALESCE(r.annullata,0)=0 AND (lower(coalesce(p.causale,'')) LIKE '%mensil%' OR lower(coalesce(p.causale,'')) LIKE '%iscrizion%' OR lower(coalesce(p.causale,''))='tesseramento') ORDER BY r.id DESC LIMIT 1").fetchone()
     integrity=str(db.execute('PRAGMA integrity_check').fetchone()[0]);fk=len(db.execute('PRAGMA foreign_key_check').fetchall())
 finally:db.close()
 if not r:raise RuntimeError('V16 no receipt available for PDF QA')
