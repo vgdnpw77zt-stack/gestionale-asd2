@@ -2230,3 +2230,203 @@ print((_rq.stdout or '').strip(),flush=True)
 if _rq.returncode!=0:
     raise RuntimeError('V16 receipt child audit failed '+((_rq.stderr or '')+(_rq.stdout or ''))[-7000:])
 print('[receipt-v16] PASS payment-method-visible all receipt PDFs existing+future read-only-QA',flush=True)
+
+
+# BODYMIND_R123_COLLABORATOR_CREATE_V17
+# The existing "Nuovo collaboratore" link only changed the query string and
+# rendered the same list: production logs showed GET ?new=1 and no POST at all.
+# Provide one canonical creation form and a real POST path. No production data
+# is created by the release itself; QA uses an isolated SQLite copy.
+_core_collab=CORE.read_text(encoding='utf-8',errors='replace')
+if 'BODYMIND_R123_COLLABORATOR_CREATE_RUNTIME_V17' not in _core_collab:
+    _core_collab += r'''
+
+# BODYMIND_R123_COLLABORATOR_CREATE_RUNTIME_V17
+def _bodymind_collaboratore_nuovo_page_v17(error=''):
+    from datetime import date as _date
+    today=_date.today().isoformat()
+    err=("<div class='bmc17-error'>"+e(error)+"</div>") if error else ""
+    html=f"""<!-- BODYMIND_R123_COLLABORATOR_CREATE_RUNTIME_V17 -->
+    <main class='bmc17'>
+      <header class='bmc17-head'>
+        <div><small>COLLABORATORI</small><h1>Nuovo collaboratore</h1>
+        <p>Registra l'anagrafica e l'inquadramento. Contratto, comunicazione RASD/UNILAV e documenti restano tracciati separatamente.</p></div>
+        <a href='/collaboratori'>Chiudi</a>
+      </header>
+      {err}
+      <form method='post' action='/collaboratori/nuovo' class='bmc17-form'>
+        {csrf_input()}
+        <section><h2>Anagrafica</h2>
+          <label>Nome<input name='nome' required autocomplete='given-name'></label>
+          <label>Cognome<input name='cognome' required autocomplete='family-name'></label>
+          <label>Codice fiscale<input name='codice_fiscale' maxlength='16' autocapitalize='characters'></label>
+          <label>Data di nascita<input type='date' name='data_nascita'></label>
+          <label>Telefono<input name='telefono' inputmode='tel'></label>
+          <label>Email<input type='email' name='email' autocomplete='email'></label>
+        </section>
+        <section><h2>Rapporto</h2>
+          <label>Ruolo / mansione<input name='ruolo' required placeholder='Es. Istruttrice di discipline aeree'></label>
+          <label>Tipo rapporto<select name='tipo_rapporto' required>
+            <option value='co.co.co sportivo'>Co.co.co. sportivo</option>
+            <option value='co.co.co amministrativo-gestionale'>Co.co.co. amministrativo-gestionale</option>
+            <option value='lavoro autonomo / P.IVA'>Lavoro autonomo / P.IVA</option>
+            <option value='volontario'>Volontario</option>
+          </select></label>
+          <label>Data inizio<input type='date' name='data_inizio' required value='{today}'></label>
+          <label>Data fine<input type='date' name='data_fine'></label>
+          <label>Paga oraria €<input type='number' step='0.01' min='0' name='paga_oraria' value='0'></label>
+          <label>Copertura previdenziale<select name='copertura_previdenziale'>
+            <option value=''>Da verificare</option>
+            <option value='gestione_separata'>Gestione Separata INPS</option>
+            <option value='altra_previdenza'>Già assicurato presso altra forma obbligatoria</option>
+            <option value='pensionato'>Pensionato</option>
+            <option value='non_applicabile'>Non applicabile</option>
+          </select></label>
+          <label>Compensi sportivi già percepiti nell'anno €<input type='number' step='0.01' min='0' name='compensi_sportivi_esterni_anno' value='0'></label>
+          <label>Franchigia INPS già utilizzata €<input type='number' step='0.01' min='0' name='franchigia_inps_precedente' value='0'></label>
+        </section>
+        <section class='wide'><h2>Note e adempimenti</h2>
+          <label class='wide'>Note<textarea name='note' rows='4' placeholder='Qualifica, tesseramento, eventuali altri rapporti, disponibilità, annotazioni...'></textarea></label>
+          <div class='bmc17-checks'>
+            <span>Alla creazione il rapporto viene segnato come <b>da completare</b>.</span>
+            <span>Contratto firmato e comunicazione RASD/UNILAV non vengono dichiarati automaticamente.</span>
+            <span>Se lavora con minori, verifica prima anche il casellario e gli obblighi safeguarding.</span>
+          </div>
+        </section>
+        <button type='submit'>Registra collaboratore</button>
+      </form>
+    </main>
+    <style>
+      .bmc17{{max-width:980px;margin:0 auto;padding:18px 14px 90px}}.bmc17-head{{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:14px}}.bmc17-head small{{font-weight:950;letter-spacing:.14em;color:#7dd3fc}}.bmc17-head h1{{margin:4px 0;font-size:28px}}.bmc17-head p{{margin:0;color:#94a3b8;max-width:700px}}.bmc17-head a{{padding:10px 14px;border-radius:11px;background:#163b5f;color:#fff!important;text-decoration:none;font-weight:900}}.bmc17-error{{margin:10px 0;padding:11px 13px;border-radius:11px;background:#7f1d1d;color:#fee2e2;font-weight:850}}.bmc17-form{{display:grid;grid-template-columns:1fr 1fr;gap:12px}}.bmc17-form section{{display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:15px;border-radius:16px;background:#0d2138;border:1px solid rgba(96,165,250,.28)}}.bmc17-form section.wide{{grid-column:1/-1}}.bmc17-form h2{{grid-column:1/-1;margin:0 0 3px;font-size:16px;color:#dbeafe}}.bmc17-form label{{display:grid;gap:5px;color:#cbd5e1;font-size:12px;font-weight:900}}.bmc17-form label.wide{{grid-column:1/-1}}.bmc17-form input,.bmc17-form select,.bmc17-form textarea{{width:100%;min-height:43px;padding:10px;border-radius:10px;border:1px solid #36516d;background:#06111f;color:#fff;font-size:15px}}.bmc17-checks{{grid-column:1/-1;display:grid;gap:5px;padding:10px;border-radius:10px;background:#10243a;color:#bfdbfe;font-size:12px}}.bmc17-form>button{{grid-column:1/-1;min-height:50px;border:0;border-radius:13px;background:#16a34a;color:white;font-size:16px;font-weight:950}}@media(max-width:760px){{.bmc17-form{{grid-template-columns:1fr}}.bmc17-form section,.bmc17-form section.wide{{grid-column:1;grid-template-columns:1fr}}.bmc17-form h2,.bmc17-form label.wide,.bmc17-checks{{grid-column:1}}}}
+    </style>"""
+    return layout(html)
+
+@app.before_request
+def _bodymind_collaboratore_new_entry_v17():
+    if request.method=='GET' and request.path=='/collaboratori' and (request.args.get('new') or '')=='1':
+        return _bodymind_collaboratore_nuovo_v17()
+
+@app.route('/collaboratori/nuovo',methods=['GET','POST'])
+@login_required
+def _bodymind_collaboratore_nuovo_v17():
+    if request.method=='GET':
+        return _bodymind_collaboratore_nuovo_page_v17()
+    from datetime import date as _date, datetime as _dt
+    nome=(request.form.get('nome') or '').strip()
+    cognome=(request.form.get('cognome') or '').strip()
+    ruolo=(request.form.get('ruolo') or '').strip()
+    tipo=(request.form.get('tipo_rapporto') or '').strip()
+    data_inizio=(request.form.get('data_inizio') or '').strip()
+    if not nome or not cognome or not ruolo or not tipo or not data_inizio:
+        return _bodymind_collaboratore_nuovo_page_v17('Nome, cognome, ruolo, tipo rapporto e data di inizio sono obbligatori.'),400
+    try:_date.fromisoformat(data_inizio)
+    except Exception:return _bodymind_collaboratore_nuovo_page_v17('Data di inizio non valida.'),400
+    data_fine=(request.form.get('data_fine') or '').strip()
+    if data_fine:
+        try:_date.fromisoformat(data_fine)
+        except Exception:return _bodymind_collaboratore_nuovo_page_v17('Data di fine non valida.'),400
+    try:paga=max(0.0,float(str(request.form.get('paga_oraria') or '0').replace(',','.')))
+    except Exception:paga=0.0
+    try:esterni=max(0.0,float(str(request.form.get('compensi_sportivi_esterni_anno') or '0').replace(',','.')))
+    except Exception:esterni=0.0
+    try:franchigia=max(0.0,float(str(request.form.get('franchigia_inps_precedente') or '0').replace(',','.')))
+    except Exception:franchigia=0.0
+
+    dob=(request.form.get('data_nascita') or '').strip()
+    minor=0
+    if dob:
+        try:
+            born=_date.fromisoformat(dob); today=_date.today()
+            minor=1 if (today.year-born.year-((today.month,today.day)<(born.month,born.day)))<18 else 0
+        except Exception:
+            return _bodymind_collaboratore_nuovo_page_v17('Data di nascita non valida.'),400
+    now=_dt.now().isoformat(timespec='seconds')
+    rasd_state='da_comunicare' if tipo=='co.co.co sportivo' else ('unilav_da_comunicare' if tipo=='co.co.co amministrativo-gestionale' else 'non_applicabile')
+    values={
+      'nome':nome,'cognome':cognome,'codice_fiscale':(request.form.get('codice_fiscale') or '').strip().upper(),
+      'data_nascita':dob,'telefono':(request.form.get('telefono') or '').strip(),'email':(request.form.get('email') or '').strip(),
+      'ruolo':ruolo,'tipo_rapporto':tipo,'data_inizio':data_inizio,'data_fine':data_fine or None,
+      'paga_oraria':paga,'copertura_previdenziale':(request.form.get('copertura_previdenziale') or '').strip(),
+      'compensi_sportivi_esterni_anno':esterni,'franchigia_inps_precedente':franchigia,
+      'note':(request.form.get('note') or '').strip()[:3000],'minor':minor,'attivo':1,
+      'workflow_status':'da_completare','workflow_blocked':0,'documenti_lavoro_ok':0,
+      'contratto_firmato':0,'rasd_stato':rasd_state,'tenant_id':'default','created_at':now,'updated_at':now,
+    }
+    c=db();c.row_factory=sqlite3.Row
+    try:
+        info=c.execute("PRAGMA table_info(collaboratori)").fetchall()
+        if not info:
+            raise RuntimeError('tabella collaboratori non disponibile')
+        cols={str(x['name']) for x in info}
+        clean={k:v for k,v in values.items() if k in cols}
+        # Fill only mandatory columns that have no DB default and are not PKs.
+        for x in info:
+            n=str(x['name'])
+            if int(x['pk'] or 0) or not int(x['notnull'] or 0) or x['dflt_value'] is not None or n in clean:
+                continue
+            typ=str(x['type'] or '').upper()
+            clean[n]=0 if any(t in typ for t in ('INT','REAL','NUM','DEC','FLOAT','DOUBLE')) else ''
+        keys=list(clean)
+        cur=c.execute("INSERT INTO collaboratori("+','.join(keys)+") VALUES("+','.join('?' for _ in keys)+")",[clean[k] for k in keys])
+        cid=int(cur.lastrowid)
+        c.commit()
+    except Exception as exc:
+        try:c.rollback()
+        except Exception:pass
+        print('[collaborator-v17-save-warning] '+repr(exc),flush=True)
+        return _bodymind_collaboratore_nuovo_page_v17('Registrazione non riuscita: '+str(exc)),400
+    finally:
+        try:c.close()
+        except Exception:pass
+    return redirect('/collaboratori?creato='+str(cid),303)
+# /BODYMIND_R123_COLLABORATOR_CREATE_RUNTIME_V17
+'''
+    CORE.write_text(_core_collab,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+    print('[collaborator-v17-source] PASS canonical create route + ?new=1 entrypoint',flush=True)
+
+_collab_qa=r"""
+import os,re,shutil,sqlite3,sys,tempfile
+sys.path.insert(0,'/data/top2_app');import app as _full
+import asd_app.core as core
+from asd_app.core import app
+app.config['TESTING']=True
+fd,tmp=tempfile.mkstemp(prefix='bodymind_collab_v17_',suffix='.db');os.close(fd)
+src=sqlite3.connect('/data/tenants/default/asd.db',timeout=30);dst=sqlite3.connect(tmp,timeout=30)
+try:src.backup(dst)
+finally:dst.close();src.close()
+orig_db=core.db
+def tdb():
+    c=sqlite3.connect(tmp,timeout=20);c.row_factory=sqlite3.Row;c.execute('PRAGMA foreign_keys=ON');return c
+core.db=tdb
+try:
+    c=app.test_client()
+    with c.session_transaction() as ss:ss.update({'logged':True,'logged_in':True,'username':'admin','role':'admin','tenant_slug':'default','user_id':1,'is_admin':True,'admin':True})
+    g=c.get('/collaboratori?new=1',follow_redirects=False)
+    html=g.get_data(as_text=True)
+    m=re.search(r"name=['\"]csrf_token['\"][^>]*value=['\"]([^'\"]+)['\"]",html)
+    if not m:raise RuntimeError('V17 CSRF token not rendered')
+    db=tdb()
+    try:before=int(db.execute('SELECT COUNT(*) FROM collaboratori').fetchone()[0])
+    finally:db.close()
+    payload={'csrf_token':m.group(1),'nome':'QA','cognome':'COLLABORATORE','ruolo':'Istruttore test','tipo_rapporto':'co.co.co sportivo','data_inizio':'2026-10-10','paga_oraria':'20','compensi_sportivi_esterni_anno':'0','franchigia_inps_precedente':'0'}
+    p=c.post('/collaboratori/nuovo',data=payload,follow_redirects=False)
+    db=tdb()
+    try:
+        after=int(db.execute('SELECT COUNT(*) FROM collaboratori').fetchone()[0])
+        row=db.execute("SELECT * FROM collaboratori WHERE nome='QA' AND cognome='COLLABORATORE' ORDER BY id DESC LIMIT 1").fetchone()
+        integrity=str(db.execute('PRAGMA integrity_check').fetchone()[0]);fk=len(db.execute('PRAGMA foreign_key_check').fetchall())
+    finally:db.close()
+    checks={'get':g.status_code==200,'marker':'BODYMIND_R123_COLLABORATOR_CREATE_RUNTIME_V17' in html,'post':p.status_code in (302,303),'created':after==before+1 and row is not None,'type':row is not None and str(row['tipo_rapporto'])=='co.co.co sportivo','workflow':row is not None and str(row['workflow_status'])=='da_completare','db':integrity.lower()=='ok' and fk==0}
+    print('[collaborator-v17-audit] '+repr(checks),flush=True)
+    if not all(checks.values()):raise RuntimeError('V17 collaborator audit failed '+repr(checks))
+finally:
+    core.db=orig_db
+    try:os.unlink(tmp)
+    except Exception:pass
+"""
+_cq=subprocess.run([sys.executable,'-c',_collab_qa],capture_output=True,text=True,timeout=180)
+print((_cq.stdout or '').strip(),flush=True)
+if _cq.returncode!=0:
+    raise RuntimeError('V17 collaborator child audit failed '+((_cq.stderr or '')+(_cq.stdout or ''))[-7000:])
+print('[collaborator-v17] PASS real form POST isolated-db no-production-mutation',flush=True)
