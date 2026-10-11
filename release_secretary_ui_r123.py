@@ -2706,3 +2706,75 @@ print((_vq.stdout or '').strip(),flush=True)
 if _vq.returncode!=0:
     raise RuntimeError('V18 review child audit failed '+((_vq.stderr or '')+(_vq.stdout or ''))[-8000:])
 print('[document-review-v18] PASS canonical-actionable-queue inline-preview no-timeline-ui read-only-QA',flush=True)
+
+
+# BODYMIND_R123_STALE_QUOTE_COUNTER_V19
+# "Quote da controllare 124" was semantically wrong: production currently has
+# 124 payment movements but only 86 rows in quote_mensili. The KPI was exposing
+# the total movement count under an action-required label. Converge the source
+# label itself (not post-render HTML) so historical movements remain visible
+# without being presented as pending manual work.
+import re as _v19_re
+_v19_hits=[]
+_v19_changed=[]
+_v19_back=BACK/'v19_stale_quote_counter'
+_v19_back.mkdir(parents=True,exist_ok=True)
+_v19_pat=_v19_re.compile(r'Quote\s+da\s+controllare',_v19_re.I)
+
+for _p in (APP/'asd_app').rglob('*.py'):
+    try:
+        _txt=_p.read_text(encoding='utf-8',errors='replace')
+    except Exception:
+        continue
+    _ms=list(_v19_pat.finditer(_txt))
+    if not _ms:
+        continue
+    for _m in _ms:
+        _ctx=_txt[max(0,_m.start()-500):min(len(_txt),_m.end()+1000)]
+        _v19_hits.append((str(_p),_ctx))
+    _new,n=_v19_pat.subn('Movimenti registrati',_txt)
+    if n:
+        _bak=_v19_back/(_p.name+'.pre_v19')
+        if not _bak.exists():shutil.copy2(_p,_bak)
+        _p.write_text(_new,encoding='utf-8')
+        py_compile.compile(str(_p),doraise=True)
+        _v19_changed.append((str(_p),n))
+
+print('[quote-counter-v19-source-hits] '+repr([(p,c[:1200]) for p,c in _v19_hits]),flush=True)
+print('[quote-counter-v19-source-changed] '+repr(_v19_changed),flush=True)
+
+_v19_qa=r"""
+import sqlite3,sys
+sys.path.insert(0,'/data/top2_app');import app as _full
+from asd_app.core import app,bodymind_payment_truth
+app.config['TESTING']=True
+c=app.test_client()
+with c.session_transaction() as ss:ss.update({'logged':True,'logged_in':True,'username':'admin','role':'admin','tenant_slug':'default','user_id':1,'is_admin':True,'admin':True})
+pages={}
+for path in ('/','/dashboard','/mobile','/cuore-operativo'):
+    r=c.get(path,follow_redirects=True)
+    pages[path]=(r.status_code,r.get_data(as_text=True))
+db=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True,timeout=20);db.row_factory=sqlite3.Row
+try:
+    movements=int(db.execute('SELECT COUNT(*) FROM pagamenti').fetchone()[0])
+    quotes=int(db.execute('SELECT COUNT(*) FROM quote_mensili').fetchone()[0])
+    truth=bodymind_payment_truth(db)
+    monthly_missing=int(truth.get('mensili_mancanti') or 0)
+    enrollment_missing=int(truth.get('iscrizioni_mancanti') or 0)
+    integrity=str(db.execute('PRAGMA integrity_check').fetchone()[0]);fk=len(db.execute('PRAGMA foreign_key_check').fetchall())
+finally:db.close()
+rendered='\\n'.join(x[1] for x in pages.values())
+checks={
+  'pages_ok':all(x[0]==200 for x in pages.values()),
+  'stale_label_absent':'Quote da controllare' not in rendered,
+  'not_quote_total':movements!=quotes,
+  'db':integrity.lower()=='ok' and fk==0,
+}
+print('[quote-counter-v19-audit] '+repr(checks)+' movements='+str(movements)+' quote_rows='+str(quotes)+' monthly_missing='+str(monthly_missing)+' enrollment_missing='+str(enrollment_missing),flush=True)
+if not all(checks.values()):raise RuntimeError('V19 stale quote counter audit failed '+repr(checks))
+"""
+_v19p=subprocess.run([sys.executable,'-c',_v19_qa],capture_output=True,text=True,timeout=180)
+print((_v19p.stdout or '').strip(),flush=True)
+if _v19p.returncode!=0:
+    raise RuntimeError('V19 stale quote counter child audit failed '+((_v19p.stderr or '')+(_v19p.stdout or ''))[-7000:])
+print('[quote-counter-v19] PASS misleading-action-label removed at source canonical-payment-truth preserved',flush=True)
