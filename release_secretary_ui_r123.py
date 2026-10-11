@@ -2430,3 +2430,279 @@ print((_cq.stdout or '').strip(),flush=True)
 if _cq.returncode!=0:
     raise RuntimeError('V17 collaborator child audit failed '+((_cq.stderr or '')+(_cq.stdout or ''))[-7000:])
 print('[collaborator-v17] PASS real form POST isolated-db no-production-mutation',flush=True)
+
+
+# BODYMIND_R123_DOCUMENT_REVIEW_CONSOLIDATION_V18
+# Canonicalize the human-review queue after R147/R148/R150 have run:
+# - one real GET route, not an after_request rewrite;
+# - inline preview that resolves both canonical and inbound files;
+# - only actionable cases, deduplicated by athlete + semantic document type;
+# - remove Timeline entry points from normal UI while preserving backend audit data/routes.
+import ast as _v18_ast, re as _v18_re, mimetypes as _v18_mimetypes
+
+_v18_back=BACK/'v18_document_review'
+_v18_back.mkdir(parents=True,exist_ok=True)
+
+def _v18_route_value(dec):
+    try:
+        if not isinstance(dec,_v18_ast.Call) or not dec.args:return ''
+        fun=dec.func
+        name=(fun.attr if isinstance(fun,_v18_ast.Attribute) else (fun.id if isinstance(fun,_v18_ast.Name) else ''))
+        if name!='route':return ''
+        a=dec.args[0]
+        return str(a.value) if isinstance(a,_v18_ast.Constant) and isinstance(a.value,str) else ''
+    except Exception:return ''
+
+def _v18_strip_exact_route(path,rule):
+    txt=path.read_text(encoding='utf-8',errors='replace')
+    tree=_v18_ast.parse(txt);lines=txt.splitlines(True);ranges=[]
+    for node in tree.body:
+        if not isinstance(node,(_v18_ast.FunctionDef,_v18_ast.AsyncFunctionDef)):continue
+        if any(_v18_route_value(d)==rule for d in node.decorator_list):
+            start=min([node.lineno]+[d.lineno for d in node.decorator_list])-1
+            end=int(getattr(node,'end_lineno',node.lineno))
+            ranges.append((start,end,node.name))
+    if not ranges:return []
+    bak=_v18_back/(path.name+'.pre_v18')
+    if not bak.exists():shutil.copy2(path,bak)
+    for a,b,_ in sorted(ranges,reverse=True):del lines[a:b]
+    path.write_text(''.join(lines),encoding='utf-8')
+    py_compile.compile(str(path),doraise=True)
+    return [x[2] for x in ranges]
+
+# Remove the old canonical GET route wherever it lives; the R147 verifier POST stays.
+_v18_old_routes=[]
+for _p in (APP/'asd_app').glob('*.py'):
+    try:_v18_old_routes += [(str(_p),x) for x in _v18_strip_exact_route(_p,'/documenti/da-verificare')]
+    except Exception as _exc:
+        raise RuntimeError('V18 failed stripping old review route from '+str(_p)+': '+repr(_exc))
+
+# Remove the R147 response-time renderer: it was the source of the stale/raw queue.
+_v18_removed=_r123_strip_runtime_functions(CORE,('_bodymind_r147_review_surface',))
+
+# Remove visible Timeline entry points from source HTML. Keep the underlying
+# historical/audit routes and records intact so no data is lost.
+_v18_timeline_files=[]
+_timeline_anchor=_v18_re.compile(r"<a\b[^>]*href=(['\"])[^'\"]*timeline[^'\"]*\1[^>]*>.*?</a>",_v18_re.I|_v18_re.S)
+for _p in (APP/'asd_app').glob('*.py'):
+    try:_txt=_p.read_text(encoding='utf-8',errors='replace')
+    except Exception:continue
+    _new,n=_timeline_anchor.subn('',_txt)
+    _new=_new.replace('Pratica sbloccata manualmente e tracciata in timeline.','Pratica sbloccata manualmente e aggiornata correttamente.')
+    _new=_new.replace('tracciata in timeline','aggiornata correttamente')
+    if _new!=_txt:
+        bak=_v18_back/(_p.name+'.timeline.pre_v18')
+        if not bak.exists():shutil.copy2(_p,bak)
+        _p.write_text(_new,encoding='utf-8')
+        py_compile.compile(str(_p),doraise=True)
+        _v18_timeline_files.append(str(_p))
+
+_v18_core=CORE.read_text(encoding='utf-8',errors='replace')
+if 'BODYMIND_R123_DOCUMENT_REVIEW_RUNTIME_V18' not in _v18_core:
+    _v18_core += r'''
+
+# BODYMIND_R123_DOCUMENT_REVIEW_RUNTIME_V18
+def _bodymind_review_parse_date_v18(raw):
+    from datetime import datetime as _dt
+    s=str(raw or '').strip()
+    if not s:return ''
+    digits=''.join(ch for ch in s if ch.isdigit())
+    candidates=[('%d/%m/%Y',s),('%d-%m-%Y',s),('%Y-%m-%d',s),('%Y/%m/%d',s)]
+    if len(digits)==8:candidates.append(('%d%m%Y',digits))
+    for fmt,val in candidates:
+        try:return _dt.strptime(val,fmt).date().isoformat()
+        except Exception:pass
+    return ''
+
+def _bodymind_review_file_v18(source,row):
+    from .document_sync_core_r143 import resolve_file
+    if source=='documenti':
+        return resolve_file(row['filename'] if 'filename' in row.keys() else '')
+    for key in ('saved_path','stored_path','path','filename'):
+        if key in row.keys() and row[key]:
+            fp=resolve_file(row[key])
+            if fp:return fp
+    return None
+
+@app.route('/documenti/da-verificare/file/<source>/<int:rid>',methods=['GET'])
+@admin_required
+def bodymind_review_file_v18(source,rid):
+    from flask import send_file
+    if source not in ('documenti','inbound'):
+        return ('Origine documento non valida',404)
+    table='documenti' if source=='documenti' else 'inbound_documents'
+    c=db();c.row_factory=sqlite3.Row
+    try:
+        if not c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(table,)).fetchone():
+            return ('Archivio non disponibile',404)
+        row=c.execute("SELECT * FROM "+table+" WHERE id=?",(rid,)).fetchone()
+        if not row:return ('Documento non trovato',404)
+        fp=_bodymind_review_file_v18(source,row)
+        if not fp:return ('File non disponibile',404)
+        name=''
+        for k in ('original_filename','titolo','filename'):
+            if k in row.keys() and row[k]:
+                name=str(row[k]).split('/')[-1];break
+    finally:
+        c.close()
+    return send_file(str(fp),as_attachment=False,download_name=(name or fp.name),conditional=True)
+
+@app.route('/documenti/da-verificare',methods=['GET'])
+@admin_required
+def bodymind_document_review_v18():
+    from .document_sync_core_r143 import canonical_type as _ctype
+    c=db();c.row_factory=sqlite3.Row
+    review_states={'verifica','review','pending','dubbio','incerto','richiede_conferma','needs_manual_match','nuovo_pronto','ready'}
+    positive_states={'deleted','archived','archived_orphan','accepted','manual_accepted','verificato','resolved','associato','archived_to_tesserato','superseded_by_canonical'}
+    try:
+        athletes=c.execute("SELECT id,nome,cognome FROM tesserati ORDER BY cognome,nome").fetchall()
+        amap={int(x['id']):(str(x['cognome'] or '')+' '+str(x['nome'] or '')).strip() for x in athletes}
+        aopts="".join("<option value='"+str(int(x['id']))+"'>"+e(amap[int(x['id'])])+"</option>" for x in athletes)
+
+        visible_docs=c.execute("SELECT * FROM documenti WHERE coalesce(visibile,1)=1 ORDER BY id DESC").fetchall()
+        canonical_keys=set()
+        docs=[]
+        for d in visible_docs:
+            rid=int(d['id']);typ=_ctype(d);tid=int(d['tesserato_id'] or 0) if 'tesserato_id' in d.keys() else 0
+            fp=_bodymind_review_file_v18('documenti',d)
+            if tid>0 and typ and fp:canonical_keys.add((tid,typ))
+            st=str(d['status'] or '').strip().lower() if 'status' in d.keys() else ''
+            reasons=[]
+            if not fp:reasons.append('file non disponibile')
+            if tid<=0:reasons.append('atleta non associata')
+            if typ=='certificato_medico':
+                exp=str(d['data_scadenza'] or '').strip() if 'data_scadenza' in d.keys() else ''
+                if not _bodymind_review_parse_date_v18(exp):reasons.append('scadenza da verificare')
+            if st in review_states:reasons.append('stato '+st)
+            # Historical OCR percentages alone no longer create a manual task
+            # once athlete/type/file are already coherent.
+            if reasons:
+                docs.append({'source':'documenti','row':d,'type':typ or 'altro','tid':tid,'reasons':reasons,'file':bool(fp)})
+
+        inbound_candidates=[]
+        if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='inbound_documents'").fetchone():
+            rows=c.execute("""SELECT * FROM inbound_documents
+              WHERE coalesce(deleted_at,'')=''
+              ORDER BY id DESC LIMIT 500""").fetchall()
+            for r in rows:
+                rid=int(r['id']);st=str(r['status'] or '').strip().lower()
+                if st in positive_states:continue
+                typ=_ctype(r) or 'altro'
+                tid=int((r['tesserato_id'] if 'tesserato_id' in r.keys() else 0) or
+                        (r['matched_tesserato_id'] if 'matched_tesserato_id' in r.keys() else 0) or
+                        (r['suggested_tesserato_id'] if 'suggested_tesserato_id' in r.keys() else 0) or 0)
+                # Exact materialization: never ask a human to verify the source upload again.
+                linked=c.execute("SELECT id FROM documenti WHERE coalesce(visibile,1)=1 AND inbound_id=? LIMIT 1",(rid,)).fetchone()
+                if linked:continue
+                # If current canonical truth already has the same athlete + semantic
+                # document type + physical file, the historical upload is redundant.
+                if tid>0 and (tid,typ) in canonical_keys:continue
+                # Do not convert every historical low-confidence OCR row into work.
+                if st not in review_states and tid>0 and typ!='altro':continue
+                fp=_bodymind_review_file_v18('inbound',r)
+                reasons=[]
+                if tid<=0:reasons.append('atleta da associare')
+                if typ=='altro':reasons.append('tipo documento da confermare')
+                if st in review_states:reasons.append('invio da confermare')
+                if not fp:reasons.append('file non disponibile')
+                if not reasons:continue
+                inbound_candidates.append({'source':'inbound','row':r,'type':typ,'tid':tid,'reasons':reasons,'file':bool(fp)})
+
+        # One actionable item per athlete + semantic type. Repeated uploads are
+        # not 5/10 separate jobs anymore. Unassigned files stay distinct.
+        inbound=[];seen=set()
+        for item in inbound_candidates:
+            r=item['row'];tid=item['tid'];typ=item['type']
+            rawname=str((r['original_filename'] if 'original_filename' in r.keys() else '') or (r['filename'] if 'filename' in r.keys() else '') or '')
+            key=(tid,typ) if tid>0 else (0,typ,rawname.strip().lower())
+            if key in seen:continue
+            seen.add(key);inbound.append(item)
+
+        def _card(item):
+            r=item['row'];source=item['source'];rid=int(r['id']);tid=int(item['tid'] or 0);typ=item['type']
+            title=str((r['original_filename'] if 'original_filename' in r.keys() else '') or (r['titolo'] if 'titolo' in r.keys() else '') or ('Documento '+str(rid)))
+            who=amap.get(tid,'Atleta da scegliere')
+            reason=' · '.join(item['reasons'])
+            current_exp=''
+            if source=='documenti' and 'data_scadenza' in r.keys():
+                raw=str(r['data_scadenza'] or '')
+                iso=_bodymind_review_parse_date_v18(raw)
+                if iso:
+                    try:
+                        y,m,d=iso.split('-');current_exp=d+'/'+m+'/'+y
+                    except Exception:current_exp=raw
+            sel=lambda v:' selected' if typ==v else ''
+            athlete_options=aopts.replace("value='"+str(tid)+"'","value='"+str(tid)+"' selected",1) if tid else aopts
+            preview=''
+            if item['file']:
+                url='/documenti/da-verificare/file/'+source+'/'+str(rid)
+                preview="<details class='rv18-preview'><summary>Anteprima documento</summary><iframe loading='lazy' src='"+url+"' title='Anteprima "+e(title)+"'></iframe><a href='"+url+"' target='_blank' rel='noopener'>Apri a tutto schermo</a></details>"
+            else:
+                preview="<div class='rv18-no-preview'>File non disponibile: non c'è nulla da approvare alla cieca.</div>"
+            return f"""<article class='rv18-card'>
+              <div class='rv18-head'><div><b>{e(title)}</b><small>{e(who)}</small></div><span>DA VERIFICARE</span></div>
+              <p>{e(reason)}</p>{preview}
+              <form method='post' action='/documenti/da-verificare/r147/verifica'>
+                {csrf_input()}<input type='hidden' name='source' value='{source}'><input type='hidden' name='id' value='{rid}'>
+                <label>Atleta<select name='tesserato_id' required><option value=''>Seleziona…</option>{athlete_options}</select></label>
+                <label>Tipo<select name='tipo' required><option value='certificato_medico'{sel('certificato_medico')}>Certificato medico</option><option value='modulo_unico_tesseramento'{sel('modulo_unico_tesseramento')}>Modulo Unico</option><option value='liberatoria_immagini'{sel('liberatoria_immagini')}>Liberatoria immagini</option><option value='altro'{sel('altro')}>Altro</option></select></label>
+                <label>Scadenza certificato · GG/MM/AAAA oppure 8 cifre<input type='text' name='scadenza' value='{e(current_exp)}' inputmode='text' autocomplete='off' placeholder='es. 14/11/2026 o 14112026'></label>
+                <button type='submit'>Verifica e aggiorna stato</button>
+              </form>
+            </article>"""
+
+        items=docs+inbound
+        cards=''.join(_card(x) for x in items)
+        err=request.args.get('error') or ''
+        messages={'scadenza':'Per un certificato medico inserisci la scadenza.','atleta':'Seleziona l’atleta.','materializza':'Il file non è disponibile: non è stato approvato.','tipo':'Seleziona il tipo documento.'}
+        msg=messages.get(err,'')
+        html=f"""<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'><title>Documenti da verificare</title>
+        <style>
+        body{{margin:0;background:#071426;color:#eef6ff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}}main{{max-width:920px;margin:auto;padding:18px 15px 110px}}h1{{margin:0 0 6px;font-size:clamp(27px,5vw,36px)}}.sub{{color:#9fb3ca;margin-bottom:15px;line-height:1.45}}.rv18-summary{{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:14px 0}}.rv18-summary div{{padding:12px;border-radius:13px;background:#0d2138;border:1px solid #27445f}}.rv18-summary b{{display:block;font-size:22px}}.rv18-summary span{{font-size:11px;color:#9fb3ca}}.okmsg,.errmsg{{padding:11px;border-radius:12px;margin:10px 0;font-weight:800}}.okmsg{{background:#14532d}}.errmsg{{background:#7f1d1d}}.rv18-card{{background:#0b1d33;border:1px solid #27445f;border-radius:18px;padding:15px;margin:12px 0}}.rv18-head{{display:flex;justify-content:space-between;gap:10px}}.rv18-head b{{font-size:18px}}.rv18-head small{{display:block;color:#a9b9cb;margin-top:4px}}.rv18-head span{{height:max-content;background:#92400e;color:#fff7ed;border-radius:999px;padding:6px 9px;font-size:11px;font-weight:950}}.rv18-card p{{color:#fcd34d}}label{{display:block;margin-top:11px;font-weight:900}}select,input{{width:100%;box-sizing:border-box;min-height:48px;margin-top:5px;border-radius:12px;border:1px solid #315475;background:#081727;color:#fff;padding:10px;font-size:16px}}button{{width:100%;margin-top:14px;padding:13px;border:0;border-radius:12px;background:#166534;color:#fff;font-weight:950;font-size:16px}}.rv18-preview{{margin:12px 0;border:1px solid #315475;border-radius:13px;overflow:hidden;background:#081727}}.rv18-preview summary{{padding:12px 13px;cursor:pointer;font-weight:950;color:#dbeafe}}.rv18-preview iframe{{display:block;width:100%;height:430px;border:0;background:#fff}}.rv18-preview>a{{display:block;padding:10px;text-align:center;background:#163b5f;color:#fff!important;text-decoration:none;font-weight:900}}.rv18-no-preview{{padding:10px;border-radius:10px;background:#4c1d1d;color:#fecaca;font-weight:800}}a.back{{display:block;margin-top:15px;padding:12px;border-radius:12px;background:#163b5f;color:#fff;text-decoration:none;text-align:center;font-weight:900}}@media(max-width:620px){{.rv18-summary{{grid-template-columns:1fr}}.rv18-preview iframe{{height:55vh}}}}
+        </style></head><body><main>
+        <h1>Documenti da verificare</h1>
+        <div class='sub'>Qui compaiono solo problemi che richiedono davvero una decisione. Gli invii storici, duplicati o già coperti da un documento canonico non diventano più attività separate.</div>
+        <div class='rv18-summary'><div><b>{len(items)}</b><span>controlli reali</span></div><div><b>{len(docs)}</b><span>documenti canonici incompleti</span></div><div><b>{len(inbound)}</b><span>invii ancora irrisolti</span></div></div>
+        {("<div class='okmsg'>Documento verificato e stato aggiornato.</div>" if request.args.get('verified') else "")}
+        {("<div class='errmsg'>"+e(msg)+"</div>" if msg else "")}
+        {cards if cards else "<div class='okmsg'>Nessun controllo manuale necessario.</div>"}
+        <a class='back' href='/documenti'>← Documenti</a>
+        </main></body></html>"""
+        return html
+    finally:
+        c.close()
+# /BODYMIND_R123_DOCUMENT_REVIEW_RUNTIME_V18
+'''
+    CORE.write_text(_v18_core,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+
+# Fresh-process, read-only QA: rendered queue count, working inline preview,
+# timeline absent from normal onboarding surface, DB untouched.
+_v18_qa=r"""
+import re,sqlite3,sys
+sys.path.insert(0,'/data/top2_app');import app as _full
+from asd_app.core import app
+app.config['TESTING']=True
+c=app.test_client()
+with c.session_transaction() as s:s.update({'logged':True,'logged_in':True,'username':'admin','role':'admin','tenant_slug':'default','user_id':1,'is_admin':True,'admin':True,'_csrf_token':'v18'})
+q=c.get('/documenti/da-verificare');h=q.get_data(as_text=True)
+m=re.search(r"<b>(\d+)</b><span>controlli reali</span>",h)
+count=int(m.group(1)) if m else -1
+pm=re.search(r"src='(/documenti/da-verificare/file/(?:documenti|inbound)/\d+)'",h)
+preview_status=None
+if pm:preview_status=c.get(pm.group(1),follow_redirects=False).status_code
+on=c.get('/onboarding-tesserati',follow_redirects=False);oh=on.get_data(as_text=True)
+db=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True,timeout=20)
+try:
+  raw=int(db.execute("""SELECT COUNT(*) FROM inbound_documents WHERE coalesce(deleted_at,'')='' AND lower(coalesce(status,'')) NOT IN ('deleted','archived','archived_orphan','accepted','manual_accepted','verificato','resolved','associato','archived_to_tesserato')""").fetchone()[0])
+  integ=str(db.execute('PRAGMA integrity_check').fetchone()[0]);fk=len(db.execute('PRAGMA foreign_key_check').fetchall())
+finally:db.close()
+checks={'queue_200':q.status_code==200,'count_found':count>=0,'preview_route':(pm is None or preview_status==200),'timeline_link_absent':not re.search(r"href=['\"][^'\"]*timeline",oh,re.I),'db':integ.lower()=='ok' and fk==0}
+print('[document-review-v18-audit] '+repr(checks)+' raw_unresolved_inbound='+str(raw)+' actionable_rendered='+str(count)+' preview_status='+repr(preview_status),flush=True)
+if not all(checks.values()):raise RuntimeError('V18 review QA failed '+repr(checks))
+"""
+_vq=subprocess.run([sys.executable,'-c',_v18_qa],capture_output=True,text=True,timeout=180)
+print((_vq.stdout or '').strip(),flush=True)
+if _vq.returncode!=0:
+    raise RuntimeError('V18 review child audit failed '+((_vq.stderr or '')+(_vq.stdout or ''))[-8000:])
+print('[document-review-v18] PASS canonical-actionable-queue inline-preview no-timeline-ui read-only-QA',flush=True)
