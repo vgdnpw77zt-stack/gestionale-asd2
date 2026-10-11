@@ -2694,7 +2694,7 @@ if pm:preview_status=c.get(pm.group(1),follow_redirects=False).status_code
 on=c.get('/onboarding-tesserati',follow_redirects=False);oh=on.get_data(as_text=True)
 db=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True,timeout=20)
 try:
-  raw=int(db.execute("""SELECT COUNT(*) FROM inbound_documents WHERE coalesce(deleted_at,'')='' AND lower(coalesce(status,'')) NOT IN ('deleted','archived','archived_orphan','accepted','manual_accepted','verificato','resolved','associato','archived_to_tesserato')""").fetchone()[0])
+  raw=int(db.execute("SELECT COUNT(*) FROM inbound_documents WHERE coalesce(deleted_at,'')='' AND lower(coalesce(status,'')) NOT IN ('deleted','archived','archived_orphan','accepted','manual_accepted','verificato','resolved','associato','archived_to_tesserato')").fetchone()[0])
   integ=str(db.execute('PRAGMA integrity_check').fetchone()[0]);fk=len(db.execute('PRAGMA foreign_key_check').fetchall())
 finally:db.close()
 checks={'queue_200':q.status_code==200,'count_found':count>=0,'preview_route':(pm is None or preview_status==200),'timeline_link_absent':not re.search(r"href=['\"][^'\"]*timeline",oh,re.I),'db':integ.lower()=='ok' and fk==0}
