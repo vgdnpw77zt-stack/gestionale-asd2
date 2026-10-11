@@ -288,7 +288,17 @@ if _r147_start>=0:
         "messages={'scadenza':'Per un certificato medico inserisci GG/MM/AAAA oppure 8 cifre, ad esempio 14112026.','atleta'"
     )
 
-    if not (n_parser==1 and n_nonqueue==1 and n_field==1):
+    # V18 intentionally supersedes only the old R147 GET/after_request
+    # renderer while preserving the R147 verifier POST + date helpers. On the
+    # next boot the persistent R147 segment therefore has no surface condition
+    # or expiry input to migrate. Treat that as the canonical converged state
+    # instead of failing startup.
+    _v18_surface_authority='BODYMIND_R123_DOCUMENT_REVIEW_RUNTIME_V18' in _persist
+    if _v18_surface_authority:
+        if n_parser!=1:
+            raise RuntimeError('R147/V18 persistent migration incomplete parser=%s' % n_parser)
+        print('[r147-persistent-migration] V18 supersedes legacy R147 review surface; verifier+parser preserved',flush=True)
+    elif not (n_parser==1 and n_nonqueue==1 and n_field==1):
         raise RuntimeError('R147 persistent migration incomplete parser=%s nonqueue=%s field=%s' % (n_parser,n_nonqueue,n_field))
     _persist=_persist[:_r147_start]+_seg+_persist[_r147_next:]
 
