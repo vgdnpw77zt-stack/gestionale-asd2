@@ -403,8 +403,7 @@ try:
     for r in rows:
         hay=' '.join(str(r[k] or '').strip().lower() for k in ('doc_type','categoria','titolo','filename') if k in r.keys())
         is_mu=('modulo_unico_tesseramento' in hay or 'modulo iscrizione' in hay or 'modulo unico' in hay or 'domanda iscrizione' in hay or 'iscrizione manleva' in hay)
-        st=str(r['status'] or '').strip().lower() if 'status' in r.keys() else ''
-        if is_mu and st in trusted_status:
+        if is_mu:
             mu.append(r)
 
     groups={}
@@ -413,12 +412,19 @@ try:
         groups.setdefault(tid,[]).append(r)
 
     r75_archived=[]
+    def _r75_rank(row):
+        st=str(row['status'] or '').strip().lower() if 'status' in row.keys() else ''
+        trusted=1 if st in trusted_status else 0
+        path=str(row['filename'] or '') if 'filename' in row.keys() else ''
+        physical=1 if path and Path(path).is_file() else 0
+        return (physical,trusted,int(row['id']))
     for tid,items in groups.items():
         if len(items)<2:
             continue
-        # BodyMind invariant: one active Modulo Unico per athlete.
-        # Historical copies remain on disk and are only hidden/archived.
-        items=sorted(items,key=lambda x:int(x['id']),reverse=True)
+        # BodyMind invariant: one active Modulo Unico per athlete. Rank the
+        # canonical copy by physical file, trusted state, then recency. Older or
+        # weaker copies are hidden, never deleted from disk.
+        items=sorted(items,key=_r75_rank,reverse=True)
         keep=int(items[0]['id'])
         for old in items[1:]:
             oid=int(old['id'])
