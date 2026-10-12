@@ -584,6 +584,23 @@ if '# BODYMIND_R158_PAYMENT_RECEIPTS_SMS' not in _core:
 else:
     print('[r158-core] already installed',flush=True)
 
+# R158 convergence: the runtime lives on the persistent /data volume, so an
+# already-installed core must also receive later hardening. Never exclude
+# annulled receipts from MAX(numero_serie): assigned identifiers are never
+# recycled.
+_core_now=CORE.read_text(encoding='utf-8',errors='replace')
+_old_reuse="""SELECT COALESCE(MAX(numero_serie),0)+1 FROM ricevute WHERE anno_progressivo=? AND serie_ricevuta=? AND COALESCE(annullata,0)=0"""
+_new_reuse="""SELECT COALESCE(MAX(numero_serie),0)+1 FROM ricevute WHERE anno_progressivo=? AND serie_ricevuta=?"""
+if _old_reuse in _core_now:
+    _core_now=_core_now.replace(_old_reuse,_new_reuse,1)
+    CORE.write_text(_core_now,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+    print('[r158-series-convergence] patched no-number-reuse',flush=True)
+elif _new_reuse in _core_now:
+    print('[r158-series-convergence] already no-number-reuse',flush=True)
+else:
+    raise RuntimeError('R158 series convergence anchor missing')
+
 # Add the new columns immediately and repair stale amounts already present.
 _r158db=sqlite3.connect(str(DB),timeout=30);_r158db.row_factory=sqlite3.Row
 try:
@@ -682,7 +699,7 @@ try:
       ORDER BY p.id DESC,r.id DESC LIMIT 8""").fetchall()]
     integ=str(db.execute('PRAGMA integrity_check').fetchone()[0]);fk=len(db.execute('PRAGMA foreign_key_check').fetchall())
 finally:db.close()
-checks={'page':r.status_code==200,'sms':'sms-reminder' in h and ('sms:' in h or 'numero mancante' in h),'series_cols':{'serie_ricevuta','numero_serie'}.issubset(cols),'receipt_sync':stale==0,'db':integ.lower()=='ok' and fk==0}
+checks={'page':r.status_code==200,'sms':'sms-reminder' in h and ('sms:' in h or 'numero mancante' in h),'series_cols':{'serie_ricevuta','numero_serie'}.issubset(cols),'receipt_sync':stale==0,'series_no_reuse':'AND COALESCE(annullata,0)=0' not in open('/data/top2_app/asd_app/core.py',encoding='utf-8').read().split("MAX(numero_serie)",1)[1].split("fetchone()",1)[0],'db':integ.lower()=='ok' and fk==0}
 print('[r158-audit] '+repr(checks)+' mancinelli='+repr(man),flush=True)
 if not all(checks.values()):raise RuntimeError('R158 QA failed '+repr(checks))
 '''
