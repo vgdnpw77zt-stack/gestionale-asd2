@@ -502,7 +502,7 @@ if '# BODYMIND_R158_PAYMENT_RECEIPTS_SMS' not in _core:
                 (anno,)
             ).fetchone()[0] or 1)
             series_prog=int(c.execute(
-                "SELECT COALESCE(MAX(numero_serie),0)+1 FROM ricevute WHERE anno_progressivo=? AND serie_ricevuta=? AND COALESCE(annullata,0)=0",
+                "SELECT COALESCE(MAX(numero_serie),0)+1 FROM ricevute WHERE anno_progressivo=? AND serie_ricevuta=?",
                 (anno,serie)
             ).fetchone()[0] or 1)
             cur=c.execute("""
