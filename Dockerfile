@@ -1,4 +1,5 @@
 FROM python:3.11-slim
+# BODYMIND_PRODUCTION_STARTUP_AUTHORITY: runtime_launcher.py via /opt/bodymind-migration/migration_upload.py
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 ASDPRO_RUNTIME_DIR=/data ASD_PRO_DATA_DIR=/data ASD_MAX_UPLOAD_MB=500
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tesseract-ocr tesseract-ocr-ita poppler-utils libgl1 libglib2.0-0 fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/bodymind
