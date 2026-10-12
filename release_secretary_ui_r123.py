@@ -2510,6 +2510,8 @@ _v18_runtime_complete=(
     _v18_runtime_marker in _v18_core
     and "def bodymind_document_review_v18():" in _v18_core
     and "def bodymind_review_file_v18(source,rid):" in _v18_core
+    and "@app.route('/documenti/da-verificare',methods=['GET'],endpoint='bodymind_document_review_v18')" in _v18_core
+    and "@app.route('/documenti/da-verificare/file/<source>/<int:rid>',methods=['GET'],endpoint='bodymind_review_file_v18')" in _v18_core
 )
 if not _v18_runtime_complete:
     # Repair an interrupted/older V18 installation atomically. A previous boot
@@ -2549,7 +2551,7 @@ def _bodymind_review_file_v18(source,row):
             if fp:return fp
     return None
 
-@app.route('/documenti/da-verificare/file/<source>/<int:rid>',methods=['GET'])
+@app.route('/documenti/da-verificare/file/<source>/<int:rid>',methods=['GET'],endpoint='bodymind_review_file_v18')
 @admin_required
 def bodymind_review_file_v18(source,rid):
     from flask import send_file
@@ -2572,7 +2574,7 @@ def bodymind_review_file_v18(source,rid):
         c.close()
     return send_file(str(fp),as_attachment=False,download_name=(name or fp.name),conditional=True)
 
-@app.route('/documenti/da-verificare',methods=['GET'])
+@app.route('/documenti/da-verificare',methods=['GET'],endpoint='bodymind_document_review_v18')
 @admin_required
 def bodymind_document_review_v18():
     from .document_sync_core_r143 import canonical_type as _ctype
@@ -2724,7 +2726,7 @@ try:
 finally:db.close()
 rules=[(r.rule,r.endpoint) for r in app.url_map.iter_rules() if r.rule=='/documenti/da-verificare']
 checks={'queue_200':q.status_code==200,'count_found':count>=0,'canonical_route':rules==[('/documenti/da-verificare','bodymind_document_review_v18')],'preview_route':(pm is None or preview_status==200),'timeline_link_absent':not re.search(r"href=['\"][^'\"]*timeline",oh,re.I),'db':integ.lower()=='ok' and fk==0}
-print('[document-review-v18-audit] '+repr(checks)+' raw_unresolved_inbound='+str(raw)+' actionable_rendered='+str(count)+' preview_status='+repr(preview_status),flush=True)
+print('[document-review-v18-audit] '+repr(checks)+' rules='+repr(rules)+' raw_unresolved_inbound='+str(raw)+' actionable_rendered='+str(count)+' preview_status='+repr(preview_status),flush=True)
 if not all(checks.values()):raise RuntimeError('V18 review QA failed '+repr(checks))
 """
 _vq=subprocess.run([sys.executable,'-c',_v18_qa],capture_output=True,text=True,timeout=180)
