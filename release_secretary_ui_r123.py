@@ -2448,7 +2448,10 @@ def _v18_route_value(dec):
         if not isinstance(dec,_v18_ast.Call) or not dec.args:return ''
         fun=dec.func
         name=(fun.attr if isinstance(fun,_v18_ast.Attribute) else (fun.id if isinstance(fun,_v18_ast.Name) else ''))
-        if name!='route':return ''
+        # Legacy R11 used @app.get(...), while newer releases use @app.route(...).
+        # Treat both as GET route declarations so V18 can remove every superseded
+        # implementation of the canonical review path without touching POST actions.
+        if name not in ('route','get'):return ''
         a=dec.args[0]
         return str(a.value) if isinstance(a,_v18_ast.Constant) and isinstance(a.value,str) else ''
     except Exception:return ''
