@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
-import json, py_compile, re, shutil, sqlite3
+import json, py_compile, re, shutil, sqlite3, subprocess, sys
 from datetime import datetime
 from pathlib import Path
 
