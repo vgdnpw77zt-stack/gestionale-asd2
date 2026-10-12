@@ -2525,7 +2525,6 @@ if not _v18_runtime_complete:
         else:_v18_end+=1
         _v18_core=_v18_core[:_v18_start]+_v18_core[_v18_end:]
     _v18_core += r'''
-    _v18_core += r'''
 
 # BODYMIND_R123_DOCUMENT_REVIEW_RUNTIME_V18
 def _bodymind_review_parse_date_v18(raw):
