@@ -746,6 +746,7 @@ if os.environ.get("BODYMIND_LEGACY_STARTUP_SMOKES","0") == "1":
 else:
     print("[startup-convergence] R140 source rewrite skipped; R141 is the final rendered mobile athlete truth surface",flush=True)
 runpy.run_path("/opt/bodymind/release_secretary_ui_r123.py", run_name="__main__")
+runpy.run_path("/opt/bodymind/release_operator_review_actions_r156.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_mobile_truth_surface_r141.py", run_name="__main__")
 runpy.run_path("/opt/bodymind/release_route_guard_r39.py", run_name="__main__")
 incoming = pathlib.Path("/data/incoming")
