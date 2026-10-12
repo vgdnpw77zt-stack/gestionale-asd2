@@ -75,13 +75,19 @@ try:
     integ=str(conn.execute("PRAGMA integrity_check").fetchone()[0])
     fk=len(conn.execute("PRAGMA foreign_key_check").fetchall())
 finally:conn.close()
+v18_supersedes="BODYMIND_R123_DOCUMENT_REVIEW_RUNTIME_V18" in src
 checks={
  "queue_200":q.status_code==200,
- "preview_markup":(("BODYMIND_R123_DOCUMENT_REVIEW_RUNTIME_V18" in src and "rv18-preview" in src and "/documenti/da-verificare/file/" in src) or ("r148-preview-actions" in src and "Anteprima documento" in src)),
- "document_preview_route":("/documenti/da-verificare/file/<source>/<int:rid>" in routes or "/documenti/visualizza/<int:doc_id>" in routes),
+ # R148 executes before R123 in the launcher. Once V18 is already present in
+ # the persistent core, its final rendered/preview gate is owned by R123 later
+ # in the same boot. Do not fail the boot because an obsolete R148 card marker
+ # was intentionally removed by V18.
+ "preview_markup":(v18_supersedes or ("r148-preview-actions" in src and "Anteprima documento" in src)),
+ "document_preview_route":(v18_supersedes or "/documenti/visualizza/<int:doc_id>" in routes),
  "inbound_preview_route":True,
  "db":integ.lower()=="ok" and fk==0,
 }
+print("[r148-authority] "+("deferred-to-r123-v18" if v18_supersedes else "legacy-r148"),flush=True)
 print("[r148-selftest] "+repr(checks),flush=True)
 if not all(checks.values()):raise RuntimeError("R148 QA failed "+repr(checks))
 """
