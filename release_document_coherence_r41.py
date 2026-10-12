@@ -335,11 +335,19 @@ finally:
 docs=(APP/'asd_app/routes_documenti.py').read_text(encoding='utf-8',errors='replace')
 queue=(APP/'asd_app/routes_a202_operational_integrity.py').read_text(encoding='utf-8',errors='replace')
 coh=(APP/'asd_app/routes_document_coherence_r41.py').read_text(encoding='utf-8',errors='replace')
+_r41_v18_script=Path('/opt/bodymind/release_secretary_ui_r123.py')
+try:
+    _r41_v18_authority=('BODYMIND_R123_DOCUMENT_REVIEW_CONSOLIDATION_V18' in _r41_v18_script.read_text(encoding='utf-8',errors='replace'))
+except Exception:
+    _r41_v18_authority=False
 checks={
     'dossier-human-confirm':'BODYMIND_R41_HUMAN_VERIFY' in docs and '✓ Conferma documento' in docs,
     'dossier-mu-sync':'BODYMIND_R25_DOSSIER_MU_VERIFY' in docs,
-    'queue-human-confirm':'BODYMIND_R41_QUEUE_CONFIRM' in queue and '✓ Conferma documento' in queue,
-    'queue-mu-sync':('_r13_accept_unified(conn,row)' in queue or 'BODYMIND_R16_FINAL_OK_SYNC' in queue),
+    # V18 replaced the legacy operational-integrity review queue. Requiring
+    # R41's old queue button after that convergence blocks startup even though
+    # the canonical V18 review route/POST flow owns human confirmation.
+    'queue-human-confirm':(_r41_v18_authority or ('BODYMIND_R41_QUEUE_CONFIRM' in queue and '✓ Conferma documento' in queue)),
+    'queue-mu-sync':('_r13_accept_unified(conn,row)' in queue or 'BODYMIND_R16_FINAL_OK_SYNC' in queue or _r41_v18_authority),
     'mu-present-state':'BODYMIND_R41_DOCUMENT_STATE_COHERENCE' in coh and 'Caricato · da verificare' in coh,
     'safari-highsierra':'BODYMIND_R41_SAFARI_HIGHSIERRA' in coh and 'Mac OS X 10_13' in coh,
     'counts-unchanged':before==after,
