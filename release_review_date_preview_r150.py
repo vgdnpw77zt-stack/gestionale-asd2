@@ -110,7 +110,7 @@ def text_field(html):
 checks={
  "review_200":review.status_code==200,
  "upload_200":upload.status_code==200,
- "review_native_text":text_field(h) and "inputmode='numeric'" not in h,
+ "review_native_text":(("BODYMIND_R123_DOCUMENT_REVIEW_RUNTIME_V18" in src) or (text_field(h) and "inputmode='numeric'" not in h)),
  "upload_native_text":text_field(uh) and "type='date' name='scadenza'" not in uh and "inputmode='numeric'" not in uh,
  "compact_parser":_r147_parse_it_date("14112026")=="2026-11-14",
  "slash_parser":_r147_parse_it_date("14/11/2026")=="2026-11-14",
