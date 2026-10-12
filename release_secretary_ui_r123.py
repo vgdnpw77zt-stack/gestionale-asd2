@@ -2504,7 +2504,27 @@ for _p in (APP/'asd_app').glob('*.py'):
         _v18_timeline_files.append(str(_p))
 
 _v18_core=CORE.read_text(encoding='utf-8',errors='replace')
-if 'BODYMIND_R123_DOCUMENT_REVIEW_RUNTIME_V18' not in _v18_core:
+_v18_runtime_marker='# BODYMIND_R123_DOCUMENT_REVIEW_RUNTIME_V18'
+_v18_runtime_end='# /BODYMIND_R123_DOCUMENT_REVIEW_RUNTIME_V18'
+_v18_runtime_complete=(
+    _v18_runtime_marker in _v18_core
+    and "def bodymind_document_review_v18():" in _v18_core
+    and "def bodymind_review_file_v18(source,rid):" in _v18_core
+)
+if not _v18_runtime_complete:
+    # Repair an interrupted/older V18 installation atomically. A previous boot
+    # could leave the marker and helper functions behind after stripping the GET
+    # route, causing later boots to skip re-installation forever.
+    _v18_start=_v18_core.find(_v18_runtime_marker)
+    if _v18_start>=0:
+        _v18_end=_v18_core.find(_v18_runtime_end,_v18_start)
+        if _v18_end<0:
+            raise RuntimeError('V18 runtime marker is incomplete; refusing blind append')
+        _v18_end=_v18_core.find('\n',_v18_end)
+        if _v18_end<0:_v18_end=len(_v18_core)
+        else:_v18_end+=1
+        _v18_core=_v18_core[:_v18_start]+_v18_core[_v18_end:]
+    _v18_core += r'''
     _v18_core += r'''
 
 # BODYMIND_R123_DOCUMENT_REVIEW_RUNTIME_V18
