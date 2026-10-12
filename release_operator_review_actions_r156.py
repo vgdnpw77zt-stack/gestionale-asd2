@@ -415,3 +415,279 @@ print('[r156-audit] '+repr(checks)+' integrity='+integ+' fk='+str(len(fk)),flush
 if not all(checks.values()):
     raise RuntimeError('R156 QA failed '+repr(checks))
 print('[r156] PASS ios-visible-viewport composer-writable operator-pending-delete manual-queue-delete soft-archive-only',flush=True)
+
+
+# ---------------------------------------------------------------------------
+# BODYMIND_R158_PAYMENT_RECEIPTS_SMS
+# Canonical post-R123 patch for exact payment edits, receipt synchronization,
+# separate future I/M receipt series, and mobile-only manual SMS reminders.
+# Existing issued receipt numbers are never renumbered.
+# ---------------------------------------------------------------------------
+_core=CORE.read_text(encoding='utf-8',errors='replace')
+if '# BODYMIND_R158_PAYMENT_RECEIPTS_SMS' not in _core:
+    _before=_core
+
+    _old_exact='''        existing=None
+        if payment_id:
+            existing=c.execute("SELECT * FROM pagamenti WHERE id=? AND tesserato_id=?",(payment_id,tid)).fetchone()
+        if not existing:
+            if tipo=='mensile':
+'''
+    _new_exact='''        existing=None
+        if payment_id:
+            existing=c.execute("SELECT * FROM pagamenti WHERE id=? AND tesserato_id=?",(payment_id,tid)).fetchone()
+            if not existing:
+                return redirect('/pagamenti?errore=pagamento_non_trovato',302)
+        if not existing:
+            if tipo=='mensile':
+'''
+    if _old_exact in _core:
+        _core=_core.replace(_old_exact,_new_exact,1)
+    elif "errore=pagamento_non_trovato" not in _core:
+        raise RuntimeError('R158 exact payment-id anchor missing')
+
+    _old_receipt=r'''        nome=((str(athlete['cognome'] or '')+' '+str(athlete['nome'] or '')).strip())
+        desc=('Quota iscrizione stagione '+str(stagione)+'/'+str(stagione+1)) if tipo=='iscrizione' else ('Quota mensile '+str(mese).zfill(2)+'/'+str(anno))
+        receipt=c.execute("SELECT * FROM ricevute WHERE pagamento_id=? ORDER BY id DESC LIMIT 1",(pid,)).fetchone()
+        if receipt:
+            rid=int(receipt['id'])
+            c.execute("""
+                UPDATE ricevute
+                   SET nome=?,descrizione=?,importo=?,data=?,metodo_pagamento=?,updated_at=?
+                 WHERE id=?
+            """,(nome,desc,importo,data,metodo,now,rid))
+        else:
+            prog=int(c.execute("SELECT COALESCE(MAX(numero_progressivo),0)+1 FROM ricevute WHERE anno_progressivo=?",(anno,)).fetchone()[0] or 1)
+            cur=c.execute("""
+                INSERT INTO ricevute(
+                    nome,descrizione,importo,data,pagamento_id,tenant_id,
+                    created_at,updated_at,metodo_pagamento,
+                    numero_progressivo,anno_progressivo,annullata
+                ) VALUES(?,?,?,?,?,'default',?,?,?,?,?,0)
+            """,(nome,desc,importo,data,pid,now,now,metodo,prog,anno))
+            rid=int(cur.lastrowid)
+        c.execute("UPDATE pagamenti SET ricevuta_id=? WHERE id=?",(rid,pid))
+'''
+    _new_receipt=r'''        # R158: keep the historical global progressive untouched, and
+        # assign a second independent series only to newly-created receipts.
+        rcols={str(x[1]) for x in c.execute("PRAGMA table_info(ricevute)").fetchall()}
+        if 'serie_ricevuta' not in rcols:
+            c.execute("ALTER TABLE ricevute ADD COLUMN serie_ricevuta TEXT")
+            rcols.add('serie_ricevuta')
+        if 'numero_serie' not in rcols:
+            c.execute("ALTER TABLE ricevute ADD COLUMN numero_serie INTEGER")
+            rcols.add('numero_serie')
+
+        nome=((str(athlete['cognome'] or '')+' '+str(athlete['nome'] or '')).strip())
+        desc=('Quota iscrizione stagione '+str(stagione)+'/'+str(stagione+1)) if tipo=='iscrizione' else ('Quota mensile '+str(mese).zfill(2)+'/'+str(anno))
+        serie=('I' if tipo=='iscrizione' else 'M')
+        receipt=c.execute("""
+            SELECT * FROM ricevute
+             WHERE pagamento_id=?
+                OR id=(SELECT ricevuta_id FROM pagamenti WHERE id=?)
+             ORDER BY CASE WHEN pagamento_id=? THEN 0 ELSE 1 END,id DESC
+             LIMIT 1
+        """,(pid,pid,pid)).fetchone()
+        if receipt:
+            rid=int(receipt['id'])
+            # A payment correction must propagate to its receipt immediately.
+            c.execute("""
+                UPDATE ricevute
+                   SET nome=?,descrizione=?,importo=?,data=?,metodo_pagamento=?,updated_at=?
+                 WHERE pagamento_id=? OR id=?
+            """,(nome,desc,importo,data,metodo,now,pid,rid))
+        else:
+            legacy_prog=int(c.execute(
+                "SELECT COALESCE(MAX(numero_progressivo),0)+1 FROM ricevute WHERE anno_progressivo=?",
+                (anno,)
+            ).fetchone()[0] or 1)
+            series_prog=int(c.execute(
+                "SELECT COALESCE(MAX(numero_serie),0)+1 FROM ricevute WHERE anno_progressivo=? AND serie_ricevuta=? AND COALESCE(annullata,0)=0",
+                (anno,serie)
+            ).fetchone()[0] or 1)
+            cur=c.execute("""
+                INSERT INTO ricevute(
+                    nome,descrizione,importo,data,pagamento_id,tenant_id,
+                    created_at,updated_at,metodo_pagamento,
+                    numero_progressivo,anno_progressivo,annullata,
+                    serie_ricevuta,numero_serie
+                ) VALUES(?,?,?,?,?,'default',?,?,?,?,?,0,?,?)
+            """,(nome,desc,importo,data,pid,now,now,metodo,legacy_prog,anno,serie,series_prog))
+            rid=int(cur.lastrowid)
+        c.execute("UPDATE pagamenti SET ricevuta_id=? WHERE id=?",(rid,pid))
+'''
+    if _old_receipt in _core:
+        _core=_core.replace(_old_receipt,_new_receipt,1)
+    elif 'series_prog=int(c.execute(' not in _core:
+        raise RuntimeError('R158 receipt block anchor missing')
+
+    _old_helpers='''        def _name(a):
+            return ((str(a.get('cognome') or '')+' '+str(a.get('nome') or '')).strip()) or ('Tesserata #'+str(int(a.get('id') or 0)))
+        def _money(v):
+'''
+    _new_helpers='''        def _name(a):
+            return ((str(a.get('cognome') or '')+' '+str(a.get('nome') or '')).strip()) or ('Tesserata #'+str(int(a.get('id') or 0)))
+        def _sms_due(a,tipo,mese,anno,stagione,months):
+            from urllib.parse import quote as _urlquote
+            raw=(a.get('telefono_genitore') or a.get('telefono') or a.get('cellulare') or '').strip()
+            phone=''.join(ch for ch in str(raw) if ch.isdigit() or ch=='+')
+            if not phone:
+                return ''
+            due=('quota di iscrizione '+str(stagione)+'/'+str(stagione+1)) if tipo=='iscrizione' else ('quota mensile di '+months[mese]+' '+str(anno))
+            msg='BodyMind Aerial Studio ASD: ti ricordiamo che risulta ancora da regolarizzare la '+due+'. Grazie.'
+            return 'sms:'+phone+'&body='+_urlquote(msg)
+        def _money(v):
+'''
+    if _old_helpers in _core:
+        _core=_core.replace(_old_helpers,_new_helpers,1)
+    elif 'def _sms_due(' not in _core:
+        raise RuntimeError('R158 SMS helper anchor missing')
+
+    _old_rows='''            rows.append((0 if not focus_ok else 1,
+                "<div class='bmpv7-row "+row_state+"' data-bm-tid='"+str(tid)+"' data-bm-enroll='"+("1" if eok else "0")+"' data-bm-monthly='"+("1" if mok else "0")+"'>"
+'''
+    _new_rows='''            sms_href=_sms_due(a,'iscrizione' if vista=='iscrizioni' else 'mensile',mese,anno,stagione,months) if not focus_ok else ''
+            sms_action=("<a class='sms-reminder' href='"+e(sms_href)+"'>Invia SMS</a>" if sms_href else ("<span class='sms-reminder disabled'>SMS · numero mancante</span>" if not focus_ok else ""))
+            rows.append((0 if not focus_ok else 1,
+                "<div class='bmpv7-row "+row_state+"' data-bm-tid='"+str(tid)+"' data-bm-enroll='"+("1" if eok else "0")+"' data-bm-monthly='"+("1" if mok else "0")+"'>"
+'''
+    if _old_rows in _core:
+        _core=_core.replace(_old_rows,_new_rows,1)
+    elif 'sms_action=(' not in _core:
+        raise RuntimeError('R158 SMS row anchor missing')
+
+    _old_actions='''                +"<div class='bmpv7-actions'><a class='doc' href='"+dh+"'>Verifica documento</a><a class='doc' href='"+ah+"'>Archivio</a><a href='"+eh+"'>"+("Correggi iscrizione" if eok else "Registra iscrizione")+"</a>"+(("<a href='"+mh+"'>"+("Correggi "+months[mese] if mok else "Registra "+months[mese])+"</a>") if monthly_due else "<span class='bmpv7-action-na'>"+months[mese]+" non dovuto</span>")+"</div>"
+'''
+    _new_actions='''                +"<div class='bmpv7-actions'><a class='doc' href='"+dh+"'>Verifica documento</a><a class='doc' href='"+ah+"'>Archivio</a><a href='"+eh+"'>"+("Correggi iscrizione" if eok else "Registra iscrizione")+"</a>"+(("<a href='"+mh+"'>"+("Correggi "+months[mese] if mok else "Registra "+months[mese])+"</a>") if monthly_due else "<span class='bmpv7-action-na'>"+months[mese]+" non dovuto</span>")+sms_action+"</div>"
+'''
+    if _old_actions in _core:
+        _core=_core.replace(_old_actions,_new_actions,1)
+    elif '+sms_action+' not in _core:
+        raise RuntimeError('R158 SMS action anchor missing')
+
+    _old_css='''.bmpv7-actions a{{background:#2563eb;color:#fff!important;text-decoration:none}}.bmpv7-actions a+ a{{background:#0f766e}}.bmpv7-actions a.doc{{background:#334155!important}}'''
+    _new_css='''.bmpv7-actions a{{background:#2563eb;color:#fff!important;text-decoration:none}}.bmpv7-actions a+ a{{background:#0f766e}}.bmpv7-actions a.doc{{background:#334155!important}}.bmpv7-actions .sms-reminder{{display:none!important;background:#7c3aed!important;color:#fff!important}}.bmpv7-actions .sms-reminder.disabled{{opacity:.58;cursor:not-allowed}}'''
+    if _old_css in _core:
+        _core=_core.replace(_old_css,_new_css,1)
+
+    _old_media='''@media(max-width:780px){{.bmpv7{{padding:11px}}.bmpv7-head{{align-items:flex-start}}.bmpv7-head h1{{font-size:21px}}.bmpv7-head>strong{{font-size:16px}}.bmpv7-fields{{grid-template-columns:1fr 1fr}}.bmpv7-fields .wide{{grid-column:1/-1}}.bmpv7-statuses{{grid-template-columns:1fr}}}}'''
+    _new_media='''@media(max-width:780px){{.bmpv7{{padding:11px}}.bmpv7-head{{align-items:flex-start}}.bmpv7-head h1{{font-size:21px}}.bmpv7-head>strong{{font-size:16px}}.bmpv7-fields{{grid-template-columns:1fr 1fr}}.bmpv7-fields .wide{{grid-column:1/-1}}.bmpv7-statuses{{grid-template-columns:1fr}}.bmpv7-actions .sms-reminder{{display:flex!important}}}}'''
+    if _old_media in _core:
+        _core=_core.replace(_old_media,_new_media,1)
+
+    _core += "\n# BODYMIND_R158_PAYMENT_RECEIPTS_SMS\n"
+    _bak=BACK/'core.pre_r158.py'
+    if not _bak.exists(): shutil.copy2(CORE,_bak)
+    CORE.write_text(_core,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+    print('[r158-core] patched exact-payment receipt-sync separate-series mobile-sms',flush=True)
+else:
+    print('[r158-core] already installed',flush=True)
+
+# Add the new columns immediately and repair stale amounts already present.
+_r158db=sqlite3.connect(str(DB),timeout=30);_r158db.row_factory=sqlite3.Row
+try:
+    _cols={str(x['name']) for x in _r158db.execute("PRAGMA table_info(ricevute)").fetchall()}
+    _altered=[]
+    if 'serie_ricevuta' not in _cols:
+        _r158db.execute("ALTER TABLE ricevute ADD COLUMN serie_ricevuta TEXT");_altered.append('serie_ricevuta')
+    if 'numero_serie' not in _cols:
+        _r158db.execute("ALTER TABLE ricevute ADD COLUMN numero_serie INTEGER");_altered.append('numero_serie')
+
+    _mismatch=_r158db.execute("""
+      SELECT r.id AS rid,p.id AS pid,r.importo AS receipt_amount,p.importo AS payment_amount
+        FROM ricevute r JOIN pagamenti p ON (p.id=r.pagamento_id OR p.ricevuta_id=r.id)
+       WHERE COALESCE(r.annullata,0)=0
+         AND ABS(COALESCE(r.importo,0)-COALESCE(p.importo,0))>0.009
+       GROUP BY r.id
+    """).fetchall()
+    if _mismatch:
+        _dbbak=BACK/'asd.pre_r158_receipt_sync.db'
+        if not _dbbak.exists():
+            _srcdb=sqlite3.connect(str(DB),timeout=30);_outdb=sqlite3.connect(str(_dbbak))
+            try:_srcdb.backup(_outdb)
+            finally:_outdb.close();_srcdb.close()
+        for _x in _mismatch:
+            _r158db.execute("UPDATE ricevute SET importo=?,updated_at=datetime('now') WHERE id=?",(float(_x['payment_amount'] or 0),int(_x['rid'])))
+    _r158db.commit()
+    print('[r158-db] columns='+repr(_altered)+' corrected='+str(len(_mismatch))+' '+repr([dict(x) for x in _mismatch]),flush=True)
+finally:
+    _r158db.close()
+
+# Show the independent series on PDFs only for receipts created in the new series.
+_RPDF=APP/'asd_app/routes_ricevute.py'
+if _RPDF.exists():
+    _rs=_RPDF.read_text(encoding='utf-8',errors='replace')
+    if 'BODYMIND_R158_RECEIPT_SERIES_PDF' not in _rs:
+        _anchor='''        _r=_c.execute("SELECT * FROM ricevute WHERE id=?",(_rid,)).fetchone()
+        if not _r:
+            return _resp
+        _method=str(_r['metodo_pagamento'] or '').strip() if 'metodo_pagamento' in _r.keys() else ''
+'''
+        _replacement='''        _r=_c.execute("SELECT * FROM ricevute WHERE id=?",(_rid,)).fetchone()
+        if not _r:
+            return _resp
+        _series=''
+        try:
+            if 'serie_ricevuta' in _r.keys() and 'numero_serie' in _r.keys() and _r['serie_ricevuta'] and _r['numero_serie']:
+                _series=str(_r['serie_ricevuta'])+'-'+str(_r['anno_progressivo'])+'-'+str(int(_r['numero_serie'])).zfill(3)
+        except Exception:
+            _series=''
+        _method=str(_r['metodo_pagamento'] or '').strip() if 'metodo_pagamento' in _r.keys() else ''
+'''
+        if _anchor in _rs:
+            _rs=_rs.replace(_anchor,_replacement,1)
+        elif "_series=''" not in _rs:
+            raise RuntimeError('R158 PDF series data anchor missing')
+
+        _draw='''        _cv.setFont('Helvetica-Bold',9)
+        _cv.drawString(_mx,_my,'Metodo di pagamento: '+_shown)
+        _cv.save(); _ov.seek(0)
+'''
+        _draw_new='''        _cv.setFont('Helvetica-Bold',9)
+        _cv.drawString(_mx,_my,'Metodo di pagamento: '+_shown)
+        if _series:
+            _cv.drawString(_mx,max(24.0,_my-13.0),'Ricevuta: '+_series)
+        _cv.save(); _ov.seek(0)
+'''
+        if _draw in _rs:
+            _rs=_rs.replace(_draw,_draw_new,1)
+        elif "Ricevuta: '+_series" not in _rs:
+            raise RuntimeError('R158 PDF series draw anchor missing')
+        _rs+="\n# BODYMIND_R158_RECEIPT_SERIES_PDF\n"
+        _pdfbak=BACK/'routes_ricevute.pre_r158.py'
+        if not _pdfbak.exists(): shutil.copy2(_RPDF,_pdfbak)
+        _RPDF.write_text(_rs,encoding='utf-8')
+        py_compile.compile(str(_RPDF),doraise=True)
+        print('[r158-pdf] installed separate receipt series display',flush=True)
+    else:
+        print('[r158-pdf] already installed',flush=True)
+
+# Fresh process audit against production read-only state.
+_r158qa=r'''
+import sqlite3,sys
+sys.path.insert(0,'/data/top2_app');import app as _full
+from asd_app.core import app
+app.config['TESTING']=True
+c=app.test_client()
+with c.session_transaction() as s:s.update({'logged':True,'logged_in':True,'username':'admin','role':'admin','tenant_slug':'default','user_id':1,'is_admin':True,'admin':True})
+r=c.get('/pagamenti?vista=mensili&mese=10&anno=2026',follow_redirects=True);h=r.get_data(as_text=True)
+db=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True,timeout=20);db.row_factory=sqlite3.Row
+try:
+    cols={str(x['name']) for x in db.execute("PRAGMA table_info(ricevute)").fetchall()}
+    stale=int(db.execute("SELECT COUNT(*) FROM ricevute r JOIN pagamenti p ON (p.id=r.pagamento_id OR p.ricevuta_id=r.id) WHERE COALESCE(r.annullata,0)=0 AND ABS(COALESCE(r.importo,0)-COALESCE(p.importo,0))>0.009").fetchone()[0])
+    man=[dict(x) for x in db.execute("""SELECT t.nome,t.cognome,p.id AS pid,p.importo AS payment_amount,r.id AS rid,r.importo AS receipt_amount,r.numero_progressivo,r.serie_ricevuta,r.numero_serie
+      FROM tesserati t LEFT JOIN pagamenti p ON p.tesserato_id=t.id LEFT JOIN ricevute r ON (r.pagamento_id=p.id OR r.id=p.ricevuta_id)
+      WHERE lower(t.nome)='francesca' AND lower(t.cognome)='mancinelli'
+      ORDER BY p.id DESC,r.id DESC LIMIT 8""").fetchall()]
+    integ=str(db.execute('PRAGMA integrity_check').fetchone()[0]);fk=len(db.execute('PRAGMA foreign_key_check').fetchall())
+finally:db.close()
+checks={'page':r.status_code==200,'sms':'sms-reminder' in h and ('sms:' in h or 'numero mancante' in h),'series_cols':{'serie_ricevuta','numero_serie'}.issubset(cols),'receipt_sync':stale==0,'db':integ.lower()=='ok' and fk==0}
+print('[r158-audit] '+repr(checks)+' mancinelli='+repr(man),flush=True)
+if not all(checks.values()):raise RuntimeError('R158 QA failed '+repr(checks))
+'''
+_r158p=subprocess.run([sys.executable,'-c',_r158qa],capture_output=True,text=True,timeout=180)
+print((_r158p.stdout or '').strip(),flush=True)
+if _r158p.returncode!=0:
+    raise RuntimeError('R158 child audit failed '+((_r158p.stderr or '')+(_r158p.stdout or ''))[-8000:])
+print('[r158] PASS receipt-auto-sync separate-future-I/M-series mobile-manual-SMS historical-numbers-preserved',flush=True)
