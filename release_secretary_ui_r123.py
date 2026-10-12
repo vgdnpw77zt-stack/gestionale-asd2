@@ -2837,3 +2837,270 @@ print((_v19p.stdout or '').strip(),flush=True)
 if _v19p.returncode!=0:
     raise RuntimeError('V19 stale quote counter child audit failed '+((_v19p.stderr or '')+(_v19p.stdout or ''))[-7000:])
 print('[quote-counter-v19] PASS false quote-review label removed; informational payment totals allowed; canonical-payment-truth preserved',flush=True)
+
+
+# BODYMIND_R123_PAYMENT_RECEIPT_SMS_V20
+# 1) Receipt amount follows the canonical payment on edit.
+# 2) New receipt numbering uses separate enrollment/monthly series without
+#    renumbering already-issued historical receipts.
+# 3) Mobile payment rows expose a manual SMS reminder for unpaid dues.
+# 4) PDF shows an explicit I/M series identifier so equal numeric progressives
+#    across the two ledgers are never ambiguous.
+import urllib.parse as _v20_urlparse
+
+_core_v20=CORE.read_text(encoding='utf-8',errors='replace')
+_v20_before=_core_v20
+
+_old_receipt_block=r"""        receipt=c.execute("SELECT * FROM ricevute WHERE pagamento_id=? ORDER BY id DESC LIMIT 1",(pid,)).fetchone()
+        if receipt:
+            rid=int(receipt['id'])
+            c.execute("""
+                UPDATE ricevute
+                   SET nome=?,descrizione=?,importo=?,data=?,metodo_pagamento=?,updated_at=?
+                 WHERE id=?
+            """,(nome,desc,importo,data,metodo,now,rid))
+        else:
+            prog=int(c.execute("SELECT COALESCE(MAX(numero_progressivo),0)+1 FROM ricevute WHERE anno_progressivo=?",(anno,)).fetchone()[0] or 1)
+            cur=c.execute("""
+                INSERT INTO ricevute(
+                    nome,descrizione,importo,data,pagamento_id,tenant_id,
+                    created_at,updated_at,metodo_pagamento,
+                    numero_progressivo,anno_progressivo,annullata
+                ) VALUES(?,?,?,?,?,'default',?,?,?,?,?,0)
+            """,(nome,desc,importo,data,pid,now,now,metodo,prog,anno))
+            rid=int(cur.lastrowid)
+        c.execute("UPDATE pagamenti SET ricevuta_id=? WHERE id=?",(rid,pid))
+"""
+
+_new_receipt_block=r"""        # Canonical receipt follows the exact payment row. Also accept a
+        # legacy link stored only as pagamenti.ricevuta_id.
+        receipt=c.execute("""
+            SELECT * FROM ricevute
+             WHERE pagamento_id=?
+                OR id=(SELECT ricevuta_id FROM pagamenti WHERE id=?)
+             ORDER BY CASE WHEN pagamento_id=? THEN 0 ELSE 1 END,id DESC
+             LIMIT 1
+        """,(pid,pid,pid)).fetchone()
+        if receipt:
+            rid=int(receipt['id'])
+            # Keep every legacy duplicate linked to the same movement aligned:
+            # correcting €70 -> €50 must immediately correct the receipt too.
+            c.execute("""
+                UPDATE ricevute
+                   SET nome=?,descrizione=?,importo=?,data=?,metodo_pagamento=?,updated_at=?
+                 WHERE pagamento_id=? OR id=?
+            """,(nome,desc,importo,data,metodo,now,pid,rid))
+        else:
+            # Separate progressive ledgers from now on. Historical numbers are
+            # deliberately preserved; the visible PDF series (I/M) disambiguates
+            # identical numeric progressives across the two ledgers.
+            if tipo=='iscrizione':
+                prog=int(c.execute("""
+                    SELECT COALESCE(MAX(r.numero_progressivo),0)+1
+                      FROM ricevute r
+                      LEFT JOIN pagamenti p ON p.id=r.pagamento_id
+                     WHERE r.anno_progressivo=?
+                       AND COALESCE(r.annullata,0)=0
+                       AND (
+                         lower(coalesce(p.causale,'')) LIKE '%iscrizion%'
+                         OR lower(coalesce(p.causale,''))='tesseramento'
+                         OR lower(coalesce(r.descrizione,'')) LIKE '%iscrizion%'
+                         OR lower(coalesce(r.descrizione,'')) LIKE '%tesserament%'
+                       )
+                """,(anno,)).fetchone()[0] or 1)
+            else:
+                prog=int(c.execute("""
+                    SELECT COALESCE(MAX(r.numero_progressivo),0)+1
+                      FROM ricevute r
+                      LEFT JOIN pagamenti p ON p.id=r.pagamento_id
+                     WHERE r.anno_progressivo=?
+                       AND COALESCE(r.annullata,0)=0
+                       AND (
+                         lower(coalesce(p.causale,'')) LIKE '%mensil%'
+                         OR lower(coalesce(p.causale,'')) IN ('quota','quota_mensile')
+                         OR lower(coalesce(r.descrizione,'')) LIKE '%mensil%'
+                         OR lower(coalesce(r.descrizione,'')) LIKE '%attivit% sportiv%'
+                       )
+                """,(anno,)).fetchone()[0] or 1)
+            cur=c.execute("""
+                INSERT INTO ricevute(
+                    nome,descrizione,importo,data,pagamento_id,tenant_id,
+                    created_at,updated_at,metodo_pagamento,
+                    numero_progressivo,anno_progressivo,annullata
+                ) VALUES(?,?,?,?,?,'default',?,?,?,?,?,0)
+            """,(nome,desc,importo,data,pid,now,now,metodo,prog,anno))
+            rid=int(cur.lastrowid)
+        c.execute("UPDATE pagamenti SET ricevuta_id=? WHERE id=?",(rid,pid))
+"""
+
+if _old_receipt_block in _core_v20:
+    _core_v20=_core_v20.replace(_old_receipt_block,_new_receipt_block,1)
+elif "Separate progressive ledgers from now on" not in _core_v20:
+    raise RuntimeError('V20 canonical receipt block not found')
+
+_old_anchors="""            dh=f"/documenti/da-verificare?tesserato_id={tid}"
+            ah=f"/documenti?tesserato_id={tid}"
+"""
+_new_anchors="""            dh=f"/documenti/da-verificare?tesserato_id={tid}"
+            ah=f"/documenti?tesserato_id={tid}"
+            # Manual-only SMS reminder: opens the phone Messages composer and
+            # never sends anything automatically.
+            _phone_raw=str(a.get('telefono') or a.get('telefono_genitore') or a.get('cellulare') or '').strip()
+            _phone=''.join(ch for ch in _phone_raw if ch.isdigit() or ch=='+')
+            _due_label=('quota di iscrizione '+str(stagione)+'/'+str(stagione+1)) if vista=='iscrizioni' else ('quota mensile di '+months[mese]+' '+str(anno))
+            _sms_text='BodyMind Aerial Studio ASD: ti ricordiamo che risulta ancora da regolarizzare la '+_due_label+'. Grazie.'
+            _sms_href=('sms:'+_phone+'&body='+_url_quote(_sms_text)) if _phone else ''
+            sms_action=("<a class='sms-reminder' href='"+_sms_href+"'>Invia SMS</a>" if _sms_href else "<span class='sms-reminder disabled'>SMS · numero mancante</span>")
+"""
+if _old_anchors in _core_v20:
+    _core_v20=_core_v20.replace(_old_anchors,_new_anchors,1)
+elif "sms_action=" not in _core_v20:
+    raise RuntimeError('V20 payment action anchors not found')
+
+_old_actions="""                +"<div class='bmpv7-actions'><a class='doc' href='"+dh+"'>Verifica documento</a><a class='doc' href='"+ah+"'>Archivio</a><a href='"+eh+"'>"+("Correggi iscrizione" if eok else "Registra iscrizione")+"</a>"+(("<a href='"+mh+"'>"+("Correggi "+months[mese] if mok else "Registra "+months[mese])+"</a>") if monthly_due else "<span class='bmpv7-action-na'>"+months[mese]+" non dovuto</span>")+"</div>"
+"""
+_new_actions="""                +"<div class='bmpv7-actions'><a class='doc' href='"+dh+"'>Verifica documento</a><a class='doc' href='"+ah+"'>Archivio</a><a href='"+eh+"'>"+("Correggi iscrizione" if eok else "Registra iscrizione")+"</a>"+(("<a href='"+mh+"'>"+("Correggi "+months[mese] if mok else "Registra "+months[mese])+"</a>") if monthly_due else "<span class='bmpv7-action-na'>"+months[mese]+" non dovuto</span>")+(sms_action if not focus_ok else "")+"</div>"
+"""
+if _old_actions in _core_v20:
+    _core_v20=_core_v20.replace(_old_actions,_new_actions,1)
+elif "(sms_action if not focus_ok else" not in _core_v20:
+    raise RuntimeError('V20 payment row action block not found')
+
+_old_css="""        @media(max-width:780px){{.bmpv7{{padding:11px}}.bmpv7-head{{align-items:flex-start}}.bmpv7-head h1{{font-size:21px}}.bmpv7-head>strong{{font-size:16px}}.bmpv7-fields{{grid-template-columns:1fr 1fr}}.bmpv7-fields .wide{{grid-column:1/-1}}.bmpv7-statuses{{grid-template-columns:1fr}}}}
+"""
+_new_css="""        .bmpv7-actions .sms-reminder{{display:none!important;background:#7c3aed!important;color:#fff!important}}.bmpv7-actions .sms-reminder.disabled{{opacity:.58;cursor:not-allowed}}
+        @media(max-width:780px){{.bmpv7{{padding:11px}}.bmpv7-head{{align-items:flex-start}}.bmpv7-head h1{{font-size:21px}}.bmpv7-head>strong{{font-size:16px}}.bmpv7-fields{{grid-template-columns:1fr 1fr}}.bmpv7-fields .wide{{grid-column:1/-1}}.bmpv7-statuses{{grid-template-columns:1fr}}.bmpv7-actions .sms-reminder{{display:flex!important}}}}
+"""
+if _old_css in _core_v20:
+    _core_v20=_core_v20.replace(_old_css,_new_css,1)
+elif ".sms-reminder" not in _core_v20:
+    raise RuntimeError('V20 payment mobile CSS anchor not found')
+
+# The generated core needs quote() under the same deterministic import alias.
+_import_anchor="from flask import request,redirect,render_template_string\\n"
+if "_url_quote" not in _core_v20:
+    if _import_anchor in _core_v20:
+        _core_v20=_core_v20.replace(_import_anchor,_import_anchor+"from urllib.parse import quote as _url_quote\\n",1)
+    else:
+        # Safe module-level append if the core import layout has changed.
+        _core_v20="from urllib.parse import quote as _url_quote\\n"+_core_v20
+
+if _core_v20!=_v20_before:
+    _v20_core_backup=BACK/'pre_v20_core.py'
+    if not _v20_core_backup.exists(): shutil.copy2(CORE,_v20_core_backup)
+    CORE.write_text(_core_v20,encoding='utf-8')
+    py_compile.compile(str(CORE),doraise=True)
+    print('[v20-core] patched receipt-sync separate-series mobile-sms',flush=True)
+else:
+    print('[v20-core] already converged',flush=True)
+
+# One-time convergence for already-existing active receipts whose amount is
+# stale relative to the exact linked payment. This fixes the reported case
+# immediately without changing receipt IDs or historical progressive numbers.
+_v20_db=sqlite3.connect(str(DB),timeout=30);_v20_db.row_factory=sqlite3.Row
+try:
+    _v20_mismatch=_v20_db.execute("""
+        SELECT r.id AS rid,p.id AS pid,r.importo AS receipt_amount,p.importo AS payment_amount
+          FROM ricevute r JOIN pagamenti p ON p.id=r.pagamento_id
+         WHERE COALESCE(r.annullata,0)=0
+           AND ABS(COALESCE(r.importo,0)-COALESCE(p.importo,0))>0.009
+    """).fetchall()
+    if _v20_mismatch:
+        _v20_backup=BACK/'v20_pre_receipt_amount_sync.db'
+        if not _v20_backup.exists():
+            _v20_src=sqlite3.connect(str(DB),timeout=30);_v20_out=sqlite3.connect(str(_v20_backup))
+            try:_v20_src.backup(_v20_out)
+            finally:_v20_out.close();_v20_src.close()
+        _v20_db.execute("""
+            UPDATE ricevute
+               SET importo=(SELECT p.importo FROM pagamenti p WHERE p.id=ricevute.pagamento_id),
+                   updated_at=datetime('now')
+             WHERE COALESCE(annullata,0)=0
+               AND pagamento_id IS NOT NULL
+               AND ABS(COALESCE(importo,0)-COALESCE((SELECT p.importo FROM pagamenti p WHERE p.id=ricevute.pagamento_id),0))>0.009
+        """)
+        _v20_db.commit()
+        print('[v20-receipt-sync] corrected='+str(len(_v20_mismatch))+' '+repr([dict(x) for x in _v20_mismatch]),flush=True)
+    else:
+        print('[v20-receipt-sync] no stale linked receipt amounts',flush=True)
+finally:
+    _v20_db.close()
+
+# Add explicit visible receipt series to the already-canonical V16 PDF wrapper.
+_v20_rpdf=APP/'asd_app/routes_ricevute.py'
+if _v20_rpdf.exists():
+    _v20_pdf=_v20_rpdf.read_text(encoding='utf-8',errors='replace')
+    if 'BODYMIND_RECEIPT_SERIES_V20' not in _v20_pdf:
+        _needle="""        _cv.setFont('Helvetica-Bold',9)
+        _cv.drawString(_mx,_my,'Metodo di pagamento: '+_shown)
+        _cv.save(); _ov.seek(0)
+"""
+        _replacement="""        _cv.setFont('Helvetica-Bold',9)
+        _cv.drawString(_mx,_my,'Metodo di pagamento: '+_shown)
+        # BODYMIND_RECEIPT_SERIES_V20
+        _desc=str(_r['descrizione'] or '').lower() if 'descrizione' in _r.keys() else ''
+        _series='I' if ('iscriz' in _desc or 'tesserament' in _desc) else ('M' if ('mensil' in _desc or 'attivit' in _desc) else 'R')
+        _prog=int(_r['numero_progressivo'] or 0) if 'numero_progressivo' in _r.keys() else 0
+        _year=int(_r['anno_progressivo'] or 0) if 'anno_progressivo' in _r.keys() else 0
+        _series_code=_series+'-'+str(_year)+'-'+str(_prog).zfill(4)
+        _cv.drawString(_mx,max(24.0,_my-13.0),'Serie ricevuta: '+_series_code)
+        _cv.save(); _ov.seek(0)
+"""
+        if _needle not in _v20_pdf:
+            raise RuntimeError('V20 receipt PDF overlay anchor not found')
+        _v20_pdf=_v20_pdf.replace(_needle,_replacement,1)
+        _v20_pdf_backup=BACK/'pre_v20_routes_ricevute.py'
+        if not _v20_pdf_backup.exists():shutil.copy2(_v20_rpdf,_v20_pdf_backup)
+        _v20_rpdf.write_text(_v20_pdf,encoding='utf-8')
+        py_compile.compile(str(_v20_rpdf),doraise=True)
+        print('[v20-pdf] explicit I/M series installed',flush=True)
+    else:
+        print('[v20-pdf] already installed',flush=True)
+
+# Fresh process QA, read-only except isolated test DB handled by existing gates.
+_v20_qa=r"""
+import io,re,sqlite3,sys
+from pypdf import PdfReader
+sys.path.insert(0,'/data/top2_app');import app as _full
+from asd_app.core import app
+app.config['TESTING']=True
+c=app.test_client()
+with c.session_transaction() as s:s.update({'logged':True,'logged_in':True,'username':'admin','role':'admin','tenant_slug':'default','user_id':1,'is_admin':True,'admin':True,'_csrf_token':'v20'})
+pay=c.get('/pagamenti?vista=mensili&mese=10&anno=2026',follow_redirects=True)
+h=pay.get_data(as_text=True)
+db=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True,timeout=20);db.row_factory=sqlite3.Row
+try:
+    stale=int(db.execute("SELECT COUNT(*) FROM ricevute r JOIN pagamenti p ON p.id=r.pagamento_id WHERE COALESCE(r.annullata,0)=0 AND ABS(COALESCE(r.importo,0)-COALESCE(p.importo,0))>0.009").fetchone()[0])
+    man=db.execute("""SELECT t.id,t.nome,t.cognome,p.id AS pid,p.importo AS payment_amount,r.id AS rid,r.importo AS receipt_amount
+                       FROM tesserati t LEFT JOIN pagamenti p ON p.tesserato_id=t.id
+                       LEFT JOIN ricevute r ON r.pagamento_id=p.id
+                      WHERE lower(t.nome)='francesca' AND lower(t.cognome)='mancinelli'
+                      ORDER BY p.id DESC,r.id DESC LIMIT 5""").fetchall()
+    recent=db.execute("""SELECT r.id,r.numero_progressivo,r.anno_progressivo,r.descrizione,p.causale
+                          FROM ricevute r LEFT JOIN pagamenti p ON p.id=r.pagamento_id
+                         WHERE COALESCE(r.annullata,0)=0
+                         ORDER BY r.id DESC LIMIT 20""").fetchall()
+    integ=str(db.execute('PRAGMA integrity_check').fetchone()[0]);fk=len(db.execute('PRAGMA foreign_key_check').fetchall())
+finally:db.close()
+rid=next((int(x['id']) for x in recent if int(x['id'] or 0)>0),0)
+series_pdf=False
+if rid:
+    rr=c.get('/ricevute/pdf/'+str(rid),follow_redirects=False)
+    if rr.status_code==200 and rr.get_data()[:4]==b'%PDF':
+        tx='\\n'.join((p.extract_text() or '') for p in PdfReader(io.BytesIO(rr.get_data())).pages)
+        series_pdf='Serie ricevuta:' in tx
+checks={
+ 'payments_200':pay.status_code==200,
+ 'sms_markup':'sms-reminder' in h and ('sms:' in h or 'numero mancante' in h),
+ 'receipt_sync':stale==0,
+ 'series_pdf':series_pdf,
+ 'db':integ.lower()=='ok' and fk==0,
+}
+print('[v20-audit] '+repr(checks)+' mancinelli='+repr([dict(x) for x in man])+' recent_receipts='+repr([dict(x) for x in recent[:6]]),flush=True)
+if not all(checks.values()):raise RuntimeError('V20 payment/receipt/SMS audit failed '+repr(checks))
+"""
+_v20p=subprocess.run([sys.executable,'-c',_v20_qa],capture_output=True,text=True,timeout=180)
+print((_v20p.stdout or '').strip(),flush=True)
+if _v20p.returncode!=0:
+    raise RuntimeError('V20 child audit failed '+((_v20p.stderr or '')+(_v20p.stdout or ''))[-8000:])
+print('[v20] PASS receipt-auto-sync separate-I/M-series mobile-manual-SMS historical-progressives-preserved',flush=True)
