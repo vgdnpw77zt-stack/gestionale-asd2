@@ -2774,6 +2774,29 @@ for _p in (APP/'asd_app').rglob('*.py'):
 print('[quote-counter-v19-source-hits] '+repr([(p,c[:1200]) for p,c in _v19_hits]),flush=True)
 print('[quote-counter-v19-source-changed] '+repr(_v19_changed),flush=True)
 
+# A total movement counter is not work-to-do. Remove that KPI from the
+# "Da controllare" alert strip altogether; Pagamenti remains available in the
+# normal menu and its dedicated screens. This is source-level convergence.
+_v19_removed=[]
+_v19_action_pat=_v19_re.compile(
+    r"<a\b[^>]*class=(['\"])(?:alert|bm22-alert)\1[^>]*href=(['\"])/pagamenti\2[^>]*>"
+    r"(?:(?!</a>).)*?<strong>\{\{quote\}\}</strong>"
+    r"(?:(?!</a>).)*?<small>(?:Quote\s+da\s+controllare|Movimenti\s+registrati)</small>"
+    r"(?:(?!</a>).)*?</a>",
+    _v19_re.I|_v19_re.S
+)
+for _p in (APP/'asd_app').rglob('*.py'):
+    try:_txt=_p.read_text(encoding='utf-8',errors='replace')
+    except Exception:continue
+    _new,n=_v19_action_pat.subn('',_txt)
+    if n:
+        _bak=_v19_back/(_p.name+'.pre_v19_action_strip')
+        if not _bak.exists():shutil.copy2(_p,_bak)
+        _p.write_text(_new,encoding='utf-8')
+        py_compile.compile(str(_p),doraise=True)
+        _v19_removed.append((str(_p),n))
+print('[quote-counter-v19-action-strip] '+repr(_v19_removed),flush=True)
+
 _v19_qa=r"""
 import sqlite3,sys
 sys.path.insert(0,'/data/top2_app');import app as _full
@@ -2798,6 +2821,8 @@ rendered='\\n'.join(x[1] for x in pages.values())
 checks={
   'pages_ok':all(x[0]==200 for x in pages.values()),
   'stale_label_absent':'Quote da controllare' not in rendered,
+  'movement_kpi_absent':'Movimenti registrati' not in rendered,
+  'payments_still_reachable':all('Pagamenti' in x[1] for x in pages.values()),
   'not_quote_total':movements!=quotes,
   'db':integrity.lower()=='ok' and fk==0,
 }
