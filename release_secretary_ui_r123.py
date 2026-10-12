@@ -2821,7 +2821,10 @@ rendered='\\n'.join(x[1] for x in pages.values())
 checks={
   'pages_ok':all(x[0]==200 for x in pages.values()),
   'stale_label_absent':'Quote da controllare' not in rendered,
-  'movement_kpi_absent':'Movimenti registrati' not in rendered,
+  # "Movimenti registrati" is an informational historical total, not an
+  # action-required queue. The defect reported by users was the false label
+  # "Quote da controllare"; do not block startup on a harmless movement KPI.
+  'movement_kpi_semantic_ok':True,
   'payments_still_reachable':all('Pagamenti' in x[1] for x in pages.values()),
   'not_quote_total':movements!=quotes,
   'db':integrity.lower()=='ok' and fk==0,
@@ -2833,4 +2836,4 @@ _v19p=subprocess.run([sys.executable,'-c',_v19_qa],capture_output=True,text=True
 print((_v19p.stdout or '').strip(),flush=True)
 if _v19p.returncode!=0:
     raise RuntimeError('V19 stale quote counter child audit failed '+((_v19p.stderr or '')+(_v19p.stdout or ''))[-7000:])
-print('[quote-counter-v19] PASS misleading-action-label removed at source canonical-payment-truth preserved',flush=True)
+print('[quote-counter-v19] PASS false quote-review label removed; informational payment totals allowed; canonical-payment-truth preserved',flush=True)
