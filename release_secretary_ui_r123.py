@@ -2459,6 +2459,12 @@ def _v18_strip_exact_route(path,rule):
     for node in tree.body:
         if not isinstance(node,(_v18_ast.FunctionDef,_v18_ast.AsyncFunctionDef)):continue
         if any(_v18_route_value(d)==rule for d in node.decorator_list):
+            # Reboot-safe idempotency: once V18 is installed, keep its own
+            # canonical GET route and remove only superseded implementations.
+            # The previous logic stripped bodymind_document_review_v18 itself,
+            # left the V18 marker behind, then skipped re-installation.
+            if path==CORE and node.name=='bodymind_document_review_v18':
+                continue
             start=min([node.lineno]+[d.lineno for d in node.decorator_list])-1
             end=int(getattr(node,'end_lineno',node.lineno))
             ranges.append((start,end,node.name))
@@ -2697,7 +2703,8 @@ try:
   raw=int(db.execute("SELECT COUNT(*) FROM inbound_documents WHERE coalesce(deleted_at,'')='' AND lower(coalesce(status,'')) NOT IN ('deleted','archived','archived_orphan','accepted','manual_accepted','verificato','resolved','associato','archived_to_tesserato')").fetchone()[0])
   integ=str(db.execute('PRAGMA integrity_check').fetchone()[0]);fk=len(db.execute('PRAGMA foreign_key_check').fetchall())
 finally:db.close()
-checks={'queue_200':q.status_code==200,'count_found':count>=0,'preview_route':(pm is None or preview_status==200),'timeline_link_absent':not re.search(r"href=['\"][^'\"]*timeline",oh,re.I),'db':integ.lower()=='ok' and fk==0}
+rules=[(r.rule,r.endpoint) for r in app.url_map.iter_rules() if r.rule=='/documenti/da-verificare']
+checks={'queue_200':q.status_code==200,'count_found':count>=0,'canonical_route':rules==[('/documenti/da-verificare','bodymind_document_review_v18')],'preview_route':(pm is None or preview_status==200),'timeline_link_absent':not re.search(r"href=['\"][^'\"]*timeline",oh,re.I),'db':integ.lower()=='ok' and fk==0}
 print('[document-review-v18-audit] '+repr(checks)+' raw_unresolved_inbound='+str(raw)+' actionable_rendered='+str(count)+' preview_status='+repr(preview_status),flush=True)
 if not all(checks.values()):raise RuntimeError('V18 review QA failed '+repr(checks))
 """
