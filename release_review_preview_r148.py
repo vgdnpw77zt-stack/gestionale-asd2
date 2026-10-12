@@ -17,17 +17,24 @@ replacement="""            preview_url=('/documenti/visualizza/'+str(rid)) if so
             return f\"\"\"<article class='r147-card'><div class='r147-head'><div><b>{e(title)}</b><small>{e(who)}</small></div><span>DA VERIFICARE</span></div><p>{e(reason)}</p>
 <div class='r148-preview-actions'><a href='{preview_url}' target='_blank' rel='noopener'>👁 Anteprima documento</a></div>
 <form method='post' action='/documenti/da-verificare/r147/verifica'>"""
+v18_authority='BODYMIND_R123_DOCUMENT_REVIEW_RUNTIME_V18' in s
 if "r148-preview-actions" not in s:
-    if needle not in s:
-        raise RuntimeError('R148 card anchor missing')
-    s=s.replace(needle,replacement,1)
+    if v18_authority:
+        print('[r148-review-preview] V18 owns canonical review preview; legacy card patch skipped',flush=True)
+    else:
+        if needle not in s:
+            raise RuntimeError('R148 card anchor missing')
+        s=s.replace(needle,replacement,1)
 
 css_anchor="""button{{width:100%;margin-top:14px;padding:13px;border:0;border-radius:12px;background:#166534;color:#fff;font-weight:950;font-size:16px}}a.back"""
 css_new="""button{{width:100%;margin-top:14px;padding:13px;border:0;border-radius:12px;background:#166534;color:#fff;font-weight:950;font-size:16px}}.r148-preview-actions{{margin:12px 0}}.r148-preview-actions a{{display:block;padding:12px 13px;border-radius:12px;background:#1d4ed8;color:#fff!important;text-decoration:none;text-align:center;font-weight:950}}a.back"""
 if ".r148-preview-actions{{" not in s:
-    if css_anchor not in s:
-        raise RuntimeError('R148 CSS anchor missing')
-    s=s.replace(css_anchor,css_new,1)
+    if v18_authority:
+        pass
+    else:
+        if css_anchor not in s:
+            raise RuntimeError('R148 CSS anchor missing')
+        s=s.replace(css_anchor,css_new,1)
 
 if s!=before:
     shutil.copy2(CORE,BACK/'core.py')
@@ -70,8 +77,8 @@ try:
 finally:conn.close()
 checks={
  "queue_200":q.status_code==200,
- "preview_markup":"r148-preview-actions" in src and "Anteprima documento" in src,
- "document_preview_route":"/documenti/visualizza/<int:doc_id>" in routes,
+ "preview_markup":(("BODYMIND_R123_DOCUMENT_REVIEW_RUNTIME_V18" in src and "rv18-preview" in src and "/documenti/da-verificare/file/" in src) or ("r148-preview-actions" in src and "Anteprima documento" in src)),
+ "document_preview_route":("/documenti/da-verificare/file/<source>/<int:rid>" in routes or "/documenti/visualizza/<int:doc_id>" in routes),
  "inbound_preview_route":True,
  "db":integ.lower()=="ok" and fk==0,
 }
