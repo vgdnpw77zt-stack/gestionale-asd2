@@ -424,7 +424,10 @@ print('[r156] PASS ios-visible-viewport composer-writable operator-pending-delet
 # Existing issued receipt numbers are never renumbered.
 # ---------------------------------------------------------------------------
 _core=CORE.read_text(encoding='utf-8',errors='replace')
-if '# BODYMIND_R158_PAYMENT_RECEIPTS_SMS' not in _core:
+if '# BODYMIND_R158_PAYMENT_RECEIPTS_SMS' not in _core or 'series_prog=int(c.execute(' not in _core:
+    # R123 re-installs the canonical payment function on every startup.
+    # A stale marker must not suppress the R158 payment/receipt patch.
+    _core=_core.replace("\n# BODYMIND_R158_PAYMENT_RECEIPTS_SMS\n","\n")
     _before=_core
 
     _old_exact='''        existing=None
@@ -708,3 +711,127 @@ print((_r158p.stdout or '').strip(),flush=True)
 if _r158p.returncode!=0:
     raise RuntimeError('R158 child audit failed '+((_r158p.stderr or '')+(_r158p.stdout or ''))[-8000:])
 print('[r158] PASS receipt-auto-sync separate-future-I/M-series mobile-manual-SMS historical-numbers-preserved',flush=True)
+
+
+# BODYMIND_CASE_BY_CASE_DUES_R156
+# The decision concerns the monthly amount due, NEVER a payment/receipt.
+# Only a deliberate admin POST changes a specific month. Immutable audit.
+_fee_conn=sqlite3.connect(str(DB),timeout=30)
+try:
+    _fee_conn.executescript("""
+    CREATE TABLE IF NOT EXISTS bodymind_quota_decisioni(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,tesserato_id INTEGER NOT NULL,
+      mese INTEGER NOT NULL,anno INTEGER NOT NULL,decisione TEXT NOT NULL,
+      importo_base REAL NOT NULL,importo_dovuto REAL NOT NULL,
+      motivo TEXT NOT NULL,autorizzata_da TEXT NOT NULL,updated_at TEXT NOT NULL,
+      UNIQUE(tesserato_id,mese,anno));
+    CREATE TABLE IF NOT EXISTS bodymind_quota_decisioni_audit(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,tesserato_id INTEGER NOT NULL,
+      mese INTEGER NOT NULL,anno INTEGER NOT NULL,decisione TEXT NOT NULL,
+      prima_quota TEXT,prima_decisione TEXT,importo_base REAL,importo_dovuto REAL,
+      motivo TEXT NOT NULL,autorizzata_da TEXT NOT NULL,created_at TEXT NOT NULL);
+    """)
+finally:_fee_conn.close()
+_fee_src=r'''
+# BODYMIND_CASE_BY_CASE_DUES_R156
+@app.route('/pagamenti/decisione-quota',methods=['GET','POST'],endpoint='bodymind_fee_decision_r156')
+@admin_required
+def bodymind_fee_decision_r156():
+    from flask import request as _fr, redirect as _redirect, render_template_string as _render
+    import json as _fj
+    from datetime import datetime as _dtf
+    try:
+        mm=int(_fr.values.get('mese') or 0); yy=int(_fr.values.get('anno') or 0)
+        tid=int(_fr.values.get('tesserato_id') or 0)
+    except (TypeError,ValueError):return _redirect('/pagamenti?errore=periodo',303)
+    if not (1<=mm<=12 and 2020<=yy<=2100):return _redirect('/pagamenti?errore=periodo',303)
+    con=db();con.row_factory=sqlite3.Row
+    try:
+        athlete=con.execute('SELECT id,nome,cognome,attivo FROM tesserati WHERE id=?',(tid,)).fetchone() if tid else None
+        if _fr.method=='POST':
+            action=str(_fr.form.get('decisione') or '').lower().strip()
+            reason=str(_fr.form.get('motivo') or '').strip()
+            if not athlete or not int(athlete['attivo'] or 0) or action not in ('dovuta','ridotta','esente','sospeso') or len(reason)<8 or len(reason)>750:
+                return _redirect('/pagamenti/decisione-quota?mese=%s&anno=%s&tesserato_id=%s&errore=motivo'%(mm,yy,tid),303)
+            try:
+                supplied=float(str(_fr.form.get('importo_base') or '0').replace(',','.'))
+                reduction=float(str(_fr.form.get('importo_dovuto') or '0').replace(',','.'))
+            except (ValueError,TypeError):return _redirect('/pagamenti/decisione-quota?mese=%s&anno=%s&tesserato_id=%s&errore=importo'%(mm,yy,tid),303)
+            if not (0<=supplied<=100000 and 0<=reduction<=100000):
+                return _redirect('/pagamenti/decisione-quota?mese=%s&anno=%s&tesserato_id=%s&errore=importo'%(mm,yy,tid),303)
+            old=con.execute('SELECT * FROM quote_mensili WHERE tesserato_id=? AND mese=? AND anno=? ORDER BY id DESC LIMIT 1',(tid,mm,yy)).fetchone()
+            prior=con.execute('SELECT * FROM bodymind_quota_decisioni WHERE tesserato_id=? AND mese=? AND anno=?',(tid,mm,yy)).fetchone()
+            base=float(old['importo_base'] or 0) if old else supplied
+            if base<=0:base=supplied
+            due=reduction if action=='ridotta' else (base if action=='dovuta' else 0.0)
+            if action in ('ridotta','dovuta') and (base<=0 or due<=0 or due>base):
+                return _redirect('/pagamenti/decisione-quota?mese=%s&anno=%s&tesserato_id=%s&errore=importo'%(mm,yy,tid),303)
+            if action in ('esente','sospeso'):
+                paid=con.execute("""SELECT COUNT(*) FROM pagamenti WHERE tesserato_id=? AND mese=? AND anno=? AND importo>0
+                    AND (lower(coalesce(causale,'')) LIKE '%mensil%' OR lower(coalesce(causale,'')) IN ('quota','quota_mensile'))
+                    AND lower(coalesce(stato,'')) NOT LIKE '%annull%' AND lower(coalesce(stato,'')) NOT LIKE '%cancel%'""",(tid,mm,yy)).fetchone()[0]
+                if paid:return _redirect('/pagamenti/decisione-quota?mese=%s&anno=%s&tesserato_id=%s&errore=incasso'%(mm,yy,tid),303)
+            ts=_dtf.now().isoformat(timespec='seconds')
+            actor=str(session.get('username') or session.get('user_id') or 'admin')[:100]
+            state=action if action in ('esente','sospeso') else 'da_pagare'
+            con.execute('BEGIN IMMEDIATE')
+            if old:
+                con.execute("UPDATE quote_mensili SET importo_base=?,sconto=?,importo_dovuto=?,stato=?,note=?,updated_at=? WHERE id=?",
+                    (base,max(0,base-due),due,state,reason,ts,int(old['id'])))
+            else:
+                con.execute("""INSERT INTO quote_mensili(tesserato_id,mese,anno,tariffa_codice,importo_base,sconto,importo_dovuto,stato,note,created_at,updated_at)
+                    VALUES(?,?,?,'standard',?,?,?,?,?,?,?)""",(tid,mm,yy,base,max(0,base-due),due,state,reason,ts,ts))
+            con.execute("""INSERT INTO bodymind_quota_decisioni(tesserato_id,mese,anno,decisione,importo_base,importo_dovuto,motivo,autorizzata_da,updated_at)
+                VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(tesserato_id,mese,anno) DO UPDATE SET decisione=excluded.decisione,
+                importo_base=excluded.importo_base,importo_dovuto=excluded.importo_dovuto,
+                motivo=excluded.motivo,autorizzata_da=excluded.autorizzata_da,updated_at=excluded.updated_at""",
+                (tid,mm,yy,action,base,due,reason,actor,ts))
+            con.execute("""INSERT INTO bodymind_quota_decisioni_audit(tesserato_id,mese,anno,decisione,prima_quota,prima_decisione,importo_base,importo_dovuto,motivo,autorizzata_da,created_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?)""",(tid,mm,yy,action,_fj.dumps(dict(old) if old else None,default=str),
+                _fj.dumps(dict(prior) if prior else None,default=str),base,due,reason,actor,ts))
+            if action in ('esente','sospeso') and con.execute("SELECT 1 FROM sqlite_master WHERE name='smart_alerts'").fetchone():
+                token=str(mm).zfill(2)+'/'+str(yy)
+                con.execute("UPDATE smart_alerts SET status='closed',closed_at=coalesce(closed_at,?),updated_at=? WHERE tesserato_id=? AND tipo='quota_mese_mancante' AND status='open' AND (message LIKE ? OR title LIKE ?)",
+                    (ts,ts,tid,'%'+token+'%','%'+token+'%'))
+            con.commit()
+            return _redirect('/pagamenti/decisione-quota?tesserato_id=%s&mese=%s&anno=%s&salvata=1'%(tid,mm,yy),303)
+        people=[dict(x) for x in con.execute('SELECT id,nome,cognome FROM tesserati WHERE coalesce(attivo,1)=1 ORDER BY cognome,nome').fetchall()]
+        q=con.execute('SELECT * FROM quote_mensili WHERE tesserato_id=? AND mese=? AND anno=? ORDER BY id DESC LIMIT 1',(tid,mm,yy)).fetchone() if athlete else None
+        decision=con.execute('SELECT * FROM bodymind_quota_decisioni WHERE tesserato_id=? AND mese=? AND anno=?',(tid,mm,yy)).fetchone() if athlete else None
+        audit=[dict(x) for x in con.execute('SELECT decisione,motivo,autorizzata_da,created_at FROM bodymind_quota_decisioni_audit WHERE tesserato_id=? AND mese=? AND anno=? ORDER BY id DESC LIMIT 10',(tid,mm,yy)).fetchall()] if athlete else []
+        base=float(q['importo_base'] or 0) if q else 0.0
+        due=float(q['importo_dovuto'] or 0) if q else 0.0
+        return _render("""<!doctype html><html lang="it"><head><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta charset="utf-8"><title>Decisione quota | BodyMind</title><style>*{box-sizing:border-box}body{margin:0;background:#071628;color:#f8fafc;font:15px system-ui}main{max-width:740px;margin:auto;padding:24px 16px 65px}section{background:#11263e;padding:18px;border:1px solid #36516c;border-radius:15px;margin:16px 0}h1{font-size:25px}label{display:block;margin:14px 0;font-weight:650}input,select,textarea,button{display:block;width:100%;padding:11px;border-radius:9px;border:1px solid #6b88aa;background:#071628;color:white;font:inherit;margin-top:5px}button{background:#2563eb;border:0;font-weight:800;padding:13px}a{color:#9dd6ff}.err{color:#fecaca}.ok{color:#bbf7d0}.muted{color:#afc5da;font-size:13px}.row{display:grid;grid-template-columns:1fr 1fr;gap:9px}@media(max-width:480px){.row{grid-template-columns:1fr}}</style></head><body><main><a href="/pagamenti?vista=mensili&mese={{mm}}&anno={{yy}}">← Pagamenti</a><h1>Decisione mensile motivata</h1><p class="muted">Autorizzazione della segreteria: nessun incasso e nessuna ricevuta da 0 €. I numeri delle ricevute già emesse rimangono invariati.</p><section><form method="get"><label>Tesserata<select name="tesserato_id" required><option value="">Seleziona</option>{% for a in people %}<option value="{{a.id}}" {% if a.id==tid %}selected{% endif %}>{{a.cognome}} {{a.nome}}</option>{% endfor %}</select></label><div class="row"><label>Mese<input type="number" name="mese" min="1" max="12" value="{{mm}}" required></label><label>Anno<input type="number" name="anno" min="2020" max="2100" value="{{yy}}" required></label></div><button>Apri quota</button></form></section>{% if athlete %}<section><h2>{{athlete.cognome}} {{athlete.nome}}</h2>{% if saved %}<p class="ok">Decisione salvata nello storico.</p>{% endif %}{% if error %}<p class="err">Controlla motivo e importi. Non puoi esentare un mese con incassi reali già registrati.</p>{% endif %}<form method="post"><input type="hidden" name="csrf_token" value="{{csrf}}"><input type="hidden" name="tesserato_id" value="{{tid}}"><input type="hidden" name="mese" value="{{mm}}"><input type="hidden" name="anno" value="{{yy}}"><label>Decisione<select name="decisione"><option value="dovuta" {% if cur=='dovuta' %}selected{% endif %}>Quota dovuta</option><option value="ridotta" {% if cur=='ridotta' %}selected{% endif %}>Quota ridotta</option><option value="esente" {% if cur=='esente' %}selected{% endif %}>Esentata</option><option value="sospeso" {% if cur=='sospeso' %}selected{% endif %}>Mese sospeso / non dovuto</option></select></label><div class="row"><label>Quota ordinaria €<input type="number" min="0" step=".01" name="importo_base" value="{{'%.2f'|format(base)}}"></label><label>Nuovo dovuto €<input type="number" min="0" step=".01" name="importo_dovuto" value="{{'%.2f'|format(due)}}"></label></div><label>Motivazione obbligatoria<textarea name="motivo" minlength="8" maxlength="750" required>{{reason}}</textarea></label><button onclick="return confirm('Confermi questa decisione sulla quota mensile?')">Salva decisione motivata</button></form></section><section><h2>Storico</h2>{% for x in audit %}<p><b>{{x.decisione}}</b> · {{x.created_at}} · {{x.autorizzata_da}}<br><span class="muted">{{x.motivo}}</span></p>{% else %}<p class="muted">Nessuna decisione precedente.</p>{% endfor %}</section>{% endif %}</main></body></html>""",
+           tid=tid,mm=mm,yy=yy,people=people,athlete=dict(athlete) if athlete else None,base=base,due=due,
+           cur=str(decision['decisione'] or 'dovuta') if decision else 'dovuta',reason=str(decision['motivo'] or '') if decision else '',
+           audit=audit,csrf=csrf_token(),saved=_fr.args.get('salvata')=='1',error=bool(_fr.args.get('errore')))
+    finally:con.close()
+'''
+_fee_core=CORE.read_text(encoding='utf-8',errors='replace')
+_fee_before=_fee_core
+if '# BODYMIND_CASE_BY_CASE_DUES_R156' not in _fee_core:
+    _fee_core+='\n'+_fee_src
+# Re-converge core after R123 refreshes payment handlers on each boot.
+_fee_zero="or anno>2100 or importo<0:"
+if _fee_zero in _fee_core:_fee_core=_fee_core.replace(_fee_zero,"or anno>2100 or importo<=0:",1)
+_fee_fallback="""        if not existing:
+            if tipo=='mensile':
+"""
+_start=_fee_core.find(_fee_fallback,_fee_core.find('def _bodymind_payment_register_v7'))
+_end=_fee_core.find("\n        now=_dt.now().isoformat",_start) if _start>=0 else -1
+if _start>=0 and _end>_start:
+    _fee_core=_fee_core[:_start]+"        # New payment ID 0 must INSERT a new movement, never overwrite the last one.\n"+_fee_core[_end:]
+if "def _bodymind_payment_register_v7" not in _fee_core or "or anno>2100 or importo<=0:" not in _fee_core:
+    raise RuntimeError('Fee decision guard: canonical payment writer missing')
+_admin_anchor="<a href='/ricevute'>RICEVUTE</a>"
+if _admin_anchor in _fee_core and "DECISIONI QUOTE" not in _fee_core:
+    _fee_core=_fee_core.replace(_admin_anchor,_admin_anchor+"<a href='/pagamenti/decisione-quota?mese={mese}&anno={anno}'>DECISIONI QUOTE</a>",1)
+if _fee_core!=_fee_before:
+    _candidate=BACK/'core.case_by_case_candidate.py'
+    _candidate.write_text(_fee_core,encoding='utf-8')
+    py_compile.compile(str(_candidate),doraise=True)
+    shutil.copy2(_candidate,CORE)
+_fee_verify=CORE.read_text(encoding='utf-8',errors='replace')
+if any(x not in _fee_verify for x in ('BODYMIND_CASE_BY_CASE_DUES_R156','or anno>2100 or importo<=0:','DECISIONI QUOTE')):
+    raise RuntimeError('Fee decision audit failed')
+print('[fee-decisions] PASS case-by-case motivated exemption suspension reduction no-zero-receipts prior numbers unchanged',flush=True)
