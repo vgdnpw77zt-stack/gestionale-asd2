@@ -1641,13 +1641,16 @@ def bodymind_quote_incassi_canonical():
         try:get=p.get
         except Exception:get=lambda k,d=None:p[k] if k in p.keys() else d
         st=(str(get('stato','') or '')+' '+str(get('online_status','') or '')).lower()
-        if any(x in st for x in ('pending','attesa','cancel','annull','failed','fallit','refunded','rimbors')):
+        if any(x in st for x in ('unpaid','not_paid','not paid','non_pagato','non pagat',
+                                  'pending','attesa','cancel','annull','failed','fallit',
+                                  'refunded','rimbors')):
             return False
+        try:amount=float(get('importo',0) or 0)
+        except (TypeError,ValueError):amount=0
+        if amount<=0: return False
         if any(x in st for x in ('paid','pagat','saldat','complet','incassat')):
             return True
-        try:amount=float(get('importo',0) or 0)
-        except Exception:amount=0
-        return bool(get('data','') or get('paid_at','')) and amount>0
+        return bool(get('data','') or get('paid_at',''))
 
     def _money(value):
         if value is None: return '—'
@@ -1928,11 +1931,12 @@ with c.session_transaction() as sess:sess.update({'logged':True,'logged_in':True
 def paid_row(p):
     def get(k,d=None):return p[k] if k in p.keys() else d
     st=(str(get('stato','') or '')+' '+str(get('online_status','') or '')).lower()
-    if any(x in st for x in ('pending','attesa','cancel','annull','failed','fallit','refunded','rimbors')):return False
-    if any(x in st for x in ('paid','pagat','saldat','complet','incassat')):return True
+    if any(x in st for x in ('unpaid','not_paid','not paid','non_pagato','non pagat','pending','attesa','cancel','annull','failed','fallit','refunded','rimbors')):return False
     try:amount=float(get('importo',0) or 0)
-    except Exception:amount=0
-    return bool(get('data','') or get('paid_at','')) and amount>0
+    except (TypeError,ValueError):amount=0
+    if amount<=0:return False
+    if any(x in st for x in ('paid','pagat','saldat','complet','incassat')):return True
+    return bool(get('data','') or get('paid_at',''))
 db=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True,timeout=20);db.row_factory=sqlite3.Row
 try:
     tables=('tesserati','pagamenti','ricevute','quote_mensili','documenti','inbound_documents')
