@@ -81,6 +81,29 @@ class RepairGuards(unittest.TestCase):
         finally:
             c.close()
 
+
+    def test_cash_totals_reject_unpaid_and_zero(self):
+        source=(ROOT / "release_secretary_ui_r123.py").read_text(encoding="utf-8")
+        tree=ast.parse(source)
+        appended=[node.value.value for node in ast.walk(tree)
+                  if isinstance(node,ast.AugAssign) and isinstance(node.target,ast.Name)
+                  and node.target.id=="_core_qi" and isinstance(node.value,ast.Constant)
+                  and isinstance(node.value.value,str)]
+        self.assertEqual(len(appended),1)
+        runtime=ast.parse(appended[0])
+        nested=[n for n in ast.walk(runtime)
+                if isinstance(n,ast.FunctionDef) and n.name=="_cash_row"]
+        self.assertEqual(len(nested),1)
+        scope={}
+        exec(compile(ast.Module(body=nested,type_ignores=[]),"<cash-guard>","exec"),scope)
+        cash=scope["_cash_row"]
+        sample={"importo":95,"data":"2026-10-05"}
+        self.assertFalse(cash(dict(sample,stato="unpaid",online_status="unpaid")))
+        self.assertFalse(cash(dict(sample,stato="pending",online_status="pending")))
+        self.assertFalse(cash(dict(sample,stato="paid_manual",importo=0)))
+        self.assertTrue(cash(dict(sample,stato="paid_manual")))
+        self.assertTrue(cash(dict(sample,stato="")))
+
     def test_zero_due_preserved_and_qa_consistent(self):
         s = (ROOT / "release_secretary_ui_r123.py").read_text(encoding="utf-8")
         self.assertEqual(s.count("q['importo_dovuto'] or q['importo_base']"), 1,
