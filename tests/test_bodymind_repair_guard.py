@@ -115,6 +115,9 @@ class RepairGuards(unittest.TestCase):
         r159 = (ROOT / "release_operator_review_actions_r156.py").read_text(encoding="utf-8")
         self.assertIn("BODYMIND_R159_SAFE_EXISTING_DUE", r159)
         self.assertIn("_already_paid or _cancelled or _attached", r159)
+        self.assertIn("if payment_id and not existing:", r159)
+        self.assertIn("_non_due=any(", r159)
+        self.assertIn("_already_paid or _cancelled or _attached or _non_due", r159)
 
 if __name__ == "__main__":
     unittest.main()
