@@ -104,6 +104,19 @@ class RepairGuards(unittest.TestCase):
         self.assertTrue(cash(dict(sample,stato="paid_manual")))
         self.assertTrue(cash(dict(sample,stato="")))
 
+    def test_connected_waiver_snapshot_and_rendered_qa(self):
+        s=(ROOT / "release_secretary_ui_r123.py").read_text(encoding="utf-8")
+        marker="BODYMIND_R163_CONNECTED_WAIVER_SNAPSHOT"
+        self.assertEqual(s.count(marker),1)
+        i=s.index(marker)
+        j=s.index("finally:",i)
+        self.assertLess(i,j)
+        self.assertIn("waived_ids={",s[i:j])
+        self.assertIn("waived=tid in waived_ids",s[j:])
+        self.assertNotIn("waived=bodymind_explicit_annual_non_due(c,tid,stagione)",s)
+        self.assertIn("if value>0:due_ids.add(tid)",s)
+        self.assertIn("amount<=0:continue",s)
+
     def test_zero_due_preserved_and_qa_consistent(self):
         s = (ROOT / "release_secretary_ui_r123.py").read_text(encoding="utf-8")
         self.assertEqual(s.count("q['importo_dovuto'] or q['importo_base']"), 1,
