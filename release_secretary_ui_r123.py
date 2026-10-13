@@ -1562,7 +1562,7 @@ def bodymind_quote_incassi_canonical():
 
         ep_amount=(float(ep['importo'] or 0) if ep_ok else None)
         mp_paid_amount=(float(mp['importo'] or 0) if mp_ok else None)
-        mp_due_amount=(float(q['importo_dovuto'] or q['importo_base'] or 0) if q not in (None,'__missing__') else None)
+        mp_due_amount=(float(q['importo_dovuto'] if q['importo_dovuto'] is not None else (q['importo_base'] or 0)) if q not in (None,'__missing__') else None)
         if mp_due_amount is not None:
             mp_display=mp_due_amount
         elif mp_ok:
@@ -1775,6 +1775,25 @@ if 'bodymind_quote_incassi_canonical' not in _qi_src:
 else:
     print('[r123-quote-incassi-source] already canonical source='+str(_pay_src),flush=True)
 
+
+# BODYMIND_R160_ZERO_DUE_TRUTH
+# The value 0 is a legitimate explicit due amount. Do not fall back to the
+# ordinary base amount because of Python's falsy-zero behavior.
+# Converge the persisted canonical renderer BEFORE its read-only QA runs.
+_r160_old_due = "float(q['importo_dovuto'] or q['importo_base'] or 0)"
+_r160_new_due = "float(q['importo_dovuto'] if q['importo_dovuto'] is not None else (q['importo_base'] or 0))"
+_r160_core_source = CORE.read_text(encoding='utf-8',errors='replace')
+if _r160_old_due in _r160_core_source:
+    _r160_candidate = BACK / 'core.r160_zero_due_candidate.py'
+    _r160_candidate.write_text(_r160_core_source.replace(_r160_old_due,_r160_new_due),encoding='utf-8')
+    py_compile.compile(str(_r160_candidate),doraise=True)
+    shutil.copy2(_r160_candidate,CORE)
+    print('[r160-zero-due] corrected persisted due amount, no DB writes',flush=True)
+elif _r160_new_due in _r160_core_source:
+    print('[r160-zero-due] already corrected',flush=True)
+else:
+    raise RuntimeError('R160 canonical due amount not found; refuse unsafe source rewrite')
+
 _quote_qa=r"""
 import json,re,sqlite3,sys
 sys.path.insert(0,'/data/top2_app');import app as _full
@@ -1811,7 +1830,7 @@ try:
         if q:
             st=str(q['stato'] or '').strip().lower()
             if not any(z in st for z in ('non_dovuto','non dovuto','esente','annull','sospes')):
-                due=float(q['importo_dovuto'] or q['importo_base'] or 0)
+                due=float(q['importo_dovuto'] if q['importo_dovuto'] is not None else (q['importo_base'] or 0))
         due_expected[tid]=due
         residual_expected[tid]=(max(due-cash_expected[tid],0.0) if due is not None else None)
     target_breakdown=[];target_receipts=[];target_month_cash={}
