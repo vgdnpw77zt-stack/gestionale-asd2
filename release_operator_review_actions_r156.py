@@ -849,6 +849,8 @@ _r159_pay_new="""        # BODYMIND_R159_SAFE_EXISTING_DUE
         # A previously created UNPAID placeholder must be completed in place;
         # a settled/cancelled payment, issued receipt, or ambiguous duplicate
         # must NEVER be overwritten through a new-payment form.
+        if payment_id and not existing:
+            return redirect('/pagamenti?errore=movimento_inesistente&mese='+str(mese)+'&anno='+str(anno),303)
         if not existing and not payment_id:
             _same=c.execute(
                 "SELECT * FROM pagamenti WHERE tesserato_id=? AND mese=? AND anno=? AND "
@@ -866,11 +868,14 @@ _r159_pay_new="""        # BODYMIND_R159_SAFE_EXISTING_DUE
                 _already_paid=(('unpaid' not in _st) and any(
                     _tok in _st for _tok in ('paid','pagat','incassat','saldat','complet')))
                 _cancelled=any(_tok in _st for _tok in ('annull','cancel','refund','rimbors','storn'))
+                _notes=str(_candidate['note_pagamento'] or '').casefold() if 'note_pagamento' in _candidate.keys() else ''
+                _non_due=any(_word in (_st+' '+_notes) for _word in
+                    ('non dovut','non_dovut','esente','esonerat','sospes','waived'))
                 _attached=bool(_candidate['ricevuta_id'] if 'ricevuta_id' in _candidate.keys() else None)
                 if not _attached:
                     _attached=bool(c.execute("SELECT 1 FROM ricevute WHERE pagamento_id=? LIMIT 1",
                         (int(_candidate['id']),)).fetchone())
-                if _already_paid or _cancelled or _attached or str(_candidate['paid_at'] or '').strip():
+                if _already_paid or _cancelled or _attached or _non_due or str(_candidate['paid_at'] or '').strip():
                     return redirect('/pagamenti?errore=gia_registrato&mese='+str(mese)+'&anno='+str(anno)
                         +'&tesserato_id='+str(tid)+'&payment_id='+str(int(_candidate['id'])),303)
                 existing=_candidate
