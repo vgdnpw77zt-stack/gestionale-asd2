@@ -1018,6 +1018,20 @@ if not all(x in CORE.read_text(encoding='utf-8') for x in (
     'bodymind_r159_month_before_entry(c,qtid,anno,mese)',
     'BODYMIND_R159_DOCUMENTS_13INCH')):
     raise RuntimeError('R159 code convergence incomplete')
+# BODYMIND_R162_R159_QA_BINDING
+# Only the pure helper function is compiled for this read-only script audit.
+# The actual app.after_request hook remains in core and is NOT executed here.
+import ast as _r159_ast
+_r159_helper_nodes=_r159_ast.parse(_r159_helpers,filename='r159-readonly-helper').body
+_r159_target=[node for node in _r159_helper_nodes
+               if isinstance(node,_r159_ast.FunctionDef)
+               and node.name=='bodymind_r159_month_before_entry']
+if len(_r159_target)!=1:
+    raise RuntimeError('R159 read-only predicate missing')
+_r159_scope={}
+exec(compile(_r159_ast.Module(body=_r159_target,type_ignores=[]),
+             'r159-readonly-helper','exec'),_r159_scope)
+_r159_predicate=_r159_scope['bodymind_r159_month_before_entry']
 _r159_db=sqlite3.connect('file:'+str(DB)+'?mode=ro',uri=True,timeout=20);_r159_db.row_factory=sqlite3.Row
 try:
     _r159_cols=[str(x[1]) for x in _r159_db.execute('PRAGMA table_info(tesserati)').fetchall()]
@@ -1026,7 +1040,7 @@ try:
        WHERE anno=2026 AND mese IN (9,10) GROUP BY tesserato_id,mese,anno
     """).fetchall()
     _r159_skip=sum(1 for x in _r159_triples if
-        bodymind_r159_month_before_entry(_r159_db,int(x['tesserato_id']),int(x['anno']),int(x['mese'])))
+        _r159_predicate(_r159_db,int(x['tesserato_id']),int(x['anno']),int(x['mese'])))
     _r159_counts={t:int(_r159_db.execute('SELECT COUNT(*) FROM '+t).fetchone()[0])
                   for t in ('pagamenti','ricevute','tesserati','quote_mensili')}
     _r159_dbok=str(_r159_db.execute('PRAGMA integrity_check').fetchone()[0])
