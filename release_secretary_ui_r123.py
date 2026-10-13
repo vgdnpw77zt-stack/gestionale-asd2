@@ -417,7 +417,8 @@ if 'get_operational_tasks' in globals():
                         or kind in ('iscrizione_mancante','iscrizione_da_pagare'))
                 pay_kind=(kind in ('pagamento_mancante','iscrizione_mancante',
                                   'iscrizione_da_pagare') or 'da pagare' in desc)
-                tid=int(get('tesserato_id',0) or 0)
+                try: tid=int(get('tesserato_id',0) or 0)
+                except (ValueError,TypeError): tid=0
                 if annual and pay_kind and tid>0:
                     if tid not in memo:
                         memo[tid]=bodymind_explicit_annual_non_due(cx,tid,season)
@@ -1575,6 +1576,8 @@ def bodymind_quote_incassi_canonical():
     conn=db(); conn.row_factory=sqlite3.Row
     try:
         truth=bodymind_payment_truth(conn,mese=mese,anno=anno,stagione=stagione)
+        waived_ids={int(x['tesserato_id']) for x in truth.get('rows',[])
+                    if bodymind_explicit_annual_non_due(conn,int(x['tesserato_id']),stagione)}
         payment_ids=[]
         for x in truth.get('rows',[]):
             for k in ('iscrizione_payment_id','mensile_payment_id'):
@@ -1632,6 +1635,8 @@ def bodymind_quote_incassi_canonical():
 
     rows=[]
     enroll_paid=0
+    enroll_required=0
+    enroll_waived=0
     monthly_paid=0
     monthly_due=0
     for x in truth.get('rows',[]):
@@ -1639,11 +1644,13 @@ def bodymind_quote_incassi_canonical():
         ep=payments.get(int(x.get('iscrizione_payment_id') or 0))
         mp=payments.get(int(x.get('mensile_payment_id') or 0))
         ep_ok=bool(x.get('iscrizione_pagata') and ep)
-        ep_waived=bodymind_explicit_annual_non_due(conn,tid,stagione)
+        ep_waived=(tid in waived_ids)
         mp_ok=bool(x.get('mensile_pagato') and mp)
         q=quote_by_tid.get(tid,'__missing__')
         month_applicable=(q is not None and q!='__missing__') or mp_ok
         if ep_ok: enroll_paid+=1
+        if ep_waived: enroll_waived+=1
+        else: enroll_required+=1
 
         ep_amount=(float(ep['importo'] or 0) if ep_ok else None)
         mp_paid_amount=(float(mp['importo'] or 0) if mp_ok else None)
@@ -1763,7 +1770,7 @@ def bodymind_quote_incassi_canonical():
         <button type='submit'>Mostra</button>
       </form>
       <section class='bmqi-summary'>
-        <div><small>ISCRIZIONI {stagione}/{stagione+1}</small><strong>{enroll_paid}/{len(truth.get('rows',[]))}</strong><span>pagate</span></div>
+        <div><small>ISCRIZIONI {stagione}/{stagione+1}</small><strong>{enroll_paid}/{enroll_required}</strong><span>pagate · {enroll_waived} non dovute</span></div>
         <div><small>MENSILE · {months[mese].upper()} {anno}</small><strong>{monthly_paid}/{monthly_due}</strong><span>pagati</span></div>
       </section>
       <section class='bmqi-list'>{''.join(rows)}</section>
