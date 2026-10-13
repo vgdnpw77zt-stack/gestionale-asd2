@@ -643,6 +643,12 @@ def _bodymind_payment_module_v7(resp):
                     qstate=str(q.get('stato') or '').strip().lower()
                     if any(x in qstate for x in ('non_dovuto','non dovuto','esente','annull','sospes')):continue
                     quote_by_tid[qtid]=q
+            # BODYMIND_R163_CONNECTED_WAIVER_SNAPSHOT
+            # Resolve annual decisions before closing the DB connection;
+            # rendering and its GET hooks must never reuse a closed handle.
+            waived_ids={int(a.get('id') or 0) for a in athletes
+                        if int(a.get('id') or 0)>0
+                        and bodymind_explicit_annual_non_due(c,int(a['id']),stagione)}
             try:month_summary=bodymind_monthly_due_summary(c)
             except Exception:month_summary=[]
         finally:
@@ -662,7 +668,7 @@ def _bodymind_payment_module_v7(resp):
             tid=int(a.get('id') or 0)
             state=payment_state.get(tid,{})
             eok=bool(state.get('iscrizione_pagata'))
-            waived=bodymind_explicit_annual_non_due(c,tid,stagione)
+            waived=tid in waived_ids
             mok=bool(state.get('mensile_pagato'))
             qactive=quote_by_tid.get(tid)
             due_value=(float(qactive.get('importo_dovuto') if qactive.get('importo_dovuto') is not None
@@ -2052,7 +2058,20 @@ try:
         if not tid or tid in seen_due:continue
         seen_due.add(tid);st=str(q['stato'] or '').strip().lower()
         if any(x in st for x in ('non_dovuto','non dovuto','esente','annull','sospes')):continue
-        due_ids.add(tid)
+        value=float(q['importo_dovuto'] if q['importo_dovuto'] is not None else (q['importo_base'] or 0))
+        if value>0:due_ids.add(tid)
+    # A genuinely collected monthly movement remains visible even if a
+    # quote row is absent. Zero-value and unpaid placeholders are NOT cash.
+    for p in db.execute("SELECT tesserato_id,importo,causale,stato,online_status FROM pagamenti WHERE mese=? AND anno=?",
+                        (int(truth['mese']),int(truth['anno']))).fetchall():
+        try:amount=float(p['importo'] or 0)
+        except (TypeError,ValueError):continue
+        if amount<=0:continue
+        cause=str(p['causale'] or '').strip().lower()
+        if 'mensil' not in cause and cause not in ('quota','quota_mensile'):continue
+        st=(str(p['stato'] or '')+' '+str(p['online_status'] or '')).lower()
+        if any(z in st for z in ('annull','cancel','rimbors','refund','pending','unpaid')):continue
+        due_ids.add(int(p['tesserato_id'] or 0))
     expected={tid:state for tid,state in expected_all.items() if tid in due_ids}
     counts={t:int(db.execute('SELECT COUNT(*) FROM '+t).fetchone()[0]) for t in ('tesserati','pagamenti','ricevute','quote_mensili','documenti','inbound_documents')}
     integrity=str(db.execute('PRAGMA integrity_check').fetchone()[0]);fk=len(db.execute('PRAGMA foreign_key_check').fetchall());legacy_only=[];season=int(truth['stagione'])
