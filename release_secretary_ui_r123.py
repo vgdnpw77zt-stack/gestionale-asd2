@@ -355,6 +355,89 @@ else:
 # BODYMIND_R123_PAYMENT_FORM_CANONICAL_V7
 # Replace the V5/V6 "move an existing form" behavior with one real canonical
 # registration/edit form. One module, two modes, same write path everywhere.
+
+# BODYMIND_R161_EXPLICIT_ANNUAL_NON_DUE
+# Read-only evidence: a zero-value annual movement with an explicit, recorded
+# "non dovuto" annotation must not be treated as an unpaid annual enrollment.
+# Never invent waivers, mark money as collected, or issue a zero-value receipt.
+_r161_src = r'''
+# BODYMIND_R161_EXPLICIT_ANNUAL_NON_DUE
+def bodymind_explicit_annual_non_due(conn, tid, season):
+    try:
+        rows = conn.execute("""
+            SELECT importo,stato,online_status,note_pagamento FROM pagamenti
+            WHERE tesserato_id=? AND anno IN (?,?)
+              AND (lower(coalesce(causale,'')) LIKE '%iscrizion%'
+                   OR lower(coalesce(causale,'')) IN ('tesseramento','quota_iscrizione'))
+            ORDER BY id DESC
+        """, (int(tid), int(season), int(season)+1)).fetchall()
+        notes=('non dovuto','non dovuta','non_dovuto','non_dovuta',
+               'esente','esentata','esonerata','gratuita','waived')
+        for p in rows:
+            try: amount=float(p['importo'] or 0)
+            except (TypeError,ValueError): continue
+            if amount > 0: return False
+            if abs(amount)>0.00001: continue
+            evidence=' '.join(str(p[k] or '').casefold()
+                              for k in ('stato','online_status','note_pagamento'))
+            if any(t in evidence for t in notes): return True
+        return False
+    except Exception as exc:
+        print('[annual-waiver-readonly] '+repr(exc),flush=True)
+        return False
+
+# Drop only clearly annual false payment alerts when the existing ledger
+# explicitly states "non dovuto". Do not change historical alert records.
+if 'get_operational_tasks' in globals():
+    _r161_tasks_base = get_operational_tasks
+    def get_operational_tasks(*args, **kwargs):
+        items = _r161_tasks_base(*args, **kwargs)
+        if not isinstance(items,(list,tuple)) or not items: return items
+        from datetime import date as _r161_date
+        import sqlite3 as _r161_sqlite
+        today=_r161_date.today()
+        season=today.year if today.month>=7 else today.year-1
+        out=[];memo={}
+        try:
+            cx=_r161_sqlite.connect(
+                'file:/data/tenants/default/asd.db?mode=ro',uri=True,timeout=10)
+            cx.row_factory=_r161_sqlite.Row
+        except Exception:
+            return items
+        try:
+            for item in items:
+                try:
+                    get=item.get
+                except Exception:
+                    get=lambda k,d=None: item[k] if k in item.keys() else d
+                kind=str(get('tipo','') or get('type','') or '').casefold()
+                desc=' '.join(str(get(k,'') or '') for k in
+                              ('title','titolo','message','messaggio','descrizione')).casefold()
+                annual=('iscrizion' in desc or 'tesserament' in desc
+                        or kind in ('iscrizione_mancante','iscrizione_da_pagare'))
+                pay_kind=(kind in ('pagamento_mancante','iscrizione_mancante',
+                                  'iscrizione_da_pagare') or 'da pagare' in desc)
+                tid=int(get('tesserato_id',0) or 0)
+                if annual and pay_kind and tid>0:
+                    if tid not in memo:
+                        memo[tid]=bodymind_explicit_annual_non_due(cx,tid,season)
+                    if memo[tid]: continue
+                out.append(item)
+            return out
+        finally:
+            cx.close()
+'''
+_r161_core=CORE.read_text(encoding='utf-8',errors='replace')
+if '# BODYMIND_R161_EXPLICIT_ANNUAL_NON_DUE' not in _r161_core:
+    _r161_candidate=BACK/'core.r161_annual_non_due.py'
+    _r161_candidate.write_text(_r161_core+'\n'+_r161_src,encoding='utf-8')
+    py_compile.compile(str(_r161_candidate),doraise=True)
+    shutil.copy2(_r161_candidate,CORE)
+    print('[r161-annual-non-due] installed strict read-only waiver evidence',flush=True)
+else:
+    print('[r161-annual-non-due] already installed',flush=True)
+
+
 _core_v7=CORE.read_text(encoding='utf-8',errors='replace')
 _changed_v7=False
 
@@ -568,11 +651,12 @@ def _bodymind_payment_module_v7(resp):
             tid=int(a.get('id') or 0)
             state=payment_state.get(tid,{})
             eok=bool(state.get('iscrizione_pagata'))
+            waived=bodymind_explicit_annual_non_due(c,tid,stagione)
             mok=bool(state.get('mensile_pagato'))
             monthly_due=tid in quote_by_tid
             if vista=='mensili' and not monthly_due:
                 continue
-            focus_ok=eok if vista=='iscrizioni' else mok
+            focus_ok=(eok or waived) if vista=='iscrizioni' else mok
             if not focus_ok:due_count+=1
             row_state='due' if not focus_ok else ('paid' if eok and (mok or not monthly_due) else 'mixed')
             eh=f"/pagamenti?vista=iscrizioni&stagione={stagione}&mese={mese}&anno={anno}&tesserato_id={tid}&azione=registra&tipo=iscrizione"
@@ -597,7 +681,7 @@ def _bodymind_payment_module_v7(resp):
                 "<div class='bmpv7-row "+row_state+"' data-bm-tid='"+str(tid)+"' data-bm-enroll='"+("1" if eok else "0")+"' data-bm-monthly='"+("1" if mok else "0")+"'>"
                 +"<div class='bmpv7-person'><b>"+e(_name(a))+"</b>"
                 +"<div class='bmpv7-statuses'>"
-                +"<span class='bmpv7-status "+("ok" if eok else "due")+"'><i></i><b>ISCRIZIONE "+str(stagione)+"/"+str(stagione+1)+"</b><em>"+("PAGATA" if eok else "DA PAGARE")+"</em></span>"
+                +"<span class='bmpv7-status "+("na" if waived else "ok" if eok else "due")+"'><i></i><b>ISCRIZIONE "+str(stagione)+"/"+str(stagione+1)+"</b><em>"+("NON DOVUTA" if waived else "PAGATA" if eok else "DA PAGARE")+"</em></span>"
                 +("<span class='bmpv7-status "+("ok" if mok else "due")+"'><i></i><b>"+months[mese].upper()+" "+str(anno)+"</b><em>"+("PAGATO" if mok else "DA PAGARE")+"</em></span>" if monthly_due else "<span class='bmpv7-status na'><i></i><b>"+months[mese].upper()+" "+str(anno)+"</b><em>NON DOVUTO</em></span>")
                 +"</div></div>"
                 +("<div class='bmpv7-actions'>"+''.join(movement_links)+"</div>" if movement_links else "")
@@ -1555,6 +1639,7 @@ def bodymind_quote_incassi_canonical():
         ep=payments.get(int(x.get('iscrizione_payment_id') or 0))
         mp=payments.get(int(x.get('mensile_payment_id') or 0))
         ep_ok=bool(x.get('iscrizione_pagata') and ep)
+        ep_waived=bodymind_explicit_annual_non_due(conn,tid,stagione)
         mp_ok=bool(x.get('mensile_pagato') and mp)
         q=quote_by_tid.get(tid,'__missing__')
         month_applicable=(q is not None and q!='__missing__') or mp_ok
@@ -1572,11 +1657,11 @@ def bodymind_quote_incassi_canonical():
 
         enroll_href='/pagamenti?vista=iscrizioni&stagione='+str(stagione)+'&tesserato_id='+str(tid)+'&azione=registra&tipo=iscrizione'
         month_href='/pagamenti?vista=mensili&mese='+str(mese)+'&anno='+str(anno)+'&tesserato_id='+str(tid)+'&azione=registra&tipo=mensile'
-        enroll_state='PAGATA' if ep_ok else 'DA PAGARE'
+        enroll_state='NON DOVUTA' if ep_waived else ('PAGATA' if ep_ok else 'DA PAGARE')
         if mp_ok: month_state='PAGATO'
         elif not month_applicable: month_state='NON DOVUTO'
         else: month_state='DA PAGARE'
-        enroll_cls='paid' if ep_ok else 'due'
+        enroll_cls='na' if ep_waived else ('paid' if ep_ok else 'due')
         month_cls='paid' if mp_ok else ('na' if not month_applicable else 'due')
         name=((str(x.get('cognome') or '')+' '+str(x.get('nome') or '')).strip())
         ep_attr=('%.2f'%ep_amount) if ep_amount is not None else ''
