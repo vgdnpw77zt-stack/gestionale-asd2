@@ -52,6 +52,14 @@ class ArchiveGuardTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             restore_into_empty(archive, self.live)
 
+    def test_refuse_untracked_user_directories(self):
+        unknown = self.live / "unknown_private_docs"
+        unknown.mkdir()
+        (unknown / "verbale.pdf").write_bytes(b"%PDF-hidden")
+        self.assertIn("unknown_private_docs", audit(self.live)["untracked_directories"])
+        with self.assertRaisesRegex(ValueError, "Untracked"):
+            create(self.live, self.root / "backup.zip")
+
     def test_no_in_place_backup_or_corruption(self):
         with self.assertRaises(ValueError):
             create(self.live, self.live / "release_backups/archive.zip")

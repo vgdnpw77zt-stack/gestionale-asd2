@@ -20,7 +20,7 @@ from pathlib import Path, PurePosixPath
 DB = "tenants/default/asd.db"
 ROOTS = ("tenants", "onboarding_docs", "signatures", "user_static",
          "incoming", "uploads", "documents", "documenti", "attachments",
-         "verbali", "media", "top2_app/user_static", "top2_app/static")
+         "verbali", "media", "top2_app")
 FORMAT = "bodymind-volume-archive-v1"
 
 
@@ -133,9 +133,15 @@ def audit(root):
     totals = _sqlite(root / DB)
     docs = _missing_docs(root)
     files = list(_files(root))
+    # Fail closed rather than silently omitting an unrecognized user-doc root.
+    known = {x.split("/", 1)[0] for x in ROOTS}
+    exempt = {"release_backups", "__pycache__", ".cache", ".tmp"}
+    untracked = sorted(x.name for x in root.iterdir()
+                       if x.is_dir() and x.name not in known | exempt)
     return {"integrity": "ok", "foreign_keys": 0, "tables": totals,
             "document_references_missing": docs, "files": len(files),
             "bytes": sum(p.stat().st_size for _, p in files),
+            "untracked_directories": untracked,
             "roots": [x for x in ROOTS if (root / x).exists()]}
 
 
@@ -146,6 +152,8 @@ def create(root, destination):
     status = audit(root)
     if status["document_references_missing"]["visible"]:
         raise ValueError("Missing visible document references: cannot certify backup")
+    if status["untracked_directories"]:
+        raise ValueError("Untracked document/data directories: expand backup coverage first")
     destination.parent.mkdir(parents=True, exist_ok=True)
     files = list(_files(root))
     required = status["bytes"] + (root / DB).stat().st_size + 128 * 1024 * 1024
