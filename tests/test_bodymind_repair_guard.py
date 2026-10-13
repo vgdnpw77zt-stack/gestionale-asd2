@@ -162,6 +162,30 @@ class RepairGuards(unittest.TestCase):
         errors=(ROOT/"release_secretary_ui_r123.py").read_text(encoding="utf-8")
         self.assertIn("Esistono più movimenti per questa quota",errors)
 
+    def test_partial_monthly_preserves_existing_due(self):
+        import re
+        src=(ROOT/"release_secretary_ui_r123.py").read_text(encoding="utf-8")
+        match=re.search(r"UPDATE quote_mensili\\s+SET stato=CASE WHEN COALESCE\\(importo_dovuto,importo_base,0\\)>\\?[\\s\\S]*?WHERE id=\\?",src)
+        self.assertIsNotNone(match)
+        c=sqlite3.connect(":memory:")
+        try:
+            c.execute("""CREATE TABLE quote_mensili(id INTEGER PRIMARY KEY,importo_base REAL,
+                    importo_dovuto REAL,stato TEXT,note TEXT,updated_at TEXT)""")
+            c.execute("INSERT INTO quote_mensili VALUES(1,95,95,'da_pagare','','')")
+            c.execute(match.group(0),(30,'','','2026-10-13',1))
+            base,due,state=c.execute("SELECT importo_base,importo_dovuto,stato FROM quote_mensili").fetchone()
+            self.assertEqual((base,due,state),(95,95,'parziale'))
+            c.execute(match.group(0),(95,'','','2026-10-13',1))
+            base,due,state=c.execute("SELECT importo_base,importo_dovuto,stato FROM quote_mensili").fetchone()
+            self.assertEqual((base,due,state),(95,95,'pagato'))
+        finally:c.close()
+
+    def test_explicit_non_due_cannot_create_receipt(self):
+        src=(ROOT/"release_secretary_ui_r123.py").read_text(encoding="utf-8")
+        self.assertIn("errore=quota_non_dovuta",src)
+        self.assertIn("decisione amministrativa di non dovuto",src)
+        self.assertIn("if _due<=0 and any",src)
+
     def test_zero_due_preserved_and_qa_consistent(self):
         s = (ROOT / "release_secretary_ui_r123.py").read_text(encoding="utf-8")
         self.assertEqual(s.count("q['importo_dovuto'] or q['importo_base']"), 1,

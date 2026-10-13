@@ -491,6 +491,18 @@ def _bodymind_payment_register_v7():
         if not athlete:
             return redirect('/pagamenti?errore=tesserato_non_trovato',302)
 
+        # An administrator's recorded zero-due/suspension decision is not cash.
+        # Do not create a receipt against that deliberate accounting state.
+        if tipo=='mensile' and not payment_id and c.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='quote_mensili'").fetchone():
+            _qnon=c.execute(
+                "SELECT importo_dovuto,stato FROM quote_mensili WHERE tesserato_id=? AND mese=? AND anno=? ORDER BY id DESC LIMIT 1",
+                (tid,mese,anno)).fetchone()
+            if _qnon:
+                _qs=str(_qnon['stato'] or '').casefold()
+                _due=float(_qnon['importo_dovuto'] or 0)
+                if _due<=0 and any(w in _qs for w in ('non dovut','non_dovut','esente','sospes','esonerat')):
+                    return redirect('/pagamenti?errore=quota_non_dovuta&mese='+str(mese)+'&anno='+str(anno)+'&tesserato_id='+str(tid),303)
         existing=None
         if payment_id:
             existing=c.execute("SELECT * FROM pagamenti WHERE id=? AND tesserato_id=?",(payment_id,tid)).fetchone()
@@ -563,15 +575,17 @@ def _bodymind_payment_register_v7():
                 """,(now,now,tid))
         else:
             if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='quote_mensili'").fetchone():
-                q=c.execute("SELECT id FROM quote_mensili WHERE tesserato_id=? AND mese=? AND anno=? ORDER BY id DESC LIMIT 1",(tid,mese,anno)).fetchone()
+                q=c.execute("SELECT id,importo_base,importo_dovuto,stato FROM quote_mensili WHERE tesserato_id=? AND mese=? AND anno=? ORDER BY id DESC LIMIT 1",(tid,mese,anno)).fetchone()
                 if q:
+                    # R165: a receipt is an incasso, not a decision changing the ordinary
+                    # fee or the amount due. A partial payment must retain its residual.
                     c.execute("""
                         UPDATE quote_mensili
-                           SET importo_base=?,importo_dovuto=?,stato='pagato',
+                           SET stato=CASE WHEN COALESCE(importo_dovuto,importo_base,0)>? THEN 'parziale' ELSE 'pagato' END,
                                note=CASE WHEN ?<>'' THEN ? ELSE note END,
                                updated_at=?
                          WHERE id=?
-                    """,(importo,importo,note,note,now,int(q['id'])))
+                    """,(importo,note,note,now,int(q['id'])))
                 else:
                     c.execute("""
                         INSERT INTO quote_mensili(
@@ -765,6 +779,7 @@ def _bodymind_payment_module_v7(resp):
             'salvataggio': 'Salvataggio non riuscito: un movimento già esistente o un problema database impedisce la conferma. Nessun nuovo incasso è stato registrato.',
             'gia_registrato': 'Esiste già un movimento registrato, una decisione di non dovuto o una ricevuta: apri lo storico e verifica prima di proseguire. Nessun incasso è stato modificato.',
             'movimenti_da_verificare': 'Esistono più movimenti per questa quota: verifica lo storico prima di registrare nuovi incassi.',
+            'quota_non_dovuta': 'Per questo mese risulta una decisione amministrativa di non dovuto: nessun incasso è stato creato. Verifica prima la decisione sulla quota.',
             'movimento_inesistente': 'Il pagamento selezionato non esiste più: ricarica lo storico senza creare duplicati.',
             'pagamento_non_trovato': 'Movimento non trovato. Ricarica la scheda e verifica lo storico.',
         }
