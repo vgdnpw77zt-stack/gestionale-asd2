@@ -654,12 +654,23 @@ def _bodymind_payment_module_v7(resp):
             eok=bool(state.get('iscrizione_pagata'))
             waived=bodymind_explicit_annual_non_due(c,tid,stagione)
             mok=bool(state.get('mensile_pagato'))
-            monthly_due=tid in quote_by_tid
+            qactive=quote_by_tid.get(tid)
+            due_value=(float(qactive.get('importo_dovuto') if qactive.get('importo_dovuto') is not None
+                             else (qactive.get('importo_base') or 0)) if qactive is not None else 0.0)
+            has_actual_monthly=any(
+                int(p.get('tesserato_id') or 0)==tid and int(p.get('mese') or 0)==mese
+                and int(p.get('anno') or 0)==anno and float(p.get('importo') or 0)>0
+                and ('mensil' in str(p.get('causale') or '').lower()
+                     or str(p.get('causale') or '').lower() in ('quota','quota_mensile'))
+                and not any(z in (str(p.get('stato') or '')+' '+str(p.get('online_status') or '')).lower()
+                            for z in ('annull','cancel','rimbors','refund','pending','unpaid'))
+                for p in payment_rows.values())
+            monthly_due=due_value>0 or has_actual_monthly
             if vista=='mensili' and not monthly_due:
                 continue
             focus_ok=(eok or waived) if vista=='iscrizioni' else mok
             if not focus_ok:due_count+=1
-            row_state='due' if not focus_ok else ('paid' if eok and (mok or not monthly_due) else 'mixed')
+            row_state='due' if not focus_ok else ('paid' if (eok or waived) and (mok or not monthly_due) else 'mixed')
             eh=f"/pagamenti?vista=iscrizioni&stagione={stagione}&mese={mese}&anno={anno}&tesserato_id={tid}&azione=registra&tipo=iscrizione"
             mh=f"/pagamenti?vista=mensili&mese={mese}&anno={anno}&tesserato_id={tid}&azione=registra&tipo=mensile"
             dh=f"/documenti/da-verificare?tesserato_id={tid}"
@@ -686,7 +697,7 @@ def _bodymind_payment_module_v7(resp):
                 +("<span class='bmpv7-status "+("ok" if mok else "due")+"'><i></i><b>"+months[mese].upper()+" "+str(anno)+"</b><em>"+("PAGATO" if mok else "DA PAGARE")+"</em></span>" if monthly_due else "<span class='bmpv7-status na'><i></i><b>"+months[mese].upper()+" "+str(anno)+"</b><em>NON DOVUTO</em></span>")
                 +"</div></div>"
                 +("<div class='bmpv7-actions'>"+''.join(movement_links)+"</div>" if movement_links else "")
-                +"<div class='bmpv7-actions'><a class='doc' href='"+dh+"'>Verifica documento</a><a class='doc' href='"+ah+"'>Archivio</a><a href='"+eh+"'>"+("Correggi iscrizione" if eok else "Registra iscrizione")+"</a>"+(("<a href='"+mh+"'>"+("Correggi "+months[mese] if mok else "Registra "+months[mese])+"</a>") if monthly_due else "<span class='bmpv7-action-na'>"+months[mese]+" non dovuto</span>")+"</div>"
+                +"<div class='bmpv7-actions'><a class='doc' href='"+dh+"'>Verifica documento</a><a class='doc' href='"+ah+"'>Archivio</a>"+("<span class='bmpv7-action-na'>Iscrizione non dovuta</span>" if waived else "<a href='"+eh+"'>"+("Correggi iscrizione" if eok else "Registra iscrizione")+"</a>")+(("<a href='"+mh+"'>"+("Correggi "+months[mese] if mok else "Registra "+months[mese])+"</a>") if monthly_due else "<span class='bmpv7-action-na'>"+months[mese]+" non dovuto</span>")+"</div>"
                 +"</div>"
             ))
         rows.sort(key=lambda x:x[0])
