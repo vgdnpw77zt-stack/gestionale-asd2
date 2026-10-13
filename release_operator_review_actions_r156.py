@@ -868,21 +868,34 @@ _r159_pay_new="""        # BODYMIND_R159_SAFE_EXISTING_DUE
         if payment_id and not existing:
             return redirect('/pagamenti?errore=movimento_inesistente&mese='+str(mese)+'&anno='+str(anno),303)
         if not existing and not payment_id:
+            # Include historical 'quota' and every mensile alias, or a second
+            # October movement could bypass the duplicate check.
             _same=c.execute(
                 "SELECT * FROM pagamenti WHERE tesserato_id=? AND mese=? AND anno=? AND "
-                "lower(trim(coalesce(causale,''))) IN ("
-                +("?,?" if tipo=='mensile' else "?,?,?")
-                +") ORDER BY id DESC",
-                ((tid,mese,anno,'mensile','quota_mensile') if tipo=='mensile'
-                 else (tid,mese,anno,'iscrizione','tesseramento','quota_iscrizione'))
+                +("(lower(trim(coalesce(causale,''))) LIKE '%mensil%' OR "
+                  "lower(trim(coalesce(causale,'')))='quota')" if tipo=='mensile' else
+                  "lower(trim(coalesce(causale,''))) IN ('iscrizione','tesseramento','quota_iscrizione')"),
+                (tid,mese,anno)
             ).fetchall()
             if _same:
                 if len(_same)!=1:
                     return redirect('/pagamenti?errore=movimenti_da_verificare&mese='+str(mese)+'&anno='+str(anno),303)
                 _candidate=_same[0]
-                _st=(str(_candidate['stato'] or '')+' '+str(_candidate['online_status'] or '')).lower()
-                _already_paid=(('unpaid' not in _st) and any(
-                    _tok in _st for _tok in ('paid','pagat','incassat','saldat','complet')))
+                _states=[str(_candidate[_key] or '').strip().casefold()
+                         for _key in ('stato','online_status') if _key in _candidate.keys()
+                         and str(_candidate[_key] or '').strip()]
+                _st=' '.join(_states)
+                # Reject contradictory status columns (e.g. unpaid + paid_manual).
+                # Only rows explicitly unpaid in EVERY populated status field
+                # can be completed by a brand-new payment form.
+                _explicit_unpaid=bool(_states) and all(
+                    any(_v in state for _v in ('unpaid','not_paid','not paid','non_pagato','non pagat'))
+                    for state in _states)
+                _already_paid=any(
+                    any(_tok in state for _tok in ('pagat','incassat','saldat','complet'))
+                    or ('paid' in state and not any(_v in state for _v in
+                        ('unpaid','not_paid','not paid')))
+                    for state in _states)
                 _cancelled=any(_tok in _st for _tok in ('annull','cancel','refund','rimbors','storn'))
                 _notes=str(_candidate['note_pagamento'] or '').casefold() if 'note_pagamento' in _candidate.keys() else ''
                 _non_due=any(_word in (_st+' '+_notes) for _word in
@@ -891,7 +904,7 @@ _r159_pay_new="""        # BODYMIND_R159_SAFE_EXISTING_DUE
                 if not _attached:
                     _attached=bool(c.execute("SELECT 1 FROM ricevute WHERE pagamento_id=? LIMIT 1",
                         (int(_candidate['id']),)).fetchone())
-                if _already_paid or _cancelled or _attached or _non_due or str(_candidate['paid_at'] or '').strip() or not any(x in _st for x in ('unpaid','not_paid','non_pagato','non pagat')):
+                if _already_paid or _cancelled or _attached or _non_due or str(_candidate['paid_at'] or '').strip() or not _explicit_unpaid:
                     return redirect('/pagamenti?errore=gia_registrato&mese='+str(mese)+'&anno='+str(anno)
                         +'&tesserato_id='+str(tid)+'&payment_id='+str(int(_candidate['id'])),303)
                 existing=_candidate

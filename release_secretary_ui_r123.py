@@ -3010,3 +3010,135 @@ print((_v19p.stdout or '').strip(),flush=True)
 if _v19p.returncode!=0:
     raise RuntimeError('V19 stale quote counter child audit failed '+((_v19p.stderr or '')+(_v19p.stdout or ''))[-7000:])
 print('[quote-counter-v19] PASS false quote-review label removed; informational payment totals allowed; canonical-payment-truth preserved',flush=True)
+
+
+
+# R167: read-only, desktop-only reconciliation of resolved payment tasks.
+# Install once in the persistent runtime; do not update any real financial row.
+_r167_src = r'''# BODYMIND_R167_DESKTOP_PAYMENT_ALERT_TRUTH
+def bodymind_explicit_monthly_non_due_r167(conn, tid, month, year):
+    """Read-only. Only documented, explicit non-due decisions are accepted."""
+    try:
+        tid=int(tid); month=int(month); year=int(year)
+        tables={str(x[0]) for x in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        if 'pagamenti' not in tables: return False
+        # Inconsistent real settled cash and a waiver need human review.
+        pcols={str(x[1]) for x in conn.execute('PRAGMA table_info(pagamenti)').fetchall()}
+        cols='id,importo,causale,stato'
+        for k in ('online_status','note_pagamento'):
+            if k in pcols: cols+=','+k
+        paid=conn.execute("SELECT "+cols+" FROM pagamenti WHERE tesserato_id=? AND mese=? AND anno=? "
+          "AND (lower(coalesce(causale,'')) LIKE '%mensil%' OR lower(coalesce(causale,''))='quota')",
+          (tid,month,year)).fetchall()
+        def _v(row,key):
+            return row[key] if key in row.keys() else None
+        for p in paid:
+            st=' '.join(str(_v(p,k) or '').casefold() for k in ('stato','online_status'))
+            val=float(p['importo'] or 0)
+            if val>0 and not any(w in st for w in
+                ('unpaid','not_paid','pending','attesa','annull','cancel','refund','rimbors','failed')):
+                if any(w in st for w in ('paid','pagat','saldat','incassat','complet')):
+                    return False
+        if 'bodymind_quota_decisioni' in tables:
+            d=conn.execute("SELECT * FROM bodymind_quota_decisioni "
+                "WHERE tesserato_id=? AND mese=? AND anno=?",(tid,month,year)).fetchone()
+            if d and str(d['decisione'] or '').casefold() in ('esente','sospeso'):
+                if float(d['importo_dovuto'] or 0)==0 and str(d['motivo'] or '').strip():
+                    return True
+        if 'quote_mensili' in tables:
+            q=conn.execute("SELECT * FROM quote_mensili "
+                "WHERE tesserato_id=? AND mese=? AND anno=? ORDER BY id DESC LIMIT 1",
+                (tid,month,year)).fetchone()
+            if q and q['importo_dovuto'] is not None and float(q['importo_dovuto'])==0:
+                st=str(q['stato'] or '').casefold().strip()
+                if any(s in st for s in ('esente','sospes','non_dovut','non dovut','esonerat')):
+                    return True
+        for p in paid:
+            if float(p['importo'] or 0)!=0:continue
+            note=str(_v(p,'note_pagamento') or '').casefold()
+            if any(s in note for s in ('non dovut','non_dovut','esente','esonerat','sospes')):
+                return True
+        return False
+    except Exception as exc:
+        print('[r167-monthly-decision-readonly-warning] '+repr(exc),flush=True)
+        return False
+
+if 'get_operational_tasks' in globals():
+    _bodymind_r167_prior_operational_tasks=get_operational_tasks
+    def get_operational_tasks(*args,**kwargs):
+        items=_bodymind_r167_prior_operational_tasks(*args,**kwargs)
+        if not isinstance(items,(list,tuple)) or not items:return items
+        try:
+            from flask import has_request_context,request
+            if not has_request_context() or request.path not in (
+                '/','/dashboard','/centro-operativo','/cuore-operativo'):
+                return items
+            from datetime import date
+            import re as _r167_re
+            import sqlite3 as _r167_sql
+            today=date.today()
+            season=today.year if today.month>=7 else today.year-1
+            cx=_r167_sql.connect("file:/data/tenants/default/asd.db?mode=ro",uri=True,timeout=12)
+            cx.row_factory=_r167_sql.Row
+            try:
+                results=[]
+                for item in items:
+                    try: get=item.get
+                    except AttributeError:
+                        get=lambda key,default=None:item[key] if key in item.keys() else default
+                    try:tid=int(get('tesserato_id',0) or 0)
+                    except (ValueError,TypeError):tid=0
+                    if tid<=0:
+                        results.append(item);continue
+                    desc=' '.join(str(get(k,'') or '') for k in
+                        ('title','titolo','message','messaggio','descrizione')).casefold()
+                    kind=str(get('tipo','') or get('type','') or '').casefold()
+                    annual='iscrizion' in desc or 'tesserament' in desc or kind in (
+                        'iscrizione_mancante','iscrizione_da_pagare')
+                    monthly=('mensil' in desc or 'quota mese' in desc or
+                             kind=='quota_mese_mancante')
+                    paytask=('pagament' in desc or 'da pagare' in desc or
+                        'pagament' in kind or 'quota' in kind or 'iscrizion' in kind)
+                    if not paytask:
+                        results.append(item);continue
+                    if annual and bodymind_explicit_annual_non_due(cx,tid,season):
+                        continue
+                    month,year=today.month,today.year
+                    pattern=_r167_re.search(r'(?<!\d)(0?[1-9]|1[012])/(20\d\d)(?!\d)',desc)
+                    if pattern:month,year=int(pattern.group(1)),int(pattern.group(2))
+                    if monthly and bodymind_explicit_monthly_non_due_r167(cx,tid,month,year):
+                        continue
+                    if not annual and not monthly:
+                        truth=bodymind_payment_truth(cx,tesserato_id=tid,mese=today.month,
+                            anno=today.year,stagione=season)
+                        row=(truth.get('rows') or [{}])[0] if truth.get('rows') else {}
+                        annual_ok=bool(row.get('iscrizione_pagata') or
+                            bodymind_explicit_annual_non_due(cx,tid,season))
+                        monthly_ok=bool(row.get('mensile_pagato') or
+                            bodymind_explicit_monthly_non_due_r167(cx,tid,today.month,today.year))
+                        if annual_ok and monthly_ok:continue
+                    results.append(item)
+                return type(items)(results)
+            finally:
+                cx.close()
+        except Exception as exc:
+            print('[r167-desktop-alert-warning] '+repr(exc),flush=True)
+            return items
+'''
+_r167_core=CORE.read_text(encoding='utf-8',errors='replace')
+if old_onboard := """    enroll=bool(pr.get('iscrizione_pagata'))
+    monthly=bool(pr.get('mensile_pagato'))""":
+    if old_onboard in _r167_core:
+        _r167_core=_r167_core.replace(old_onboard, """    season=today.year if today.month>=7 else today.year-1
+    enroll=bool(pr.get('iscrizione_pagata') or bodymind_explicit_annual_non_due(conn,tid,season))
+    monthly=bool(pr.get('mensile_pagato') or bodymind_explicit_monthly_non_due_r167(conn,tid,today.month,today.year))""",1)
+        print('[r167-onboarding] annual/monthly explicit non-due now resolves stale payment flags',flush=True)
+if '# BODYMIND_R167_DESKTOP_PAYMENT_ALERT_TRUTH' not in _r167_core:
+    _r167_core+='\n'+_r167_src+'\n'
+    print('[r167-desktop-alert] installed verified-payment-only desktop filter',flush=True)
+if _r167_core!=CORE.read_text(encoding='utf-8',errors='replace'):
+    _r167_candidate=BACK/'core.r167_desktop_alert_candidate.py'
+    _r167_candidate.write_text(_r167_core,encoding='utf-8')
+    py_compile.compile(str(_r167_candidate),doraise=True)
+    shutil.copy2(_r167_candidate,CORE)
