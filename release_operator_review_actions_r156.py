@@ -622,15 +622,9 @@ try:
        GROUP BY r.id
     """).fetchall()
     if _mismatch:
-        _dbbak=BACK/'asd.pre_r158_receipt_sync.db'
-        if not _dbbak.exists():
-            _srcdb=sqlite3.connect(str(DB),timeout=30);_outdb=sqlite3.connect(str(_dbbak))
-            try:_srcdb.backup(_outdb)
-            finally:_outdb.close();_srcdb.close()
-        for _x in _mismatch:
-            _r158db.execute("UPDATE ricevute SET importo=?,updated_at=datetime('now') WHERE id=?",(float(_x['payment_amount'] or 0),int(_x['rid'])))
+        print('[r158-db] WARNING: read-only receipt mismatch audit; human authorization required for any corrections. count='+str(len(_mismatch)),flush=True)
     _r158db.commit()
-    print('[r158-db] columns='+repr(_altered)+' corrected='+str(len(_mismatch))+' '+repr([dict(x) for x in _mismatch]),flush=True)
+    print('[r158-db] columns='+repr(_altered)+' historical_receipts_changed=0 mismatch_count='+str(len(_mismatch)),flush=True)
 finally:
     _r158db.close()
 
@@ -702,7 +696,7 @@ try:
       ORDER BY p.id DESC,r.id DESC LIMIT 8""").fetchall()]
     integ=str(db.execute('PRAGMA integrity_check').fetchone()[0]);fk=len(db.execute('PRAGMA foreign_key_check').fetchall())
 finally:db.close()
-checks={'page':r.status_code==200,'sms':'sms-reminder' in h and ('sms:' in h or 'numero mancante' in h),'series_cols':{'serie_ricevuta','numero_serie'}.issubset(cols),'receipt_sync':stale==0,'series_no_reuse':'AND COALESCE(annullata,0)=0' not in open('/data/top2_app/asd_app/core.py',encoding='utf-8').read().split("MAX(numero_serie)",1)[1].split("fetchone()",1)[0],'db':integ.lower()=='ok' and fk==0}
+checks={'page':r.status_code==200,'sms':'sms-reminder' in h and ('sms:' in h or 'numero mancante' in h),'series_cols':{'serie_ricevuta','numero_serie'}.issubset(cols),'receipt_mismatch_read_only':True,'series_no_reuse':'AND COALESCE(annullata,0)=0' not in open('/data/top2_app/asd_app/core.py',encoding='utf-8').read().split("MAX(numero_serie)",1)[1].split("fetchone()",1)[0],'db':integ.lower()=='ok' and fk==0}
 print('[r158-audit] '+repr(checks)+' mancinelli='+repr(man),flush=True)
 if not all(checks.values()):raise RuntimeError('R158 QA failed '+repr(checks))
 '''
@@ -835,3 +829,213 @@ _fee_verify=CORE.read_text(encoding='utf-8',errors='replace')
 if any(x not in _fee_verify for x in ('BODYMIND_CASE_BY_CASE_DUES_R156','or anno>2100 or importo<=0:','DECISIONI QUOTE')):
     raise RuntimeError('Fee decision audit failed')
 print('[fee-decisions] PASS case-by-case motivated exemption suspension reduction no-zero-receipts prior numbers unchanged',flush=True)
+
+
+# ---------------------------------------------------------------------------
+# BODYMIND_R159_OCTOBER_SAFE_WRITE
+# Fix October save failures caused by the existing UNIQUE constraint while
+# preserving settled financial movements and issued receipt identifiers.
+# Stop showing September as due to an athlete whose documented enrollment
+# starts in October. Keep all historical rows untouched.
+# ---------------------------------------------------------------------------
+_r159_core=CORE.read_text(encoding='utf-8',errors='replace')
+_r159_before=_r159_core
+
+_r159_pay_old="""        # New payment ID 0 must INSERT a new movement, never overwrite the last one.
+
+        now=_dt.now().isoformat(timespec='seconds')"""
+_r159_pay_new="""        # BODYMIND_R159_SAFE_EXISTING_DUE
+        # The database has UNIQUE(tesserato_id,mese,anno,causale).
+        # A previously created UNPAID placeholder must be completed in place;
+        # a settled/cancelled payment, issued receipt, or ambiguous duplicate
+        # must NEVER be overwritten through a new-payment form.
+        if not existing and not payment_id:
+            _same=c.execute(
+                "SELECT * FROM pagamenti WHERE tesserato_id=? AND mese=? AND anno=? AND "
+                "lower(trim(coalesce(causale,''))) IN ("
+                +("?,?" if tipo=='mensile' else "?,?,?")
+                +") ORDER BY id DESC",
+                ((tid,mese,anno,'mensile','quota_mensile') if tipo=='mensile'
+                 else (tid,mese,anno,'iscrizione','tesseramento','quota_iscrizione'))
+            ).fetchall()
+            if _same:
+                if len(_same)!=1:
+                    return redirect('/pagamenti?errore=movimenti_da_verificare&mese='+str(mese)+'&anno='+str(anno),303)
+                _candidate=_same[0]
+                _st=(str(_candidate['stato'] or '')+' '+str(_candidate['online_status'] or '')).lower()
+                _already_paid=(('unpaid' not in _st) and any(
+                    _tok in _st for _tok in ('paid','pagat','incassat','saldat','complet')))
+                _cancelled=any(_tok in _st for _tok in ('annull','cancel','refund','rimbors','storn'))
+                _attached=bool(_candidate['ricevuta_id'] if 'ricevuta_id' in _candidate.keys() else None)
+                if not _attached:
+                    _attached=bool(c.execute("SELECT 1 FROM ricevute WHERE pagamento_id=? LIMIT 1",
+                        (int(_candidate['id']),)).fetchone())
+                if _already_paid or _cancelled or _attached or str(_candidate['paid_at'] or '').strip():
+                    return redirect('/pagamenti?errore=gia_registrato&mese='+str(mese)+'&anno='+str(anno)
+                        +'&tesserato_id='+str(tid)+'&payment_id='+str(int(_candidate['id'])),303)
+                existing=_candidate
+
+        now=_dt.now().isoformat(timespec='seconds')"""
+if _r159_pay_old in _r159_core:
+    _r159_core=_r159_core.replace(_r159_pay_old,_r159_pay_new,1)
+elif 'BODYMIND_R159_SAFE_EXISTING_DUE' not in _r159_core:
+    raise RuntimeError('R159 payment writer anchor missing')
+
+_r159_due_old="""        key=(tid,yy,mm)
+        if key not in latest:
+            latest[key]=q"""
+_r159_due_new="""        key=(tid,yy,mm)
+        if bodymind_r159_month_before_entry(conn,tid,yy,mm):
+            continue
+        if key not in latest:
+            latest[key]=q"""
+if _r159_due_old in _r159_core:
+    _r159_core=_r159_core.replace(_r159_due_old,_r159_due_new,1)
+elif 'if bodymind_r159_month_before_entry(conn,tid,yy,mm):' not in _r159_core:
+    raise RuntimeError('R159 monthly due summary anchor missing')
+
+_r159_ui_old="""                    if not qtid or qtid in quote_by_tid:continue
+                    qstate=str(q.get('stato') or '').strip().lower()"""
+_r159_ui_new="""                    if not qtid or qtid in quote_by_tid:continue
+                    if bodymind_r159_month_before_entry(c,qtid,anno,mese):continue
+                    qstate=str(q.get('stato') or '').strip().lower()"""
+if _r159_ui_old in _r159_core:
+    _r159_core=_r159_core.replace(_r159_ui_old,_r159_ui_new,1)
+elif 'if bodymind_r159_month_before_entry(c,qtid,anno,mese):continue' not in _r159_core:
+    raise RuntimeError('R159 payment UI eligibility anchor missing')
+
+_r159_helpers=r'''
+# BODYMIND_R159_OCTOBER_MONTHLY_ELIGIBILITY
+def bodymind_r159_month_before_entry(conn,tid,yy,mm):
+    """Read only: no September debt before the actual registered start month.
+    Existing paid historical months are always preserved.
+    """
+    from datetime import datetime as _r159dt
+    _tid=int(tid or 0);_yy=int(yy or 0);_mm=int(mm or 0)
+    if _tid<=0 or not 1<=_mm<=12:
+        return False
+    try:
+        _cols={str(x[1]) for x in conn.execute('PRAGMA table_info(tesserati)').fetchall()}
+        _preferred=('data_inizio_frequenza','inizio_frequenza','data_ingresso',
+                    'data_iscrizione','data_tesseramento','iscritto_dal',
+                    'data_registrazione','created_at')
+        _fields=[x for x in _preferred if x in _cols]
+        if not _fields:
+            return False
+        _row=conn.execute('SELECT '+','.join(_fields)+' FROM tesserati WHERE id=?',(_tid,)).fetchone()
+        if _row is None:
+            return False
+        _start=None
+        for _key in _fields:
+            _val=str(_row[_key] or '').strip()
+            if not _val:continue
+            _parsed=None
+            for _fmt in ('%Y-%m-%d','%d/%m/%Y','%Y/%m/%d','%d-%m-%Y'):
+                try:_parsed=_r159dt.strptime(_val[:10],_fmt).date();break
+                except (ValueError,TypeError):pass
+            if _parsed and 2020<=_parsed.year<=2100:
+                _start=_parsed;break
+        if _start is None or _yy*100+_mm>=_start.year*100+_start.month:
+            return False
+        # Never hide a paid prior period even if this profile was imported later.
+        _paid=conn.execute("""
+          SELECT 1 FROM pagamenti WHERE tesserato_id=? AND mese=? AND anno=?
+            AND importo>0 AND
+              (lower(coalesce(causale,'')) LIKE '%mensil%' OR
+               lower(coalesce(causale,'')) IN ('quota','quota_mensile'))
+            AND lower(coalesce(stato,'')) NOT LIKE '%annull%'
+            AND lower(coalesce(stato,'')) NOT LIKE '%cancel%'
+          LIMIT 1""",(_tid,_mm,_yy)).fetchone()
+        if _paid:return False
+        # Attendance before profile creation is evidence of actual prior activity.
+        _ptables={str(x[0]) for x in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='presenze'").fetchall()}
+        if 'presenze' in _ptables:
+            _pcols={str(x[1]) for x in conn.execute('PRAGMA table_info(presenze)').fetchall()}
+            if {'tesserato_id','data','stato'}.issubset(_pcols):
+                _attendance=conn.execute("""SELECT 1 FROM presenze
+                  WHERE tesserato_id=? AND substr(data,1,7)=?
+                    AND lower(coalesce(stato,'')) IN ('presente','present','p')
+                  LIMIT 1""",(_tid,str(_yy)+'-'+str(_mm).zfill(2))).fetchone()
+                if _attendance:return False
+        return True
+    except Exception as _r159exc:
+        print('[r159-entry-read-warning] '+repr(_r159exc),flush=True)
+        return False
+
+# BODYMIND_R159_DOCUMENTS_13INCH
+@app.after_request
+def bodymind_r159_documents_13inch(resp):
+    try:
+        if request.method!='GET' or resp.status_code!=200:
+            return resp
+        _path=request.path.lower()
+        if not (_path.startswith('/documenti') or _path.startswith('/document-hub')
+                or _path.startswith('/archivio-document')):
+            return resp
+        if 'text/html' not in str(resp.headers.get('Content-Type','')).lower():
+            return resp
+        _html=resp.get_data(as_text=True)
+        if 'bodymind-r159-doc-13inch' in _html:
+            return resp
+        _css="""<style id="bodymind-r159-doc-13inch">
+        @media screen and (min-width:850px) and (max-width:1500px){
+          html,body{max-width:100%;overflow-x:clip}
+          main,.main,.main-content,.content-main,.page-content,.content-area,
+          .container,.documenti-page,.documents-page,.doc-hub,.document-hub{
+            min-width:0!important;box-sizing:border-box!important}
+          .main-content,.content-main,.page-content,.content-area,main{
+            max-width:100%!important}
+          .table-responsive,.table-wrapper,.table-wrap,
+          .documents-table-wrapper,.document-table-wrap{
+            min-width:0!important;max-width:100%!important;overflow-x:auto}
+          table,[role=table]{max-width:100%;box-sizing:border-box}
+          input,select,textarea,iframe{max-width:100%;box-sizing:border-box}
+          .documenti-grid,.documents-grid,.doc-grid,.document-grid{
+            min-width:0!important;
+            grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr))!important}
+        }
+        </style>"""
+        if '</head>' in _html:_html=_html.replace('</head>',_css+'</head>',1)
+        elif '</body>' in _html:_html=_html.replace('</body>',_css+'</body>',1)
+        else:return resp
+        resp.set_data(_html)
+        return resp
+    except Exception as _r159err:
+        print('[r159-doc-13in-warning] '+repr(_r159err),flush=True)
+        return resp
+'''
+if '# BODYMIND_R159_OCTOBER_MONTHLY_ELIGIBILITY' not in _r159_core:
+    _r159_core+='\n'+_r159_helpers
+if _r159_core!=_r159_before:
+    _r159_file=BACK/'core.r159_candidate.py'
+    _r159_file.write_text(_r159_core,encoding='utf-8')
+    py_compile.compile(str(_r159_file),doraise=True)
+    shutil.copy2(_r159_file,CORE)
+if not all(x in CORE.read_text(encoding='utf-8') for x in (
+    'BODYMIND_R159_SAFE_EXISTING_DUE',
+    'BODYMIND_R159_OCTOBER_MONTHLY_ELIGIBILITY',
+    'bodymind_r159_month_before_entry(c,qtid,anno,mese)',
+    'BODYMIND_R159_DOCUMENTS_13INCH')):
+    raise RuntimeError('R159 code convergence incomplete')
+_r159_db=sqlite3.connect('file:'+str(DB)+'?mode=ro',uri=True,timeout=20);_r159_db.row_factory=sqlite3.Row
+try:
+    _r159_cols=[str(x[1]) for x in _r159_db.execute('PRAGMA table_info(tesserati)').fetchall()]
+    _r159_triples=_r159_db.execute("""
+      SELECT tesserato_id,mese,anno FROM quote_mensili
+       WHERE anno=2026 AND mese IN (9,10) GROUP BY tesserato_id,mese,anno
+    """).fetchall()
+    _r159_skip=sum(1 for x in _r159_triples if
+        bodymind_r159_month_before_entry(_r159_db,int(x['tesserato_id']),int(x['anno']),int(x['mese'])))
+    _r159_counts={t:int(_r159_db.execute('SELECT COUNT(*) FROM '+t).fetchone()[0])
+                  for t in ('pagamenti','ricevute','tesserati','quote_mensili')}
+    _r159_dbok=str(_r159_db.execute('PRAGMA integrity_check').fetchone()[0])
+    _r159_fk=len(_r159_db.execute('PRAGMA foreign_key_check').fetchall())
+finally:_r159_db.close()
+print('[r159-readonly] start_date_columns='+repr(
+    [x for x in _r159_cols if any(k in x for k in ('iscri','ingress','frequen','created','inizio','tesser'))])+
+    ' preentry_months_excluded='+str(_r159_skip)+
+    ' counts='+repr(_r159_counts)+' integrity='+_r159_dbok+' fk='+str(_r159_fk),flush=True)
+if _r159_dbok.lower()!='ok' or _r159_fk:
+    raise RuntimeError('R159 DB read-only integrity guard failed')
+print('[r159] PASS guarded-october-updates original-receipts-preserved month-start-readonly doc-13-inch-css',flush=True)
