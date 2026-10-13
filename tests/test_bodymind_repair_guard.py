@@ -156,7 +156,8 @@ class RepairGuards(unittest.TestCase):
     def test_october_collision_will_not_replace_settled_or_ambiguous(self):
         src=(ROOT/"release_operator_review_actions_r156.py").read_text(encoding="utf-8")
         self.assertIn("BODYMIND_R159_SAFE_EXISTING_DUE",src)
-        self.assertIn("or not any(x in _st",src)
+        self.assertIn("or not _explicit_unpaid:",src)
+        self.assertIn("_states=[str(_candidate[_key]",src)
         self.assertIn("if len(_same)!=1",src)
         self.assertIn("_already_paid or _cancelled or _attached or _non_due",src)
         errors=(ROOT/"release_secretary_ui_r123.py").read_text(encoding="utf-8")
