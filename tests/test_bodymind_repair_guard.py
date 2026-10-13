@@ -165,7 +165,7 @@ class RepairGuards(unittest.TestCase):
     def test_partial_monthly_preserves_existing_due(self):
         import re
         src=(ROOT/"release_secretary_ui_r123.py").read_text(encoding="utf-8")
-        match=re.search(r"UPDATE quote_mensili\\s+SET stato=CASE WHEN COALESCE\\(importo_dovuto,importo_base,0\\)>\\?[\\s\\S]*?WHERE id=\\?",src)
+        match=re.search(r"UPDATE quote_mensili\s+SET stato=CASE WHEN COALESCE\(importo_dovuto,importo_base,0\)>\?[\s\S]*?WHERE id=\?",src)
         self.assertIsNotNone(match)
         c=sqlite3.connect(":memory:")
         try:
