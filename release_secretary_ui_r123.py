@@ -365,7 +365,7 @@ _r161_src = r'''
 def bodymind_explicit_annual_non_due(conn, tid, season):
     try:
         rows = conn.execute("""
-            SELECT importo,stato,online_status,note_pagamento FROM pagamenti
+            SELECT anno,causale,importo,stato,online_status,note_pagamento FROM pagamenti
             WHERE tesserato_id=? AND anno IN (?,?)
               AND (lower(coalesce(causale,'')) LIKE '%iscrizion%'
                    OR lower(coalesce(causale,'')) IN ('tesseramento','quota_iscrizione'))
@@ -374,12 +374,22 @@ def bodymind_explicit_annual_non_due(conn, tid, season):
         notes=('non dovuto','non dovuta','non_dovuto','non_dovuta',
                'esente','esentata','esonerata','gratuita','waived')
         for p in rows:
+            evidence=' '.join(str(p[k] or '').casefold()
+                              for k in ('causale','stato','online_status','note_pagamento'))
+            # Season+1 can belong to another annual enrollment; require
+            # an explicit season reference, never assume that next calendar
+            # year is automatically part of this waiver.
+            try: row_year=int(p['anno'] or 0)
+            except (TypeError,ValueError): continue
+            if row_year!=int(season):
+                labels=(str(season)+'/'+str(int(season)+1),
+                        str(season)+'-'+str(int(season)+1))
+                if not any(label in evidence for label in labels):
+                    continue
             try: amount=float(p['importo'] or 0)
             except (TypeError,ValueError): continue
             if amount > 0: return False
             if abs(amount)>0.00001: continue
-            evidence=' '.join(str(p[k] or '').casefold()
-                              for k in ('stato','online_status','note_pagamento'))
             if any(t in evidence for t in notes): return True
         return False
     except Exception as exc:
