@@ -559,9 +559,9 @@ if '# BODYMIND_R158_PAYMENT_RECEIPTS_SMS' not in _core or 'series_prog=int(c.exe
     elif 'sms_action=(' not in _core:
         raise RuntimeError('R158 SMS row anchor missing')
 
-    _old_actions='''                +"<div class='bmpv7-actions'><a class='doc' href='"+dh+"'>Verifica documento</a><a class='doc' href='"+ah+"'>Archivio</a><a href='"+eh+"'>"+("Correggi iscrizione" if eok else "Registra iscrizione")+"</a>"+(("<a href='"+mh+"'>"+("Correggi "+months[mese] if mok else "Registra "+months[mese])+"</a>") if monthly_due else "<span class='bmpv7-action-na'>"+months[mese]+" non dovuto</span>")+"</div>"
+    _old_actions='''                +"<div class='bmpv7-actions'><a class='doc' href='"+dh+"'>Verifica documento</a><a class='doc' href='"+ah+"'>Archivio</a>"+("<span class='bmpv7-action-na'>Iscrizione non dovuta</span>" if waived else "<a href='"+eh+"'>"+("Correggi iscrizione" if eok else "Registra iscrizione")+"</a>")+(("<a href='"+mh+"'>"+("Correggi "+months[mese] if mok else "Registra "+months[mese])+"</a>") if monthly_due else "<span class='bmpv7-action-na'>"+months[mese]+" non dovuto</span>")+"</div>"
 '''
-    _new_actions='''                +"<div class='bmpv7-actions'><a class='doc' href='"+dh+"'>Verifica documento</a><a class='doc' href='"+ah+"'>Archivio</a><a href='"+eh+"'>"+("Correggi iscrizione" if eok else "Registra iscrizione")+"</a>"+(("<a href='"+mh+"'>"+("Correggi "+months[mese] if mok else "Registra "+months[mese])+"</a>") if monthly_due else "<span class='bmpv7-action-na'>"+months[mese]+" non dovuto</span>")+sms_action+"</div>"
+    _new_actions='''                +"<div class='bmpv7-actions'><a class='doc' href='"+dh+"'>Verifica documento</a><a class='doc' href='"+ah+"'>Archivio</a>"+("<span class='bmpv7-action-na'>Iscrizione non dovuta</span>" if waived else "<a href='"+eh+"'>"+("Correggi iscrizione" if eok else "Registra iscrizione")+"</a>")+(("<a href='"+mh+"'>"+("Correggi "+months[mese] if mok else "Registra "+months[mese])+"</a>") if monthly_due else "<span class='bmpv7-action-na'>"+months[mese]+" non dovuto</span>")+sms_action+"</div>"
 '''
     if _old_actions in _core:
         _core=_core.replace(_old_actions,_new_actions,1)
@@ -728,6 +728,24 @@ try:
 finally:_fee_conn.close()
 _fee_src=r'''
 # BODYMIND_CASE_BY_CASE_DUES_R156
+def bodymind_r156_settled_monthly(conn, tid, month, year):
+    """Only settled monthly rows are evidence of cash; unpaid/pending are never settled."""
+    rows=conn.execute("""SELECT * FROM pagamenti WHERE tesserato_id=? AND mese=? AND anno=?
+      AND importo>0 AND (lower(coalesce(causale,'')) LIKE '%mensil%'
+      OR lower(coalesce(causale,'')) IN ('quota','quota_mensile'))""",
+      (int(tid),int(month),int(year))).fetchall()
+    for row in rows:
+        keys=set(row.keys())
+        state=' '.join(str(row[k] or '').casefold() for k in ('stato','online_status') if k in keys)
+        if any(v in state for v in ('unpaid','not_paid','not paid','non_pagato','non pagat',
+                 'pending','attesa','annull','cancel','refund','rimbors','storn','failed','fallit')):
+            continue
+        if any(v in state for v in ('paid','pagat','saldat','incassat','complet')):
+            return True
+        if 'paid_at' in keys and str(row['paid_at'] or '').strip():
+            return True
+    return False
+
 @app.route('/pagamenti/decisione-quota',methods=['GET','POST'],endpoint='bodymind_fee_decision_r156')
 @admin_required
 def bodymind_fee_decision_r156():
@@ -761,10 +779,8 @@ def bodymind_fee_decision_r156():
             if action in ('ridotta','dovuta') and (base<=0 or due<=0 or due>base):
                 return _redirect('/pagamenti/decisione-quota?mese=%s&anno=%s&tesserato_id=%s&errore=importo'%(mm,yy,tid),303)
             if action in ('esente','sospeso'):
-                paid=con.execute("""SELECT COUNT(*) FROM pagamenti WHERE tesserato_id=? AND mese=? AND anno=? AND importo>0
-                    AND (lower(coalesce(causale,'')) LIKE '%mensil%' OR lower(coalesce(causale,'')) IN ('quota','quota_mensile'))
-                    AND lower(coalesce(stato,'')) NOT LIKE '%annull%' AND lower(coalesce(stato,'')) NOT LIKE '%cancel%'""",(tid,mm,yy)).fetchone()[0]
-                if paid:return _redirect('/pagamenti/decisione-quota?mese=%s&anno=%s&tesserato_id=%s&errore=incasso'%(mm,yy,tid),303)
+                if bodymind_r156_settled_monthly(con,tid,mm,yy):
+                    return _redirect('/pagamenti/decisione-quota?mese=%s&anno=%s&tesserato_id=%s&errore=incasso'%(mm,yy,tid),303)
             ts=_dtf.now().isoformat(timespec='seconds')
             actor=str(session.get('username') or session.get('user_id') or 'admin')[:100]
             state=action if action in ('esente','sospeso') else 'da_pagare'
@@ -875,7 +891,7 @@ _r159_pay_new="""        # BODYMIND_R159_SAFE_EXISTING_DUE
                 if not _attached:
                     _attached=bool(c.execute("SELECT 1 FROM ricevute WHERE pagamento_id=? LIMIT 1",
                         (int(_candidate['id']),)).fetchone())
-                if _already_paid or _cancelled or _attached or _non_due or str(_candidate['paid_at'] or '').strip():
+                if _already_paid or _cancelled or _attached or _non_due or str(_candidate['paid_at'] or '').strip() or not any(x in _st for x in ('unpaid','not_paid','non_pagato','non pagat')):
                     return redirect('/pagamenti?errore=gia_registrato&mese='+str(mese)+'&anno='+str(anno)
                         +'&tesserato_id='+str(tid)+'&payment_id='+str(int(_candidate['id'])),303)
                 existing=_candidate
@@ -943,15 +959,24 @@ def bodymind_r159_month_before_entry(conn,tid,yy,mm):
         if _start is None or _yy*100+_mm>=_start.year*100+_start.month:
             return False
         # Never hide a paid prior period even if this profile was imported later.
-        _paid=conn.execute("""
-          SELECT 1 FROM pagamenti WHERE tesserato_id=? AND mese=? AND anno=?
-            AND importo>0 AND
-              (lower(coalesce(causale,'')) LIKE '%mensil%' OR
-               lower(coalesce(causale,'')) IN ('quota','quota_mensile'))
-            AND lower(coalesce(stato,'')) NOT LIKE '%annull%'
-            AND lower(coalesce(stato,'')) NOT LIKE '%cancel%'
-          LIMIT 1""",(_tid,_mm,_yy)).fetchone()
-        if _paid:return False
+        _paid_rows=conn.execute("""
+          SELECT * FROM pagamenti WHERE tesserato_id=? AND mese=? AND anno=?
+            AND importo>0 AND (lower(coalesce(causale,'')) LIKE '%mensil%'
+              OR lower(coalesce(causale,'')) IN ('quota','quota_mensile'))
+          """,(_tid,_mm,_yy)).fetchall()
+        for _p in _paid_rows:
+            _keys=set(_p.keys())
+            _state=' '.join(str(_p[k] or '').casefold() for k in
+                            ('stato','online_status') if k in _keys)
+            if any(_v in _state for _v in
+                   ('unpaid','not_paid','not paid','non_pagato','non pagat',
+                    'pending','attesa','annull','cancel','refund','rimbors','storn',
+                    'failed','fallit')):
+                continue
+            if any(_v in _state for _v in ('paid','pagat','saldat','incassat','complet')):
+                return False
+            if 'paid_at' in _keys and str(_p['paid_at'] or '').strip():
+                return False
         # Attendance before profile creation is evidence of actual prior activity.
         _ptables={str(x[0]) for x in conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='presenze'").fetchall()}

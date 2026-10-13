@@ -104,6 +104,64 @@ class RepairGuards(unittest.TestCase):
         self.assertTrue(cash(dict(sample,stato="paid_manual")))
         self.assertTrue(cash(dict(sample,stato="")))
 
+    def test_october_sms_compatible_with_annual_non_due(self):
+        r123=(ROOT/"release_secretary_ui_r123.py").read_text(encoding="utf-8")
+        old=value_of("_old_actions","release_operator_review_actions_r156.py")
+        new=value_of("_new_actions","release_operator_review_actions_r156.py")
+        self.assertIn("Iscrizione non dovuta",old)
+        self.assertIn(old,r123)
+        self.assertEqual(new,old.replace('+"</div>"','+sms_action+"</div>"'))
+
+    def test_positive_unpaid_does_not_count_as_paid(self):
+        fn=pure_function(value_of("_fee_src","release_operator_review_actions_r156.py"),
+                         "bodymind_r156_settled_monthly")
+        c=sqlite3.connect(":memory:");c.row_factory=sqlite3.Row
+        try:
+            c.execute("""CREATE TABLE pagamenti(tesserato_id INTEGER,mese INTEGER,anno INTEGER,
+                importo REAL,causale TEXT,stato TEXT,online_status TEXT,paid_at TEXT)""")
+            c.execute("INSERT INTO pagamenti VALUES(14,10,2026,95,'mensile','unpaid','unpaid','')")
+            self.assertFalse(fn(c,14,10,2026))
+            c.execute("UPDATE pagamenti SET stato='pending',online_status='pending'")
+            self.assertFalse(fn(c,14,10,2026))
+            c.execute("UPDATE pagamenti SET stato='paid_manual',online_status='paid_manual'")
+            self.assertTrue(fn(c,14,10,2026))
+            c.execute("UPDATE pagamenti SET stato='annullato',online_status='annullato'")
+            self.assertFalse(fn(c,14,10,2026))
+        finally:c.close()
+
+    def test_pre_entry_unpaid_is_not_historical_paid(self):
+        fn=pure_function(value_of("_r159_helpers","release_operator_review_actions_r156.py"),
+                         "bodymind_r159_month_before_entry")
+        c=sqlite3.connect(":memory:");c.row_factory=sqlite3.Row
+        try:
+            c.execute("CREATE TABLE tesserati(id INTEGER,data_iscrizione TEXT,created_at TEXT)")
+            c.execute("CREATE TABLE pagamenti(tesserato_id INTEGER,mese INTEGER,anno INTEGER,importo REAL,causale TEXT,stato TEXT)")
+            c.execute("INSERT INTO tesserati VALUES(14,'2026-10-01','2026-10-01')")
+            c.execute("INSERT INTO pagamenti VALUES(14,9,2026,95,'mensile','unpaid')")
+            self.assertTrue(fn(c,14,2026,9))
+            c.execute("UPDATE pagamenti SET stato='paid_manual'")
+            self.assertFalse(fn(c,14,2026,9))
+        finally:c.close()
+
+    def test_startup_never_deletes_backups_or_reverts_database(self):
+        src=(ROOT/"runtime_launcher.py").read_text(encoding="utf-8")
+        pre=src.split("def _bodymind_storage_preflight():",1)[1].split(
+            "# BODYMIND_OPERATOR_TASK_LIFECYCLE_CLEANUP",1)[0]
+        self.assertIn('"backup_auto_deletion":"disabled"',pre)
+        self.assertIn('manual recovery required',pre)
+        self.assertNotIn(".unlink(",pre)
+        self.assertNotIn("os.replace(",pre)
+        self.assertNotIn("shutil.copy2(db_path",pre)
+
+    def test_october_collision_will_not_replace_settled_or_ambiguous(self):
+        src=(ROOT/"release_operator_review_actions_r156.py").read_text(encoding="utf-8")
+        self.assertIn("BODYMIND_R159_SAFE_EXISTING_DUE",src)
+        self.assertIn("or not any(x in _st",src)
+        self.assertIn("if len(_same)!=1",src)
+        self.assertIn("_already_paid or _cancelled or _attached or _non_due",src)
+        errors=(ROOT/"release_secretary_ui_r123.py").read_text(encoding="utf-8")
+        self.assertIn("Esistono più movimenti per questa quota",errors)
+
     def test_zero_due_preserved_and_qa_consistent(self):
         s = (ROOT / "release_secretary_ui_r123.py").read_text(encoding="utf-8")
         self.assertEqual(s.count("q['importo_dovuto'] or q['importo_base']"), 1,

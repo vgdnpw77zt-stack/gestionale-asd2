@@ -760,7 +760,15 @@ def _bodymind_payment_module_v7(resp):
                     </form>"""
 
         saved="<div class='bmpv7-saved'>Pagamento salvato. Dashboard, Task e Centro operativo leggono ora lo stesso stato.</div>" if request.args.get('salvato')=='1' else ""
-        error="<div class='bmpv7-error'>Il pagamento non è stato salvato. Controlla i dati e riprova.</div>" if request.args.get('errore') else ""
+        err=(request.args.get('errore') or '').strip()
+        err_messages={
+            'salvataggio': 'Salvataggio non riuscito: un movimento già esistente o un problema database impedisce la conferma. Nessun nuovo incasso è stato registrato.',
+            'gia_registrato': 'Esiste già un movimento registrato, una decisione di non dovuto o una ricevuta: apri lo storico e verifica prima di proseguire. Nessun incasso è stato modificato.',
+            'movimenti_da_verificare': 'Esistono più movimenti per questa quota: verifica lo storico prima di registrare nuovi incassi.',
+            'movimento_inesistente': 'Il pagamento selezionato non esiste più: ricarica lo storico senza creare duplicati.',
+            'pagamento_non_trovato': 'Movimento non trovato. Ricarica la scheda e verifica lo storico.',
+        }
+        error=("<div class='bmpv7-error'>"+e(err_messages.get(err,'Dati non validi o movimento da verificare: nessun nuovo pagamento confermato.'))+"</div>") if err else ""
         month_strip=''
         if month_summary:
             month_chips=''.join("<a class='"+("ok" if int(x['mancanti'])==0 else "due")+"' href='/pagamenti?vista=mensili&mese="+str(x['mese'])+"&anno="+str(x['anno'])+"'><b>"+months[int(x['mese'])]+" "+str(x['anno'])+"</b><span>"+(str(x['mancanti'])+" da pagare" if int(x['mancanti']) else "completo")+"</span></a>" for x in month_summary)

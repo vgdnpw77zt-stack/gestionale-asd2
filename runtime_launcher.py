@@ -3,136 +3,36 @@ import os, sys, pathlib, runpy, sqlite3, shutil, json, time, hashlib, py_compile
 
 # BODYMIND_R102_STORAGE_PREFLIGHT
 def _bodymind_storage_preflight():
-    data_root = pathlib.Path("/data")
-    backup_root = data_root / "release_backups"
-    db_path = data_root / "tenants/default/asd.db"
-    target_free = 2048 * 1024 * 1024
-    cleanup_trigger = 1536 * 1024 * 1024
-    hard_floor = 512 * 1024 * 1024
-    max_backup_bytes = 900 * 1024 * 1024
-    before = shutil.disk_usage(str(data_root))
-    deleted = []
-    freed = 0
-    protected = set()
-
-    if backup_root.exists():
-        candidates = []
-        for p in backup_root.rglob("*"):
-            try:
-                if p.is_file():
-                    st = p.stat()
-                    candidates.append((st.st_mtime, st.st_size, p))
-            except Exception:
-                pass
-
-        full = [x for x in candidates if x[2].suffix.lower() in (".db",".sqlite",".sqlite3")]
-        known = [x for x in full if "r100_medical_profile" in str(x[2]) or "pre_r100" in x[2].name.lower()]
-        if known:
-            protected.add(max(known,key=lambda x:x[0])[2])
-        for x in sorted(full,key=lambda x:x[0],reverse=True)[:4]:
-            protected.add(x[2])
-
-        backup_bytes=sum(x[1] for x in full)
-        cleanup_needed=(before.free < cleanup_trigger or backup_bytes > max_backup_bytes or len(full) > 10)
-        if cleanup_needed:
-            remaining_bytes=backup_bytes
-            remaining_count=len(full)
-            for mtime,size,p in sorted(full,key=lambda x:x[0]):
-                if p in protected:
-                    continue
-                try:
-                    p.unlink()
-                    freed += int(size)
-                    remaining_bytes -= int(size)
-                    remaining_count -= 1
-                    deleted.append({"path":str(p),"bytes":int(size)})
-                except Exception as exc:
-                    print("[storage-retention] delete-warning "+str(p)+" "+repr(exc),flush=True)
-                free_now=shutil.disk_usage(str(data_root)).free
-                if free_now >= target_free and remaining_bytes <= max_backup_bytes and remaining_count <= 6:
-                    break
-
-        cutoff=time.time()-(48*3600)
-        for mtime,size,p in sorted(candidates,key=lambda x:x[0]):
-            if p in protected or p.suffix.lower() in (".db",".sqlite",".sqlite3"):
-                continue
-            if p.suffix.lower() not in (".db-wal",".db-shm",".tmp",".part"):
-                continue
-            if mtime > cutoff:
-                continue
-            try:
-                p.unlink(); freed += int(size); deleted.append({"path":str(p),"bytes":int(size)})
-            except Exception:
-                pass
-
-        try:
-            for d in sorted((x for x in backup_root.rglob("*") if x.is_dir()),key=lambda x:len(str(x)),reverse=True):
-                try: d.rmdir()
-                except Exception: pass
-        except Exception:
-            pass
-
-    after = shutil.disk_usage(str(data_root))
-    result = {
-        "before_used_gb":round(before.used/(1024**3),3),
-        "before_free_gb":round(before.free/(1024**3),3),
-        "after_used_gb":round(after.used/(1024**3),3),
-        "after_free_gb":round(after.free/(1024**3),3),
-        "freed_gb":round(freed/(1024**3),3),
-        "deleted_files":len(deleted),
-        "protected_backups":[str(x) for x in sorted(protected,key=str)],
-    }
-    print("[storage-retention] "+json.dumps(result,ensure_ascii=False),flush=True)
-
-    if after.free < hard_floor:
-        raise SystemExit("Storage preflight: insufficient free space; refusing SQLite writes")
-
-    if db_path.exists():
-        conn=sqlite3.connect("file:"+str(db_path)+"?mode=ro",uri=True,timeout=20)
-        try:
-            integrity=str(conn.execute("PRAGMA integrity_check").fetchone()[0])
-            fk=len(conn.execute("PRAGMA foreign_key_check").fetchall())
-        finally:
-            conn.close()
-        print(f"[storage-retention-db] integrity={integrity} fk={fk}",flush=True)
-        if integrity.lower()!="ok" or fk:
-            raise SystemExit(f"Storage preflight DB check failed: integrity={integrity} fk={fk}")
+    """Never delete backups or silently rebuild a missing SQLite database."""
+    volume = pathlib.Path("/data")
+    db_path = volume / "tenants/default/asd.db"
+    if not volume.is_dir() or not db_path.is_file():
+        raise SystemExit("Storage preflight: persistent BodyMind database missing; refusing empty database")
+    usage = shutil.disk_usage(str(volume))
+    print("[storage-preflight] "+json.dumps({
+        "used_gb":round(usage.used/(1024**3),3),
+        "free_gb":round(usage.free/(1024**3),3),
+        "backup_auto_deletion":"disabled"
+    }),flush=True)
+    if usage.free < 512*1024*1024:
+        raise SystemExit("Storage preflight: insufficient free space, refusing database writes")
+    connection=sqlite3.connect("file:"+str(db_path)+"?mode=ro",uri=True,timeout=20)
+    try:
+        integrity=str(connection.execute("PRAGMA integrity_check").fetchone()[0])
+        fk=len(connection.execute("PRAGMA foreign_key_check").fetchall())
+    finally:
+        connection.close()
+    print(f"[storage-preflight-db] integrity={integrity} fk={fk}",flush=True)
+    if integrity.lower()!="ok" or fk:
+        raise SystemExit("Persistent DB integrity error: manual recovery required; backups preserved")
 
 # BODYMIND_EARLY_DB_FK_RECOVERY_R121_PREPREFLIGHT
 def _bodymind_early_db_fk_recovery_preflight():
-    db_path=pathlib.Path("/data/tenants/default/asd.db")
-    if not db_path.exists():
-        return
-    conn=sqlite3.connect(str(db_path),timeout=20)
-    try:
-        integrity=str(conn.execute("PRAGMA integrity_check").fetchone()[0])
-        fk=conn.execute("PRAGMA foreign_key_check").fetchall()
-    finally: conn.close()
-    if integrity.lower()=="ok" and not fk:
-        return
-    candidates=sorted(pathlib.Path("/data/release_backups/20261002_r81_stabilization").glob("*_pre_r81.db"),reverse=True)
-    for src in candidates:
-        chk=sqlite3.connect(str(src),timeout=20)
-        try:
-            ok=str(chk.execute("PRAGMA integrity_check").fetchone()[0]).lower()=="ok"
-            fk2=chk.execute("PRAGMA foreign_key_check").fetchall()
-        finally: chk.close()
-        if ok and not fk2:
-            q=pathlib.Path("/data/release_backups/20261003_r121_fk_recovery")
-            q.mkdir(parents=True,exist_ok=True)
-            stamp=__import__("datetime").datetime.now().strftime("%Y%m%d_%H%M%S")
-            shutil.copy2(db_path,q/(stamp+"_broken_fk.db"))
-            tmp=db_path.with_suffix(".r121_restore_tmp")
-            shutil.copy2(src,tmp)
-            os.replace(tmp,db_path)
-            print("[r121-preflight-recovery] restored="+str(src),flush=True)
-            return
-    raise SystemExit("R121 preflight recovery failed: no verified pre-R81 backup")
+    _bodymind_storage_preflight()
 
 _bodymind_early_db_fk_recovery_preflight()
 
-_bodymind_storage_preflight()
-
+# Storage integrity was checked above. No automatic backup pruning or DB restore.
 # BODYMIND_EARLY_SOURCE_RECOVERY_R120
 def _bodymind_early_source_recovery():
     pairs=[
@@ -162,51 +62,8 @@ runpy.run_path("/opt/bodymind/release_core_recovery_r151.py", run_name="__main__
 
 # BODYMIND_EARLY_DB_FK_RECOVERY_R121
 def _bodymind_early_db_fk_recovery():
-    db_path=pathlib.Path("/data/tenants/default/asd.db")
-    if not db_path.exists():
-        return
-    conn=sqlite3.connect(str(db_path),timeout=20)
-    try:
-        integrity=str(conn.execute("PRAGMA integrity_check").fetchone()[0])
-        fk=conn.execute("PRAGMA foreign_key_check").fetchall()
-    finally:
-        conn.close()
-    if integrity.lower()=="ok" and not fk:
-        print("[r121-db-recovery] DB already healthy",flush=True)
-        return
-    # The failed deployment log proves R81 introduced the FK violation immediately
-    # after creating document 215 for deleted athlete id 37. Restore the newest
-    # pre-R81 verified snapshot only; never guess or rebuild data.
-    candidates=sorted(pathlib.Path("/data/release_backups/20261002_r81_stabilization").glob("*_pre_r81.db"),reverse=True)
-    restored=False
-    for src in candidates:
-        chk=sqlite3.connect(str(src),timeout=20)
-        try:
-            ok=str(chk.execute("PRAGMA integrity_check").fetchone()[0]).lower()=="ok"
-            fk2=chk.execute("PRAGMA foreign_key_check").fetchall()
-        finally:
-            chk.close()
-        if ok and not fk2:
-            quarantine=pathlib.Path("/data/release_backups/20261003_r121_fk_recovery")
-            quarantine.mkdir(parents=True,exist_ok=True)
-            bad=quarantine/(__import__("datetime").datetime.now().strftime("%Y%m%d_%H%M%S")+"_broken_fk.db")
-            shutil.copy2(db_path,bad)
-            tmp=db_path.with_suffix(".r121_restore_tmp")
-            shutil.copy2(src,tmp)
-            os.replace(tmp,db_path)
-            restored=True
-            print("[r121-db-recovery] restored="+str(src)+" quarantined="+str(bad),flush=True)
-            break
-    if not restored:
-        raise SystemExit("R121 could not find a verified pre-R81 DB backup")
-    conn=sqlite3.connect(str(db_path),timeout=20)
-    try:
-        integrity=str(conn.execute("PRAGMA integrity_check").fetchone()[0])
-        fk=conn.execute("PRAGMA foreign_key_check").fetchall()
-    finally: conn.close()
-    if integrity.lower()!="ok" or fk:
-        raise SystemExit("R121 restore verification failed")
-    print("[r121-db-recovery] PASS integrity=ok fk=0",flush=True)
+    # Never replace newer production data with historical pre-R81 backups.
+    print("[r121-db-recovery] automatic restore disabled; manual recovery required",flush=True)
 
 _bodymind_early_db_fk_recovery()
 
