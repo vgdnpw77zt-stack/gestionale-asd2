@@ -1639,22 +1639,28 @@ def bodymind_quote_incassi_canonical():
     enroll_waived=0
     monthly_paid=0
     monthly_due=0
+    monthly_due_eur=0.0
+    monthly_paid_eur=0.0
+    monthly_residual_eur=0.0
     for x in truth.get('rows',[]):
         tid=int(x['tesserato_id'])
         ep=payments.get(int(x.get('iscrizione_payment_id') or 0))
         mp=payments.get(int(x.get('mensile_payment_id') or 0))
-        ep_ok=bool(x.get('iscrizione_pagata') and ep)
         ep_waived=(tid in waived_ids)
-        mp_ok=bool(x.get('mensile_pagato') and mp)
+        ep_ok=bool(x.get('iscrizione_pagata') and ep and float(ep['importo'] or 0)>0 and not ep_waived)
+        mp_ok=bool(x.get('mensile_pagato') and mp and float(mp['importo'] or 0)>0)
         q=quote_by_tid.get(tid,'__missing__')
-        month_applicable=(q is not None and q!='__missing__') or mp_ok
+        # Zero is an explicit non-due amount, not a paid installment.
+        _due_value=(float(q['importo_dovuto'] if q['importo_dovuto'] is not None else (q['importo_base'] or 0))
+                    if q is not None and q!='__missing__' else None)
+        month_applicable=(_due_value is not None and _due_value>0) or mp_ok
         if ep_ok: enroll_paid+=1
         if ep_waived: enroll_waived+=1
         else: enroll_required+=1
 
         ep_amount=(float(ep['importo'] or 0) if ep_ok else None)
         mp_paid_amount=(float(mp['importo'] or 0) if mp_ok else None)
-        mp_due_amount=(float(q['importo_dovuto'] if q['importo_dovuto'] is not None else (q['importo_base'] or 0)) if q not in (None,'__missing__') else None)
+        mp_due_amount=_due_value
         if mp_due_amount is not None:
             mp_display=mp_due_amount
         elif mp_ok:
@@ -1712,7 +1718,7 @@ def bodymind_quote_incassi_canonical():
         month_total=sum(float(p['importo'] or 0) for p in month_movs)
         residual=(max(float(mp_due_amount)-month_total,0.0) if mp_due_amount is not None else None)
         excess=(max(month_total-float(mp_due_amount),0.0) if mp_due_amount is not None else 0.0)
-        if not month_applicable and month_total<=0:
+        if (mp_due_amount is not None and mp_due_amount<=0 and month_total<=0) or (not month_applicable and month_total<=0):
             month_state='NON DOVUTO'; month_cls='na'
         elif mp_due_amount is not None:
             if month_total>=float(mp_due_amount):
@@ -1726,7 +1732,11 @@ def bodymind_quote_incassi_canonical():
         else:
             month_state='DA PAGARE'; month_cls='due'
         if month_applicable: monthly_due+=1
-        if month_state in ('PAGATO','REGISTRATO'): monthly_paid+=1
+        if month_state in ('PAGATO','REGISTRATO') and month_total>0: monthly_paid+=1
+        monthly_paid_eur += month_total
+        if month_applicable and mp_due_amount is not None:
+            monthly_due_eur += mp_due_amount
+            monthly_residual_eur += max(mp_due_amount-month_total,0.0)
         duplicate_warning=(
             "<div class='bmqi-warning'><b>"+str(len(month_movs))+" movimenti mensili per "+months[mese]+" "+str(anno)+"</b>"
             "<span>Incassato mensile "+_money(month_total)
@@ -1772,6 +1782,7 @@ def bodymind_quote_incassi_canonical():
       <section class='bmqi-summary'>
         <div><small>ISCRIZIONI {stagione}/{stagione+1}</small><strong>{enroll_paid}/{enroll_required}</strong><span>pagate · {enroll_waived} non dovute</span></div>
         <div><small>MENSILE · {months[mese].upper()} {anno}</small><strong>{monthly_paid}/{monthly_due}</strong><span>pagati</span></div>
+        <div><small>TOTALI MENSILE · {months[mese].upper()} {anno}</small><strong>{_money(monthly_paid_eur)}</strong><span>Incassato · Dovuto {_money(monthly_due_eur)} · Residuo {_money(monthly_residual_eur)}</span></div>
       </section>
       <section class='bmqi-list'>{''.join(rows)}</section>
     </main>
@@ -1889,7 +1900,7 @@ else:
 _quote_qa=r"""
 import json,re,sqlite3,sys
 sys.path.insert(0,'/data/top2_app');import app as _full
-from asd_app.core import app,bodymind_payment_truth
+from asd_app.core import app,bodymind_payment_truth,bodymind_explicit_annual_non_due
 app.config['TESTING']=True
 c=app.test_client()
 with c.session_transaction() as sess:sess.update({'logged':True,'logged_in':True,'username':'admin','display_name':'Quote QA','role':'admin','tenant_slug':'default','user_id':1,'is_admin':True,'admin':True})
@@ -1912,7 +1923,10 @@ try:
         tid=int(x['tesserato_id'])
         ep=db.execute('SELECT importo FROM pagamenti WHERE id=?',(int(x['iscrizione_payment_id']),)).fetchone() if x.get('iscrizione_payment_id') else None
         mp=db.execute('SELECT importo FROM pagamenti WHERE id=?',(int(x['mensile_payment_id']),)).fetchone() if x.get('mensile_payment_id') else None
-        expected[tid]=(bool(x['iscrizione_pagata'] and ep),('%.2f'%float(ep['importo'] or 0) if ep else ''),bool(x['mensile_pagato'] and mp),('%.2f'%float(mp['importo'] or 0) if mp else ''))
+        expected[tid]=(bool(x['iscrizione_pagata'] and ep and float(ep['importo'] or 0)>0 and not bodymind_explicit_annual_non_due(db,tid,2026)),
+                       ('%.2f'%float(ep['importo'] or 0) if ep and float(ep['importo'] or 0)>0 else ''),
+                       bool(x['mensile_pagato'] and mp and float(mp['importo'] or 0)>0),
+                       ('%.2f'%float(mp['importo'] or 0) if mp and float(mp['importo'] or 0)>0 else ''))
         movs=db.execute("SELECT * FROM pagamenti WHERE tesserato_id=? AND mese=10 AND anno=2026 ORDER BY id",(tid,)).fetchall()
         month=[p for p in movs if (('mensil' in str(p['causale'] or '').lower()) or str(p['causale'] or '').lower() in ('quota','quota_mensile')) and paid_row(p)]
         cash_expected[tid]=sum(float(p['importo'] or 0) for p in month)
