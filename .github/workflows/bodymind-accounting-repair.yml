@@ -21,4 +21,4 @@ jobs:
         with:
           python-version: '3.11'
       - name: Validate syntax and safe accounting semantics
-        run: python -m unittest discover -s tests -p 'test_bodymind_repair_guard.py' -v
+        run: python -m unittest discover -s tests -p 'test_bodymind_*.py' -v
