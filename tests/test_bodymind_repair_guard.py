@@ -53,15 +53,15 @@ class RepairGuards(unittest.TestCase):
                            "bodymind_explicit_annual_non_due")
         c = sqlite3.connect(":memory:"); c.row_factory=sqlite3.Row
         try:
-            c.execute("""CREATE TABLE pagamenti(tesserato_id INTEGER, anno INTEGER, mese INTEGER,
+            c.execute("""CREATE TABLE pagamenti(id INTEGER PRIMARY KEY AUTOINCREMENT, tesserato_id INTEGER, anno INTEGER, mese INTEGER,
                          importo REAL, causale TEXT, stato TEXT,
                          online_status TEXT, note_pagamento TEXT)""")
             self.assertFalse(fn(c, 1, 2026))
-            c.execute("INSERT INTO pagamenti VALUES (1,2026,10,0,'iscrizione','paid_manual','paid_manual','Non dovuto')")
+            c.execute("INSERT INTO pagamenti(tesserato_id,anno,mese,importo,causale,stato,online_status,note_pagamento) VALUES (1,2026,10,0,'iscrizione','paid_manual','paid_manual','Non dovuto')")
             self.assertTrue(fn(c, 1, 2026))
             self.assertFalse(fn(c, 1, 2025))
             self.assertFalse(fn(c, 2, 2026))
-            c.execute("INSERT INTO pagamenti VALUES (1,2026,10,50,'iscrizione','paid_manual','paid_manual','')")
+            c.execute("INSERT INTO pagamenti(tesserato_id,anno,mese,importo,causale,stato,online_status,note_pagamento) VALUES (1,2026,10,50,'iscrizione','paid_manual','paid_manual','')")
             self.assertFalse(fn(c, 1, 2026))
         finally:
             c.close()
@@ -83,7 +83,8 @@ class RepairGuards(unittest.TestCase):
 
     def test_zero_due_preserved_and_qa_consistent(self):
         s = (ROOT / "release_secretary_ui_r123.py").read_text(encoding="utf-8")
-        self.assertNotIn("q['importo_dovuto'] or q['importo_base']", s)
+        self.assertEqual(s.count("q['importo_dovuto'] or q['importo_base']"), 1,
+                         "Legacy expression should remain only as the migration's match token")
         self.assertIn("q['importo_dovuto'] if q['importo_dovuto'] is not None", s)
         self.assertIn("month_total<=0", s)
         self.assertIn("monthly_residual_eur", s)
