@@ -88,7 +88,9 @@ class RepairGuards(unittest.TestCase):
         self.assertIn("month_total<=0", s)
         self.assertIn("monthly_residual_eur", s)
         self.assertIn("NON DOVUTA", s)
-        self.assertIn("mensile_parziale", (ROOT / "release_operator_review_actions_r156.py").read_text(encoding="utf-8") if False else "mensile_parziale")
+        r159 = (ROOT / "release_operator_review_actions_r156.py").read_text(encoding="utf-8")
+        self.assertIn("BODYMIND_R159_SAFE_EXISTING_DUE", r159)
+        self.assertIn("_already_paid or _cancelled or _attached", r159)
 
 if __name__ == "__main__":
     unittest.main()
