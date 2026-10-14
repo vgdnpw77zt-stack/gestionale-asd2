@@ -20,7 +20,10 @@ from pathlib import Path, PurePosixPath
 DB = "tenants/default/asd.db"
 ROOTS = ("tenants", "onboarding_docs", "signatures", "user_static",
          "incoming", "uploads", "documents", "documenti", "attachments",
-         "verbali", "media", "top2_app")
+         "verbali", "media", "top2_app", "pdf", "release_backups",
+         "migration_backups", "operator_backups", "operator_upload_jobs",
+         "release_packages", "database", "config", "logs")
+EXCLUDED_DIRS = {"backups", "__pycache__", ".cache", ".tmp"}
 FORMAT = "bodymind-volume-archive-v1"
 
 
@@ -34,7 +37,9 @@ def _sha(file):
 
 def _path(name):
     p = PurePosixPath(name)
-    if not name or p.is_absolute() or "\\" in name or ".." in p.parts or "." in p.parts:
+    if (not name or p.is_absolute() or "\\" in name or "\x00" in name
+            or any(part in ("", ".", "..") for part in name.split("/"))
+            or ":" in p.parts[0]):
         raise ValueError("Unsafe file path in archive")
     return name
 
@@ -62,6 +67,13 @@ def _sqlite(path):
 def _files(root):
     """Never follow symlinks outside the volume or copy live WAL/SHM files."""
     seen = set()
+    for file in sorted(root.iterdir()):
+        if file.is_symlink():
+            raise ValueError("Symlinked root entry blocked")
+        if file.is_file() and not file.name.endswith(("-wal", "-shm", "-journal")):
+            rel = _path(file.name)
+            seen.add(rel)
+            yield rel, file
     for prefix in ROOTS:
         base = root / prefix
         if not base.exists():
@@ -76,7 +88,7 @@ def _files(root):
                 file = Path(path) / name
                 if file.is_symlink():
                     raise ValueError("Symlinked user file blocked")
-                if not file.is_file() or name.endswith(("-wal", "-shm")):
+                if not file.is_file() or name.endswith(("-wal", "-shm", "-journal")):
                     continue
                 rel = _path(file.relative_to(root).as_posix())
                 if rel == DB or rel in seen:
@@ -108,7 +120,14 @@ def _missing_docs(root):
             if not raw or raw.startswith(("https://", "http://")):
                 continue
             p = Path(raw)
-            alternatives = [p] if p.is_absolute() else [b / p for b in bases]
+            if p.is_absolute():
+                alternatives = [p]
+                # Relocate known production paths for an offline audit; never
+                # guess by basename or rewrite legitimate names containing '..'.
+                if raw.startswith("/data/"):
+                    alternatives.append(root / raw[len("/data/"):])
+            else:
+                alternatives = [b / p for b in bases]
             found = False
             for candidate in alternatives:
                 try:
@@ -135,13 +154,16 @@ def audit(root):
     files = list(_files(root))
     # Fail closed rather than silently omitting an unrecognized user-doc root.
     known = {x.split("/", 1)[0] for x in ROOTS}
-    exempt = {"release_backups", "__pycache__", ".cache", ".tmp"}
+    exempt = EXCLUDED_DIRS
     untracked = sorted(x.name for x in root.iterdir()
                        if x.is_dir() and x.name not in known | exempt)
     return {"integrity": "ok", "foreign_keys": 0, "tables": totals,
             "document_references_missing": docs, "files": len(files),
             "bytes": sum(p.stat().st_size for _, p in files),
             "untracked_directories": untracked,
+            "excluded_directories": sorted(x.name for x in root.iterdir()
+                                           if x.is_dir() and x.name in exempt),
+            "excluded_file_suffixes": ["-wal", "-shm", "-journal"],
             "roots": [x for x in ROOTS if (root / x).exists()]}
 
 
@@ -213,10 +235,17 @@ def verify(path):
         if m.get("format") != FORMAT:
             raise ValueError("Unknown backup format")
         members = {x["name"] for x in m["files"]}
+        if len(members) != len(m["files"]):
+            raise ValueError("Duplicate manifest entries")
         if set(names) != members | {"manifest.json"} or "database/asd.db" not in members:
             raise ValueError("Incomplete manifest")
         for entry in m["files"]:
             _path(entry["name"])
+            name = entry["name"]
+            if name != "database/asd.db" and not name.startswith("data/"):
+                raise ValueError("Invalid restoration path")
+            if name == "data/" + DB:
+                raise ValueError("Conflicting active database in archive")
             h = hashlib.sha256()
             size = 0
             with package.open(entry["name"]) as f:
@@ -238,6 +267,8 @@ def verify(path):
 
 def restore_into_empty(archive, target):
     """Recovery to a NEW offline volume only. NEVER clobber production."""
+    if Path(target).is_symlink():
+        raise ValueError("Symlinked restore destination blocked")
     target = Path(target).resolve()
     if target.exists() and any(target.iterdir()):
         raise FileExistsError("Restore destination must be EMPTY")

@@ -1,5 +1,7 @@
 """Synthetic archive verification tests: production database is never opened."""
 import sqlite3
+import hashlib
+import json
 import tempfile
 import unittest
 import zipfile
@@ -74,6 +76,74 @@ class ArchiveGuardTests(unittest.TestCase):
                 dst.writestr(member, data)
         with self.assertRaisesRegex(ValueError, "Checksum mismatch"):
             verify(bad)
+
+    def test_historical_roots_and_literal_dots_survive_round_trip(self):
+        extra = ['pdf/receipt.pdf', 'release_backups/pre_release.db',
+                 'migration_backups/old.db', 'operator_upload_jobs/queued.pdf',
+                 'operator_backups/old.db', 'release_packages/runtime.zip',
+                 'database/asd.db', 'asd.db', '.secret_key']
+        for name in extra:
+            p = self.live / name
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(b'historical bytes: ' + name.encode())
+        renamed = self.document.with_name('Name..pdf')
+        self.document.rename(renamed)
+        con = sqlite3.connect(self.live / 'tenants/default/asd.db')
+        con.execute("UPDATE documenti SET filename=?", ('/data/' + renamed.relative_to(self.live).as_posix(),))
+        con.commit(); con.close()
+        (self.live / 'backups').mkdir()
+        (self.live / 'backups/previous.zip').write_bytes(b'excluded backup')
+        archive = self.root / 'roundtrip.zip'
+        create(self.live, archive)
+        report = verify(archive)
+        self.assertEqual(report['audit']['excluded_directories'], ['backups'])
+        restored = self.root / 'restored'
+        restore_into_empty(archive, restored)
+        for name in extra:
+            self.assertEqual((restored / name).read_bytes(), (self.live / name).read_bytes())
+        self.assertEqual((restored / renamed.relative_to(self.live)).read_bytes(), renamed.read_bytes())
+        self.assertEqual(audit(restored)['document_references_missing']['visible'], [])
+        self.assertEqual(report['database']['pagamenti'], 1)
+
+    def test_wal_transactions_are_in_active_database_snapshot(self):
+        con = sqlite3.connect(self.live / 'tenants/default/asd.db')
+        self.addCleanup(con.close)
+        con.execute('PRAGMA journal_mode=WAL')
+        con.execute('INSERT INTO pagamenti VALUES(2,14)')
+        con.commit()
+        archive = self.root / 'wal.zip'
+        create(self.live, archive)
+        self.assertEqual(verify(archive)['database']['pagamenti'], 2)
+        restored = self.root / 'wal_restore'
+        restore_into_empty(archive, restored)
+        check = sqlite3.connect(restored / 'tenants/default/asd.db')
+        self.assertEqual(check.execute('SELECT count(*) FROM pagamenti').fetchone()[0], 2)
+        check.close()
+
+    def test_invalid_restore_namespace_rejected_before_target_creation(self):
+        good = self.root / 'good.zip'; create(self.live, good)
+        for name in ['evil.txt', 'data/tenants/default/asd.db', 'data/../escape',
+                     'data//ambiguous', 'data/./ambiguous']:
+            with self.subTest(name=name):
+                bad = self.root / 'bad.zip'
+                with zipfile.ZipFile(good) as src, zipfile.ZipFile(bad, 'w') as dst:
+                    m = json.loads(src.read('manifest.json'))
+                    for member in src.namelist():
+                        if member != 'manifest.json': dst.writestr(member, src.read(member))
+                    data = b'bad'
+                    dst.writestr(name, data)
+                    m['files'].append({'name': name, 'size': len(data), 'sha256': hashlib.sha256(data).hexdigest()})
+                    dst.writestr('manifest.json', json.dumps(m))
+                target = self.root / 'must_not_exist'
+                with self.assertRaises(ValueError): restore_into_empty(bad, target)
+                self.assertFalse(target.exists())
+
+    def test_symlinked_restore_destination_is_rejected(self):
+        archive = self.root / 'safe.zip'; create(self.live, archive)
+        actual = self.root / 'actual'; actual.mkdir()
+        link = self.root / 'link'; link.symlink_to(actual, target_is_directory=True)
+        with self.assertRaises(ValueError): restore_into_empty(archive, link)
+        self.assertEqual(list(actual.iterdir()), [])
 
 
 if __name__ == "__main__":
