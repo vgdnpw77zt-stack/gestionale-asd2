@@ -102,7 +102,56 @@ def prepare_monthly(conn, tid, month, year, amount, payment_id=0, note=''):
     return None, cause
 
 
+def payment_form_error(message):
+    """Keep rejected input visible, without putting private notes in a URL/cookie."""
+    from flask import request, make_response
+    from html import escape
+    from urllib.parse import urlencode
+    def value(name):
+        return escape(str(request.form.get(name) or '')[:1000], quote=True)
+    hidden=''.join("<input type='hidden' name='"+name+"' value='"+value(name)+"'>"
+                   for name in ('csrf_token','tesserato_id','tipo','payment_id','stagione','mese','anno'))
+    target='/pagamenti?'+urlencode(dict(vista='mensili',mese=request.form.get('mese',''),
+        anno=request.form.get('anno',''),tesserato_id=request.form.get('tesserato_id',''),
+        payment_id=request.form.get('payment_id',''),azione='registra',tipo='mensile'))
+    options=''.join("<option"+(" selected" if request.form.get('metodo_pagamento')==x else "")+">"+escape(x)+"</option>"
+                    for x in ('contanti','bonifico','carta/SumUp','altro'))
+    html=f"""<!doctype html><html lang="it"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Correggi pagamento · BodyMind</title>
+<style>body{{font:17px system-ui;background:#f5f2f7;color:#292032;margin:0}}main{{max-width:640px;margin:24px auto;padding:24px;background:white;border-radius:16px}}label{{display:block;margin:16px 0}}input,textarea,select,button{{box-sizing:border-box;width:100%;padding:12px;font:inherit}}[role=alert]{{border-left:5px solid #b42318;padding:16px;background:#fff0ed}}button{{background:#612e76;color:white;border:0;border-radius:8px}}a{{display:block;margin-top:20px}}</style></head>
+<body><main><h1>Pagamento non salvato</h1><p role="alert">{escape(str(message))}</p>
+<p>I dati inseriti sono conservati qui sotto. Controlla il messaggio e correggi i dati prima di salvare.</p>
+<form method="post" action="/pagamenti/registra-unico">{hidden}
+<label>Importo concordato €<input name="importo" type="number" step="0.01" min="0.01" required value="{value('importo')}"></label>
+<label>Data<input name="data" type="date" required value="{value('data')}"></label>
+<label>Metodo<select name="metodo_pagamento">{options}</select></label>
+<label>Causale / motivazione (obbligatoria per una correzione)<textarea name="note_pagamento" rows="3" maxlength="1000" required placeholder="Es. accordo presenze, sconto concordato">{value('note_pagamento')}</textarea></label>
+<p>La rettifica sostituisce automaticamente il pagamento e la ricevuta, conservando gli originali annullati nello storico.</p>
+<button type="submit">Salva pagamento e ricevuta</button></form>
+<a href="{escape(target,quote=True)}">Torna al modulo pagamento</a></main></body></html>"""
+    response=make_response(html,422)
+    response.headers['Cache-Control']='no-store'
+    return response
+
+
 def patch_core(source):
+    marker='# BODYMIND_CANCELLED_MONTHLY_REPAIR_4'
+    if marker in source:
+        return source
+    result=_patch_core_v3(source)
+    old="return redirect_with_message('/pagamenti?vista=mensili&mese='+str(mese)+'&anno='+str(anno)+'&tesserato_id='+str(tid),str(exc),'error')"
+    if result.count(old)!=1:
+        raise ValueError('Unexpected validation handler; no patch applied')
+    result=result.replace(old,"from .bodymind_cancelled_monthly_repair import payment_form_error\n                return payment_form_error(str(exc))",1)
+    result=result.replace('# BODYMIND_CANCELLED_MONTHLY_REPAIR_3',marker,1)
+    result=result.replace("response.headers['X-BodyMind-Monthly-Repair'] = '3'", "response.headers['X-BodyMind-Monthly-Repair'] = '4'")
+    result=result.replace("Motivazione importo / note<textarea name='note_pagamento' rows='2'",
+        "Causale / motivazione<textarea name='note_pagamento' rows='2' maxlength='1000' {'required' if action_tipo=='mensile' and pid else ''}")
+    compile(result,'<monthly-form-validation-v4>','exec')
+    return result
+
+
+def _patch_core_v3(source):
     marker='# BODYMIND_CANCELLED_MONTHLY_REPAIR_3'
     if marker in source:
         return source
@@ -270,8 +319,8 @@ def main():
             time.sleep(1)
             try:
                 with urlopen('http://127.0.0.1:8080/login',timeout=1) as response:
-                    if response.status==200 and response.headers.get('X-BodyMind-Monthly-Repair')=='3':
-                        print('ONLINE: HTTP 200, correzione pagamento e ricevuta versione 3 caricata',flush=True)
+                    if response.status==200 and response.headers.get('X-BodyMind-Monthly-Repair')=='4':
+                        print('ONLINE: HTTP 200, modulo pagamento versione 4 caricato; salvataggio reale da verificare',flush=True)
                         return
             except Exception:
                 pass
@@ -284,7 +333,7 @@ def main():
             time.sleep(1)
             try:
                 with urlopen('http://127.0.0.1:8080/login',timeout=1) as response:
-                    if response.status==200 and response.headers.get('X-BodyMind-Monthly-Repair')!='3':
+                    if response.status==200 and response.headers.get('X-BodyMind-Monthly-Repair')!='4':
                         raise SystemExit('ROLLBACK verificato: sito precedente HTTP 200')
             except (OSError,TimeoutError):
                 pass

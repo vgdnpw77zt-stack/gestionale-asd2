@@ -166,20 +166,41 @@ with tempfile.TemporaryDirectory(prefix='bodymind-full-test-') as tmp:
     with client.session_transaction() as s:s.update(logged=True,role='admin',username='isolated-test',tenant_slug='default')
     r=client.post('/pagamenti/registra-unico',data={**form,'csrf_token':'invalid'})
     assert r.status_code==400
+    # Reproduce the production failure: amount changed, reason omitted.
+    from html.parser import HTMLParser
+    class Fields(HTMLParser):
+        def __init__(self):super().__init__();self.values={}
+        def handle_starttag(self,tag,attrs):
+            attrs=dict(attrs)
+            if tag=='input' and attrs.get('name'):self.values[attrs['name']]=attrs.get('value','')
+    r=client.post('/pagamenti/registra-unico',data={**form,'note_pagamento':''})
+    assert r.status_code==422 and not r.location
+    assert 'motivazione' in r.get_data(as_text=True)
+    fields=Fields();fields.feed(r.get_data(as_text=True))
+    for key in ('importo','data','csrf_token','tesserato_id','mese','anno'):
+        assert fields.values[key]==form[key], (key,fields.values)
+    assert r.headers['Cache-Control']=='no-store'
     for tid in (14,19):
         form['tesserato_id']=str(tid)
         r=client.post('/pagamenti/registra-unico',data=form)
         assert r.status_code==303 and 'salvato=1' in r.location
-        assert r.headers.get('X-BodyMind-Monthly-Repair')=='3'
+        assert r.headers.get('X-BodyMind-Monthly-Repair')=='4'
         r=client.post('/pagamenti/registra-unico',data=form)
-        assert 'salvato=1' not in r.location
+        assert 'salvato=1' not in (r.location or '')
     c=sqlite3.connect(data/'tenants/default/asd.db')
     assert c.execute('select count(*) from pagamenti').fetchone()[0]==129
     assert c.execute('select count(*) from ricevute').fetchone()[0]==121
     pid=c.execute("SELECT id FROM pagamenti WHERE tesserato_id=14 AND causale='mensile_reincasso_1'").fetchone()[0]
     rid=c.execute('SELECT id FROM ricevute WHERE pagamento_id=?',(pid,)).fetchone()[0]
     form.update(tesserato_id='14',payment_id=str(pid),importo='42.35',note_pagamento='Correzione importo concordato')
-    r=client.post('/pagamenti/registra-unico',data=form)
+    r=client.post('/pagamenti/registra-unico',data={**form,'note_pagamento':''})
+    assert r.status_code==422
+    assert c.execute('SELECT annullata FROM ricevute WHERE id=?',(rid,)).fetchone()[0]==0
+    fields=Fields();fields.feed(r.get_data(as_text=True))
+    assert fields.values['payment_id']==str(pid)
+    assert fields.values['importo']=='42.35'
+    # Submit the fields actually preserved by the error form.
+    r=client.post('/pagamenti/registra-unico',data={**fields.values,'note_pagamento':'Correzione importo concordato','metodo_pagamento':'contanti'})
     assert r.status_code==303 and 'salvato=1' in r.location
     assert c.execute('SELECT annullata FROM ricevute WHERE id=?',(rid,)).fetchone()[0]==1
     newrid=c.execute("SELECT r.id FROM ricevute r JOIN pagamenti p ON p.id=r.pagamento_id WHERE p.tesserato_id=14 AND p.mese=10 AND p.anno=2026 AND p.stato='paid_manual'").fetchone()[0]
@@ -236,7 +257,8 @@ print('Full core / authentication / CSRF / duplicate requests: OK')
                 self.assertEqual(response.status_code,303)
                 self.assertIn('salvato=1',response.location)
                 response=client.post('/pagamenti/registra-unico',data=data)
-                self.assertIn('errore=verifica',response.location)
+                self.assertEqual(response.status_code,422)
+                self.assertIn('Movimento gia presente',response.get_data(as_text=True))
             with db() as c:
                 self.assertEqual(oldpayments,[tuple(r) for r in c.execute('SELECT * FROM pagamenti ORDER BY id LIMIT ?',(len(oldpayments),))])
                 self.assertEqual(oldreceipts,[tuple(r) for r in c.execute('SELECT * FROM ricevute ORDER BY id LIMIT ?',(len(oldreceipts),))])
@@ -268,7 +290,7 @@ print('Full core / authentication / CSRF / duplicate requests: OK')
             response=client.post('/pagamenti/registra-unico',data=correction)
             self.assertIn('salvato=1',response.location)
             response=client.post('/pagamenti/registra-unico',data=correction)
-            self.assertNotIn('salvato=1',response.location)
+            self.assertNotIn('salvato=1',response.location or '')
             with db() as c:
                 previous=c.execute('SELECT importo,annullata,numero_progressivo FROM ricevute WHERE id=?',(rid,)).fetchone()
                 self.assertEqual(tuple(previous),(30,1,maxprogress+1))

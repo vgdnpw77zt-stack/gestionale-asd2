@@ -1,3 +1,28 @@
+## Current status — v4, 2026-10-15
+
+Production runtime logs show monthly validation rejected an empty reason. The
+v3 redirect appended a second question mark, losing form context and hiding the
+validation message. HTTP 200 after reloading was not evidence of a successful
+payment edit. V4 is prepared, not yet installed or verified online.
+
+V4 returns an explicit HTTP 422 form with escaped original submitted values,
+CSRF token, payment ID and actionable reason. No notes in query strings or
+cookies. Existing monthly correction form labels the reason clearly and requires
+it in the browser. Accounting logic remains v3: atomic cancellation/replacement
+with a new receipt, preserving historical numbers and originals.
+
+Verified against actual v3 core SHA256
+`ac6d7bf745a95141220e468d1b83a32c226811492100c332ff20a3a1ac5b18a5`.
+11 isolated tests cover missing reason, retained inputs, resubmission, resulting
+receipt PDF amount, permissions, CSRF, concurrency and transactional rollback.
+The external archive and restoration evidence below remain historical; do not
+restore that DB over payments recorded later. Installer backs up current core
+and helper; reload health failure restores code only. Direct SSH from this
+assistant is unavailable; operator installation is required.
+
+---
+Historical release notes follow; statements are scoped to each earlier release.
+
 # Monthly cancellation repair — 2026-10-14
 
 Prepared against the running core snapshot SHA256
