@@ -53,3 +53,24 @@ Diagnosticato a runtime con output V6.1:
 **Effetto deterministico:** V6.1 impedisce qualsiasi modifica del mensile ottobre 2026 per questa tesserata finché non viene riconciliato il doppio movimento; questo è un blocco contabile intenzionale, non prova di un errore JavaScript. Il blocco non dovrebbe essere rimosso senza un flusso di revisione esplicito che preservi ricevute e audit. Determinare con la segreteria se #35 e #36 rappresentino due incassi reali o se il secondo sia una rettifica/doppione. Gli HTTP POST 303 rilevati non riportano il tesserato_id e non sono attribuibili con certezza.
 
 **Nessuna scrittura/modifica contabile effettuata qui.**
+
+
+## A223 — Regole unificate di pagamento (15/10/2026)
+
+Preparata la release `bodymind_a223_pagamenti_unificati_v7.py` basata **esclusivamente** sulle tre versioni sorgente V6.1 effettivamente installate:
+
+| Runtime | SHA V6.1 atteso | SHA proposto A223 |
+|---|---|---|
+| `/data/top2_app/asd_app/core.py` | `b85e28c3f47d1eb83cf6ad3583e195758a6126f8cab916dc90e8ceafd9a616dc` | `aeb678d31e3dda88fc0fc83d9cab7fbd416733c4e89479929638d812e71b2120` |
+| `bodymind_one_step_monthlies.py` | `93083ee1efa738ab5d2fe4a42f067d9b8a49a1c6a51c1a674be10504645bdd0c` | `4fa6bf824580f280992d601c0b8805cc76dd0eba5f79d2d81c394d4bdf667c00` |
+| `bodymind_enrollment_guard_v6.py` | `a87a21de737e69ea73db74b3d03276fa029069186aca00b549d8dcec37b9ebb3` | `0fecb24d7143a32080a513ad852a5166fba4b15c3cc2dc5a620754151b6b21bf` |
+
+**Regole richieste:** iscrizione base 50 EUR; mensile base 70 EUR, riduzioni es. 50 EUR con motivazione obbligatoria; correzioni annotate su movimenti esatti, ricevuta originale annullata solo se l'importo cambia; due pagamenti già attivi non vengono cancellati automaticamente.
+
+**Correzioni:** singola fonte `bodymind_payment_truth` non considera più saldata un'iscrizione da 1 EUR né un mensile da 50 EUR senza motivazione, segnala gruppi di più movimenti come da verificare; corregge il falso arretrato prima dell'ingresso registrato usando la funzione R159 esistente; il form richiede ID specifico se più movimenti risultano attivi; modifica nota mantenendo l'importo e la ricevuta se invariati; preserva validazioni CSV/CSRF e l'archivio.
+
+**Test locali:** 16 assert contabili/regole e 7 test del writer transazionale più due regressioni di note-only; simulazione installatore su volume e DB SQLite temporanei (CHECK ONLY, APPLY con copia SQLite, e rollback simulato) superata; `patch -p1 --dry-run` del diff sulle baseline superato. Non significa aver già collaudato la modifica sull'istanza autenticata online.
+
+**Importantissimo:** gli eventuali due incassi attivi possono essere due pagamenti reali o un errore. Non annullarli né fonderli automaticamente; verificare quelli di Fabiani/Annunziato/Frioli. Il rilascio del *codice* non modifica movimenti o ricevute esistenti e non ripulisce la banca dati.
+
+**INSTALLAZIONE:** script allegato all'interazione con utente; è in dry-run di default, con `--apply --reload` genera backup SQLite consistente + sorgenti e aggiorna solo tre file; health header `X-BodyMind-Payment-Flow: 7`. Non effettuare redeploy Railway: il comando di startup ancora da revisionare può sovrascrivere le patch volume. **PR ancora draft, non è un deploy.**
