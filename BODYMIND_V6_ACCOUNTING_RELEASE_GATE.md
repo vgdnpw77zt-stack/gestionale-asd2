@@ -61,9 +61,9 @@ Preparata la release `bodymind_a223_pagamenti_unificati_v7.py` basata **esclusiv
 
 | Runtime | SHA V6.1 atteso | SHA proposto A223 |
 |---|---|---|
-| `/data/top2_app/asd_app/core.py` | `b85e28c3f47d1eb83cf6ad3583e195758a6126f8cab916dc90e8ceafd9a616dc` | `aeb678d31e3dda88fc0fc83d9cab7fbd416733c4e89479929638d812e71b2120` |
-| `bodymind_one_step_monthlies.py` | `93083ee1efa738ab5d2fe4a42f067d9b8a49a1c6a51c1a674be10504645bdd0c` | `4fa6bf824580f280992d601c0b8805cc76dd0eba5f79d2d81c394d4bdf667c00` |
-| `bodymind_enrollment_guard_v6.py` | `a87a21de737e69ea73db74b3d03276fa029069186aca00b549d8dcec37b9ebb3` | `0fecb24d7143a32080a513ad852a5166fba4b15c3cc2dc5a620754151b6b21bf` |
+| `/data/top2_app/asd_app/core.py` | `b85e28c3f47d1eb83cf6ad3583e195758a6126f8cab916dc90e8ceafd9a616dc` | `4d94c26c66c67edc713440464ec879df79c38684d29143cfed47f96bd8b40294` |
+| `bodymind_one_step_monthlies.py` | `93083ee1efa738ab5d2fe4a42f067d9b8a49a1c6a51c1a674be10504645bdd0c` | `f554ceab9e160f7447e9bdd62c81c61ef0b4f8e13988813e9b11fcb43210b316` |
+| `bodymind_enrollment_guard_v6.py` | `a87a21de737e69ea73db74b3d03276fa029069186aca00b549d8dcec37b9ebb3` | `6398c5ec26b64135e1b2d368dad17f1ca7cd4a5624a4cac35ab8746371ad5c33` |
 
 **Regole richieste:** iscrizione base 50 EUR; mensile base 70 EUR, riduzioni es. 50 EUR con motivazione obbligatoria; correzioni annotate su movimenti esatti, ricevuta originale annullata solo se l'importo cambia; due pagamenti già attivi non vengono cancellati automaticamente.
 
@@ -74,3 +74,6 @@ Preparata la release `bodymind_a223_pagamenti_unificati_v7.py` basata **esclusiv
 **Importantissimo:** gli eventuali due incassi attivi possono essere due pagamenti reali o un errore. Non annullarli né fonderli automaticamente; verificare quelli di Fabiani/Annunziato/Frioli. Il rilascio del *codice* non modifica movimenti o ricevute esistenti e non ripulisce la banca dati.
 
 **INSTALLAZIONE:** script allegato all'interazione con utente; è in dry-run di default, con `--apply --reload` genera backup SQLite consistente + sorgenti e aggiorna solo tre file; health header `X-BodyMind-Payment-Flow: 7`. Non effettuare redeploy Railway: il comando di startup ancora da revisionare può sovrascrivere le patch volume. **PR ancora draft, non è un deploy.**
+
+
+**Revisione conclusiva A223:** rilevato e corretto anche il bug di matching `unpaid` tramite `if 'paid' in status`, che poteva segnalare erroneamente come incassati pagamenti non saldati. Non basta una data di pagamento: solo gli stati esplicitamente pagati sono accettati. Modulo iscrizione/mensile: la motivazione precedente non è riutilizzata automaticamente; è richiesta una nuova motivazione per rettifiche. Package allegato SHA256 `26e202dbb2a0efae1cdde2cef07eda9650b857e8e0226abefedd915f215b5bb4`. 17 assertions nel test di regole, 7 test writer, 2 note-only, dry-run/apply/rollback simulati. Nessuna installazione ancora avvenuta in produzione.
