@@ -71,3 +71,34 @@ test. The complete restored media tree is held by the user/on-server, not in
 the local HTTP fixture. Document audit finds two historical zero-byte PDFs and
 unresolved references in other document tables; these are preserved, not fixed.
 The broader backup UI, alert and document interventions remain open.
+
+
+## Version 2 — agreed monthly amount, 2026-10-15
+
+Version 1 was applied to the persistent code and reloaded in Gunicorn on
+2026-10-14. A real full monthly payment and its new progressive receipt were
+confirmed by read-only production query; cancelled history was preserved.
+The Railway image/startup pipeline remains unchanged.
+
+The user clarified that an entered amount is the total agreed monthly fee,
+not an instalment. Version 2 removes equality with the default price and
+requires a reason in the existing notes field when the amount changes.
+Positive amounts with at most two decimal places are accepted without any
+percentage rule. Zero/waived amounts do not generate receipts through this flow.
+The same SQLite transaction records old/new due and reason, keeps the base fee,
+updates the agreed due and discount, and creates the actual receipt. A failed
+save rolls back the fee change too. Issued payments/receipts remain protected.
+
+The installer upgrades the exact installed v1 core hash
+`dec06c52dfbe9a9e3159a6dd9cb36bb94db34901b6890459f333b306810c28ab`.
+It backs up both core and the old helper. Optional `--apply --reload` identifies
+one Gunicorn master, reloads it, and verifies HTTP 200 with the v2 response
+header. If health verification fails, it restores both code files and reloads
+the previous version; no database rollback is performed. A failure to confirm
+rollback health is reported explicitly.
+
+11 tests pass against reconstructed exact v1 source and an isolated DB copy,
+including arbitrary amounts, increases, reductions, missing reasons, failed
+save rollback, protected receipts, simultaneous saves, real Flask writer and
+full core/session/CSRF checks with outbound connections disabled.
+V2 production installation and verification are still pending.

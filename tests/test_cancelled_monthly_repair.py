@@ -21,12 +21,13 @@ class CancelledMonthlyTests(unittest.TestCase):
         self.path = Path(self.tmp.name) / 'test.db'
         c = self.connect()
         c.executescript('''
-          CREATE TABLE quote_mensili(tesserato_id,mese,anno,importo_dovuto,stato);
+          CREATE TABLE quote_mensili(tesserato_id,mese,anno,importo_dovuto,stato,
+            importo_base REAL DEFAULT 50,sconto REAL DEFAULT 0,note TEXT,updated_at TEXT);
           CREATE TABLE pagamenti(id INTEGER PRIMARY KEY,tesserato_id,mese,anno,
             importo,causale,stato,online_status,ricevuta_id,paid_at,
             UNIQUE(tesserato_id,mese,anno,causale));
           CREATE TABLE ricevute(id INTEGER PRIMARY KEY,pagamento_id,annullata);
-          INSERT INTO quote_mensili VALUES(14,10,2026,50,'dovuto');
+          INSERT INTO quote_mensili(tesserato_id,mese,anno,importo_dovuto,stato) VALUES(14,10,2026,50,'dovuto');
           INSERT INTO pagamenti VALUES(37,14,10,2026,50,'mensile','annullato','annullato',NULL,NULL);
           INSERT INTO ricevute VALUES(1907,37,1);
         ''')
@@ -47,6 +48,35 @@ class CancelledMonthlyTests(unittest.TestCase):
             self.assertIsNone(old)
             self.assertEqual(cause,'mensile_reincasso_1')
             self.assertEqual(before,[tuple(r) for r in c.execute('SELECT * FROM pagamenti')])
+
+    def test_arbitrary_agreed_amount_preserves_base_and_reason(self):
+        for amount in (0.01,30,37.65,65,123.45):
+            c=self.connect()
+            try:
+                repair.prepare_monthly(c,14,10,2026,amount,note='Accordo in base alle presenze')
+                row=c.execute('SELECT * FROM quote_mensili').fetchone()
+                self.assertEqual(row['importo_dovuto'],amount)
+                self.assertEqual(row['importo_base'],50)
+                self.assertEqual(row['sconto'],max(0,50-amount))
+                self.assertIn('Accordo in base alle presenze',row['note'])
+                self.assertIn('50.00 ->',row['note'])
+            finally:
+                c.rollback();c.close()
+
+    def test_failed_save_rolls_back_fee_adjustment(self):
+        c=self.connect()
+        repair.prepare_monthly(c,14,10,2026,30,note='Sconto concordato')
+        c.rollback()
+        self.assertEqual(c.execute('SELECT importo_dovuto FROM quote_mensili').fetchone()[0],50)
+        c.close()
+
+    def test_issued_payment_blocks_fee_change(self):
+        with self.connect() as c:
+            c.execute("UPDATE pagamenti SET stato='paid_manual',online_status='paid_manual'")
+            c.commit()
+            with self.assertRaises(repair.PaymentReviewRequired):
+                repair.prepare_monthly(c,14,10,2026,30,note='Sconto')
+            self.assertEqual(c.execute('SELECT importo_dovuto FROM quote_mensili').fetchone()[0],50)
 
     def test_cancelled_with_live_receipt_is_blocked(self):
         with self.connect() as c:
@@ -128,7 +158,7 @@ with tempfile.TemporaryDirectory(prefix='bodymind-full-test-') as tmp:
     core.wizard_required=lambda:False
     core.app.config['TESTING']=True
     client=core.app.test_client()
-    form={'tipo':'mensile','tesserato_id':'14','mese':'10','anno':'2026','importo':'50','data':'2026-10-14','metodo_pagamento':'contanti','csrf_token':'test-csrf'}
+    form={'tipo':'mensile','tesserato_id':'14','mese':'10','anno':'2026','importo':'37.65','note_pagamento':'Accordo presenze','data':'2026-10-14','metodo_pagamento':'contanti','csrf_token':'test-csrf'}
     with client.session_transaction() as s:s.update(_csrf_token='test-csrf')
     r=client.post('/pagamenti/registra-unico',data=form)
     assert r.status_code==302 and '/login' in r.location
@@ -139,6 +169,7 @@ with tempfile.TemporaryDirectory(prefix='bodymind-full-test-') as tmp:
         form['tesserato_id']=str(tid)
         r=client.post('/pagamenti/registra-unico',data=form)
         assert r.status_code==303 and 'salvato=1' in r.location
+        assert r.headers.get('X-BodyMind-Monthly-Repair')=='2'
         r=client.post('/pagamenti/registra-unico',data=form)
         assert 'salvato=1' not in r.location
     c=sqlite3.connect(data/'tenants/default/asd.db')
@@ -182,9 +213,10 @@ print('Full core / authentication / CSRF / duplicate requests: OK')
                 oldreceipts=[tuple(r) for r in c.execute('SELECT * FROM ricevute ORDER BY id')]
                 maxprogress=c.execute('SELECT MAX(numero_progressivo) FROM ricevute WHERE anno_progressivo=2026').fetchone()[0]
             client=app.test_client()
-            for tid in (14,19):
+            for tid,amount in ((14,'30'),(19,'65')):
                 data={'tesserato_id':str(tid),'tipo':'mensile','mese':'10','anno':'2026',
-                      'importo':'50','metodo_pagamento':'contanti','data':'2026-10-14','payment_id':'0'}
+                      'importo':amount,'note_pagamento':'Importo concordato in base alle presenze',
+                      'metodo_pagamento':'contanti','data':'2026-10-14','payment_id':'0'}
                 response=client.post('/pagamenti/registra-unico',data=data)
                 self.assertEqual(response.status_code,303)
                 self.assertIn('salvato=1',response.location)
@@ -196,6 +228,12 @@ print('Full core / authentication / CSRF / duplicate requests: OK')
                 self.assertEqual(c.execute('SELECT COUNT(*) FROM pagamenti').fetchone()[0],len(oldpayments)+2)
                 self.assertEqual(c.execute('SELECT COUNT(*) FROM ricevute').fetchone()[0],len(oldreceipts)+2)
                 self.assertEqual(c.execute('SELECT MAX(numero_progressivo) FROM ricevute WHERE anno_progressivo=2026').fetchone()[0],maxprogress+2)
+                for tid,amount in ((14,30),(19,65)):
+                    q=c.execute('SELECT importo_base,importo_dovuto,stato,note FROM quote_mensili WHERE tesserato_id=? AND mese=10 AND anno=2026',(tid,)).fetchone()
+                    self.assertEqual(tuple(q)[:3],(50,amount,'pagato'))
+                    self.assertIn('Importo concordato in base alle presenze',q['note'])
+                    r=c.execute("SELECT r.importo FROM ricevute r JOIN pagamenti p ON p.id=r.pagamento_id WHERE p.tesserato_id=? AND p.causale='mensile_reincasso_1'",(tid,)).fetchone()
+                    self.assertEqual(r[0],amount)
                 self.assertEqual(c.execute('PRAGMA integrity_check').fetchone()[0],'ok')
                 self.assertEqual(c.execute('PRAGMA foreign_key_check').fetchall(),[])
 
