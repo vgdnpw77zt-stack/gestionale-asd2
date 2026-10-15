@@ -153,6 +153,7 @@ with tempfile.TemporaryDirectory(prefix='bodymind-full-test-') as tmp:
     def deny(*a,**k):raise RuntimeError('Outbound network disabled in test')
     socket.socket.connect=deny;socket.create_connection=deny
     import asd_app.core as core
+    import asd_app.routes_ricevute
     assert core.DATA_DIR==data
     core.current_license_status=lambda:(True,{'test_fixture':True},data/'license.json')
     core.wizard_required=lambda:False
@@ -169,12 +170,26 @@ with tempfile.TemporaryDirectory(prefix='bodymind-full-test-') as tmp:
         form['tesserato_id']=str(tid)
         r=client.post('/pagamenti/registra-unico',data=form)
         assert r.status_code==303 and 'salvato=1' in r.location
-        assert r.headers.get('X-BodyMind-Monthly-Repair')=='2'
+        assert r.headers.get('X-BodyMind-Monthly-Repair')=='3'
         r=client.post('/pagamenti/registra-unico',data=form)
         assert 'salvato=1' not in r.location
     c=sqlite3.connect(data/'tenants/default/asd.db')
     assert c.execute('select count(*) from pagamenti').fetchone()[0]==129
     assert c.execute('select count(*) from ricevute').fetchone()[0]==121
+    pid=c.execute("SELECT id FROM pagamenti WHERE tesserato_id=14 AND causale='mensile_reincasso_1'").fetchone()[0]
+    rid=c.execute('SELECT id FROM ricevute WHERE pagamento_id=?',(pid,)).fetchone()[0]
+    form.update(tesserato_id='14',payment_id=str(pid),importo='42.35',note_pagamento='Correzione importo concordato')
+    r=client.post('/pagamenti/registra-unico',data=form)
+    assert r.status_code==303 and 'salvato=1' in r.location
+    assert c.execute('SELECT annullata FROM ricevute WHERE id=?',(rid,)).fetchone()[0]==1
+    newrid=c.execute("SELECT r.id FROM ricevute r JOIN pagamenti p ON p.id=r.pagamento_id WHERE p.tesserato_id=14 AND p.mese=10 AND p.anno=2026 AND p.stato='paid_manual'").fetchone()[0]
+    import asd_app.routes_ricevute
+    pdf=client.get('/ricevute/pdf/'+str(newrid))
+    assert pdf.status_code==200 and pdf.mimetype=='application/pdf', (pdf.status_code,pdf.mimetype)
+    from pypdf import PdfReader
+    import io
+    text=' '.join(page.extract_text() or '' for page in PdfReader(io.BytesIO(pdf.data)).pages)
+    assert '42.35' in text.replace(',','.'), 'Corrected amount missing from receipt PDF'
     c.close()
 print('Full core / authentication / CSRF / duplicate requests: OK')
 '''
@@ -236,6 +251,30 @@ print('Full core / authentication / CSRF / duplicate requests: OK')
                     self.assertEqual(r[0],amount)
                 self.assertEqual(c.execute('PRAGMA integrity_check').fetchone()[0],'ok')
                 self.assertEqual(c.execute('PRAGMA foreign_key_check').fetchall(),[])
+            with db() as c:
+                pid=c.execute("SELECT id FROM pagamenti WHERE tesserato_id=14 AND causale='mensile_reincasso_1'").fetchone()[0]
+                rid=c.execute('SELECT id FROM ricevute WHERE pagamento_id=?',(pid,)).fetchone()[0]
+                c.execute("CREATE TRIGGER reject_new_receipt BEFORE INSERT ON ricevute BEGIN SELECT RAISE(ABORT,'simulated receipt failure'); END")
+            correction={'tesserato_id':'14','tipo':'mensile','mese':'10','anno':'2026',
+                        'importo':'37.65','note_pagamento':'Rettifica importo',
+                        'metodo_pagamento':'bonifico','data':'2026-10-14','payment_id':str(pid)}
+            response=client.post('/pagamenti/registra-unico',data=correction)
+            self.assertIn('errore=salvataggio',response.location)
+            with db() as c:
+                self.assertEqual(c.execute('SELECT annullata FROM ricevute WHERE id=?',(rid,)).fetchone()[0],0)
+                self.assertEqual(c.execute('SELECT stato FROM pagamenti WHERE id=?',(pid,)).fetchone()[0],'paid_manual')
+                self.assertEqual(c.execute('SELECT importo_dovuto FROM quote_mensili WHERE tesserato_id=14 AND mese=10 AND anno=2026').fetchone()[0],30)
+                c.execute('DROP TRIGGER reject_new_receipt')
+            response=client.post('/pagamenti/registra-unico',data=correction)
+            self.assertIn('salvato=1',response.location)
+            response=client.post('/pagamenti/registra-unico',data=correction)
+            self.assertNotIn('salvato=1',response.location)
+            with db() as c:
+                previous=c.execute('SELECT importo,annullata,numero_progressivo FROM ricevute WHERE id=?',(rid,)).fetchone()
+                self.assertEqual(tuple(previous),(30,1,maxprogress+1))
+                current=c.execute("SELECT p.importo,p.metodo_pagamento,r.importo,r.annullata,r.numero_progressivo FROM pagamenti p JOIN ricevute r ON r.pagamento_id=p.id WHERE p.tesserato_id=14 AND p.mese=10 AND p.anno=2026 AND p.stato='paid_manual'").fetchall()
+                self.assertEqual([tuple(r) for r in current],[(37.65,'bonifico',37.65,0,maxprogress+3)])
+                self.assertEqual(c.execute('SELECT COUNT(*) FROM pagamenti').fetchone()[0],len(oldpayments)+3)
 
 
 if __name__=='__main__':

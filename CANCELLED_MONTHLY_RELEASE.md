@@ -102,3 +102,27 @@ including arbitrary amounts, increases, reductions, missing reasons, failed
 save rollback, protected receipts, simultaneous saves, real Flask writer and
 full core/session/CSRF checks with outbound connections disabled.
 V2 production installation and verification are still pending.
+
+
+## Version 3 — correct an issued monthly payment and its receipt atomically
+
+An explicit edit of a settled monthly payment now automatically cancels the
+old movement and old receipt and inserts a replacement payment and receipt.
+Original amounts, receipt numbers and PDF files are preserved; the replacement
+gets the next progressive. Both versions are linked in payment notes. No manual
+second receipt operation is required. New registration still cannot overwrite
+an issued movement accidentally. Ambiguous, mismatched or already cancelled
+selections are rejected. The supplied note records the correction reason.
+
+The old cancellation, new agreed fee, replacement payment, receipt and links
+are one BEGIN IMMEDIATE transaction. A receipt-insertion failure rolls back
+all changes. A repeated correction of the old ID cannot create another receipt.
+
+11 expanded tests pass against the exact deployed v2 source, including a real
+HTTP edit of a settled payment, opening the corrected PDF and extracting its
+new amount, fault injection during receipt creation, rollback preservation,
+double submission and unchanged historical amounts/numbers. Installer upgrade
+and backup of both old code files were tested in an isolated directory.
+Input core SHA256:
+`3b4602e39779c2906295b9183d70c2a6f7c41e354d110161e5d01d174da22b89`.
+The response version header is now 3. V3 production application remains pending.

@@ -16,7 +16,7 @@ HEALTH_HOOK = '''
 
 @app.after_request
 def _bodymind_monthly_amount_release_v2(response):
-    response.headers['X-BodyMind-Monthly-Repair'] = '2'
+    response.headers['X-BodyMind-Monthly-Repair'] = '3'
     return response
 '''
 
@@ -58,7 +58,7 @@ def prepare_monthly(conn, tid, month, year, amount, payment_id=0, note=''):
     for row in rows:
         states = [str(row[k] or '').strip().lower() for k in ('stato', 'online_status')]
         receipts = conn.execute(
-            'SELECT id,annullata FROM ricevute WHERE pagamento_id=? OR id=?',
+            'SELECT id,annullata,pagamento_id FROM ricevute WHERE pagamento_id=? OR id=?',
             (row['id'], row['ricevuta_id'])).fetchall()
         if all(s in cancelled for s in states):
             if any(r['annullata'] != 1 for r in receipts):
@@ -70,11 +70,26 @@ def prepare_monthly(conn, tid, month, year, amount, payment_id=0, note=''):
         if len(candidates) != 1 or len(active) != 1:
             raise PaymentReviewRequired('Movimento selezionato non idoneo')
         row, states, receipts = candidates[0]
-        if (not all(s in pending for s in states) or receipts or row['ricevuta_id']
-                or row['paid_at']):
+        settled = {'paid_manual','closed_manual','pagato_online_verificato'}
+        if all(s in settled for s in states):
+            if not note:
+                raise PaymentReviewRequired('Indica nelle note la motivazione della correzione.')
+            if (len(receipts)!=1 or receipts[0]['pagamento_id']!=payment_id
+                    or receipts[0]['annullata']!=0):
+                raise PaymentReviewRequired('Collegamento ricevuta da verificare prima della correzione')
+            stamp=datetime.now().isoformat(timespec='seconds')
+            reason=f'Rettifica automatica pagamento #{payment_id}: {row["importo"]} -> {amount:.2f} EUR. {note}'
+            conn.execute("UPDATE pagamenti SET stato='annullato',online_status='annullato',updated_at=?,note_pagamento=COALESCE(note_pagamento,'') || char(10) || ? WHERE id=?",(stamp,reason,payment_id))
+            conn.execute('UPDATE ricevute SET annullata=1,annullata_motivo=?,updated_at=? WHERE id=?',(reason,stamp,receipts[0]['id']))
+            # Continue below to create a replacement with a fresh receipt and
+            # progressive, without modifying the original amounts or PDF.
+            active=[]
+        elif (not all(s in pending for s in states) or receipts or row['ricevuta_id']
+              or row['paid_at']):
             raise PaymentReviewRequired('Movimento incassato, con ricevuta o da verificare')
-        agree_amount()
-        return row, row['causale']
+        else:
+            agree_amount()
+            return row, row['causale']
     if active:
         raise PaymentReviewRequired('Movimento gia presente: selezionarlo e verificarne lo stato')
     used = {str(r['causale']) for r in rows}
@@ -88,6 +103,30 @@ def prepare_monthly(conn, tid, month, year, amount, payment_id=0, note=''):
 
 
 def patch_core(source):
+    marker='# BODYMIND_CANCELLED_MONTHLY_REPAIR_3'
+    if marker in source:
+        return source
+    result=_patch_core_v2(source)
+    result=result.replace('# BODYMIND_CANCELLED_MONTHLY_REPAIR_2',marker,1)
+    result=result.replace("response.headers['X-BodyMind-Monthly-Repair'] = '2'", "response.headers['X-BodyMind-Monthly-Repair'] = '3'")
+    call='existing,payment_causale=prepare_monthly(c,tid,mese,anno,importo,payment_id,note)'
+    if result.count(call)!=1:
+        raise ValueError('Ambiguous monthly writer')
+    result=result.replace(call,call+"\n                if payment_id and existing is None:\n                    note='Rettifica pagamento #'+str(payment_id)+' · '+note",1)
+    anchor='        c.execute("UPDATE pagamenti SET ricevuta_id=? WHERE id=?",(rid,pid))'
+    link='''
+        if tipo=='mensile' and payment_id and payment_id!=pid:
+            c.execute("UPDATE pagamenti SET note_pagamento=COALESCE(note_pagamento,'') || char(10) || ? WHERE id=?",
+                ('Sostituito da pagamento #'+str(pid)+' e ricevuta #'+str(rid),payment_id))
+'''
+    if result.count(anchor)!=1:
+        raise ValueError('Receipt linkage changed')
+    result=result.replace(anchor,anchor+link,1)
+    compile(result,'<monthly-correction-v3>','exec')
+    return result
+
+
+def _patch_core_v2(source):
     """Patch only the monthly branch of the exact canonical writer; no execution."""
     marker = '# BODYMIND_CANCELLED_MONTHLY_REPAIR_2'
     if marker in source:
@@ -231,8 +270,8 @@ def main():
             time.sleep(1)
             try:
                 with urlopen('http://127.0.0.1:8080/login',timeout=1) as response:
-                    if response.status==200 and response.headers.get('X-BodyMind-Monthly-Repair')=='2':
-                        print('ONLINE: HTTP 200, correzione importo libero versione 2 caricata',flush=True)
+                    if response.status==200 and response.headers.get('X-BodyMind-Monthly-Repair')=='3':
+                        print('ONLINE: HTTP 200, correzione pagamento e ricevuta versione 3 caricata',flush=True)
                         return
             except Exception:
                 pass
@@ -245,7 +284,7 @@ def main():
             time.sleep(1)
             try:
                 with urlopen('http://127.0.0.1:8080/login',timeout=1) as response:
-                    if response.status==200 and response.headers.get('X-BodyMind-Monthly-Repair')!='2':
+                    if response.status==200 and response.headers.get('X-BodyMind-Monthly-Repair')!='3':
                         raise SystemExit('ROLLBACK verificato: sito precedente HTTP 200')
             except (OSError,TimeoutError):
                 pass
