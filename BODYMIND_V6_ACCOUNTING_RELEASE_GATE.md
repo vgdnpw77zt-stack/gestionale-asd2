@@ -41,3 +41,15 @@
 L'installer V6 originario conteneva ancora, nel ramo dei campi iniziali non validi, il redirect `302 /pagamenti?errore=dati_non_validi`. Railway ha registrato esplicitamente questo errore il 15 ottobre, 18:38 ora italiana. **Preferire esclusivamente il nuovo allegato `bodymind_pagamenti_v6_1_iscrizioni_mensili_tutte.py`** (SHA256 `b9ae8bf2ec5825bef4daa9fc72c2b842a6ad99eef505a62c1778294e82e95cdf`, core post-install `b85e28c3f47d1eb83cf6ad3583e195758a6126f8cab916dc90e8ceafd9a616dc`) che riutilizza `payment_form_error` per validazioni fallite e mantiene input/motivazione nella sessione anziché mostrare il vecchio errore generico.
 
 Rieseguiti 11 test iscrizioni, 11 test mensili, 7 test writer SQLite, 2 dry-run installer su baseline V4/V5, test form error e integrità SHA: superati. Nessun test applica scritture al database di produzione. La PR resta in bozza e *non include* l'installatore eseguibile: per pubblicarlo in modo persistente è necessario integrare anche il percorso di startup Railway, previa verifica del launcher. **Non effettuare redeploy automatico.**
+
+
+## Caso riproducibile: Ludovica Annunziato (ID 13), ottobre 2026
+
+Diagnosticato a runtime con output V6.1:
+- mensile pagamento `#35`, importo `50.00`, `stato=paid_manual`, `online_status=paid_manual`
+- mensile pagamento `#36`, importo `45.00`, `stato=paid_manual`, `online_status=paid_manual`
+- in `bodymind_one_step_monthlies.py` V5, usato anche da V6.1, `prepare_monthly` seleziona tutti i pagamenti mensili attivi per tesserata/mese/anno, poi `if len(active)>1: raise PaymentReviewRequired('Esistono più pagamenti attivi per questo mese: verifica necessaria per evitare duplicati.')`.
+
+**Effetto deterministico:** V6.1 impedisce qualsiasi modifica del mensile ottobre 2026 per questa tesserata finché non viene riconciliato il doppio movimento; questo è un blocco contabile intenzionale, non prova di un errore JavaScript. Il blocco non dovrebbe essere rimosso senza un flusso di revisione esplicito che preservi ricevute e audit. Determinare con la segreteria se #35 e #36 rappresentino due incassi reali o se il secondo sia una rettifica/doppione. Gli HTTP POST 303 rilevati non riportano il tesserato_id e non sono attribuibili con certezza.
+
+**Nessuna scrittura/modifica contabile effettuata qui.**
