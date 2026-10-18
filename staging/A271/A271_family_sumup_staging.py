@@ -28,18 +28,33 @@ def patch(root):
 </style></head><body><header id="top" class="hero">'''
     src=one(src,old_css,new_css,'template CSS')
     old="""    cert=str(t.get('certificato_scadenza') or '').strip()"""
-    new="""    # BODYMIND_A271_FAMILY_SUMUP_LINK: payment CTA, NOT payment confirmation.
-    # Fail closed on ambiguous debt, empty/invalid URL or missing A270 policy.
+    new="""    # BODYMIND_A271_FAMILY_SUMUP_LINK: payment CTA, NEVER payment confirmation.
+    # A269 checks actual reconciled payments/receipts/waivers and old credits.
+    # If a receipt or historic credit is ambiguous, hide the link rather than
+    # encouraging an athlete to pay twice.
     sumup_link = ''
     if (pending and str(quote_current.get('state') or '').casefold() == 'dovuto'
             and not quote_current.get('motivo_non_dovuto')):
         try:
             from .bodymind_a269_reminders import Policy
-            url = str((load_config().get('bodymind_reminders') or {}).get('sumup_url') or '').strip()
-            if url:
-                Policy(sumup_url=url)  # HTTPS/public validation, no provider calls.
-                sumup_link = url
-        except (ValueError, TypeError, AttributeError, ImportError):
+            from .bodymind_a269_read_model import collect
+            from .core import current_month_year
+            mm, yy = current_month_year()
+            audit = db()
+            try:
+                audit.execute('PRAGMA query_only=ON')
+                candidates = collect(audit,year=yy,month=mm)
+                current = next((r for r in candidates if r.athlete_id == tid),None)
+            finally:
+                audit.close()
+            if (current is not None and current.state in ('da_pagare','parziale')
+                    and current.reconciled and current.credits_verified
+                    and current.waivers_verified and current.outstanding > 0):
+                url = str((load_config().get('bodymind_reminders') or {}).get('sumup_url') or '').strip()
+                if url:
+                    Policy(sumup_url=url)  # Validate HTTPS; never call provider.
+                    sumup_link = url
+        except (ValueError, TypeError, AttributeError, ImportError, RuntimeError):
             pass
     cert=str(t.get('certificato_scadenza') or '').strip()"""
     src=one(src,old,new,'URL and due-state guard')
