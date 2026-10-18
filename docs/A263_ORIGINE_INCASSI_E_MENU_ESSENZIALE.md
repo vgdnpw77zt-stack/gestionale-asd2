@@ -2,7 +2,7 @@
 
 **Solo codice di prova. NON distribuito su Railway, NON usare il branch di staging come sorgente deploy.**
 
-Obiettivo: su dashboard compatta A261 (senza downgrade), mostrare quanto proviene da iscrizioni, quote mensili, pagamenti di altra causale ed entrate manuali, con numero di incassi e tesserati distinti, matrice per canale di incasso e agevolazioni documentate (sorelle/fratelli, metà anno, metà mese, altre riduzioni). Tutte le cifre riconciliano con A237/A253 e non sommano mai le ricevute una seconda volta. Esclusi pagamenti annullati, non pagati e importi zero. Gli sconti sono indicatori documentali: una quota corrente non dimostra da sola il prezzo storico.
+Obiettivo: su dashboard compatta A261 (senza downgrade), mostrare quanto proviene da iscrizioni, quote mensili, pagamenti di altra causale ed entrate manuali, con numero di incassi e tesserati distinti, matrice per canale di incasso e agevolazioni documentate (sorelle/fratelli, metà anno, metà mese, altre riduzioni). Tutte le cifre riconciliano con A237/A253 e non sommano mai le ricevute una seconda volta. Esclusi pagamenti annullati, non pagati e importi zero. La sola parola «sorella» non viene conteggiata come sconto senza una riduzione esplicita o decisione tariffaria. Gli sconti sono indicatori documentali: una quota corrente non dimostra da sola il prezzo storico.
 
 La voce Cuore operativo è nascosta dalla navigazione ordinaria e il quickdock mostra soltanto Dashboard e Automazioni. Le route tecniche, i log, gli stati delle pratiche concluse, i database e l'engine delle automazioni non vengono eliminati. I vecchi pannelli di dashboard sono accessibili dal pulsante «Mostra altri controlli». Non cambiamo tesserati o documenti.
 

@@ -51,7 +51,9 @@ def _discount_reason(text,category):
     x=_simple(text)
     if re.search(r'\b(?:nessun[oa]?|senza|no)\s+(?:sconto|riduzione|agevolazione)\b',x) or re.search(r'\bsconto\s*(?:=|:)\s*0(?:[,\.]00)?\b',x):
         return None
-    if re.search(r'\b(sorell[aei]?|fratell[oiie]?|siblings?)\b',x):
+    # Presence of a sibling is NOT proof that a discount was applied.
+    if (re.search(r'\b(sorell[aei]?|fratell[oiie]?|siblings?)\b',x)
+        and re.search(r'\b(scont[oi]|riduzion[ei]|agevolazion[ei]|tariffa(?:\s+ridotta)?|quota\s+ridotta)\b',x)):
         return 'iscr_sorelle' if category=='iscrizioni' else 'mens_sorelle'
     if category=='iscrizioni' and re.search(r'\b(meta|mezzo|mezza|1/2)\s*(?:di\s*)?(?:anno|stagione)\b',x):
         return 'iscr_meta_anno'
@@ -101,7 +103,7 @@ def _monthly_evidence(conn,paid_periods):
             base=_amount(q['importo_base']);due=_amount(q['importo_dovuto']);discount=_amount(q['sconto'])
             if discount>0 or base>due>ZERO:
                 confirmed=True
-                parts.extend([str(q.get('tariffa_codice') or ''),str(q.get('note') or '')])
+                parts.extend(['sconto documentato',str(q.get('tariffa_codice') or ''),str(q.get('note') or '')])
                 if str(q.get('tariffa_codice') or '').strip().lower()=='sorelle':parts.append('sorelle')
         if d and str(d.get('decisione') or '').lower()=='ridotta':
             if _amount(d['importo_base'])>_amount(d['importo_dovuto'])>ZERO:

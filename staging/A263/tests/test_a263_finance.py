@@ -73,6 +73,10 @@ def main():
             assert cats['mensili']['payers']==3, cats['mensili']
             assert cats['mensili']['periods']==3, cats['mensili']
             assert cats['movimenti_manuali']['payers'] is None
+            from asd_app import bodymind_a262_income_origin as evidence_module
+            assert evidence_module._discount_reason('Mia sorella','iscrizioni') is None
+            assert evidence_module._discount_reason('sconto sorelle','iscrizioni')=='iscr_sorelle'
+            assert evidence_module._discount_reason('nessuno sconto sorelle','iscrizioni') is None
             d=data['origini_entrate']['discounts']
             assert d['iscr_meta_anno']==1,d
             assert d['mens_sorelle']==1,d
