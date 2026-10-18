@@ -10,7 +10,7 @@ In `core.py`, la funzione `_bodymind_expense_entry_v11` intercetta in `before_re
 - Render della tabella uscite: celle con etichette accessibili; su mobile righe-card verticali; data, causale, importo, metodo, giustificativo, modifica, senza necessità di scorrere 900px.
 - Filtro lettura `metodo=bonifico` sulle ultime 300 uscite, più collegamento «Tutte le uscite». Non altera i totali né le registrazioni.
 - `routes_contabilita.py`: metodo visibile nel registro operativo, link «Apri uscita» ai movimenti di `bodymind_uscite`, righe responsive.
-- `bodymind_a265_cashbook.py`: pannello in sola lettura; numero versamenti e mensilità distinte per contanti/bonifico/carta-SumUp; iscrizioni e quote mensili; riduzioni ed esenzioni documentate; uscite per metodo con singole causali bonifico e collegamento alla registrazione.
+- `bodymind_a265_cashbook.py`: pannello in sola lettura; numero versamenti e mensilità distinte per contanti/bonifico/carta-SumUp; iscrizioni e quote mensili; riduzioni documentate distinte tra mensilità già incassate e sole riduzioni configurate, oltre alle esenzioni; uscite per metodo con singole causali bonifico e collegamento alla registrazione.
 - Tutti i riepiloghi devono quadrare con il canonico A237/A253. Incassi annullati/non pagati esclusi; metodi sconosciuti mai imputati automaticamente ai contanti. La **cassa contanti teorica** è entrate contanti meno uscite contanti: non costituisce attestazione della giacenza fisica custodita dalla presidente in assenza di saldo iniziale e trasferimenti interni.
 - Riduzioni ricavate da `quote_mensili` e `bodymind_quota_decisioni`, conteggiate per atleta/mese/anno una sola volta; valori indicativi in mancanza di tariffari storici immutabili. Un'esenzione non è un incasso.
 
@@ -18,7 +18,7 @@ In `core.py`, la funzione `_bodymind_expense_entry_v11` intercetta in `before_re
 Patch applicata solo a copia A256/A253 (senza accesso DB reale). Sorgenti `core.py` e `routes_contabilita.py` compilati, modulo A265 compilato; test con fixture SQLite: entrate, uscite, mese frazionato in due tranche, bonifico al presidente fittizio, sconti, esenzioni, metodo di pagamento, filtro annullati e incompatibilità canoniche. Snapshot prima/dopo il test in sola lettura identico. Browser Chromium: **375, 390, 428, 768, 1024, 1152, 1280, 1366 px**, nessun overflow orizzontale, bonifico e causale visibili in mobile.
 
 SHA-256 sorgenti staging:
-- `bodymind_a265_cashbook.py`: `1ba2799f1ff64be0582c57639dc5e124e5562846e9a7f4bb8ca92`
+- `bodymind_a265_cashbook.py`: `9635298f76355825458ee294713fb549ef59a5206475bd0275a2f1b2860be3cb`
 - `patch_a265.py`: `21866e2a9b9d1e36240498ac49f27013d50076d061b76373c7ccf6776e796b4c`
 - `test_a265.py`: `a51b10b5d90e0da114527ea5fa43f837b8476e3fd361bf4e29f65603cba90bb8`
 - `test_a265_layout.py`: `5edb8f447bb57925e25b00a055a85b7390afccefbe830587c608349e5e34bea0`
