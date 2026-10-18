@@ -124,7 +124,7 @@ TODAY = '''
             <strong>In scadenza / da verificare</strong><span class='a260-big'>{warning_count}</span><small>Avvisi non bloccanti e controlli</small>
           </a>
           <a class='a260-state okay' href='/tesserati/elenco-ordinato'>
-            <strong>Tutto in regola</strong><span class='a260-big' aria-hidden='true'>✓</span><small>Apri le schede e verifica gli stati aggiornati</small>
+            <strong>{'Tutto in regola' if total_actions == 0 else 'Stati in regola'}</strong><span class='a260-big' aria-hidden='true'>✓</span><small>Apri le schede e verifica gli stati aggiornati</small>
           </a>
         </div>
       </section>
