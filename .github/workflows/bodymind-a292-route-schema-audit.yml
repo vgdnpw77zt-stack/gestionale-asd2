@@ -1,0 +1,70 @@
+name: BodyMind A292 live read-only route and schema audit
+on:
+  push:
+    branches:
+      - bodymind-a292-family-receipts-safety-20261019
+    paths:
+      - '.github/workflows/bodymind-a292-route-schema-audit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  read-only-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Prepare SSH identity
+        shell: bash
+        run: |
+          set -eu
+          test -n "$RAILWAY_SSH_KEY"
+          mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"
+          printf '%s\n' "$RAILWAY_SSH_KEY" > "$HOME/.ssh/id_ed25519"; chmod 600 "$HOME/.ssh/id_ed25519"
+      - name: Inspect source routes and DB structure without reading any personal records
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/id_ed25519" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com 'python3 -' <<'PY'
+          import ast,os,sqlite3,json
+          root='/data/top2_app/asd_app'
+          names=['routes_bodymind_final.py','routes_ricevute.py','bodymind_a250_finance_view.py','bodymind_a292_receipt_visibility.py']
+          for n in names:
+              p=os.path.join(root,n)
+              if not os.path.isfile(p):
+                  print('SOURCE_FILE:',n,'missing')
+                  continue
+              with open(p,encoding='utf-8') as f: s=f.read()
+              try: tree=ast.parse(s); status='valid'
+              except SyntaxError: tree=None; status='invalid'
+              print('SOURCE_FILE:',n,'present','syntax='+status)
+              if n=='routes_bodymind_final.py' and tree:
+                  routes=[]
+                  for node in ast.walk(tree):
+                      if isinstance(node,ast.Call) and isinstance(node.func,ast.Attribute) and node.func.attr in ('add_url_rule','route') and node.args:
+                          a=node.args[0]
+                          if isinstance(a,ast.Constant) and isinstance(a.value,str):
+                              routes.append(a.value)
+                  print('FAMILY_ROUTE_PATHS:',json.dumps(sorted(set(routes))[:60]))
+                  print('RAW_PAYMENT_TEMPLATE:', '{% for p in pays %}' in s)
+                  print('RECEIPT_OPERATIONAL_FILTER:', 'receipts_operational' in s)
+          db='file:/data/tenants/default/asd.db?mode=ro'
+          try:
+              conn=sqlite3.connect(db,uri=True,timeout=3)
+              for t in ('ricevute','pagamenti','tesserati','bodymind_family_receipt_visibility'):
+                  found=conn.execute('SELECT name FROM sqlite_master WHERE type=? AND name=?',('table',t)).fetchone()
+                  if found:
+                      cols=[x[1] for x in conn.execute('PRAGMA table_info("'+t+'")')]
+                      print('DB_SCHEMA:',t,json.dumps(cols))
+                  else: print('DB_SCHEMA:',t,'absent')
+              conn.close()
+              print('DATABASE_READONLY_SCHEMA: PASS')
+          except Exception as e:
+              print('DATABASE_READONLY_SCHEMA: FAILED',type(e).__name__)
+              raise
+          PY
+      - name: Remove temporary key
+        if: always()
+        shell: bash
+        run: rm -f "$HOME/.ssh/id_ed25519"
