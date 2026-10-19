@@ -15,6 +15,7 @@ jobs:
     container: ghcr.io/railwayapp/cli:latest
     env:
       RAILWAY_TOKEN: ${{ secrets.BODYMIND_RAILWAY_PROJECT_TOKEN }}
+      RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
     steps:
       - name: Stop unless Railway project token is configured
         shell: sh
@@ -23,6 +24,17 @@ jobs:
             echo "::notice::Missing BODYMIND_RAILWAY_PROJECT_TOKEN. No remote access attempted."
             exit 1
           fi
+      - name: Install temporary SSH identity from masked secret
+        shell: sh
+        run: |
+          if [ -z "$RAILWAY_SSH_KEY" ]; then
+            echo "::notice::Missing BODYMIND_RAILWAY_SSH_PRIVATE_KEY. No remote access attempted."
+            exit 1
+          fi
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' "$RAILWAY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
       - name: Inspect source names only (no DB, no backups)
         shell: sh
         run: |
@@ -52,4 +64,4 @@ jobs:
       - name: Erase temporary source copies
         if: always()
         shell: sh
-        run: rm -rf /tmp/bodymind-a292-source /tmp/bodymind-a292-list.json
+        run: rm -rf /tmp/bodymind-a292-source /tmp/bodymind-a292-list.json "$HOME/.ssh/id_ed25519"
