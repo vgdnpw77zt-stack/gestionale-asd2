@@ -65,6 +65,18 @@ jobs:
                           paths.append(a.value)
               if paths: print('RECEIPT_ROUTE_FILE:',fn,json.dumps(sorted(set(paths))))
           print('RECEIPT_ROUTE_SCAN_END')
+          import shutil
+          usage=shutil.disk_usage('/data')
+          print('VOLUME_DISK_GB:',round(usage.total/1e9,3),'free_gb:',round(usage.free/1e9,3))
+          db_path='/data/tenants/default/asd.db'
+          print('SQLITE_DB_MB:',round(os.path.getsize(db_path)/1e6,3))
+          try:
+              import subprocess
+              ps=subprocess.run(['ps','-eo','pid,ppid,args'],capture_output=True,text=True,timeout=3)
+              for line in ps.stdout.splitlines():
+                  if 'gunicorn' in line.lower() and 'master' in line.lower() and 'python3 -' not in line:
+                      print('GUNICORN_MASTER:',line[:220])
+          except Exception as e: print('PROCESS_INSPECTION:',type(e).__name__)
           db='file:/data/tenants/default/asd.db?mode=ro'
           try:
               conn=sqlite3.connect(db,uri=True,timeout=3)
