@@ -18,7 +18,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Install Flask test dependency
+        run: python -m pip install 'flask>=3,<4'
       - name: Check Python syntax
-        run: python -m py_compile fixes/a292/*.py tests/test_a292_family_receipt_visibility.py
+        run: python -m py_compile fixes/a292/*.py tests/test_a292*.py
       - name: Run isolated receipt visibility tests
-        run: python -m unittest discover -s tests -p 'test_a292_family_receipt_visibility.py' -v
+        run: python -m unittest discover -s tests -p 'test_a292*.py' -v
