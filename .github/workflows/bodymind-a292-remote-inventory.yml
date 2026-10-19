@@ -14,13 +14,13 @@ jobs:
     timeout-minutes: 8
     container: ghcr.io/railwayapp/cli:latest
     env:
-      RAILWAY_TOKEN: ${{ secrets.BODYMIND_RAILWAY_READONLY_TOKEN }}
+      RAILWAY_TOKEN: ${{ secrets.BODYMIND_RAILWAY_PROJECT_TOKEN }}
     steps:
       - name: Stop unless Railway project token is configured
         shell: sh
         run: |
           if [ -z "$RAILWAY_TOKEN" ]; then
-            echo "::notice::Missing BODYMIND_RAILWAY_READONLY_TOKEN. No remote access attempted."
+            echo "::notice::Missing BODYMIND_RAILWAY_PROJECT_TOKEN. No remote access attempted."
             exit 1
           fi
       - name: Inspect source names only (no DB, no backups)
