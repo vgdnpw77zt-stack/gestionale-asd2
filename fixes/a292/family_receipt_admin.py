@@ -31,12 +31,21 @@ def register(app, db, admin_required, csrf_input, current_username):
             rows = []
             if exists:
                 cols = {r[1] for r in conn.execute("PRAGMA table_info(ricevute)")}
-                wanted = [c for c in ("id", "tesserato_id", "importo", "descrizione", "codice") if c in cols]
-                if "id" in wanted:
+                if {"id", "pagamento_id"}.issubset(cols):
+                    # Verified live schema: ricevute -> pagamenti -> tesserati.
+                    q = """SELECT r.id, r.importo, r.descrizione, p.tesserato_id,
+                                  t.nome AS tesserata_nome, t.cognome AS tesserata_cognome
+                           FROM ricevute r
+                           LEFT JOIN pagamenti p ON p.id=r.pagamento_id
+                           LEFT JOIN tesserati t ON t.id=p.tesserato_id
+                           ORDER BY r.id DESC LIMIT 100"""
+                    rows = [dict(r) for r in conn.execute(q)]
+                elif "id" in cols:
+                    wanted = [c for c in ("id", "importo", "descrizione") if c in cols]
                     q = "SELECT " + ",".join('"' + c + '"' for c in wanted) + " FROM ricevute ORDER BY id DESC LIMIT 100"
                     rows = [dict(r) for r in conn.execute(q)]
-                    for row in rows:
-                        row["hidden"] = hidden(conn, row["id"])
+                for row in rows:
+                    row["hidden"] = hidden(conn, row["id"])
         finally:
             conn.close()
         return render_template_string("""
@@ -45,7 +54,7 @@ def register(app, db, admin_required, csrf_input, current_username):
 <style>body{font:15px system-ui;background:#0b1627;color:#f8fafc;margin:0}main{max-width:840px;margin:auto;padding:20px}article{background:#162941;border:1px solid #3b5874;padding:16px;margin:12px 0;border-radius:14px}input,button{font:inherit;padding:12px;border-radius:9px}input{width:100%;box-sizing:border-box;background:#0b1627;border:1px solid #789;color:white;margin:8px 0}button{background:#c6edff;border:0;font-weight:750}a{color:#aee0ff}</style>
 </head><body><main><a href="/ricevute">← Ricevute</a><h1>Ricevute nell'App Famiglie</h1>
 <p>Nascondere non cancella il documento originale, il PDF o l'incasso. Ogni azione è reversibile e tracciata.</p>
-{% for r in rows %}<article><strong>Ricevuta #{{r.id}}</strong> · Tesserata #{{r.get('tesserato_id','—')}} · {{r.get('importo','—')}} €
+{% for r in rows %}<article><strong>Ricevuta #{{r.id}}</strong> · Tesserata: {{((r.get('tesserata_nome') or '') ~ ' ' ~ (r.get('tesserata_cognome') or ''))|trim or ('#' ~ r.get('tesserato_id')) if r.get('tesserato_id') else 'Da verificare'}} · {{r.get('importo','—')}} €
 <p>{{'Nascosta alle famiglie' if r.hidden else 'Visibile se operativa'}}</p>
 <form method="post" action="/amministrazione/ricevute-famiglie/{{r.id}}/visibilita">
 {{csrf|safe}}<input type="hidden" name="hide" value="{{'0' if r.hidden else '1'}}">
