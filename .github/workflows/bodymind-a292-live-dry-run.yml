@@ -1,0 +1,52 @@
+name: BodyMind A292 live source dry-run (read-only)
+on:
+  push:
+    branches:
+      - bodymind-a292-family-receipts-safety-20261019
+    paths:
+      - '.github/workflows/bodymind-a292-live-dry-run.yml'
+      - 'fixes/a292/patch_family_portal.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  live-source-dry-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Prepare temporary SSH identity
+        shell: bash
+        run: |
+          set -eu
+          test -n "$RAILWAY_SSH_KEY"
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' "$RAILWAY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+      - name: Fetch live source into temporary runner memory and validate dry-run
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/id_ed25519" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com 'cat /data/top2_app/asd_app/routes_bodymind_final.py' > /tmp/a292-live-source.py
+          python - <<'PY'
+          import ast, hashlib, pathlib
+          from fixes.a292.patch_family_portal import transform
+          raw=pathlib.Path('/tmp/a292-live-source.py').read_bytes()
+          ast.parse(raw.decode('utf-8'))
+          print('LIVE_SOURCE_SHA256:',hashlib.sha256(raw).hexdigest())
+          patched=transform(raw)
+          ast.parse(patched.decode('utf-8'))
+          print('A292_TRANSFORM:', 'PASS')
+          print('A292_PATCHED_SHA256:',hashlib.sha256(patched).hexdigest())
+          print('A292_DRY_RUN:', 'No production files changed')
+          PY
+      - name: Delete temporary source and SSH key
+        if: always()
+        shell: bash
+        run: rm -f /tmp/a292-live-source.py "$HOME/.ssh/id_ed25519"
