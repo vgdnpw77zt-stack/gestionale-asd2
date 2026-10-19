@@ -13,8 +13,12 @@ class TestA292FlaskRoutes(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.path = os.path.join(self.tmp.name, "test.sqlite")
         with sqlite3.connect(self.path) as conn:
-            conn.execute("CREATE TABLE ricevute(id INTEGER PRIMARY KEY,tesserato_id INTEGER,importo REAL)")
-            conn.execute("INSERT INTO ricevute VALUES (1,14,50.0)")
+            conn.execute("CREATE TABLE ricevute(id INTEGER PRIMARY KEY,pagamento_id INTEGER,importo REAL,descrizione TEXT)")
+            conn.execute("CREATE TABLE pagamenti(id INTEGER PRIMARY KEY,tesserato_id INTEGER)")
+            conn.execute("CREATE TABLE tesserati(id INTEGER PRIMARY KEY,nome TEXT,cognome TEXT)")
+            conn.execute("INSERT INTO tesserati VALUES (14,'Test','Atleta')")
+            conn.execute("INSERT INTO pagamenti VALUES (77,14)")
+            conn.execute("INSERT INTO ricevute VALUES (1,77,50.0,'Quota mensile')")
         self.app = Flask(__name__)
         self.app.secret_key = "test-secret"
 
@@ -47,6 +51,12 @@ class TestA292FlaskRoutes(unittest.TestCase):
 
     def tearDown(self):
         self.tmp.cleanup()
+
+    def test_admin_page_uses_actual_receipt_payment_athlete_relation(self):
+        response = self.client.get("/amministrazione/ricevute-famiglie", headers={"X-Test-Admin":"yes"})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Test Atleta", response.data)
+        self.assertIn(b"Ricevuta #1", response.data)
 
     def test_admin_auth_csrf_and_pdf_hide_restore(self):
         self.assertEqual(self.client.get("/amministrazione/ricevute-famiglie").status_code, 403)
