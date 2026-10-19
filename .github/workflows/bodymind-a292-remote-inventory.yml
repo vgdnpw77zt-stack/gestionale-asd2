@@ -1,0 +1,55 @@
+name: BodyMind A292 remote source inventory (read-only)
+on:
+  push:
+    branches:
+      - bodymind-a292-family-receipts-safety-20261019
+    paths:
+      - '.github/workflows/bodymind-a292-remote-inventory.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    container: ghcr.io/railwayapp/cli:latest
+    env:
+      RAILWAY_TOKEN: ${{ secrets.BODYMIND_RAILWAY_READONLY_TOKEN }}
+    steps:
+      - name: Stop unless Railway project token is configured
+        shell: sh
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "::notice::Missing BODYMIND_RAILWAY_READONLY_TOKEN. No remote access attempted."
+            exit 1
+          fi
+      - name: Inspect source names only (no DB, no backups)
+        shell: sh
+        run: |
+          railway volume files --volume bodymind-data-d0BI list /top2_app/asd_app --json > /tmp/bodymind-a292-list.json
+          echo "Remote source directory listing acquired; raw listing suppressed."
+      - name: Read three source modules into temporary CI workspace
+        shell: sh
+        run: |
+          mkdir -p /tmp/bodymind-a292-source
+          for name in routes_bodymind_final.py routes_tesserati.py core.py; do
+            railway volume files --volume bodymind-data-d0BI download "/top2_app/asd_app/$name" "/tmp/bodymind-a292-source/$name"
+          done
+      - name: Print only fingerprints and static safety facts
+        shell: sh
+        run: |
+          python3 - <<'PY'
+          import ast,hashlib,json,pathlib
+          root=pathlib.Path('/tmp/bodymind-a292-source')
+          for p in sorted(root.glob('*.py')):
+              raw=p.read_bytes()
+              try: ast.parse(raw.decode('utf-8')); syntax='ok'
+              except Exception: syntax='invalid'
+              print(json.dumps({'file':p.name,'bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest(),'syntax':syntax}))
+          data=json.loads(pathlib.Path('/tmp/bodymind-a292-list.json').read_text())
+          print('Remote listing parsed; sensitive filenames and content not printed.')
+          PY
+      - name: Erase temporary source copies
+        if: always()
+        shell: sh
+        run: rm -rf /tmp/bodymind-a292-source /tmp/bodymind-a292-list.json
