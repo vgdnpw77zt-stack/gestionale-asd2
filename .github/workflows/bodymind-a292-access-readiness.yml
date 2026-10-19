@@ -1,0 +1,28 @@
+name: BodyMind A292 maintenance access readiness
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - bodymind-a292-family-receipts-safety-20261019
+    paths:
+      - '.github/workflows/bodymind-a292-access-readiness.yml'
+permissions:
+  contents: read
+jobs:
+  readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      RAILWAY_TOKEN_PRESENT: ${{ secrets.RAILWAY_TOKEN != '' }}
+      RAILWAY_SSH_KEY_PRESENT: ${{ secrets.RAILWAY_SSH_PRIVATE_KEY != '' }}
+    steps:
+      - name: Report boolean presence only (never access secret values)
+        shell: bash
+        run: |
+          echo "Railway CLI token configured in this repository: ${RAILWAY_TOKEN_PRESENT}"
+          echo "Railway SSH private key configured in this repository: ${RAILWAY_SSH_KEY_PRESENT}"
+          if [[ "${RAILWAY_TOKEN_PRESENT}" == "true" && "${RAILWAY_SSH_KEY_PRESENT}" == "true" ]]; then
+            echo "Remote maintenance may be possible; verify key permissions without writing production."
+          else
+            echo "No complete unattended SSH credential pair is available to this GitHub Actions workflow."
+          fi
