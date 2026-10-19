@@ -70,13 +70,13 @@ jobs:
           print('VOLUME_DISK_GB:',round(usage.total/1e9,3),'free_gb:',round(usage.free/1e9,3))
           db_path='/data/tenants/default/asd.db'
           print('SQLITE_DB_MB:',round(os.path.getsize(db_path)/1e6,3))
-          try:
-              import subprocess
-              ps=subprocess.run(['ps','-eo','pid,ppid,args'],capture_output=True,text=True,timeout=3)
-              for line in ps.stdout.splitlines():
-                  if 'gunicorn' in line.lower() and 'master' in line.lower() and 'python3 -' not in line:
-                      print('GUNICORN_MASTER:',line[:220])
-          except Exception as e: print('PROCESS_INSPECTION:',type(e).__name__)
+          for pid in os.listdir('/proc'):
+              if not pid.isdigit(): continue
+              try:
+                  data=open('/proc/'+pid+'/cmdline','rb').read().replace(b'\\0',b' ').decode('utf-8','replace')
+                  if 'gunicorn' in data.lower() and ('master' in data.lower() or 'worker' in data.lower()):
+                      print('GUNICORN_PROCESS:',pid,data[:160])
+              except (OSError,PermissionError): pass
           db='file:/data/tenants/default/asd.db?mode=ro'
           try:
               conn=sqlite3.connect(db,uri=True,timeout=3)
