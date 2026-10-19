@@ -1,0 +1,37 @@
+name: BodyMind A292 direct SSH read-only source check
+on:
+  push:
+    branches:
+      - bodymind-a292-family-receipts-safety-20261019
+    paths:
+      - '.github/workflows/bodymind-a292-direct-ssh.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-fingerprints:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Install ephemeral SSH key
+        shell: bash
+        run: |
+          set -eu
+          test -n "$RAILWAY_SSH_KEY" || { echo "SSH key secret not configured"; exit 1; }
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' "$RAILWAY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          ssh-keygen -y -f "$HOME/.ssh/id_ed25519" >/dev/null
+          echo "SSH private key format verified; no key data printed."
+      - name: Read fingerprints of three Python source files only
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/id_ed25519" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com 'for p in /data/top2_app/asd_app/routes_bodymind_final.py /data/top2_app/asd_app/routes_tesserati.py /data/top2_app/asd_app/core.py; do if test -f "$p"; then sha256sum "$p"; else echo "MISSING: $p"; fi; done'
+      - name: Remove temporary SSH key
+        if: always()
+        shell: bash
+        run: rm -f "$HOME/.ssh/id_ed25519"
