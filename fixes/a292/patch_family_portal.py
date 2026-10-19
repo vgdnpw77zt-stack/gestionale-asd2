@@ -21,7 +21,7 @@ def transform(source: bytes) -> bytes:
     text = text[:p] + '<p class="muted">Le rettifiche interne non sono mostrate alle famiglie.</p>' + text[q:]
     needle = "from .bodymind_a250_finance_view import receipts_operational"
     assert text.count(needle) == 1
-    text = text.replace(needle, needle + "\n            from .bodymind_a292_receipt_visibility import family_visible_receipts")
+    text = text.replace(needle, needle + "\n            from .family_receipt_visibility import family_visible_receipts")
     needle = "rawr=receipts_operational(conn,tid=tid,limit=40)"
     assert text.count(needle) == 1
     text = text.replace(needle, "rawr=family_visible_receipts(conn,receipts_operational(conn,tid=tid,limit=40))")
@@ -30,7 +30,7 @@ def transform(source: bytes) -> bytes:
     anchor = "app.add_url_rule('/app-tesserato/<token>/manifest.json','bodymind_manifest',bodymind_manifest,methods=['GET'])"
     assert text.count(anchor) == 1
     text = text.replace(anchor, anchor + """\n\n# A292: admin-only receipt visibility and direct download guard.
-from .bodymind_a292_receipt_admin import register as _register_a292_receipts
+from .family_receipt_admin import register as _register_a292_receipts
 from .core import admin_required, current_username
 _register_a292_receipts(app, db, admin_required, csrf_input, current_username)""")
     return text.encode("utf-8")
