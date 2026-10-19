@@ -49,6 +49,22 @@ jobs:
                   print('FAMILY_ROUTE_PATHS:',json.dumps(sorted(set(routes))[:60]))
                   print('RAW_PAYMENT_TEMPLATE:', '{% for p in pays %}' in s)
                   print('RECEIPT_OPERATIONAL_FILTER:', 'receipts_operational' in s)
+          print('RECEIPT_ROUTE_SCAN_START')
+          for fn in sorted(os.listdir(root)):
+              if not fn.endswith('.py'): continue
+              p=os.path.join(root,fn)
+              if not os.path.isfile(p): continue
+              try:
+                  with open(p,encoding='utf-8') as f: t=ast.parse(f.read())
+              except (OSError,SyntaxError,UnicodeError): continue
+              paths=[]
+              for n in ast.walk(t):
+                  if isinstance(n,ast.Call) and isinstance(n.func,ast.Attribute) and n.func.attr in ('add_url_rule','route') and n.args:
+                      a=n.args[0]
+                      if isinstance(a,ast.Constant) and isinstance(a.value,str) and ('ricevut' in a.value.lower() or 'app-tesserato' in a.value.lower()):
+                          paths.append(a.value)
+              if paths: print('RECEIPT_ROUTE_FILE:',fn,json.dumps(sorted(set(paths))))
+          print('RECEIPT_ROUTE_SCAN_END')
           db='file:/data/tenants/default/asd.db?mode=ro'
           try:
               conn=sqlite3.connect(db,uri=True,timeout=3)
