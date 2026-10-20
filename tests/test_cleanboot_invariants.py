@@ -15,6 +15,18 @@ class TestCleanBoot(unittest.TestCase):
     def test_frozen_inventory(self):
         self.assertEqual(boot.EXPECTED_SOURCE_COUNT,209)
         self.assertEqual(len(boot.EXPECTED_SOURCE_DIGEST),64)
+    def test_a309b_upgrade_lock(self):
+        self.assertEqual(boot.EXPECTED_SOURCE_COUNT,209)
+        self.assertEqual(boot.UPGRADE_SOURCE_COUNT,211)
+        self.assertEqual(boot.UPGRADE_SOURCE_DIGEST,'c7cd7cd5c95e424d0fb43d4f32ad7dfbc752ad181446b247a94b31769c5788b0')
+        self.assertNotEqual(boot.UPGRADE_SOURCE_DIGEST,boot.EXPECTED_SOURCE_DIGEST)
+        # Both precise source locks are permitted, any other digest must fail closed.
+        import inspect
+        source=inspect.getsource(boot.preflight)
+        self.assertIn('UPGRADE_SOURCE_COUNT',source)
+        self.assertIn('UPGRADE_SOURCE_DIGEST',source)
+        self.assertIn('not in valid',source)
+
     def test_no_historical_mutation(self):
         source=(ROOT/'bootstrap/clean_runtime_launcher.py').read_text()
         for forbidden in ('runpy.run_path','shutil.rmtree','shutil.copy2','db_path.unlink','os.remove('):
