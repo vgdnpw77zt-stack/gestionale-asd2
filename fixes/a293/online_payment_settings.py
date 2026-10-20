@@ -173,14 +173,25 @@ def eligible_offer(con, *, token_verified_tesserato_id, provider, year, month):
     try:
         if _eur(q["importo_dovuto"])<=0 or _has_payment(con,tid,int(year),int(month)):
             return None
+        # A269 is the same reconciled read model already used by A291's family
+        # portal. Never offer a checkout for ambiguous balances, credits or waivers.
+        from .bodymind_a269_read_model import collect as _collect
+        audited=next((r for r in _collect(con,year=int(year),month=int(month))
+             if int(r.athlete_id)==tid),None)
+        if (not audited or audited.state!="da_pagare" or not all((
+            audited.reconciled,audited.credits_verified,audited.waivers_verified))):
+            return None
+        outstanding=_eur(audited.outstanding)
+        if outstanding<=0 or outstanding!=_eur(q["importo_dovuto"]):
+            return None
         link=con.execute("""SELECT url,importo FROM bodymind_a293_offer_links
           WHERE provider=? AND tesserato_id=? AND anno=? AND mese=? AND active=1""",
           (provider,tid,int(year),int(month))).fetchone()
-        if not link or _eur(link["importo"])!=_eur(q["importo_dovuto"]):return None
+        if not link or _eur(link["importo"])!=outstanding:return None
         return {"provider":provider,"url":_link(link["url"],provider),
                 "amount":format(_eur(link["importo"]),".2f"),
                 "year":int(year),"month":int(month)}
-    except (ValueError,RuntimeError,sqlite3.Error):
+    except (ValueError,RuntimeError,sqlite3.Error,ImportError):
         return None
 
 _STYLE="""<style>
@@ -210,12 +221,13 @@ def register(app, db, admin_required, csrf_input, current_username):
                 return resp
             con=db()
             try:
-                if not _table(con,"tesserati") or "pwa_token" not in _cols(con,"tesserati"):
+                if not _table(con,"tesserati") or "online_token" not in _cols(con,"tesserati"):
                     return resp
                 rows=con.execute("""SELECT id FROM tesserati
-                   WHERE pwa_token=? AND COALESCE(attivo,1)=1 LIMIT 2""",(m.group(1),)).fetchall()
+                   WHERE online_token=? AND COALESCE(attivo,1)=1 LIMIT 2""",(m.group(1),)).fetchall()
                 if len(rows)!=1:return resp
                 tid=int(rows[0][0])
+                con.execute("PRAGMA query_only=ON")
                 now=date.today()
                 periods=[]
                 for n in range(0,4):
