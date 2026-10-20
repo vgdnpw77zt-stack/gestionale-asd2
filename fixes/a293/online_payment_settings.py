@@ -97,11 +97,16 @@ def _has_payment(con, athlete_id, year, month):
     c=_cols(con,"pagamenti")
     if not {"tesserato_id","anno","mese","causale"}.issubset(c):
         raise RuntimeError("Schema pagamenti non compatibile")
+    # Conservative: any payment in the selected period blocks edits, not
+    # merely 'mensile'. Older imports used multiple descriptions for dues.
+    # Unknown dates on a monthly-looking row also block editing.
     return bool(con.execute("""SELECT 1 FROM pagamenti
-         WHERE tesserato_id=? AND anno=? AND mese=?
-         AND (lower(coalesce(causale,'')) LIKE '%mensil%'
-              OR lower(coalesce(causale,'')) IN ('quota','quota_mensile'))
-         LIMIT 1""",(athlete_id,year,month)).fetchone())
+         WHERE tesserato_id=? AND (
+             (anno=? AND mese=?)
+             OR ((anno IS NULL OR anno=0 OR mese IS NULL OR mese=0)
+                 AND (lower(coalesce(causale,'')) LIKE '%mensil%'
+                      OR lower(coalesce(causale,'')) LIKE '%quota%'))
+         ) LIMIT 1""",(athlete_id,year,month)).fetchone())
 
 def _latest_monthly(con, tid, year, month):
     if not _table(con,"quote_mensili") or not {
@@ -297,6 +302,12 @@ def register(app, db, admin_required, csrf_input, current_username):
                 raise ValueError("Atleta inesistente")
             # Even when saving disabled links, avoid stale unverified amounts.
             if active=="1":_check_unpaid(con,q)
+            # A shared/reusable link cannot be safely matched back to one
+            # athlete and due period. Reject duplicates across obligations.
+            shared=con.execute("""SELECT 1 FROM bodymind_a293_offer_links
+              WHERE url=? AND NOT (provider=? AND tesserato_id=? AND anno=? AND mese=?)
+              LIMIT 1""",(url,p,tid,year,month)).fetchone()
+            if shared: raise ValueError("Link già associato a un'altra atleta/periodo: usare un link individuale")
             old=con.execute("""SELECT url,importo,active FROM bodymind_a293_offer_links
               WHERE provider=? AND tesserato_id=? AND anno=? AND mese=?""",(p,tid,year,month)).fetchone()
             con.execute("""INSERT INTO bodymind_a293_offer_links
