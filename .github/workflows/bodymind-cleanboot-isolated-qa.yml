@@ -1,0 +1,31 @@
+name: BodyMind clean boot isolated QA
+on:
+  push:
+    branches:
+      - bodymind-consolidato-cleanboot-a293-20261020
+  pull_request:
+    paths:
+      - "consolidation/**"
+      - "tests/test_bodymind_cleanboot.py"
+      - "Dockerfile"
+permissions:
+  contents: read
+jobs:
+  cleanboot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Confirm no legacy scripts used by new entrypoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -E '(runpy\.run_path|rmtree\(|\.unlink\(|shutil\.copy2\()' consolidation/clean_runtime_launcher.py
+          ! grep -q 'migration_upload.py' consolidation/Dockerfile.clean.CANDIDATE
+          python -m py_compile consolidation/clean_runtime_launcher.py
+          python -m unittest discover -s tests -p test_bodymind_cleanboot.py -v
+      - name: Existing payment/accounting guard regression
+        run: python -m unittest discover -s tests -p test_bodymind_repair_guard.py -v
