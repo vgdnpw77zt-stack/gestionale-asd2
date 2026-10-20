@@ -116,12 +116,13 @@ def _has_open_request(con, athlete_id, year, month):
     if not _table(con,"payment_requests"):return False
     required={"tesserato_id","anno","mese","status"}
     if not required.issubset(_cols(con,"payment_requests")):return True
-    return bool(con.execute("""SELECT 1 FROM payment_requests
+    deleted = (" AND (deleted_at IS NULL OR trim(deleted_at)='')" if
+               "deleted_at" in _cols(con,"payment_requests") else "")
+    sql="""SELECT 1 FROM payment_requests
       WHERE tesserato_id=? AND anno=? AND mese=?
       AND lower(coalesce(status,'')) NOT IN
-         ('paid','pagato','completed','canceled','cancelled','annullato','expired','refunded')
-      AND (deleted_at IS NULL OR trim(deleted_at)='') LIMIT 1""",
-      (athlete_id,year,month)).fetchone())
+         ('paid','pagato','completed','canceled','cancelled','annullato','expired','refunded')"""+deleted+" LIMIT 1"
+    return bool(con.execute(sql,(athlete_id,year,month)).fetchone())
 
 def _latest_monthly(con, tid, year, month):
     if not _table(con,"quote_mensili") or not {
