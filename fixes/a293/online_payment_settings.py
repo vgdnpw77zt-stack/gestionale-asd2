@@ -4,10 +4,12 @@ Explicit integration: register(app, db, admin_required, csrf_input, current_user
 No automatic settlements, receipts, notifications, or external HTTP calls.
 Core's global CSRF guard MUST be verified before enabling the POST endpoints.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from decimal import Decimal, InvalidOperation
 from hashlib import sha256
 from urllib.parse import urlsplit
+from html import escape
+import re
 from flask import request, abort, redirect, render_template_string
 import hmac, json, sqlite3
 
@@ -195,6 +197,64 @@ border:0;cursor:pointer}small{color:#bfccdc}.full{grid-column:1/-1}
 </style>"""
 
 def register(app, db, admin_required, csrf_input, current_username):
+    # BODYMIND_A293_FAMILY_PAYMENT_CTA: only an already validated family
+    # page, a matching pwa_token and a configured EXACT monthly SumUp link.
+    # Never touch payments or receipts here. No generic provider redirects.
+    @app.after_request
+    def bodymind_a293_family_sumup_offer(resp):
+        try:
+            if request.method!="GET" or resp.status_code!=200 or resp.mimetype!="text/html":
+                return resp
+            m=re.fullmatch(r"/app-tesserato/([A-Za-z0-9_-]{16,256})/?",request.path)
+            if not m or resp.direct_passthrough or resp.is_streamed:
+                return resp
+            con=db()
+            try:
+                if not _table(con,"tesserati") or "pwa_token" not in _cols(con,"tesserati"):
+                    return resp
+                rows=con.execute("""SELECT id FROM tesserati
+                   WHERE pwa_token=? AND COALESCE(attivo,1)=1 LIMIT 2""",(m.group(1),)).fetchall()
+                if len(rows)!=1:return resp
+                tid=int(rows[0][0])
+                now=date.today()
+                periods=[]
+                for n in range(0,4):
+                    year=now.year
+                    month=now.month-n
+                    while month<1:
+                        month+=12;year-=1
+                    offer=eligible_offer(con,token_verified_tesserato_id=tid,
+                                         provider="sumup",year=year,month=month)
+                    if offer:periods.append(offer)
+            finally:con.close()
+            if not periods:return resp
+            html=resp.get_data(as_text=True)
+            close_tag="</main>" if "</main>" in html else "</body>" if "</body>" in html else ""
+            if not close_tag:return resp
+            cards=[]
+            for offer in periods:
+                cards.append('<div style="display:flex;align-items:center;justify-content:space-between;'
+                  'flex-wrap:wrap;gap:12px;border:1px solid #536b80;background:#10283f;'
+                  'border-radius:14px;padding:15px;margin:12px 0;color:white">'
+                  '<span>Quota '+str(offer["month"])+'/'+str(offer["year"])+' · <b>€ '+
+                  escape(offer["amount"])+'</b></span><a rel="noopener noreferrer" target="_blank" '
+                  'style="display:inline-flex;align-items:center;justify-content:center;'
+                  'border-radius:10px;padding:12px 18px;background:#c4eafa;color:#092035;'
+                  'font-weight:800;text-decoration:none;min-height:44px" href="'+
+                  escape(offer["url"],quote=True)+'">Paga con SumUp ↗</a></div>')
+            snippet='<section aria-label="Pagamenti online" style="max-width:900px;margin:20px auto;'
+            snippet+='padding:14px"><h2>Pagamenti online</h2>'
+            snippet+=''.join(cards)
+            snippet+='<small>Il pagamento viene verificato dalla segreteria; '
+            snippet+='non viene registrato automaticamente aprendo il link.</small></section>'
+            resp.set_data(html.replace(close_tag,snippet+close_tag,1))
+            resp.headers["Cache-Control"]="private, no-store"
+            resp.headers.pop("ETag",None)
+            return resp
+        except Exception:
+            # Never disclose token, athlete, payment URL or exception in logs.
+            return resp
+
     @app.route("/impostazioni/pagamenti-online",methods=["GET"])
     @admin_required
     def bodymind_a293_settings_page():
