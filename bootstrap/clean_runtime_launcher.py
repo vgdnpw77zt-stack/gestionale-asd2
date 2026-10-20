@@ -9,8 +9,8 @@ from pathlib import Path
 import sqlite3
 import sys
 
-EXPECTED_SOURCE_COUNT=208
-EXPECTED_SOURCE_DIGEST='270c19b328a893a9bbc03c0c28f4b2f7cf546c96474495ae4f6995322a32e33d'
+EXPECTED_SOURCE_COUNT=209
+EXPECTED_SOURCE_DIGEST='8d19e46fa5313c3b6626a48830e1b00629ee16fa9c423d29d294083d194b53f4'
 REQUIRED_TABLES=('tesserati','pagamenti','ricevute','quote_mensili')
 
 def source_inventory(root:Path)->dict[str,str]:
