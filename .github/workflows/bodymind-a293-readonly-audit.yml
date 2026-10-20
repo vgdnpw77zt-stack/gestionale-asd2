@@ -61,6 +61,20 @@ jobs:
               if c.execute('SELECT 1 FROM sqlite_master WHERE type=? AND name=?',('table',tab)).fetchone():
                   print('COLUMNS',tab,json.dumps([x[1] for x in c.execute('PRAGMA table_info("'+tab+'")')]))
           c.close()
+          for key,filename in (
+              ('family','routes_bodymind_final.py'),
+              ('settings','routes_bodymind_fix25.py'),
+              ('provider_links','routes_bodymind_fix20.py'),
+              ('promemoria','routes_promemoria.py'),
+              ('reminder_engine','bodymind_a269_reminders.py'),
+              ('family_methods','bodymind_a291_family_methods.py'),
+          ):
+              source=(__import__('pathlib').Path(base)/filename).read_text(encoding='utf8')
+              markers=['sumup','stripe','paypal','family_payment_options','family_pin',
+                       'payment_url','payment_link_url','codice','promemoria',
+                       'bodymind_payment_truth','quote_current','app-tesserato',
+                       'family_code','/famiglia/','recipients','consent','consenso']
+              print('FEATURE_FLAGS',key,json.dumps({m:(m in source) for m in markers}))
           print('AUDIT_DONE')
           PY
       - name: Remove temporary identity
