@@ -10,7 +10,7 @@ _RECEIPT_PATH = re.compile(r"^/app-tesserato/[^/]+/ricevuta/([0-9]+)$")
 def register(app, db, admin_required, csrf_input, current_username):
     @app.before_request
     def a292_guard_hidden_family_pdf():
-        if request.method != "GET":
+        if request.method not in ("GET", "HEAD"):
             return None
         m = _RECEIPT_PATH.fullmatch(request.path)
         if m is None:
