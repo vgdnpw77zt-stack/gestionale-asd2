@@ -73,6 +73,16 @@ class TestA293Settings(unittest.TestCase):
         self.assertIn(b"Conferma e registra rettifica",result.data)
         c=self.db(); self.assertEqual(c.execute("SELECT importo_dovuto FROM quote_mensili WHERE id=51").fetchone()[0],45);c.close()
 
+    def test_ambiguous_historical_payment_blocks_edit(self):
+        c=self.db()
+        q=c.execute("SELECT * FROM quote_mensili WHERE id=51").fetchone()
+        c.execute("INSERT INTO pagamenti VALUES(100,1,2026,10,'quota_corso',45,'incassato')")
+        c.commit()
+        with self.assertRaises(ValueError):
+            safe_monthly_correction(c,quota_id=51,expected_state=_row_state(q),
+                new_amount="30.00",reason="Rettifica della quota in prova",actor="admin")
+        c.close()
+
     def test_invalid_link_host_blocked(self):
         for value in ("http://pay.sumup.com/x","https://sumup.com.evil.test/charge",
                       "https://evil.test/charge","https://user:pwd@pay.sumup.com/x"):
