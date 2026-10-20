@@ -119,8 +119,8 @@ def _check_unpaid(con,q):
         raise ValueError("Esiste una registrazione di pagamento: necessaria rettifica contabile separata")
     if _table(con,"bodymind_a293_offer_links"):
         exists=con.execute("""SELECT 1 FROM bodymind_a293_offer_links
-           WHERE tesserato_id=? AND anno=? AND mese=? AND active=1 LIMIT 1""",(tid,year,month)).fetchone()
-        if exists: raise ValueError("Disattivare e verificare i link di pagamento prima di modificare la quota")
+           WHERE tesserato_id=? AND anno=? AND mese=? LIMIT 1""",(tid,year,month)).fetchone()
+        if exists: raise ValueError("Esiste un link di pagamento, anche se disattivato nel portale: verificare la revoca presso il provider e usare una procedura separata")
     return True
 
 def safe_monthly_correction(con, *, quota_id, expected_state, new_amount, reason, actor):
@@ -333,18 +333,60 @@ def register(app, db, admin_required, csrf_input, current_username):
         <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
         <title>Rettifiche quote · BodyMind</title>"""+_STYLE+"""</head><body><main>
         <a href="/impostazioni/pagamenti-online">← Pagamenti online</a><h1>Rettifiche quote</h1>
-        <p>Modifiche soltanto su quote mensili senza pagamenti e senza link attivi.
+        <p>Modifiche soltanto su quote mensili senza pagamenti e senza precedenti link di pagamento.
         Ogni variazione è tracciata. Le ricevute emesse restano intatte.</p>
         {% for q in rows %}
         <section><b>{{q.nome}} {{q.cognome}} · quota #{{q.id}} · {{q.mese}}/{{q.anno}}</b>
         <p>Importo attuale: € {{q.importo_dovuto}} · Stato: {{q.stato}}</p>
-        <form method="post" action="/amministrazione/rettifiche-quote/{{q.id}}">
+        <form method="post" action="/amministrazione/rettifiche-quote/{{q.id}}/anteprima">
         {{csrf|safe}}<input type="hidden" name="expected_state" value="{{q.etag}}">
         <label>Nuovo importo<input name="importo" inputmode="decimal" required></label>
         <label>Motivazione<input name="reason" minlength="12" maxlength="600" required></label>
-        <button class="full">Conferma modifica tracciata</button></form></section>
+        <button class="full">Mostra anteprima e verifica</button></form></section>
         {% else %}<p>Nessuna quota mensile disponibile.</p>{% endfor %}
         </main></body></html>""",csrf=csrf_input(),rows=rows)
+
+    @app.route("/amministrazione/rettifiche-quote/<int:quota_id>/anteprima",methods=["POST"])
+    @admin_required
+    def bodymind_a293_quota_preview(quota_id):
+        con=db()
+        try:
+            q=_monthly_row(con,quota_id)
+            etag=request.form.get("expected_state","")
+            if not hmac.compare_digest(etag,_row_state(q)):
+                abort(409,description="Quota aggiornata nel frattempo")
+            _check_unpaid(con,q)
+            old=_eur(q["importo_dovuto"])
+            new=_eur(request.form.get("importo"))
+            if new==old:abort(400,description="Importo invariato")
+            reason=str(request.form.get("reason") or "").strip()
+            if not 12<=len(reason)<=600:abort(400)
+            delta=new-old
+        except (ValueError,RuntimeError) as exc:
+            abort(409,description=str(exc))
+        finally:con.close()
+        return render_template_string("""<!doctype html><html lang="it"><head><meta charset="utf-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>Conferma rettifica · BodyMind</title>"""+_STYLE+"""</head><body><main>
+        <a href="/amministrazione/rettifiche-quote">← Annulla senza modifiche</a>
+        <h1>Anteprima rettifica mensile</h1><section>
+        <p>Atleta #{{tid}} · periodo {{month}}/{{year}} · quota #{{quota_id}}</p>
+        <p>Importo precedente: <strong>€ {{old}}</strong></p>
+        <p>Nuovo importo: <strong>€ {{new}}</strong></p>
+        <p>Differenza: <strong>€ {{delta}}</strong></p>
+        <p>Motivazione: {{reason}}</p>
+        <p class="notice">Verificato: nessun pagamento e nessun link associato.
+        Questa operazione NON modifica ricevute, pagamenti o documenti.</p>
+        <form method="post" action="/amministrazione/rettifiche-quote/{{quota_id}}">
+        {{csrf|safe}}
+        <input type="hidden" name="expected_state" value="{{etag}}">
+        <input type="hidden" name="importo" value="{{new}}">
+        <input type="hidden" name="reason" value="{{reason}}">
+        <button class="full">Conferma e registra rettifica</button></form>
+        </section></main></body></html>""",quota_id=int(q["id"]),
+        tid=int(q["tesserato_id"]),year=int(q["anno"]),month=int(q["mese"]),
+        old=format(old,".2f"),new=format(new,".2f"),
+        delta=format(delta,"+.2f"),reason=reason,etag=etag,csrf=csrf_input())
 
     @app.route("/amministrazione/rettifiche-quote/<int:quota_id>",methods=["POST"])
     @admin_required
