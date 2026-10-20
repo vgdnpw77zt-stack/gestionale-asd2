@@ -17,37 +17,37 @@ CSS=r"""
 .bmo .bmo-chat {min-width:0;min-height:0;overflow:hidden}
 .bmo .bmo-messages {min-height:0;overflow-y:auto;overscroll-behavior:contain}
 .bmo .bmo-compose-shell {min-width:0;max-width:100%;z-index:10}
-.bmo .bmo-compose {
-  box-sizing:border-box;min-width:0;max-width:min(100%,900px);
-  display:grid;grid-template-columns:44px minmax(0,1fr) 44px 44px;
+html body main.bmo .bmo-compose {
+  box-sizing:border-box!important;min-width:0!important;max-width:min(100%,900px)!important;
+  display:grid!important;grid-template-columns:44px minmax(0,1fr) 44px 44px!important;
   align-items:center;column-gap:7px;
 }
-.bmo .bmo-compose>#bmoInput {
+html body main.bmo .bmo-compose>#bmoInput {
   grid-column:2;grid-row:1;
   box-sizing:border-box;min-width:0;max-width:100%;width:100%;
   overflow-y:auto;resize:none;line-height:1.4;
 }
-.bmo .bmo-compose>.bmo-attach{grid-column:1;grid-row:1}
-.bmo .bmo-compose>.bmo-mic{grid-column:3;grid-row:1}
-.bmo .bmo-compose>.bmo-send{grid-column:4;grid-row:1}
+html body main.bmo .bmo-compose>.bmo-attach{grid-column:1;grid-row:1}
+html body main.bmo .bmo-compose>.bmo-mic{grid-column:3;grid-row:1}
+html body main.bmo .bmo-compose>.bmo-send{grid-column:4;grid-row:1}
 @media(max-width:800px) {
-  .bmo .bmo-compose-shell {
+  html body main.bmo .bmo-compose-shell {
     flex:0 0 auto!important;position:relative!important;inset:auto!important;
     width:100%!important;max-width:100%!important;transform:none!important;
     padding:7px 8px max(8px,env(safe-area-inset-bottom))!important;
   }
-  .bmo .bmo-compose {
+  html body main.bmo .bmo-compose {
     width:100%!important;max-width:100%!important;
     grid-template-columns:40px minmax(0,1fr) 40px 40px!important;
     gap:6px!important;height:auto!important;min-height:56px!important;\n    grid-template-rows:minmax(40px,auto)!important;
   }
-  .bmo .bmo-compose>#bmoInput {
+  html body main.bmo .bmo-compose>#bmoInput {
     width:100%!important;min-width:0!important;max-width:100%!important;
     min-height:40px!important;max-height:112px!important;
     height:auto!important;font-size:16px!important;align-self:center!important;
   }
-  .bmo .bmo-compose>.bmo-attach,.bmo .bmo-compose>.bmo-mic,
-  .bmo .bmo-compose>.bmo-send {
+  html body main.bmo .bmo-compose>.bmo-attach,html body main.bmo .bmo-compose>.bmo-mic,
+  html body main.bmo .bmo-compose>.bmo-send {
     height:40px!important;width:40px!important;min-width:40px!important;
     margin:0!important;padding:0!important;align-self:center!important;
   }
@@ -75,4 +75,9 @@ def transform(source: bytes, *, expected_sha256: str) -> bytes:
         raise ValueError("Cannot uniquely isolate R155 operator style; refusing patch")
     if 'id="bmoInput"' not in text or 'id="bmoAttachPicker"' not in text:
         raise ValueError("Required composer structure changed")
-    return (text[:end]+CSS+text[end:]).encode("utf-8")
+    # The operator HTML is embedded in a Python f-string. Literal CSS braces must
+    # be doubled or Python will parse selectors/blocks as f-string expressions.
+    escaped_css=CSS.replace("{","{{").replace("}","}}")
+    candidate=(text[:end]+escaped_css+text[end:]).encode("utf-8")
+    compile(candidate,"routes_operator_bodymind.py","exec")
+    return candidate
