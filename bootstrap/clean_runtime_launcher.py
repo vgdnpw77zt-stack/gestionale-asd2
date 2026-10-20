@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+"""BodyMind A301 immutable-volume clean boot. No automatic migration, restore or cleanup."""
+from __future__ import annotations
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import sqlite3
+import sys
+
+EXPECTED_SOURCE_COUNT=208
+EXPECTED_SOURCE_DIGEST='270c19b328a893a9bbc03c0c28f4b2f7cf546c96474495ae4f6995322a32e33d'
+REQUIRED_TABLES=('tesserati','pagamenti','ricevute','quote_mensili')
+
+def source_inventory(root:Path)->dict[str,str]:
+    root=root.resolve(strict=True)
+    paths=[*root.glob('*.py'),*(root/'asd_app').rglob('*.py')]
+    found={}
+    for path in sorted(set(paths)):
+        rel=path.relative_to(root)
+        if any(part.startswith('.') or part=='__pycache__' for part in rel.parts):
+            continue
+        if path.is_symlink() or not path.is_file():
+            raise RuntimeError('unsafe application source')
+        content=path.read_bytes()
+        if len(content)>5_000_000:
+            raise RuntimeError('application source exceeds size guard')
+        compile(content,rel.as_posix(),'exec')
+        found[rel.as_posix()]=hashlib.sha256(content).hexdigest()
+    return found
+
+def inventory_digest(files:dict[str,str])->str:
+    payload=''.join(f'{name}\t{sha}\n' for name,sha in sorted(files.items()))
+    return hashlib.sha256(payload.encode('utf-8')).hexdigest()
+
+def sqlite_readonly_check(db:Path)->dict[str,int]:
+    if not db.is_file() or db.is_symlink():
+        raise RuntimeError('missing or unsafe SQLite database')
+    con=sqlite3.connect(db.resolve(strict=True).as_uri()+'?mode=ro',uri=True,timeout=25)
+    try:
+        con.execute('PRAGMA query_only=ON')
+        if con.execute('PRAGMA integrity_check').fetchone()[0]!='ok':
+            raise RuntimeError('SQLite integrity check failed (no automatic restore)')
+        if con.execute('PRAGMA foreign_key_check').fetchone() is not None:
+            raise RuntimeError('SQLite foreign key violation (no automatic restore)')
+        counts={}
+        for table in REQUIRED_TABLES:
+            if not con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(table,)).fetchone():
+                raise RuntimeError('missing required database table')
+            counts[table]=int(con.execute('SELECT COUNT(*) FROM "'+table+'"').fetchone()[0])
+        return counts
+    finally:
+        con.close()
+
+def preflight(root:Path,db:Path)->dict:
+    if not (root/'.TOP2_OFFICIAL').is_file() or not (root/'app.py').is_file():
+        raise RuntimeError('official application root missing')
+    found=source_inventory(root)
+    if len(found)!=EXPECTED_SOURCE_COUNT or inventory_digest(found)!=EXPECTED_SOURCE_DIGEST:
+        raise RuntimeError(f'source lock mismatch files={len(found)} expected={EXPECTED_SOURCE_COUNT}')
+    return {'source_files':len(found),'sqlite':'ok','rows':sqlite_readonly_check(db),
+            'historical_migrations_executed':0,'automatic_backup_cleanup':False,
+            'automatic_database_restore':False}
+
+def main(argv=None):
+    parser=argparse.ArgumentParser()
+    parser.add_argument('mode',nargs='?',choices=('check','start'),default='start')
+    parser.add_argument('--root',type=Path,default=Path('/data/top2_app'))
+    parser.add_argument('--db',type=Path,default=Path('/data/tenants/default/asd.db'))
+    args=parser.parse_args(argv)
+    try:
+        result=preflight(args.root,args.db)
+    except (OSError,RuntimeError,ValueError,sqlite3.DatabaseError) as exc:
+        print('BODYMIND CLEAN BOOT STOP: '+str(exc),file=sys.stderr,flush=True)
+        return 2
+    print('BODYMIND CLEAN BOOT PASS '+json.dumps(result,sort_keys=True),flush=True)
+    if args.mode=='check':return 0
+    os.chdir(str(args.root.resolve()))
+    port=os.environ.get('PORT','8080')
+    if not port.isdigit() or not 1<=int(port)<=65535:
+        print('BODYMIND CLEAN BOOT STOP: invalid port',file=sys.stderr)
+        return 2
+    os.execvp('gunicorn',['gunicorn','--bind','0.0.0.0:'+port,'--workers','1','--threads','4','--timeout','300','--access-logfile','-','--error-logfile','-','app:app'])
+    return 0
+
+if __name__=='__main__':
+    raise SystemExit(main())
