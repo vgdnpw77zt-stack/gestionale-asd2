@@ -60,6 +60,19 @@ class TestA293Settings(unittest.TestCase):
         self.assertEqual(c.execute("SELECT COUNT(*) FROM ricevute").fetchone()[0],1)
         c.close()
 
+    def test_preview_asks_for_second_confirmation(self):
+        app=Flask("a293-preview")
+        app.secret_key="test-only"
+        def admin(fn):
+            return fn
+        register(app,self.db,admin,lambda:'<input type="hidden" name="csrf_token" value="yes">',lambda:"admin")
+        c=self.db(); q=c.execute("SELECT * FROM quote_mensili WHERE id=51").fetchone();etag=_row_state(q);c.close()
+        result=app.test_client().post("/amministrazione/rettifiche-quote/51/anteprima",
+              data={"expected_state":etag,"importo":"40.00","reason":"Motivo di rettifica test"})
+        self.assertEqual(result.status_code,200)
+        self.assertIn(b"Conferma e registra rettifica",result.data)
+        c=self.db(); self.assertEqual(c.execute("SELECT importo_dovuto FROM quote_mensili WHERE id=51").fetchone()[0],45);c.close()
+
     def test_invalid_link_host_blocked(self):
         for value in ("http://pay.sumup.com/x","https://sumup.com.evil.test/charge",
                       "https://evil.test/charge","https://user:pwd@pay.sumup.com/x"):
@@ -107,6 +120,9 @@ class TestA293Settings(unittest.TestCase):
         c=self.db()
         row=c.execute("SELECT * FROM quote_mensili WHERE id=51").fetchone()
         etag=_row_state(row);c.close()
+        self.assertEqual(client.post("/amministrazione/rettifiche-quote/51/anteprima",headers=h,
+          data={"expected_state":etag,"importo":"40.00","reason":"Correzione quota ottobre",
+                "csrf_token":"yes"}).status_code,409)
         self.assertEqual(client.post("/amministrazione/rettifiche-quote/51",headers=h,
           data={"expected_state":etag,"importo":"40.00","reason":"Correzione quota ottobre",
                 "csrf_token":"yes"}).status_code,409)
