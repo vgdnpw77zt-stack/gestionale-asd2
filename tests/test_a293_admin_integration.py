@@ -4,6 +4,8 @@ import os
 import sqlite3
 import tempfile
 import unittest
+from unittest.mock import patch
+from decimal import Decimal
 from flask import Flask, request, abort
 from fixes.a293.online_payment_settings import (
     _link, _eur, _schema, _row_state, eligible_offer, register,
@@ -16,13 +18,13 @@ class TestA293Settings(unittest.TestCase):
         self.file=os.path.join(self.tmp.name,"test.db")
         c=self.db()
         c.executescript("""
-          CREATE TABLE tesserati(id INTEGER PRIMARY KEY, nome TEXT, cognome TEXT, pwa_token TEXT,attivo INTEGER DEFAULT 1);
+          CREATE TABLE tesserati(id INTEGER PRIMARY KEY, nome TEXT, cognome TEXT, online_token TEXT,attivo INTEGER DEFAULT 1);
           CREATE TABLE quote_mensili(id INTEGER PRIMARY KEY, tesserato_id INTEGER,
             anno INTEGER,mese INTEGER,importo_dovuto REAL,stato TEXT);
           CREATE TABLE pagamenti(id INTEGER PRIMARY KEY, tesserato_id INTEGER,
             anno INTEGER,mese INTEGER,causale TEXT,importo REAL,stato TEXT);
           CREATE TABLE ricevute(id INTEGER PRIMARY KEY,pagamento_id INTEGER);
-          INSERT INTO tesserati(id,nome,cognome,pwa_token,attivo) VALUES(1,'Persona','Test','abcdefghABCDEFGH12345',1);
+          INSERT INTO tesserati(id,nome,cognome,online_token,attivo) VALUES(1,'Persona','Test','abcdefghABCDEFGH12345',1);
           INSERT INTO quote_mensili VALUES(51,1,2026,10,45.00,'da_pagare');
         """)
         c.commit();c.close()
@@ -96,6 +98,8 @@ class TestA293Settings(unittest.TestCase):
         def family(token):
             return "<html><body><main><h1>App Famiglie</h1></main></body></html>"
         register(app,self.db,lambda fn:fn,lambda:"",lambda:"admin")
+        # Simulate the production A269 reconciled read model; the real-model integration
+        # must be separately tested on a cloned production SQLite snapshot.
         c=self.db()
         _schema(c)
         c.execute("INSERT INTO bodymind_a293_providers VALUES(?,?,?,?)",("sumup",1,"admin","2026-10-20"))
@@ -105,16 +109,17 @@ class TestA293Settings(unittest.TestCase):
           ("sumup",1,2026,10,"45.00","https://pay.sumup.com/b2c/safe",1,"admin","2026-10-20"))
         c.commit();c.close()
         client=app.test_client()
-        valid=client.get("/app-tesserato/abcdefghABCDEFGH12345")
-        self.assertEqual(valid.status_code,200)
-        self.assertIn(b"Paga con SumUp",valid.data)
-        self.assertIn(b"45.00",valid.data)
-        self.assertIn("no-store",valid.headers.get("Cache-Control",""))
-        self.assertNotIn(b"Paga con SumUp",client.get("/app-tesserato/otherOPAQUEtoken123456").data)
-        c=self.db()
-        c.execute("UPDATE quote_mensili SET importo_dovuto=41 WHERE id=51")
-        c.commit();c.close()
-        self.assertNotIn(b"Paga con SumUp",client.get("/app-tesserato/abcdefghABCDEFGH12345").data)
+        with patch('fixes.a293.online_payment_settings._reconciled_outstanding',return_value=Decimal('45.00')):
+            valid=client.get("/app-tesserato/abcdefghABCDEFGH12345")
+            self.assertEqual(valid.status_code,200)
+            self.assertIn(b"Paga con SumUp",valid.data)
+            self.assertIn(b"45.00",valid.data)
+            self.assertIn("no-store",valid.headers.get("Cache-Control",""))
+            self.assertNotIn(b"Paga con SumUp",client.get("/app-tesserato/otherOPAQUEtoken123456").data)
+            c=self.db()
+            c.execute("UPDATE quote_mensili SET importo_dovuto=41 WHERE id=51")
+            c.commit();c.close()
+            self.assertNotIn(b"Paga con SumUp",client.get("/app-tesserato/abcdefghABCDEFGH12345").data)
         c=self.db()
         c.execute("UPDATE quote_mensili SET importo_dovuto=45 WHERE id=51")
         c.execute("INSERT INTO pagamenti VALUES(990,1,2026,10,'mensile',45,'pagato')")
@@ -151,7 +156,8 @@ class TestA293Settings(unittest.TestCase):
         self.assertEqual(client.post("/impostazioni/pagamenti-online/link",
                      headers=h,data=link).status_code,302)
         c=self.db()
-        offer=eligible_offer(c,token_verified_tesserato_id=1,provider="sumup",year=2026,month=10)
+        with patch("fixes.a293.online_payment_settings._reconciled_outstanding",return_value=Decimal("45.00")):
+            offer=eligible_offer(c,token_verified_tesserato_id=1,provider="sumup",year=2026,month=10)
         self.assertEqual(offer["amount"],"45.00")
         self.assertEqual(c.execute("SELECT COUNT(*) FROM pagamenti").fetchone()[0],0)
         self.assertEqual(c.execute("SELECT COUNT(*) FROM ricevute").fetchone()[0],0)
