@@ -21,11 +21,11 @@ def source_inventory(root):
     candidates=list(root.glob("*.py")) + list((root/"asd_app").rglob("*.py"))
     result={}
     for p in sorted(set(candidates)):
-        if not p.is_file() or p.is_symlink():
-            raise RuntimeError("Invalid or symlinked source: "+p.name)
         parts=p.relative_to(root).parts
         if any(q.startswith(".") or q=="__pycache__" for q in parts):
             continue
+        if not p.is_file() or p.is_symlink():
+            raise RuntimeError("Invalid or symlinked source: "+p.name)
         relative=p.relative_to(root).as_posix()
         body=p.read_bytes()
         if len(body)>5_000_000: raise RuntimeError("Unexpectedly large source: "+relative)
