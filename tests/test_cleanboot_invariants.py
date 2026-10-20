@@ -13,7 +13,7 @@ spec.loader.exec_module(boot)
 
 class TestCleanBoot(unittest.TestCase):
     def test_frozen_inventory(self):
-        self.assertEqual(boot.EXPECTED_SOURCE_COUNT,208)
+        self.assertEqual(boot.EXPECTED_SOURCE_COUNT,209)
         self.assertEqual(len(boot.EXPECTED_SOURCE_DIGEST),64)
     def test_no_historical_mutation(self):
         source=(ROOT/'bootstrap/clean_runtime_launcher.py').read_text()
