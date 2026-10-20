@@ -1,0 +1,48 @@
+name: BodyMind A293 operator patch real-source dry-run
+on:
+  push:
+    branches: [bodymind-a293-paymentlinks-reminders-operator-20261020]
+    paths:
+      - 'fixes/a293/operator_layout_patch.py'
+      - '.github/workflows/bodymind-a293-live-dry-run.yml'
+permissions:
+  contents: read
+jobs:
+  dry-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Prepare temporary SSH identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$SSH_KEY" > "$HOME/.ssh/a293"
+          chmod 600 "$HOME/.ssh/a293"
+      - name: Live operator CSS transform without any production writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -T -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -i "$HOME/.ssh/a293" bodymind-app-production.up.railway.app@ssh.railway.com 'cat /data/top2_app/asd_app/routes_operator_bodymind.py' > /tmp/a293_operator_live.py
+          python - <<'PY'
+          import ast,hashlib,pathlib
+          from fixes.a293.operator_layout_patch import transform
+          src=pathlib.Path('/tmp/a293_operator_live.py').read_bytes()
+          ast.parse(src.decode('utf-8'))
+          print('A293_OPERATOR_LIVE_SHA256',hashlib.sha256(src).hexdigest())
+          result=transform(src)
+          ast.parse(result.decode('utf-8'))
+          print('A293_OPERATOR_PROPOSED_SHA256',hashlib.sha256(result).hexdigest())
+          print('A293_OPERATOR_REAL_SOURCE_DRYRUN_PASS')
+          print('NO_PRODUCTION_CHANGES')
+          PY
+      - name: Clean temporary files
+        if: always()
+        run: rm -f "$HOME/.ssh/a293" /tmp/a293_operator_live.py
