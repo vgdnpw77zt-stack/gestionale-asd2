@@ -1,0 +1,68 @@
+name: BodyMind A293 targeted read-only integration audit
+on:
+  push:
+    branches: [bodymind-a293-paymentlinks-reminders-operator-20261020]
+    paths: [.github/workflows/bodymind-a293-readonly-audit.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Inspect route metadata and schema only, never personal rows
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$SSH_KEY" > "$HOME/.ssh/a293"
+          chmod 600 "$HOME/.ssh/a293"
+          ssh -T -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -i "$HOME/.ssh/a293" bodymind-app-production.up.railway.app@ssh.railway.com 'python3 -' <<'PY'
+          import os,ast,json,hashlib,sqlite3,re
+          base='/data/top2_app/asd_app'
+          patterns=('family','famigl','app-tesserato','sumup','stripe','paypal','checkout','pagament','remind','promemor','sms','operat','question','domand','invio','codic','token')
+          names=sorted(x for x in os.listdir(base) if x.endswith('.py'))
+          print('MODULE_COUNT',len(names))
+          for fn in names:
+              try:
+                  with open(base+'/'+fn,encoding='utf-8') as f:s=f.read()
+                  t=ast.parse(s)
+              except (OSError,UnicodeError,SyntaxError):continue
+              found=[]
+              for node in ast.walk(t):
+                  if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)):
+                      if any(q in node.name.lower() for q in patterns):
+                          found.append({'function':node.name,'line':node.lineno,'args':[x.arg for x in node.args.args]})
+              if found:
+                  print('FUNCTIONS',fn,json.dumps(found[:100],ensure_ascii=False))
+              routes=[]
+              for node in ast.walk(t):
+                  if not isinstance(node,ast.Call):continue
+                  if not isinstance(node.func,ast.Attribute) or node.func.attr not in ('route','add_url_rule'):continue
+                  if node.args and isinstance(node.args[0],ast.Constant) and isinstance(node.args[0].value,str):
+                      route=node.args[0].value
+                      if any(q in route.lower() for q in patterns):
+                          routes.append({'path':route,'line':node.lineno})
+              if routes:print('ROUTES',fn,json.dumps(routes[:120],ensure_ascii=False))
+              markers=[x for x in ('BODYMIND_R155_OPERATOR_COMPOSER_ANCHORED','BODYMIND_OPERATOR_MOBILE_LAYOUT_CANONICAL','bmo-compose-shell','bmo-compose','bmoInput','SUMUP','sumup','stripe','paypal','app-tesserato','promemoria') if x in s]
+              if markers and ('operat' in fn.lower() or 'bodymind_final' in fn or 'pagament' in fn or 'notific' in fn or 'remind' in fn):
+                  print('MARKERS',fn,json.dumps(markers))
+                  if fn=='routes_operator_bodymind.py':
+                      for key in ('BODYMIND_OPERATOR_MOBILE_LAYOUT_CANONICAL','BODYMIND_R155_OPERATOR_COMPOSER_ANCHORED','<main class="bmo">','bmo-compose-shell'):
+                          print('OPERATOR_ANCHOR',key,'count',s.count(key),'pos',s.find(key))
+                      for key in ('.bmo-compose{','.bmo-compose-shell{','.bmo-grid{'):
+                          matches=[i for i in range(len(s)) if s.startswith(key,i)]
+                          print('OPERATOR_STYLE',key,'positions',matches[:30])
+          c=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True,timeout=15)
+          for tab in ('tesserati','pagamenti','ricevute','quote_mensili','payment_requests','payment_notifications','bodymind_family_receipt_visibility'):
+              if c.execute('SELECT 1 FROM sqlite_master WHERE type=? AND name=?',('table',tab)).fetchone():
+                  print('COLUMNS',tab,json.dumps([x[1] for x in c.execute('PRAGMA table_info("'+tab+'")')]))
+          c.close()
+          print('AUDIT_DONE')
+          PY
+      - name: Remove temporary identity
+        if: always()
+        run: rm -f "$HOME/.ssh/a293"
