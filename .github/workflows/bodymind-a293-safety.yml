@@ -24,5 +24,6 @@ jobs:
           python-version: '3.11'
       - name: Compile and test without production access
         run: |
-          python -m compileall -q fixes/a293 tests/test_a293_family_payment_policy.py tests/test_a293_due_correction_policy.py
+          python -m compileall -q fixes/a293 tests/test_a293_family_payment_policy.py tests/test_a293_due_correction_policy.py tests/test_a293_admin_integration.py
+          python -m pip install 'Flask>=3.0,<4.0'
           python -m unittest discover -s tests -p 'test_a293_*.py' -v
