@@ -67,6 +67,7 @@ class TestA292FlaskRoutes(unittest.TestCase):
         result = self.client.post(url, headers={"X-Test-Admin":"yes"}, data={"hide":"1","reason":"Duplicato storico","csrf_token":"test-csrf"})
         self.assertEqual(result.status_code, 302)
         self.assertEqual(self.client.get("/app-tesserato/abc/ricevuta/1").status_code, 404)
+        self.assertEqual(self.client.head("/app-tesserato/abc/ricevuta/1").status_code, 404)
         self.assertEqual(self.client.get("/app-tesserato/abc/ricevuta/2").status_code, 200)
         result = self.client.post(url, headers={"X-Test-Admin":"yes"}, data={"hide":"0","reason":"Ricevuta ripristinata","csrf_token":"test-csrf"})
         self.assertEqual(result.status_code, 302)
