@@ -156,6 +156,16 @@ def safe_monthly_correction(con, *, quota_id, expected_state, new_amount, reason
         con.rollback()
         raise
 
+def _reconciled_outstanding(con, tid, year, month):
+    # Live adapter; fails closed when read-model does not confirm a clean debt.
+    from .bodymind_a269_read_model import collect as _collect
+    audited=next((r for r in _collect(con,year=int(year),month=int(month))
+                 if int(r.athlete_id)==int(tid)),None)
+    if (not audited or audited.state!="da_pagare" or not all((
+        audited.reconciled,audited.credits_verified,audited.waivers_verified))):
+        return None
+    return _eur(audited.outstanding)
+
 def eligible_offer(con, *, token_verified_tesserato_id, provider, year, month):
     """For use ONLY after established family-token authorization checks.
 
@@ -173,16 +183,9 @@ def eligible_offer(con, *, token_verified_tesserato_id, provider, year, month):
     try:
         if _eur(q["importo_dovuto"])<=0 or _has_payment(con,tid,int(year),int(month)):
             return None
-        # A269 is the same reconciled read model already used by A291's family
-        # portal. Never offer a checkout for ambiguous balances, credits or waivers.
-        from .bodymind_a269_read_model import collect as _collect
-        audited=next((r for r in _collect(con,year=int(year),month=int(month))
-             if int(r.athlete_id)==tid),None)
-        if (not audited or audited.state!="da_pagare" or not all((
-            audited.reconciled,audited.credits_verified,audited.waivers_verified))):
-            return None
-        outstanding=_eur(audited.outstanding)
-        if outstanding<=0 or outstanding!=_eur(q["importo_dovuto"]):
+        # A269 is the reconciled read model used by the existing A291 portal.
+        outstanding=_reconciled_outstanding(con,tid,int(year),int(month))
+        if outstanding is None or outstanding<=0 or outstanding!=_eur(q["importo_dovuto"]):
             return None
         link=con.execute("""SELECT url,importo FROM bodymind_a293_offer_links
           WHERE provider=? AND tesserato_id=? AND anno=? AND mese=? AND active=1""",
