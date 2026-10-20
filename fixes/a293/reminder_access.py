@@ -26,9 +26,9 @@ def compose_reminder(*, athlete_label, family_pin, subject, is_minor,
     if not label or not subject or len(label) > 160 or len(subject) > 180:
         raise ValueError("Promemoria incompleto")
     url = family_access_url(family_pin)
-    msg = ("BodyMind Aerial Studio\\nPromemoria per " + label + ": " + subject +
-           ".\\nCodice personale App Famiglie: " + str(family_pin).strip() +
-           "\\nAccesso: " + url)
+    msg = ("BodyMind Aerial Studio\nPromemoria per " + label + ": " + subject +
+           ".\nCodice personale App Famiglie: " + str(family_pin).strip() +
+           "\nAccesso: " + url)
     if payment_url:
         from .manual_payment_links import validate_url
         candidates = ("sumup", "stripe", "paypal")
@@ -37,7 +37,7 @@ def compose_reminder(*, athlete_label, family_pin, subject, is_minor,
                 safe_url = validate_url(payment_url, provider)
             except ValueError:
                 continue
-            msg += "\\nPagamento online, se ancora dovuto: " + safe_url
+            msg += "\nPagamento online, se ancora dovuto: " + safe_url
             break
         else:
             raise ValueError("Link di pagamento non ufficiale")
