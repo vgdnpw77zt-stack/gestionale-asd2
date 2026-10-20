@@ -15,7 +15,13 @@ REQUIRED_TABLES=('tesserati','pagamenti','ricevute','quote_mensili')
 
 def source_inventory(root:Path)->dict[str,str]:
     root=root.resolve(strict=True)
-    paths=[*root.glob('*.py'),*(root/'asd_app').rglob('*.py')]
+    # Match A301's AUTHORITATIVE source inventory: app.py and asd_app only.
+    # The volume also contains four desktop-only Python files from older releases.
+    allowed_root={'desktop_boot.py','desktop_webview.py','desktop_webview_browser_stabile.py','production_preflight.py'}
+    other_root={p.name for p in root.glob('*.py') if p.name!='app.py'}
+    if other_root-allowed_root:
+        raise RuntimeError('unexpected root-level Python source')
+    paths=[root/'app.py',*(root/'asd_app').rglob('*.py')]
     found={}
     for path in sorted(set(paths)):
         rel=path.relative_to(root)
