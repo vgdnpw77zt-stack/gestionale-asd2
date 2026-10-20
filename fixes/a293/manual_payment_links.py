@@ -10,7 +10,7 @@ _ALLOWED_HOSTS = {
     "paypal": {"paypal.me", "www.paypal.com", "www.paypal.me"},
 }
 _KINDS = {"mensile", "iscrizione", "evento"}
-_PERIOD = re.compile(r"^20\\d{2}-(0[1-9]|1[0-2])$")
+_PERIOD = re.compile(r"^20\d{2}-(0[1-9]|1[0-2])$")
 _TENANT = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
 def amount_to_cents(value):
