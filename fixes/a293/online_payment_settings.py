@@ -110,6 +110,19 @@ def _has_payment(con, athlete_id, year, month):
                       OR lower(coalesce(causale,'')) LIKE '%quota%'))
          ) LIMIT 1""",(athlete_id,year,month)).fetchone())
 
+def _has_open_request(con, athlete_id, year, month):
+    # Old provider checkout requests can remain payable even without a
+    # canonical payment entry. Fail closed before offering or editing.
+    if not _table(con,"payment_requests"):return False
+    required={"tesserato_id","anno","mese","status"}
+    if not required.issubset(_cols(con,"payment_requests")):return True
+    return bool(con.execute("""SELECT 1 FROM payment_requests
+      WHERE tesserato_id=? AND anno=? AND mese=?
+      AND lower(coalesce(status,'')) NOT IN
+         ('paid','pagato','completed','canceled','cancelled','annullato','expired','refunded')
+      AND (deleted_at IS NULL OR trim(deleted_at)='') LIMIT 1""",
+      (athlete_id,year,month)).fetchone())
+
 def _latest_monthly(con, tid, year, month):
     if not _table(con,"quote_mensili") or not {
         "id","tesserato_id","anno","mese","importo_dovuto","stato"
@@ -124,6 +137,8 @@ def _check_unpaid(con,q):
     tid,year,month=(int(q["tesserato_id"]),int(q["anno"]),int(q["mese"]))
     if _has_payment(con,tid,year,month):
         raise ValueError("Esiste una registrazione di pagamento: necessaria rettifica contabile separata")
+    if _has_open_request(con,tid,year,month):
+        raise ValueError("Richiesta di pagamento ancora aperta: riconciliare prima di modificare")
     if _table(con,"bodymind_a293_offer_links"):
         exists=con.execute("""SELECT 1 FROM bodymind_a293_offer_links
            WHERE tesserato_id=? AND anno=? AND mese=? LIMIT 1""",(tid,year,month)).fetchone()
@@ -181,7 +196,8 @@ def eligible_offer(con, *, token_verified_tesserato_id, provider, year, month):
     if any(x in str(q["stato"] or "").lower()
            for x in ("non_dovut","non dovut","esente","annull","sospes","rimbors")):return None
     try:
-        if _eur(q["importo_dovuto"])<=0 or _has_payment(con,tid,int(year),int(month)):
+        if (_eur(q["importo_dovuto"])<=0 or _has_payment(con,tid,int(year),int(month))
+                or _has_open_request(con,tid,int(year),int(month))):
             return None
         # A269 is the reconciled read model used by the existing A291 portal.
         outstanding=_reconciled_outstanding(con,tid,int(year),int(month))
@@ -268,6 +284,32 @@ def register(app, db, admin_required, csrf_input, current_username):
             return resp
         except Exception:
             # Never disclose token, athlete, payment URL or exception in logs.
+            return resp
+
+    @app.after_request
+    def bodymind_a293_settings_navigation(resp):
+        # Add a visible link inside the existing settings/payment provider
+        # screens. No global CSS or changes to legacy provider configuration.
+        try:
+            if (request.method!="GET" or resp.status_code!=200 or
+                    resp.mimetype!="text/html" or request.path not in
+                    ("/impostazioni","/pagamenti/provider-links","/pagamenti")):
+                return resp
+            html=resp.get_data(as_text=True)
+            if "/impostazioni/pagamenti-online" in html:return resp
+            marker="</main>" if "</main>" in html else "</body>" if "</body>" in html else ""
+            if not marker:return resp
+            html=html.replace(marker,
+              '<div style="margin:16px auto;max-width:1080px;padding:16px;border-radius:14px;'
+              'border:1px solid #54718a;background:#112a40;color:#fff">'
+              '<strong>Pagamenti online e rettifiche quote</strong><p>'
+              'Configura i link SumUp individuali e gestisci le quote aperte.</p>'
+              '<a href="/impostazioni/pagamenti-online" style="color:#9bdcff;'
+              'font-weight:800">Apri impostazioni SumUp →</a></div>'+marker,1)
+            resp.set_data(html)
+            resp.headers.pop("ETag",None)
+            return resp
+        except Exception:
             return resp
 
     @app.route("/impostazioni/pagamenti-online",methods=["GET"])
