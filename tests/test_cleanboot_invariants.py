@@ -26,15 +26,15 @@ class TestCleanBoot(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root=pathlib.Path(td)
             (root/'asd_app').mkdir()
-            (root/'app.py').write_text('app=object()\\n')
+            (root/'app.py').write_text('app=object()\n')
             before=boot.source_inventory(root)
             # Files present in actual A301 backup, but never part of the app's 209-lock.
             for filename in ('desktop_boot.py','desktop_webview.py',
                              'desktop_webview_browser_stabile.py','production_preflight.py'):
-                (root/filename).write_text('DESKTOP_ONLY=True\\n')
+                (root/filename).write_text('DESKTOP_ONLY=True\n')
             self.assertEqual(boot.source_inventory(root),before)
             self.assertEqual(len(boot.source_inventory(root)),1)
-            (root/'accidental_loader.py').write_text('SHOULD_NOT_RUN=True\\n')
+            (root/'accidental_loader.py').write_text('SHOULD_NOT_RUN=True\n')
             with self.assertRaisesRegex(RuntimeError,'unexpected root-level Python source'):
                 boot.source_inventory(root)
 
