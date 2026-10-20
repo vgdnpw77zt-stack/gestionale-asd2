@@ -11,6 +11,10 @@ import sys
 
 EXPECTED_SOURCE_COUNT=209
 EXPECTED_SOURCE_DIGEST='8d19e46fa5313c3b6626a48830e1b00629ee16fa9c423d29d294083d194b53f4'
+# A309B staged upgrade: BOTH exact verified hashes are accepted, nothing else.
+# Production remains pinned to the prior 209-only image until isolated QA and post-A304 backup.
+UPGRADE_SOURCE_COUNT=211
+UPGRADE_SOURCE_DIGEST='c7cd7cd5c95e424d0fb43d4f32ad7dfbc752ad181446b247a94b31769c5788b0'
 REQUIRED_TABLES=('tesserati','pagamenti','ricevute','quote_mensili')
 
 def source_inventory(root:Path)->dict[str,str]:
@@ -63,7 +67,8 @@ def preflight(root:Path,db:Path)->dict:
     if not (root/'.TOP2_OFFICIAL').is_file() or not (root/'app.py').is_file():
         raise RuntimeError('official application root missing')
     found=source_inventory(root)
-    if len(found)!=EXPECTED_SOURCE_COUNT or inventory_digest(found)!=EXPECTED_SOURCE_DIGEST:
+    valid={(EXPECTED_SOURCE_COUNT,EXPECTED_SOURCE_DIGEST),(UPGRADE_SOURCE_COUNT,UPGRADE_SOURCE_DIGEST)}
+    if (len(found),inventory_digest(found)) not in valid:
         raise RuntimeError(f'source lock mismatch files={len(found)} expected={EXPECTED_SOURCE_COUNT}')
     return {'source_files':len(found),'sqlite':'ok','rows':sqlite_readonly_check(db),
             'historical_migrations_executed':0,'automatic_backup_cleanup':False,
