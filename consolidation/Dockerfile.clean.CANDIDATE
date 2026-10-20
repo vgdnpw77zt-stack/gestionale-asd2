@@ -1,0 +1,14 @@
+# CANDIDATE ONLY — do NOT point Railway at this Dockerfile until isolated cold-boot QA.
+# This image DOES NOT copy or invoke the 131 historical release migrations.
+FROM python:3.11-slim
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 ASDPRO_RUNTIME_DIR=/data ASD_PRO_DATA_DIR=/data ASD_MAX_UPLOAD_MB=500
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tesseract-ocr tesseract-ocr-ita poppler-utils libgl1 libglib2.0-0 fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
+WORKDIR /opt/bodymind
+COPY requirements_runtime.txt /opt/bodymind/requirements_runtime.txt
+RUN pip install --no-cache-dir -r /opt/bodymind/requirements_runtime.txt
+COPY consolidation/clean_runtime_launcher.py /opt/bodymind/clean_runtime_launcher.py
+# The reviewed full application is mounted at /data/top2_app.
+# The reviewed release-specific SHA manifest MUST exist before starting.
+# The image deliberately does NOT generate or install a lockfile automatically.
+EXPOSE 8080
+CMD ["python","/opt/bodymind/clean_runtime_launcher.py","start","--root","/data/top2_app","--db","/data/tenants/default/asd.db","--manifest","/opt/bodymind/source.lock.json"]
