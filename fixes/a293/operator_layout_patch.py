@@ -39,7 +39,7 @@ CSS=r"""
   .bmo .bmo-compose {
     width:100%!important;max-width:100%!important;
     grid-template-columns:40px minmax(0,1fr) 40px 40px!important;
-    gap:6px!important;height:auto!important;min-height:56px!important;
+    gap:6px!important;height:auto!important;min-height:56px!important;\n    grid-template-rows:minmax(40px,auto)!important;
   }
   .bmo .bmo-compose>#bmoInput {
     width:100%!important;min-width:0!important;max-width:100%!important;
