@@ -1,0 +1,25 @@
+name: BodyMind A293 isolated payment and reminder regression
+on:
+  push:
+    branches: [bodymind-a293-paymentlinks-reminders-operator-20261020]
+    paths:
+      - 'fixes/a293/**'
+      - 'tests/test_a293_staging.py'
+      - '.github/workflows/bodymind-a293-staging-tests.yml'
+permissions:
+  contents: read
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install test-only Flask dependency
+        run: python -m pip install --disable-pip-version-check 'Flask>=3,<4'
+      - name: Verify all isolated tests
+        run: python -m unittest discover -s tests -p 'test_a293_staging.py' -v
+      - name: Compile new modules
+        run: python -m compileall -q fixes/a293 tests/test_a293_staging.py
