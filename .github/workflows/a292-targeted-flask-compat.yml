@@ -1,0 +1,48 @@
+name: A292 targeted Flask compatibility read-only check
+on:
+  push:
+    branches: [bodymind-a292-family-receipts-safety-20261019]
+    paths: [.github/workflows/a292-targeted-flask-compat.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Read-only code compatibility inspection
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"
+          printf '%s\n' "$SSH_KEY" > "$HOME/.ssh/a292_key"
+          chmod 600 "$HOME/.ssh/a292_key"
+          ssh -T -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -i "$HOME/.ssh/a292_key" bodymind-app-production.up.railway.app@ssh.railway.com 'python3 -' <<'PY'
+          import ast, pathlib, json
+          root=pathlib.Path('/data/top2_app/asd_app')
+          targets={
+            'core.py': {'db','admin_required','csrf_input','current_username'},
+            'bodymind_a250_finance_view.py': {'receipts_operational'},
+          }
+          for filename,functions in targets.items():
+            f=root/filename
+            if not f.is_file():
+              print('MISSING',filename);continue
+            s=f.read_text(encoding='utf8'); t=ast.parse(s)
+            for node in ast.walk(t):
+              if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)) and node.name in functions:
+                print('FUNCTION',filename,node.name,node.lineno)
+                # Source only: no execution, no DB records.
+                lines=s.splitlines()
+                for line in lines[node.lineno-1:min(node.end_lineno,node.lineno+95)]:
+                  print('SOURCE',line)
+          f=root/'routes_bodymind_final.py'
+          s=f.read_text(encoding='utf8')
+          print('A292_MARKERS',json.dumps({'raw_payments':'{% for p in pays %}' in s, 'receipt_guard':'family_receipt_visibility' in s}))
+          PY
+      - name: Remove private key
+        if: always()
+        run: rm -f "$HOME/.ssh/a292_key"
