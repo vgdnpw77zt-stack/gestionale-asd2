@@ -125,11 +125,12 @@ def _check_unpaid(con,q):
 
 def safe_monthly_correction(con, *, quota_id, expected_state, new_amount, reason, actor):
     """EXPLICIT single transaction; no write to pagamenti or ricevute."""
-    if not actor or not reason or not 12<=len(reason.strip())<=600:
+    if not actor or not isinstance(reason,str) or not 12<=len(reason.strip())<=600:
         raise ValueError("Motivazione e operatore obbligatori")
     value=_eur(new_amount)
     con.execute("BEGIN IMMEDIATE")
     try:
+        _schema(con)
         q=_monthly_row(con,quota_id)
         if not isinstance(expected_state,str) or not hmac.compare_digest(_row_state(q),expected_state):
             raise ValueError("Quota aggiornata nel frattempo: ricaricare")
