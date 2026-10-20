@@ -22,6 +22,22 @@ class TestCleanBoot(unittest.TestCase):
         docker=(ROOT/'Dockerfile').read_text()
         self.assertNotIn('release_',docker)
         self.assertIn('cp /opt/bodymind/clean_runtime_launcher.py /opt/bodymind-migration/migration_upload.py',docker)
+    def test_desktop_only_files_are_excluded_from_source_lock(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=pathlib.Path(td)
+            (root/'asd_app').mkdir()
+            (root/'app.py').write_text('app=object()\\n')
+            before=boot.source_inventory(root)
+            # Files present in actual A301 backup, but never part of the app's 209-lock.
+            for filename in ('desktop_boot.py','desktop_webview.py',
+                             'desktop_webview_browser_stabile.py','production_preflight.py'):
+                (root/filename).write_text('DESKTOP_ONLY=True\\n')
+            self.assertEqual(boot.source_inventory(root),before)
+            self.assertEqual(len(boot.source_inventory(root)),1)
+            (root/'accidental_loader.py').write_text('SHOULD_NOT_RUN=True\\n')
+            with self.assertRaisesRegex(RuntimeError,'unexpected root-level Python source'):
+                boot.source_inventory(root)
+
     def test_source_and_sqlite_fail_closed(self):
         with tempfile.TemporaryDirectory() as td:
             root=pathlib.Path(td);app=root/'top2_app';app.mkdir();(app/'asd_app').mkdir()
