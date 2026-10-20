@@ -17,3 +17,16 @@ jobs:
         with:
           python-version: '3.11'
       - run: python -m unittest discover -s tests -p 'test_cleanboot_*.py' -v
+
+  image-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production-style image from clean Dockerfile
+        run: docker build --pull --tag bodymind-cleanboot:qa .
+      - name: Validate Railway legacy-path shim is the CLEAN launcher
+        run: |
+          docker run --rm --entrypoint python bodymind-cleanboot:qa -c "from pathlib import Path; p=Path('/opt/bodymind-migration/migration_upload.py'); b=p.read_text(); assert 'EXPECTED_SOURCE_COUNT=209' in b; assert 'runpy.run_path' not in b; assert 'os.execvp' in b; print('CLEAN_LAUNCHER_IMAGE_OK')"
+      - name: Reject historical migration scripts in the new image
+        run: |
+          docker run --rm --entrypoint python bodymind-cleanboot:qa -c "from pathlib import Path; p=Path('/opt/bodymind'); unexpected=[str(x) for x in p.glob('release_*.py')]; assert not unexpected, unexpected; print('NO_LEGACY_RELEASE_SCRIPTS')"
