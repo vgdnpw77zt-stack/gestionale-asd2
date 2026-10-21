@@ -18,6 +18,9 @@ UPGRADE_SOURCE_DIGEST='c7cd7cd5c95e424d0fb43d4f32ad7dfbc752ad181446b247a94b31769
 # A310 manual course roster: source-only surgical release (no automatic roster migration).
 MANUAL_ROSTER_SOURCE_COUNT=212
 MANUAL_ROSTER_SOURCE_DIGEST='fc66a79bc5c86415b3fca60c1fc2134bc4e7194e3303aaf12691fac49724bf28'
+# A311: group-only attendance with persisted Kids/Adults/Pro members, no course assignment.
+SIMPLE_GROUP_SOURCE_COUNT=212
+SIMPLE_GROUP_SOURCE_DIGEST='451abcf3cfab5faab68a82993bd0767f97c3a0413025d361fa8df36b2583ac9f'
 REQUIRED_TABLES=('tesserati','pagamenti','ricevute','quote_mensili')
 
 def source_inventory(root:Path)->dict[str,str]:
@@ -71,7 +74,8 @@ def preflight(root:Path,db:Path)->dict:
         raise RuntimeError('official application root missing')
     found=source_inventory(root)
     valid={(EXPECTED_SOURCE_COUNT,EXPECTED_SOURCE_DIGEST),(UPGRADE_SOURCE_COUNT,UPGRADE_SOURCE_DIGEST),
-           (MANUAL_ROSTER_SOURCE_COUNT,MANUAL_ROSTER_SOURCE_DIGEST)}
+           (MANUAL_ROSTER_SOURCE_COUNT,MANUAL_ROSTER_SOURCE_DIGEST),
+           (SIMPLE_GROUP_SOURCE_COUNT,SIMPLE_GROUP_SOURCE_DIGEST)}
     if (len(found),inventory_digest(found)) not in valid:
         raise RuntimeError(f'source lock mismatch files={len(found)} expected={EXPECTED_SOURCE_COUNT}')
     return {'source_files':len(found),'sqlite':'ok','rows':sqlite_readonly_check(db),
