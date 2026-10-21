@@ -15,9 +15,6 @@ EXPECTED_SOURCE_DIGEST='8d19e46fa5313c3b6626a48830e1b00629ee16fa9c423d29d294083d
 # Production remains pinned to the prior 209-only image until isolated QA and post-A304 backup.
 UPGRADE_SOURCE_COUNT=211
 UPGRADE_SOURCE_DIGEST='c7cd7cd5c95e424d0fb43d4f32ad7dfbc752ad181446b247a94b31769c5788b0'
-# A310 manual roster upgrade: source-only patch, exactly two files changed/added.
-ROSTER_SOURCE_COUNT=212
-ROSTER_SOURCE_DIGEST='fc66a79bc5c86415b3fca60c1fc2134bc4e7194e3303aaf12691fac49724bf28'
 # A310 manual course roster: source-only surgical release (no automatic roster migration).
 MANUAL_ROSTER_SOURCE_COUNT=212
 MANUAL_ROSTER_SOURCE_DIGEST='fc66a79bc5c86415b3fca60c1fc2134bc4e7194e3303aaf12691fac49724bf28'
