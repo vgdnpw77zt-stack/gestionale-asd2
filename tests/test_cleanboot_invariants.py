@@ -27,6 +27,16 @@ class TestCleanBoot(unittest.TestCase):
         self.assertIn('UPGRADE_SOURCE_DIGEST',source)
         self.assertIn('not in valid',source)
 
+    def test_a310_manual_roster_lock(self):
+        self.assertEqual(boot.MANUAL_ROSTER_SOURCE_COUNT,212)
+        self.assertEqual(boot.MANUAL_ROSTER_SOURCE_DIGEST,'fc66a79bc5c86415b3fca60c1fc2134bc4e7194e3303aaf12691fac49724bf28')
+        self.assertEqual(len({boot.EXPECTED_SOURCE_DIGEST,boot.UPGRADE_SOURCE_DIGEST,boot.MANUAL_ROSTER_SOURCE_DIGEST}),3)
+        import inspect
+        code=inspect.getsource(boot.preflight)
+        self.assertIn('MANUAL_ROSTER_SOURCE_COUNT',code)
+        self.assertIn('MANUAL_ROSTER_SOURCE_DIGEST',code)
+        self.assertIn('not in valid',code)
+
     def test_no_historical_mutation(self):
         source=(ROOT/'bootstrap/clean_runtime_launcher.py').read_text()
         for forbidden in ('runpy.run_path','shutil.rmtree','shutil.copy2','db_path.unlink','os.remove('):
