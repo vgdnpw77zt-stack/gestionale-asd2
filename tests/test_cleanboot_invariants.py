@@ -37,6 +37,14 @@ class TestCleanBoot(unittest.TestCase):
         self.assertIn('MANUAL_ROSTER_SOURCE_DIGEST',code)
         self.assertIn('not in valid',code)
 
+    def test_a311_group_only_lock(self):
+        self.assertEqual(boot.SIMPLE_GROUP_SOURCE_COUNT,212)
+        self.assertEqual(boot.SIMPLE_GROUP_SOURCE_DIGEST,'451abcf3cfab5faab68a82993bd0767f97c3a0413025d361fa8df36b2583ac9f')
+        self.assertNotEqual(boot.SIMPLE_GROUP_SOURCE_DIGEST,boot.MANUAL_ROSTER_SOURCE_DIGEST)
+        source=(ROOT/'bootstrap/clean_runtime_launcher.py').read_text()
+        self.assertIn('(SIMPLE_GROUP_SOURCE_COUNT,SIMPLE_GROUP_SOURCE_DIGEST)',source)
+        self.assertIn('not in valid',source)
+
     def test_no_historical_mutation(self):
         source=(ROOT/'bootstrap/clean_runtime_launcher.py').read_text()
         for forbidden in ('runpy.run_path','shutil.rmtree','shutil.copy2','db_path.unlink','os.remove('):
