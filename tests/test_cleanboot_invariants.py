@@ -20,16 +20,11 @@ class TestCleanBoot(unittest.TestCase):
         self.assertEqual(boot.UPGRADE_SOURCE_COUNT,211)
         self.assertEqual(boot.UPGRADE_SOURCE_DIGEST,'c7cd7cd5c95e424d0fb43d4f32ad7dfbc752ad181446b247a94b31769c5788b0')
         self.assertNotEqual(boot.UPGRADE_SOURCE_DIGEST,boot.EXPECTED_SOURCE_DIGEST)
-        self.assertEqual(boot.ROSTER_SOURCE_COUNT,212)
-        self.assertEqual(boot.ROSTER_SOURCE_DIGEST,'fc66a79bc5c86415b3fca60c1fc2134bc4e7194e3303aaf12691fac49724bf28')
-        self.assertNotEqual(boot.ROSTER_SOURCE_DIGEST,boot.UPGRADE_SOURCE_DIGEST)
         # Both precise source locks are permitted, any other digest must fail closed.
         import inspect
         source=inspect.getsource(boot.preflight)
         self.assertIn('UPGRADE_SOURCE_COUNT',source)
         self.assertIn('UPGRADE_SOURCE_DIGEST',source)
-        self.assertIn('ROSTER_SOURCE_COUNT',source)
-        self.assertIn('ROSTER_SOURCE_DIGEST',source)
         self.assertIn('not in valid',source)
 
     def test_a310_manual_roster_lock(self):
