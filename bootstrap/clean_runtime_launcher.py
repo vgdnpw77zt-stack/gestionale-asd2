@@ -21,6 +21,8 @@ MANUAL_ROSTER_SOURCE_DIGEST='fc66a79bc5c86415b3fca60c1fc2134bc4e7194e3303aaf1269
 # A311: group-only attendance with persisted Kids/Adults/Pro members, no course assignment.
 SIMPLE_GROUP_SOURCE_COUNT=212
 SIMPLE_GROUP_SOURCE_DIGEST='451abcf3cfab5faab68a82993bd0767f97c3a0413025d361fa8df36b2583ac9f'
+A317_SOURCE_COUNT=214
+A317_SOURCE_DIGEST='ed36df177eb122933c784e236edf1f72e7f11a147151381672217f547dd4a5bc'
 REQUIRED_TABLES=('tesserati','pagamenti','ricevute','quote_mensili')
 
 def source_inventory(root:Path)->dict[str,str]:
@@ -75,7 +77,7 @@ def preflight(root:Path,db:Path)->dict:
     found=source_inventory(root)
     valid={(EXPECTED_SOURCE_COUNT,EXPECTED_SOURCE_DIGEST),(UPGRADE_SOURCE_COUNT,UPGRADE_SOURCE_DIGEST),
            (MANUAL_ROSTER_SOURCE_COUNT,MANUAL_ROSTER_SOURCE_DIGEST),
-           (SIMPLE_GROUP_SOURCE_COUNT,SIMPLE_GROUP_SOURCE_DIGEST)}
+           (SIMPLE_GROUP_SOURCE_COUNT,SIMPLE_GROUP_SOURCE_DIGEST),(A317_SOURCE_COUNT,A317_SOURCE_DIGEST)}
     if (len(found),inventory_digest(found)) not in valid:
         raise RuntimeError(f'source lock mismatch files={len(found)} expected={EXPECTED_SOURCE_COUNT}')
     return {'source_files':len(found),'sqlite':'ok','rows':sqlite_readonly_check(db),
