@@ -90,7 +90,7 @@ def preflight(root:Path,db:Path)->dict:
     valid={(EXPECTED_SOURCE_COUNT,EXPECTED_SOURCE_DIGEST),(UPGRADE_SOURCE_COUNT,UPGRADE_SOURCE_DIGEST),
            (MANUAL_ROSTER_SOURCE_COUNT,MANUAL_ROSTER_SOURCE_DIGEST),
            (SIMPLE_GROUP_SOURCE_COUNT,SIMPLE_GROUP_SOURCE_DIGEST),(A317_SOURCE_COUNT,A317_SOURCE_DIGEST),(A328_SOURCE_COUNT,A328_SOURCE_DIGEST),(A330_SOURCE_COUNT,A330_SOURCE_DIGEST),(A336_SOURCE_COUNT,A336_SOURCE_DIGEST),(A337_SOURCE_COUNT,A337_SOURCE_DIGEST)}
-    if (len(found),inventory_digest(found)) not in valid:
+    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found):
         raise RuntimeError(f'source lock mismatch files={len(found)} expected={EXPECTED_SOURCE_COUNT}')
     return {'source_files':len(found),'sqlite':'ok','rows':sqlite_readonly_check(db),
             'historical_migrations_executed':0,'automatic_backup_cleanup':False,
@@ -161,6 +161,85 @@ def maybe_apply_a337_family_ui(root:Path,db:Path)->None:
         raise RuntimeError('A337 post-write manifest mismatch')
     print('BODYMIND A337 FAMILY UI APPLIED; 214 verified sources; SQLite not modified',flush=True)
 
+
+# A340 — approved BodyMind design overlay, with exact A337 source-lock verification.
+# All private source and athlete documents stay on the existing Railway volume.
+A340_CSS_SHA256='c7212f04470de83fd3f6a95175d23e11bd594e836dfc0dbd4cf434bf96af92dc'
+A340_OLD_MODULE_SHA256='3aa21ab21216bd72d1dc26030f5cb0f04d1c312f42ad545aed4736220fbe8ecc'
+A340_REL='asd_app/routes_bodymind_final.py'
+A340_BACKUP=Path('/data/release_packages/BODYMIND_A340_PREUI_A337_3aa21ab21216bd7.py')
+
+def a340_css()->bytes:
+    content=Path('/opt/bodymind/family_a340.css.zlib.base64').read_text(encoding='ascii').strip()
+    css=zlib.decompress(base64.b64decode(content,validate=True))
+    if hashlib.sha256(css).hexdigest()!=A340_CSS_SHA256:
+        raise RuntimeError('A340 approved style checksum mismatch')
+    if b"'''" in css or b'</style>' in css:
+        raise RuntimeError('A340 unsafe style delimiter')
+    return css
+
+def a340_expected_source(old:bytes)->tuple[bytes,str]:
+    if hashlib.sha256(old).hexdigest()!=A340_OLD_MODULE_SHA256:
+        raise RuntimeError('A340 historical UI source checksum mismatch')
+    anchor=b'</style>\n</head>'
+    if old.count(anchor)!=1:
+        raise RuntimeError('A340 UI stylesheet anchor not unique')
+    new=old.replace(anchor,b'\n'+a340_css()+b'\n'+anchor,1)
+    compile(new,A340_REL,'exec')
+    return new,hashlib.sha256(new).hexdigest()
+
+def a340_matches(root:Path,found:dict[str,str])->bool:
+    if len(found)!=214 or A340_REL not in found or not A340_BACKUP.is_file() or A340_BACKUP.is_symlink():
+        return False
+    _,new_sha=a340_expected_source(A340_BACKUP.read_bytes())
+    if found[A340_REL]!=new_sha:
+        return False
+    # Verify all 213 OTHER active source hashes by virtually restoring the
+    # single known A337 module digest before checking the signed A337 manifest.
+    prior=dict(found)
+    prior[A340_REL]=A340_OLD_MODULE_SHA256
+    return inventory_digest(prior)==A337_SOURCE_DIGEST
+
+def maybe_apply_a340_family_ui(root:Path,db:Path)->None:
+    found=source_inventory(root)
+    if a340_matches(root,found):
+        return
+    if (len(found),inventory_digest(found))!=(A337_SOURCE_COUNT,A337_SOURCE_DIGEST):
+        return
+    sqlite_readonly_check(db)
+    target=root/A340_REL
+    if target.is_symlink() or not target.is_file():
+        raise RuntimeError('A340 unsafe source path')
+    old=target.read_bytes()
+    new,new_sha=a340_expected_source(old)
+    if A340_BACKUP.exists():
+        if A340_BACKUP.is_symlink() or A340_BACKUP.read_bytes()!=old:
+            raise RuntimeError('A340 backup source conflict')
+    else:
+        if not A340_BACKUP.parent.is_dir() or A340_BACKUP.parent.is_symlink():
+            raise RuntimeError('A340 protected source backup directory missing')
+        with open(A340_BACKUP,'xb') as f:
+            f.write(old)
+            f.flush()
+            os.fsync(f.fileno())
+    temp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a340_design_',suffix='.py',dir=str(target.parent),delete=False) as fh:
+            temp=Path(fh.name)
+            fh.write(new)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(temp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(temp),str(target))
+        temp=None
+    finally:
+        if temp is not None:
+            temp.unlink(missing_ok=True)
+    final=source_inventory(root)
+    if not a340_matches(root,final) or final[A340_REL]!=new_sha:
+        raise RuntimeError('A340 post-write source manifest mismatch')
+    print('BODYMIND A340 APPROVED FAMILY DESIGN APPLIED; previous source preserved; SQLite unchanged',flush=True)
+
 def main(argv=None):
     parser=argparse.ArgumentParser()
     parser.add_argument('mode',nargs='?',choices=('check','start'),default='start')
@@ -170,6 +249,7 @@ def main(argv=None):
     try:
         if args.mode=='start':
             maybe_apply_a337_family_ui(args.root,args.db)
+            maybe_apply_a340_family_ui(args.root,args.db)
         result=preflight(args.root,args.db)
     except (OSError,RuntimeError,ValueError,sqlite3.DatabaseError) as exc:
         print('BODYMIND CLEAN BOOT STOP: '+str(exc),file=sys.stderr,flush=True)
