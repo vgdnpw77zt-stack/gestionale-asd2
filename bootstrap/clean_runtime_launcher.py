@@ -339,7 +339,7 @@ def a342_source_from_a341(old:bytes)->tuple[bytes,str]:
     if old.count(anchor)!=1:
         raise RuntimeError('A342 stylesheet anchor mismatch')
     css=A342_STYLE_PATH.read_bytes()
-    if b'bmWaveFlowDesktop' not in css or b'prefers-reduced-motion' not in css or b'</style>' in css:
+    if b'bmWaveFloat' not in css or b'prefers-reduced-motion' not in css or b'</style>' in css:
         raise RuntimeError('A342 motion stylesheet invalid')
     new=old.replace(anchor,b'\n'+css+b'\n'+anchor,1)
     compile(new,A342_REL,'exec')
