@@ -25,7 +25,7 @@ A317_SOURCE_COUNT=214
 A317_SOURCE_DIGEST='ed36df177eb122933c784e236edf1f72e7f11a147151381672217f547dd4a5bc'
 A328_SOURCE_COUNT=214
 A328_SOURCE_DIGEST='f8b3de5cd7e6feb98f0aee595cc8317965b57205a4270994274cab7390907cfe'
-REQUIRED_TABLES='tesserati','pagamenti','ricevute','quote_mensili')
+REQUIRED_TABLES=('tesserati','pagamenti','ricevute','quote_mensili')
 
 def source_inventory(root:Path)->dict[str,str]:
     root=root.resolve(strict=True)
