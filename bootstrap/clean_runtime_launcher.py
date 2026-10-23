@@ -23,7 +23,9 @@ SIMPLE_GROUP_SOURCE_COUNT=212
 SIMPLE_GROUP_SOURCE_DIGEST='451abcf3cfab5faab68a82993bd0767f97c3a0413025d361fa8df36b2583ac9f'
 A317_SOURCE_COUNT=214
 A317_SOURCE_DIGEST='ed36df177eb122933c784e236edf1f72e7f11a147151381672217f547dd4a5bc'
-REQUIRED_TABLES=('tesserati','pagamenti','ricevute','quote_mensili')
+A328_SOURCE_COUNT=214
+A328_SOURCE_DIGEST='f8b3de5cd7e6feb98f0aee595cc8317965b57205a4270994274cab7390907cfe'
+REQUIRED_TABLES='tesserati','pagamenti','ricevute','quote_mensili')
 
 def source_inventory(root:Path)->dict[str,str]:
     root=root.resolve(strict=True)
@@ -77,7 +79,7 @@ def preflight(root:Path,db:Path)->dict:
     found=source_inventory(root)
     valid={(EXPECTED_SOURCE_COUNT,EXPECTED_SOURCE_DIGEST),(UPGRADE_SOURCE_COUNT,UPGRADE_SOURCE_DIGEST),
            (MANUAL_ROSTER_SOURCE_COUNT,MANUAL_ROSTER_SOURCE_DIGEST),
-           (SIMPLE_GROUP_SOURCE_COUNT,SIMPLE_GROUP_SOURCE_DIGEST),(A317_SOURCE_COUNT,A317_SOURCE_DIGEST)}
+           (SIMPLE_GROUP_SOURCE_COUNT,SIMPLE_GROUP_SOURCE_DIGEST),(A317_SOURCE_COUNT,A317_SOURCE_DIGEST),(A328_SOURCE_COUNT,A328_SOURCE_DIGEST)}
     if (len(found),inventory_digest(found)) not in valid:
         raise RuntimeError(f'source lock mismatch files={len(found)} expected={EXPECTED_SOURCE_COUNT}')
     return {'source_files':len(found),'sqlite':'ok','rows':sqlite_readonly_check(db),
