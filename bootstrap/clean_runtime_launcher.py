@@ -178,13 +178,15 @@ def a340_css()->bytes:
         raise RuntimeError('A340 unsafe style delimiter')
     return css
 
+A340_EDITORIAL_CSS="/* Home editorial order: gallery follows dashboard summary without changing routes. */\n.main{display:flex;flex-direction:column}\n.main>.flash{order:-3}\n.main>.stats{order:-2}\n.main>#media{order:-1;margin-bottom:32px}\n.main>#corsi{order:0}\n.main>#pagamenti{order:1}\n.main>#documenti{order:2}\n.main>.section:not(#media):not(#corsi):not(#pagamenti){order:3}\n"
+
 def a340_expected_source(old:bytes)->tuple[bytes,str]:
     if hashlib.sha256(old).hexdigest()!=A340_OLD_MODULE_SHA256:
         raise RuntimeError('A340 historical UI source checksum mismatch')
     anchor=b'</style>\n</head>'
     if old.count(anchor)!=1:
         raise RuntimeError('A340 UI stylesheet anchor not unique')
-    new=old.replace(anchor,b'\n'+a340_css()+b'\n'+anchor,1)
+    new=old.replace(anchor,b'\n'+a340_css()+b'\n'+A340_EDITORIAL_CSS.encode('utf-8')+b'\n'+anchor,1)
     compile(new,A340_REL,'exec')
     return new,hashlib.sha256(new).hexdigest()
 
