@@ -90,7 +90,7 @@ def preflight(root:Path,db:Path)->dict:
     valid={(EXPECTED_SOURCE_COUNT,EXPECTED_SOURCE_DIGEST),(UPGRADE_SOURCE_COUNT,UPGRADE_SOURCE_DIGEST),
            (MANUAL_ROSTER_SOURCE_COUNT,MANUAL_ROSTER_SOURCE_DIGEST),
            (SIMPLE_GROUP_SOURCE_COUNT,SIMPLE_GROUP_SOURCE_DIGEST),(A317_SOURCE_COUNT,A317_SOURCE_DIGEST),(A328_SOURCE_COUNT,A328_SOURCE_DIGEST),(A330_SOURCE_COUNT,A330_SOURCE_DIGEST),(A336_SOURCE_COUNT,A336_SOURCE_DIGEST),(A337_SOURCE_COUNT,A337_SOURCE_DIGEST)}
-    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found):
+    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found):
         raise RuntimeError(f'source lock mismatch files={len(found)} expected={EXPECTED_SOURCE_COUNT}')
     return {'source_files':len(found),'sqlite':'ok','rows':sqlite_readonly_check(db),
             'historical_migrations_executed':0,'automatic_backup_cleanup':False,
@@ -242,6 +242,87 @@ def maybe_apply_a340_family_ui(root:Path,db:Path)->None:
         raise RuntimeError('A340 post-write source manifest mismatch')
     print('BODYMIND A340 APPROVED FAMILY DESIGN APPLIED; previous source preserved; SQLite unchanged',flush=True)
 
+
+# A341 — site-consistent luminous waves + links to existing PUBLIC reels.
+# Keep the actual family/video data intact; preserve private UI source A340 for recovery.
+A341_REL=A340_REL
+A341_ROLLBACK=Path('/data/release_packages/BODYMIND_A341_PREUI_A340.py')
+A341_STYLE_PATH=Path('/opt/bodymind/family_a341.css')
+A341_LINKS_PATH=Path('/opt/bodymind/family_a341.js')
+A341_STYLE_ANCHOR=b'</style>\n</head>'
+A341_MEDIA_ANCHOR=b'</div></div></section>\n<section class="section"><div class="panel personal">'
+
+def a341_source_from_a340(old:bytes)->tuple[bytes,str]:
+    if not A340_BACKUP.is_file() or A340_BACKUP.is_symlink():
+        raise RuntimeError('A341 original A337 UI backup missing')
+    _,a340_sha=a340_expected_source(A340_BACKUP.read_bytes())
+    if hashlib.sha256(old).hexdigest()!=a340_sha:
+        raise RuntimeError('A341 A340 source checksum mismatch')
+    if old.count(A341_STYLE_ANCHOR)!=1 or old.count(A341_MEDIA_ANCHOR)!=1:
+        raise RuntimeError('A341 expected template anchors missing')
+    style=A341_STYLE_PATH.read_bytes()
+    links=A341_LINKS_PATH.read_bytes()
+    if not (b'.bodymind-media-outbound' in style and b'familyMediaTrack' in links and b'noopener noreferrer' in links):
+        raise RuntimeError('A341 expected visual/link assets missing')
+    if b'</style>' in style or b'</script>' in links or b"'''" in links:
+        raise RuntimeError('A341 unsafe style or link assets')
+    new=old.replace(A341_STYLE_ANCHOR,b'\n'+style+b'\n'+A341_STYLE_ANCHOR,1)
+    new=new.replace(A341_MEDIA_ANCHOR,
+        b'</div></div></section>\n<script id="bodymind-media-links">\n'+links+b'\n</script>\n<section class="section"><div class="panel personal">',1)
+    compile(new,A341_REL,'exec')
+    return new,hashlib.sha256(new).hexdigest()
+
+def a341_matches(root:Path,found:dict[str,str])->bool:
+    if len(found)!=214 or A341_REL not in found or not A341_ROLLBACK.is_file() or A341_ROLLBACK.is_symlink():
+        return False
+    old=A341_ROLLBACK.read_bytes()
+    _,expected_sha=a341_source_from_a340(old)
+    if found[A341_REL]!=expected_sha:
+        return False
+    prior=dict(found)
+    prior[A341_REL]=hashlib.sha256(old).hexdigest()
+    return a340_matches(root,prior)
+
+def maybe_apply_a341_family_ui(root:Path,db:Path)->None:
+    found=source_inventory(root)
+    if a341_matches(root,found):
+        return
+    if not a340_matches(root,found):
+        return
+    sqlite_readonly_check(db)
+    target=root/A341_REL
+    if target.is_symlink() or not target.is_file():
+        raise RuntimeError('A341 unsafe source path')
+    old=target.read_bytes()
+    new,new_sha=a341_source_from_a340(old)
+    if A341_ROLLBACK.exists():
+        if A341_ROLLBACK.is_symlink() or A341_ROLLBACK.read_bytes()!=old:
+            raise RuntimeError('A341 previous source backup mismatch')
+    else:
+        if not A341_ROLLBACK.parent.is_dir() or A341_ROLLBACK.parent.is_symlink():
+            raise RuntimeError('A341 protected backup directory missing')
+        with open(A341_ROLLBACK,'xb') as fh:
+            fh.write(old)
+            fh.flush()
+            os.fsync(fh.fileno())
+    tmp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a341_family_',suffix='.py',dir=str(target.parent),delete=False) as fh:
+            tmp=Path(fh.name)
+            fh.write(new)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(tmp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(tmp),str(target))
+        tmp=None
+    finally:
+        if tmp is not None:
+            tmp.unlink(missing_ok=True)
+    final=source_inventory(root)
+    if not a341_matches(root,final) or final[A341_REL]!=new_sha:
+        raise RuntimeError('A341 post-write manifest mismatch')
+    print('BODYMIND A341 WAVES AND PUBLIC MEDIA LINKS APPLIED; previous source preserved; SQLite unchanged',flush=True)
+
 def main(argv=None):
     parser=argparse.ArgumentParser()
     parser.add_argument('mode',nargs='?',choices=('check','start'),default='start')
@@ -252,6 +333,7 @@ def main(argv=None):
         if args.mode=='start':
             maybe_apply_a337_family_ui(args.root,args.db)
             maybe_apply_a340_family_ui(args.root,args.db)
+            maybe_apply_a341_family_ui(args.root,args.db)
         result=preflight(args.root,args.db)
     except (OSError,RuntimeError,ValueError,sqlite3.DatabaseError) as exc:
         print('BODYMIND CLEAN BOOT STOP: '+str(exc),file=sys.stderr,flush=True)
