@@ -8,6 +8,10 @@ import os
 from pathlib import Path
 import sqlite3
 import sys
+import base64
+import zlib
+import tempfile
+import stat
 
 EXPECTED_SOURCE_COUNT=209
 EXPECTED_SOURCE_DIGEST='8d19e46fa5313c3b6626a48830e1b00629ee16fa9c423d29d294083d194b53f4'
@@ -92,6 +96,71 @@ def preflight(root:Path,db:Path)->dict:
             'historical_migrations_executed':0,'automatic_backup_cleanup':False,
             'automatic_database_restore':False}
 
+
+# A337 cinematic family UI overlay. Only the public stylesheet lives in this image.
+# Private application sources and their backups remain on the existing volume.
+def maybe_apply_a337_family_ui(root:Path,db:Path)->None:
+    found=source_inventory(root)
+    actual=(len(found),inventory_digest(found))
+    desired=(A337_SOURCE_COUNT,A337_SOURCE_DIGEST)
+    if actual==desired:
+        return
+    if actual!=(A336_SOURCE_COUNT,A336_SOURCE_DIGEST):
+        return
+    # Visual-only upgrade: refuse any write unless the live database checks pass.
+    sqlite_readonly_check(db)
+    compressed=Path('/opt/bodymind/family_a337.css.zlib.base64').read_text(encoding='ascii').strip()
+    css=zlib.decompress(base64.b64decode(compressed,validate=True))
+    if hashlib.sha256(css).hexdigest()!='69210cc584ab72980e061f1db340f2533f9fa7c356c4f6d3dc1d75783e5283ae':
+        raise RuntimeError('A337 stylesheet checksum mismatch')
+    target=root/'asd_app'/'routes_bodymind_final.py'
+    if target.is_symlink() or not target.is_file():
+        raise RuntimeError('A337 unsafe target path')
+    old=target.read_bytes()
+    old_sha=hashlib.sha256(old).hexdigest()
+    if old_sha!='24361f208b5ddf3d24180b7a15f429071d332130ba0c95d4fc9b2ae9f24ca4e9':
+        raise RuntimeError('A337 existing UI changed, nothing written')
+    anchor=b'</style>\n</head>'
+    if old.count(anchor)!=1:
+        raise RuntimeError('A337 unique stylesheet anchor not found')
+    new=old.replace(anchor,css+b'\n'+anchor,1)
+    new_sha=hashlib.sha256(new).hexdigest()
+    if new_sha!='3aa21ab21216bd72d1dc26030f5cb0f04d1c312f42ad545aed4736220fbe8ecc':
+        raise RuntimeError('A337 candidate source hash mismatch')
+    proposed=dict(found)
+    proposed['asd_app/routes_bodymind_final.py']=new_sha
+    if (len(proposed),inventory_digest(proposed))!=desired:
+        raise RuntimeError('A337 candidate manifest mismatch')
+    releases=Path('/data/release_packages')
+    if not releases.is_dir() or releases.is_symlink():
+        raise RuntimeError('A337 safe backup directory unavailable')
+    backup=releases/'BODYMIND_A337_PREUI_ROLLBACK_24361f208b5d.py'
+    if backup.exists():
+        if backup.is_symlink() or hashlib.sha256(backup.read_bytes()).hexdigest()!=old_sha:
+            raise RuntimeError('A337 previous source backup mismatch')
+    else:
+        with open(backup,'xb') as fh:
+            fh.write(old)
+            fh.flush()
+            os.fsync(fh.fileno())
+    temp_path=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a337_ui_patch_',suffix='.py',dir=str(target.parent),delete=False) as fh:
+            temp_path=Path(fh.name)
+            fh.write(new)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(temp_path,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(temp_path),str(target))
+        temp_path=None
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+    final=source_inventory(root)
+    if (len(final),inventory_digest(final))!=desired:
+        raise RuntimeError('A337 post-write manifest mismatch')
+    print('BODYMIND A337 FAMILY UI APPLIED; 214 verified sources; SQLite not modified',flush=True)
+
 def main(argv=None):
     parser=argparse.ArgumentParser()
     parser.add_argument('mode',nargs='?',choices=('check','start'),default='start')
@@ -99,6 +168,8 @@ def main(argv=None):
     parser.add_argument('--db',type=Path,default=Path('/data/tenants/default/asd.db'))
     args=parser.parse_args(argv)
     try:
+        if args.mode=='start':
+            maybe_apply_a337_family_ui(args.root,args.db)
         result=preflight(args.root,args.db)
     except (OSError,RuntimeError,ValueError,sqlite3.DatabaseError) as exc:
         print('BODYMIND CLEAN BOOT STOP: '+str(exc),file=sys.stderr,flush=True)
