@@ -18,3 +18,13 @@
 .media-card>a.bodymind-media-outbound:after{content:"Guarda ↗";position:absolute;right:13px;top:13px;color:#fff;background:#071d3de8;border:1px solid #9ccaffad;border-radius:999px;padding:7px 10px;font:600 12px/1.2 system-ui,sans-serif;box-shadow:0 4px 19px #0006}
 .media-card>a.bodymind-media-outbound:hover:after{background:#1b5090}
 .media-card>a.bodymind-media-outbound:focus-visible{outline:3px solid #a1d4ff;outline-offset:-5px;border-radius:18px}
+
+
+/* Visible, gentle motion of site-inspired light waves */
+.main::before{background-repeat:repeat-y!important;animation:bodymindWaveFlow 17s ease-in-out infinite alternate;will-change:transform,background-position}
+@keyframes bodymindWaveFlow{
+  0%{transform:translate3d(-1.5%,-8px,0);background-position:0 0}
+  50%{transform:translate3d(1.5%,8px,0);background-position:25px 38px}
+  100%{transform:translate3d(-.7%,18px,0);background-position:-20px 82px}
+}
+@media(prefers-reduced-motion:reduce){.main::before{animation:none!important;transform:none!important}}
