@@ -90,7 +90,7 @@ def preflight(root:Path,db:Path)->dict:
     valid={(EXPECTED_SOURCE_COUNT,EXPECTED_SOURCE_DIGEST),(UPGRADE_SOURCE_COUNT,UPGRADE_SOURCE_DIGEST),
            (MANUAL_ROSTER_SOURCE_COUNT,MANUAL_ROSTER_SOURCE_DIGEST),
            (SIMPLE_GROUP_SOURCE_COUNT,SIMPLE_GROUP_SOURCE_DIGEST),(A317_SOURCE_COUNT,A317_SOURCE_DIGEST),(A328_SOURCE_COUNT,A328_SOURCE_DIGEST),(A330_SOURCE_COUNT,A330_SOURCE_DIGEST),(A336_SOURCE_COUNT,A336_SOURCE_DIGEST),(A337_SOURCE_COUNT,A337_SOURCE_DIGEST)}
-    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found):
+    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found):
         raise RuntimeError(f'source lock mismatch files={len(found)} expected={EXPECTED_SOURCE_COUNT}')
     return {'source_files':len(found),'sqlite':'ok','rows':sqlite_readonly_check(db),
             'historical_migrations_executed':0,'automatic_backup_cleanup':False,
@@ -323,6 +323,79 @@ def maybe_apply_a341_family_ui(root:Path,db:Path)->None:
         raise RuntimeError('A341 post-write manifest mismatch')
     print('BODYMIND A341 WAVES AND PUBLIC MEDIA LINKS APPLIED; previous source preserved; SQLite unchanged',flush=True)
 
+
+# A342 — moving luminous waves. Source-only UI overlay; authenticated A341 tree and SQLite.
+A342_REL=A341_REL
+A342_BACKUP=Path('/data/release_packages/BODYMIND_A342_PREUI_A341.py')
+A342_STYLE_PATH=Path('/opt/bodymind/family_a342_motion.css')
+
+def a342_source_from_a341(old:bytes)->tuple[bytes,str]:
+    if not A341_ROLLBACK.is_file() or A341_ROLLBACK.is_symlink():
+        raise RuntimeError('A342 signed A340 source backup missing')
+    _,a341_sha=a341_source_from_a340(A341_ROLLBACK.read_bytes())
+    if hashlib.sha256(old).hexdigest()!=a341_sha:
+        raise RuntimeError('A342 unexpected A341 source checksum')
+    anchor=b'</style>\n</head>'
+    if old.count(anchor)!=1:
+        raise RuntimeError('A342 stylesheet anchor mismatch')
+    css=A342_STYLE_PATH.read_bytes()
+    if b'bmWaveFlowDesktop' not in css or b'prefers-reduced-motion' not in css or b'</style>' in css:
+        raise RuntimeError('A342 motion stylesheet invalid')
+    new=old.replace(anchor,b'\n'+css+b'\n'+anchor,1)
+    compile(new,A342_REL,'exec')
+    return new,hashlib.sha256(new).hexdigest()
+
+def a342_matches(root:Path,found:dict[str,str])->bool:
+    if len(found)!=214 or A342_REL not in found or not A342_BACKUP.is_file() or A342_BACKUP.is_symlink():
+        return False
+    old=A342_BACKUP.read_bytes()
+    _,expected_sha=a342_source_from_a341(old)
+    if found[A342_REL]!=expected_sha:
+        return False
+    prior=dict(found)
+    prior[A342_REL]=hashlib.sha256(old).hexdigest()
+    return a341_matches(root,prior)
+
+def maybe_apply_a342_family_ui(root:Path,db:Path)->None:
+    found=source_inventory(root)
+    if a342_matches(root,found):
+        return
+    if not a341_matches(root,found):
+        return
+    sqlite_readonly_check(db)
+    target=root/A342_REL
+    if target.is_symlink() or not target.is_file():
+        raise RuntimeError('A342 unsafe target source path')
+    old=target.read_bytes()
+    new,new_sha=a342_source_from_a341(old)
+    if A342_BACKUP.exists():
+        if A342_BACKUP.is_symlink() or A342_BACKUP.read_bytes()!=old:
+            raise RuntimeError('A342 source backup conflict')
+    else:
+        if not A342_BACKUP.parent.is_dir() or A342_BACKUP.parent.is_symlink():
+            raise RuntimeError('A342 safe rollback directory unavailable')
+        with open(A342_BACKUP,'xb') as fh:
+            fh.write(old)
+            fh.flush()
+            os.fsync(fh.fileno())
+    temp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a342_motion_',suffix='.py',dir=str(target.parent),delete=False) as fh:
+            temp=Path(fh.name)
+            fh.write(new)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(temp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(temp),str(target))
+        temp=None
+    finally:
+        if temp is not None:
+            temp.unlink(missing_ok=True)
+    final=source_inventory(root)
+    if not a342_matches(root,final) or final[A342_REL]!=new_sha:
+        raise RuntimeError('A342 post-write source verification failed')
+    print('BODYMIND A342 MOVING WAVES INSTALLED; SQLite and personal files unchanged',flush=True)
+
 def main(argv=None):
     parser=argparse.ArgumentParser()
     parser.add_argument('mode',nargs='?',choices=('check','start'),default='start')
@@ -334,6 +407,7 @@ def main(argv=None):
             maybe_apply_a337_family_ui(args.root,args.db)
             maybe_apply_a340_family_ui(args.root,args.db)
             maybe_apply_a341_family_ui(args.root,args.db)
+            maybe_apply_a342_family_ui(args.root,args.db)
         result=preflight(args.root,args.db)
     except (OSError,RuntimeError,ValueError,sqlite3.DatabaseError) as exc:
         print('BODYMIND CLEAN BOOT STOP: '+str(exc),file=sys.stderr,flush=True)
