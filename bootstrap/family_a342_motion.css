@@ -1,0 +1,11 @@
+
+/* A342: true luminous wave movement; matching the A341 720px and mobile 610px tiles. */
+@keyframes bmWaveFlowDesktop{from{background-position:center 0}to{background-position:center 720px}}
+@keyframes bmWaveFlowMobile{from{background-position:center 0}to{background-position:center 610px}}
+@media (prefers-reduced-motion:no-preference){
+  .main::before{animation:bmWaveFlowDesktop 26s linear infinite!important}
+}
+@media (max-width:760px) and (prefers-reduced-motion:no-preference){
+  .main::before{animation:bmWaveFlowMobile 21s linear infinite!important}
+}
+@media (prefers-reduced-motion:reduce){.main::before{animation:none!important}}
