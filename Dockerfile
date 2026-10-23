@@ -6,6 +6,7 @@ WORKDIR /opt/bodymind
 COPY requirements_runtime.txt /opt/bodymind/requirements_runtime.txt
 RUN pip install --no-cache-dir -r /opt/bodymind/requirements_runtime.txt
 COPY bootstrap/clean_runtime_launcher.py /opt/bodymind/clean_runtime_launcher.py
+COPY bootstrap/family_a337.css.zlib.base64 /opt/bodymind/family_a337.css.zlib.base64
 # Existing Railway startCommand remains compatible, but now executes this CLEAN code only.
 RUN mkdir -p /opt/bodymind-migration && cp /opt/bodymind/clean_runtime_launcher.py /opt/bodymind-migration/migration_upload.py
 EXPOSE 8080
