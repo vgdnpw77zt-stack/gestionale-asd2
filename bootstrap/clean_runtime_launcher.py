@@ -262,6 +262,8 @@ def a341_source_from_a340(old:bytes)->tuple[bytes,str]:
         raise RuntimeError('A341 expected template anchors missing')
     style=A341_STYLE_PATH.read_bytes()
     links=A341_LINKS_PATH.read_bytes()
+    if hashlib.sha256(style).hexdigest()!='502bfe839e3d0cfc9987578ab0f138149ba27b3b4660d8229eeedfadad5241eb' or hashlib.sha256(links).hexdigest()!='c8d06142ba6e3fd2b0b474605866e327577f1ee8bcc3782a77a1a3b19c074238':
+        raise RuntimeError('A341 public stylesheet/script checksum mismatch')
     if not (b'.bodymind-media-outbound' in style and b'familyMediaTrack' in links and b'noopener noreferrer' in links):
         raise RuntimeError('A341 expected visual/link assets missing')
     if b'</style>' in style or b'</script>' in links or b"'''" in links:
