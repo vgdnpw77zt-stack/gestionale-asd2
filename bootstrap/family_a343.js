@@ -18,7 +18,7 @@ if(controls)controls.appendChild(toggle);
 let userPaused=reduced||saveData,inView=true,userInteracting=false,resumeAt=0;
 let lastAdvance=Date.now(),scrollWaitUntil=0,activeVideo=null,videoStart=0;
 function paused(){return userPaused||userInteracting||!inView||document.hidden;}
-function updateControl(){toggle.setAttribute('aria-pressed',userPaused?'true':'false');toggle.textContent=userPaused?'▶ Riprendi':'Ⅱ Pausa';area.dataset.autoplayActive=paused()?'false':'true';}
+function updateControl(){toggle.setAttribute('aria-pressed',userPaused?'true':'false');toggle.textContent=userPaused?'\u25B6 Riprendi':'\u2161 Pausa';area.dataset.autoplayActive=paused()?'false':'true';}
 function pauseVideos(except){
 for(const v of track.querySelectorAll('video'))if(v!==except&&!v.paused){try{v.pause();}catch(_){}}
 }
