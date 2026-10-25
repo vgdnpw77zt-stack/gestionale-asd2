@@ -90,7 +90,7 @@ def preflight(root:Path,db:Path)->dict:
     valid={(EXPECTED_SOURCE_COUNT,EXPECTED_SOURCE_DIGEST),(UPGRADE_SOURCE_COUNT,UPGRADE_SOURCE_DIGEST),
            (MANUAL_ROSTER_SOURCE_COUNT,MANUAL_ROSTER_SOURCE_DIGEST),
            (SIMPLE_GROUP_SOURCE_COUNT,SIMPLE_GROUP_SOURCE_DIGEST),(A317_SOURCE_COUNT,A317_SOURCE_DIGEST),(A328_SOURCE_COUNT,A328_SOURCE_DIGEST),(A330_SOURCE_COUNT,A330_SOURCE_DIGEST),(A336_SOURCE_COUNT,A336_SOURCE_DIGEST),(A337_SOURCE_COUNT,A337_SOURCE_DIGEST)}
-    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found):
+    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found) and not a343_matches(root,found):
         raise RuntimeError(f'source lock mismatch files={len(found)} expected={EXPECTED_SOURCE_COUNT}')
     return {'source_files':len(found),'sqlite':'ok','rows':sqlite_readonly_check(db),
             'historical_migrations_executed':0,'automatic_backup_cleanup':False,
@@ -396,6 +396,82 @@ def maybe_apply_a342_family_ui(root:Path,db:Path)->None:
         raise RuntimeError('A342 post-write source verification failed')
     print('BODYMIND A342 MOVING WAVES INSTALLED; SQLite and personal files unchanged',flush=True)
 
+
+# A343 — stronger visible waves. Only visual CSS is changed; A342 source tree is authenticated.
+A343_REL=A342_REL
+A343_BACKUP=Path('/data/release_packages/BODYMIND_A343_PREUI_A342.py')
+A343_STYLE_PATH=Path('/opt/bodymind/family_a343_visible_waves.css')
+A343_CSS_SHA256='8e99376e6ce7ee8f59f7f1f53106633261204b7d66cb80492b95f1b1c8c19e97'
+
+def a343_source_from_a342(old:bytes)->tuple[bytes,str]:
+    if not A342_BACKUP.is_file() or A342_BACKUP.is_symlink():
+        raise RuntimeError('A343 certified A341 source backup unavailable')
+    _,prior_sha=a342_source_from_a341(A342_BACKUP.read_bytes())
+    if hashlib.sha256(old).hexdigest()!=prior_sha:
+        raise RuntimeError('A343 A342 source checksum mismatch')
+    css=A343_STYLE_PATH.read_bytes()
+    if hashlib.sha256(css).hexdigest()!=A343_CSS_SHA256:
+        raise RuntimeError('A343 visible style checksum mismatch')
+    if b'</style>' in css or b"'''" in css:
+        raise RuntimeError('A343 unsafe style bytes')
+    anchor=b'</style>\n</head>'
+    if old.count(anchor)!=1:
+        raise RuntimeError('A343 stylesheet anchor mismatch')
+    new=old.replace(anchor,b'\n'+css+b'\n'+anchor,1)
+    compile(new,A343_REL,'exec')
+    return new,hashlib.sha256(new).hexdigest()
+
+def a343_matches(root:Path,found:dict[str,str])->bool:
+    if len(found)!=214 or A343_REL not in found or not A343_BACKUP.is_file() or A343_BACKUP.is_symlink():
+        return False
+    old=A343_BACKUP.read_bytes()
+    _,expected=a343_source_from_a342(old)
+    if found[A343_REL]!=expected:
+        return False
+    preceding=dict(found)
+    preceding[A343_REL]=hashlib.sha256(old).hexdigest()
+    return a342_matches(root,preceding)
+
+def maybe_apply_a343_family_ui(root:Path,db:Path)->None:
+    found=source_inventory(root)
+    if a343_matches(root,found):
+        return
+    if not a342_matches(root,found):
+        return
+    sqlite_readonly_check(db)
+    target=root/A343_REL
+    if target.is_symlink() or not target.is_file():
+        raise RuntimeError('A343 unsafe source path')
+    old=target.read_bytes()
+    new,new_sha=a343_source_from_a342(old)
+    if A343_BACKUP.exists():
+        if A343_BACKUP.is_symlink() or A343_BACKUP.read_bytes()!=old:
+            raise RuntimeError('A343 backup conflict; no application write')
+    else:
+        if not A343_BACKUP.parent.is_dir() or A343_BACKUP.parent.is_symlink():
+            raise RuntimeError('A343 protected source backup directory unavailable')
+        with open(A343_BACKUP,'xb') as fh:
+            fh.write(old)
+            fh.flush()
+            os.fsync(fh.fileno())
+    temp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a343_waves_',suffix='.py',dir=str(target.parent),delete=False) as fh:
+            temp=Path(fh.name)
+            fh.write(new)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(temp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(temp),str(target))
+        temp=None
+    finally:
+        if temp is not None:
+            temp.unlink(missing_ok=True)
+    final=source_inventory(root)
+    if not a343_matches(root,final) or final[A343_REL]!=new_sha:
+        raise RuntimeError('A343 post-write manifest mismatch')
+    print('BODYMIND A343 VISIBLE WAVES APPLIED; photo links retained; SQLite unchanged',flush=True)
+
 def main(argv=None):
     parser=argparse.ArgumentParser()
     parser.add_argument('mode',nargs='?',choices=('check','start'),default='start')
@@ -408,6 +484,7 @@ def main(argv=None):
             maybe_apply_a340_family_ui(args.root,args.db)
             maybe_apply_a341_family_ui(args.root,args.db)
             maybe_apply_a342_family_ui(args.root,args.db)
+            maybe_apply_a343_family_ui(args.root,args.db)
         result=preflight(args.root,args.db)
     except (OSError,RuntimeError,ValueError,sqlite3.DatabaseError) as exc:
         print('BODYMIND CLEAN BOOT STOP: '+str(exc),file=sys.stderr,flush=True)
