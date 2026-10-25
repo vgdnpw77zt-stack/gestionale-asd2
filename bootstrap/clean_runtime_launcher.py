@@ -90,7 +90,7 @@ def preflight(root:Path,db:Path)->dict:
     valid={(EXPECTED_SOURCE_COUNT,EXPECTED_SOURCE_DIGEST),(UPGRADE_SOURCE_COUNT,UPGRADE_SOURCE_DIGEST),
            (MANUAL_ROSTER_SOURCE_COUNT,MANUAL_ROSTER_SOURCE_DIGEST),
            (SIMPLE_GROUP_SOURCE_COUNT,SIMPLE_GROUP_SOURCE_DIGEST),(A317_SOURCE_COUNT,A317_SOURCE_DIGEST),(A328_SOURCE_COUNT,A328_SOURCE_DIGEST),(A330_SOURCE_COUNT,A330_SOURCE_DIGEST),(A336_SOURCE_COUNT,A336_SOURCE_DIGEST),(A337_SOURCE_COUNT,A337_SOURCE_DIGEST)}
-    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found) and not a343_matches(root,found) and not a344_matches(root,found):
+    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found) and not a343_matches(root,found) and not a344_matches(root,found) and not a345_matches(root,found):
         raise RuntimeError(f'source lock mismatch files={len(found)} expected={EXPECTED_SOURCE_COUNT}')
     return {'source_files':len(found),'sqlite':'ok','rows':sqlite_readonly_check(db),
             'historical_migrations_executed':0,'automatic_backup_cleanup':False,
@@ -581,6 +581,119 @@ def maybe_recover_a344_to_a343(root:Path,db:Path)->bool:
     print('BODYMIND A344 RECOVERY SUCCESS: verified A343 restored; SQLite and documents unchanged',flush=True)
     return True
 
+# A345 — real mobile full-frame hero; checked over exact protected A344 source.
+A345_REL=A344_REL
+A345_BACKUP=Path('/data/release_packages/BODYMIND_A345_PREUI_A344.py')
+A345_CSS_PATH=Path('/opt/bodymind/family_a345_fullframe.css')
+A345_JS_PATH=Path('/opt/bodymind/family_a345_fullframe.js')
+A345_CSS_SHA256='3c915aae2b019c0cc495a47dd28f2dd18b3c06cea1fbe9f719e7e21ae0b8e5fc'
+A345_JS_SHA256='b9580e4586893226471cf07c4dbee0ffa61a369f893622b4847326278c942ab3'
+A345_SCRIPT_ANCHOR=b'\n</script>\n<section class="section"><div class="panel personal">'
+
+def a345_source_from_a344(old:bytes)->tuple[bytes,str]:
+    if not A344_BACKUP.is_file() or A344_BACKUP.is_symlink():
+        raise RuntimeError('A345 protected A343 source backup missing')
+    _,previous_sha=a344_source_from_a343(A344_BACKUP.read_bytes())
+    if hashlib.sha256(old).hexdigest()!=previous_sha:
+        raise RuntimeError('A345 unexpected A344 source digest')
+    css=A345_CSS_PATH.read_bytes()
+    js=A345_JS_PATH.read_bytes()
+    if hashlib.sha256(css).hexdigest()!=A345_CSS_SHA256 or hashlib.sha256(js).hexdigest()!=A345_JS_SHA256:
+        raise RuntimeError('A345 public asset checksum mismatch')
+    if b'</style>' in css or b"'''" in css or b'</script>' in js or b"'''" in js:
+        raise RuntimeError('A345 unsafe template delimiter')
+    anchor=b'</style>\n</head>'
+    if old.count(anchor)!=1 or old.count(A345_SCRIPT_ANCHOR)!=1:
+        raise RuntimeError('A345 unique template anchors absent')
+    new=old.replace(anchor,b'\n'+css+b'\n'+anchor,1)
+    replacement=b'\n</script>\n<script id="bodymind-a345-video">\n'+js+b'\n</script>\n<section class="section"><div class="panel personal">'
+    new=new.replace(A345_SCRIPT_ANCHOR,replacement,1)
+    compile(new,A345_REL,'exec')
+    return new,hashlib.sha256(new).hexdigest()
+
+def a345_matches(root:Path,found:dict[str,str])->bool:
+    if len(found)!=214 or A345_REL not in found or not A345_BACKUP.is_file() or A345_BACKUP.is_symlink():
+        return False
+    old=A345_BACKUP.read_bytes()
+    _,expected_sha=a345_source_from_a344(old)
+    if found[A345_REL]!=expected_sha:
+        return False
+    previous=dict(found)
+    previous[A345_REL]=hashlib.sha256(old).hexdigest()
+    return a344_matches(root,previous)
+
+def maybe_apply_a345_family_ui(root:Path,db:Path)->None:
+    found=source_inventory(root)
+    if a345_matches(root,found):
+        return
+    if not a344_matches(root,found):
+        return
+    sqlite_readonly_check(db)
+    target=root/A345_REL
+    if target.is_symlink() or not target.is_file():
+        raise RuntimeError('A345 unsafe target')
+    old=target.read_bytes()
+    new,new_sha=a345_source_from_a344(old)
+    if A345_BACKUP.exists():
+        if A345_BACKUP.is_symlink() or A345_BACKUP.read_bytes()!=old:
+            raise RuntimeError('A345 rollback source conflict')
+    else:
+        if not A345_BACKUP.parent.is_dir() or A345_BACKUP.parent.is_symlink():
+            raise RuntimeError('A345 protected rollback directory missing')
+        with open(A345_BACKUP,'xb') as fh:
+            fh.write(old)
+            fh.flush()
+            os.fsync(fh.fileno())
+    tmp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a345_video_',suffix='.py',dir=str(target.parent),delete=False) as fh:
+            tmp=Path(fh.name)
+            fh.write(new)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(tmp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(tmp),str(target))
+        tmp=None
+    finally:
+        if tmp is not None:
+            tmp.unlink(missing_ok=True)
+    final=source_inventory(root)
+    if not a345_matches(root,final) or final[A345_REL]!=new_sha:
+        raise RuntimeError('A345 post-write source verification failed')
+    print('BODYMIND A345 FULL FRAME HERO APPLIED; SQLite and personal documents unchanged',flush=True)
+
+def maybe_recover_a345_to_a344(root:Path,db:Path)->bool:
+    if os.environ.get('BODYMIND_A345_RECOVER_A344')!='1':
+        return False
+    found=source_inventory(root)
+    if a344_matches(root,found):
+        print('BODYMIND A345 RECOVERY: A344 already active',flush=True)
+        return True
+    if not a345_matches(root,found):
+        raise RuntimeError('A345 recovery declined: source not exact A345')
+    sqlite_readonly_check(db)
+    target=root/A345_REL
+    if target.is_symlink() or not target.is_file():
+        raise RuntimeError('A345 recovery unsafe target')
+    old=A345_BACKUP.read_bytes()
+    tmp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a345_recover_',suffix='.py',dir=str(target.parent),delete=False) as fh:
+            tmp=Path(fh.name)
+            fh.write(old)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(tmp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(tmp),str(target))
+        tmp=None
+    finally:
+        if tmp is not None:
+            tmp.unlink(missing_ok=True)
+    if not a344_matches(root,source_inventory(root)):
+        raise RuntimeError('A345 rollback verification failed')
+    print('BODYMIND A345 RECOVERY PASS: A344 verified; SQLite unchanged',flush=True)
+    return True
+
 def main(argv=None):
     parser=argparse.ArgumentParser()
     parser.add_argument('mode',nargs='?',choices=('check','start'),default='start')
@@ -596,6 +709,8 @@ def main(argv=None):
             maybe_apply_a343_family_ui(args.root,args.db)
             if not maybe_recover_a344_to_a343(args.root,args.db):
                 maybe_apply_a344_family_ui(args.root,args.db)
+            if not maybe_recover_a345_to_a344(args.root,args.db):
+                maybe_apply_a345_family_ui(args.root,args.db)
         result=preflight(args.root,args.db)
     except (OSError,RuntimeError,ValueError,sqlite3.DatabaseError) as exc:
         print('BODYMIND CLEAN BOOT STOP: '+str(exc),file=sys.stderr,flush=True)
