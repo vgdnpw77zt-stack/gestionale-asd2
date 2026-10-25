@@ -1,0 +1,77 @@
+/* BODYMIND A348 — iPhone navigation geometry and hero action clearance.
+   Corrects A347's 12px left + inherited translateX(-50%) double offset.
+   Pure CSS, portrait footage and authenticated functionality untouched. */
+@media(max-width:760px){
+  .bottom-nav{
+    position:fixed!important;
+    left:12px!important;
+    right:12px!important;
+    inset-inline:12px!important;
+    width:calc(100% - 24px)!important;
+    width:calc(100vw - 24px)!important;
+    max-width:none!important;
+    min-width:0!important;
+    box-sizing:border-box!important;
+    margin:0!important;
+    transform:none!important;
+    translate:none!important;
+    display:flex!important;
+    flex-direction:row!important;
+    align-items:stretch!important;
+    justify-content:space-between!important;
+    flex-wrap:nowrap!important;
+    gap:2px!important;
+    overflow:hidden!important;
+    padding:5px 6px!important;
+    bottom:calc(10px + env(safe-area-inset-bottom))!important;
+    border-radius:24px!important;
+    z-index:110!important;
+  }
+  .bottom-nav a{
+    display:flex!important;
+    flex:1 1 0!important;
+    min-width:0!important;
+    width:auto!important;
+    max-width:none!important;
+    min-height:57px!important;
+    padding:8px 1px!important;
+    margin:0!important;
+    box-sizing:border-box!important;
+    align-items:center!important;
+    justify-content:center!important;
+    text-align:center!important;
+    overflow:visible!important;
+    white-space:nowrap!important;
+    font-size:10px!important;
+    line-height:1.2!important;
+  }
+  .bottom-nav a span{
+    font-size:20px!important;
+    line-height:1.2!important;
+  }
+  /* Don't tuck the primary discovery CTA behind the fixed dock. */
+  .hero .hero-content{
+    padding-bottom:clamp(92px,13svh,114px)!important;
+  }
+  .hero .hero-intro .pill{
+    position:relative!important;
+    top:auto!important;
+    left:auto!important;
+    right:auto!important;
+    bottom:auto!important;
+    flex-shrink:0!important;
+    pointer-events:auto!important;
+  }
+  main.main{
+    padding-bottom:calc(120px + env(safe-area-inset-bottom))!important;
+  }
+}
+@media(max-width:380px){
+  .bottom-nav{left:8px!important;right:8px!important;inset-inline:8px!important;width:calc(100vw - 16px)!important;padding:4px!important;gap:1px!important}
+  .bottom-nav a{font-size:9px!important;padding:8px 0!important}
+  .bottom-nav a span{font-size:19px!important}
+  .hero .hero-content{padding-bottom:88px!important}
+}
+@media(prefers-reduced-motion:reduce){
+  .bottom-nav,.bottom-nav a{transition:none!important;animation:none!important}
+}
