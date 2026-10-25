@@ -19,3 +19,5 @@ jobs:
                   if any(key in sel for key in ('.bottom-nav','.hero .pill')):
                       print('NAV_RULE',repr(sel.strip()[:160]),repr(body.strip()[:1000]))
           PY
+      - name: Pin mobile CSS hash
+        run: sha256sum bootstrap/family_a348_navfix.css
