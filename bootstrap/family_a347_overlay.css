@@ -1,0 +1,267 @@
+/* BODYMIND A347 — Cinematic overlay, not a detached dashboard hero.
+   Scoped to the family home. No content, links, video URLs or business logic changed. */
+:root{
+  --bm347-velvet:#090b1e;
+  --bm347-night:#0a1430;
+  --bm347-amethyst:#bda6f0;
+  --bm347-mauve:#e3b2d6;
+  --bm347-silver:#f8f3ff;
+}
+.hero .family-hero-video{
+  object-fit:contain!important;
+  object-position:center center!important;
+  filter:none!important;
+  -webkit-filter:none!important;
+  opacity:1!important;
+  transform:none!important;
+}
+/* Better typographic restraint on large screens. Keep the desktop two-column hero. */
+@media(min-width:761px){
+  .hero h1{font-weight:400!important;letter-spacing:-.058em!important}
+  .hero-intro{max-width:610px}
+  .hero .pill{
+    background:linear-gradient(110deg,#73529a,#aa669c)!important;
+    border-color:rgba(248,221,255,.64)!important;
+  }
+}
+@media(max-width:760px){
+  /* The existing HTML places .hero-content after .hero-media.
+     Overlay it; don't move or replace a user's personalized content. */
+  .hero{
+    position:relative!important;
+    isolation:isolate!important;
+    display:flex!important;
+    flex-direction:column!important;
+    align-items:center!important;
+    gap:0!important;
+    min-height:0!important;
+    height:auto!important;
+    padding:18px 0 19px!important;
+    overflow:visible!important;
+    background:
+      radial-gradient(ellipse at 45% 4%,rgba(155,114,224,.21),transparent 72%),
+      linear-gradient(180deg,#090c20,#12132c 80%,#0b1230)!important;
+  }
+  .hero::before{opacity:.30!important;pointer-events:none!important}
+  .hero::after{content:none!important;display:none!important}
+  .hero-media{
+    position:relative!important;
+    z-index:2!important;
+    inset:auto!important;
+    order:0!important;
+    display:block!important;
+    width:min(calc(100% - 28px),460px)!important;
+    max-width:460px!important;
+    height:auto!important;
+    max-height:none!important;
+    min-height:0!important;
+    aspect-ratio:9/16!important;
+    padding:0!important;
+    margin:0 auto!important;
+    overflow:hidden!important;
+    border-radius:30px!important;
+    border:1px solid rgba(223,196,249,.49)!important;
+    background:
+      radial-gradient(ellipse at 52% 39%,rgba(56,49,103,.22),transparent 68%),
+      #090d20!important;
+    box-shadow:
+      0 0 0 5px rgba(144,105,192,.055),
+      0 24px 64px rgba(2,4,18,.56),
+      0 0 54px rgba(134,92,174,.13)!important;
+  }
+  .hero-media::before,.hero-media::after{
+    content:none!important;
+    display:none!important;
+  }
+  .hero-media .family-hero-video{
+    position:absolute!important;
+    z-index:1!important;
+    inset:0!important;
+    display:block!important;
+    width:100%!important;
+    height:100%!important;
+    max-width:100%!important;
+    max-height:100%!important;
+    object-fit:contain!important;
+    object-position:center center!important;
+    border-radius:0!important;
+    box-shadow:none!important;
+    background:transparent!important;
+  }
+  /* Signature over the FOOT of the scene, not below the frame.
+     A graded veil preserves moving imagery without an opaque panel. */
+  .hero .hero-content{
+    position:absolute!important;
+    z-index:6!important;
+    order:1!important;
+    inset:auto auto 19px 50%!important;
+    display:block!important;
+    width:min(calc(100% - 28px),460px)!important;
+    max-width:460px!important;
+    height:auto!important;
+    min-height:0!important;
+    margin:0!important;
+    padding:112px 20px 24px!important;
+    overflow:visible!important;
+    transform:translateX(-50%)!important;
+    border-radius:0 0 29px 29px!important;
+    background:linear-gradient(180deg,
+      rgba(6,10,24,0) 0%,
+      rgba(9,12,30,.32) 21%,
+      rgba(9,12,30,.78) 53%,
+      rgba(9,12,30,.96) 100%)!important;
+    box-shadow:none!important;
+    pointer-events:none!important;
+  }
+  .hero .hero-intro{
+    position:relative!important;
+    z-index:2!important;
+    display:flex!important;
+    flex-direction:column!important;
+    align-items:flex-start!important;
+    gap:0!important;
+    width:100%!important;
+    max-width:100%!important;
+    min-height:0!important;
+    padding:0!important;
+    margin:0!important;
+    pointer-events:auto!important;
+  }
+  .hero .hero-intro .kicker,
+  .hero .hero-intro small:first-child{
+    color:#f2d5f2!important;
+    font-weight:750!important;
+    font-size:10px!important;
+    letter-spacing:.23em!important;
+    line-height:1.4!important;
+    text-shadow:0 2px 14px rgba(0,2,12,.65);
+  }
+  .hero .hero-intro h1{
+    position:relative!important;
+    max-width:100%!important;
+    margin:9px 0 8px!important;
+    font-family:Georgia,'Times New Roman',serif!important;
+    font-size:clamp(42px,10vw,62px)!important;
+    font-weight:400!important;
+    line-height:1.02!important;
+    letter-spacing:-.062em!important;
+    color:#fffaff!important;
+    text-shadow:0 3px 18px rgba(0,1,10,.62);
+    text-wrap:balance;
+  }
+  .hero .hero-intro p{
+    max-width:100%!important;
+    margin:0 0 17px!important;
+    color:#f4f0fb!important;
+    font-size:clamp(13px,3.55vw,16px)!important;
+    line-height:1.51!important;
+    font-weight:500!important;
+    text-shadow:0 3px 14px rgba(0,2,14,.83);
+    text-wrap:pretty;
+  }
+  .hero .pill,.hero .hero-intro .pill{
+    position:relative!important;
+    inset:auto!important;
+    top:auto!important;
+    right:auto!important;
+    bottom:auto!important;
+    left:auto!important;
+    display:inline-flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    min-height:45px!important;
+    max-width:100%!important;
+    margin:0!important;
+    padding:11px 19px!important;
+    border-radius:999px!important;
+    border:1px solid rgba(241,202,253,.69)!important;
+    background:linear-gradient(115deg,rgba(116,70,169,.96),rgba(166,82,149,.96))!important;
+    box-shadow:0 10px 28px rgba(2,5,24,.42),inset 0 1px rgba(255,255,255,.2)!important;
+    color:#fff!important;
+    font-weight:740!important;
+    font-size:12px!important;
+    text-align:center!important;
+    line-height:1.3!important;
+    white-space:normal!important;
+    align-self:flex-start!important;
+    transform:none!important;
+    pointer-events:auto!important;
+  }
+  .hero .hero-media .hero-playback{
+    position:absolute!important;
+    top:13px!important;
+    right:13px!important;
+    left:auto!important;
+    bottom:auto!important;
+    z-index:9!important;
+    min-height:44px!important;
+    min-width:44px!important;
+    padding:10px!important;
+    margin:0!important;
+    border-radius:15px!important;
+    border:1px solid rgba(225,207,249,.70)!important;
+    background:rgba(8,15,35,.82)!important;
+    box-shadow:0 8px 23px rgba(1,4,16,.30)!important;
+    -webkit-backdrop-filter:blur(10px);
+    backdrop-filter:blur(10px);
+  }
+  .hero .hero-content .hero-playback{
+    position:relative!important;
+    top:auto!important;
+    left:auto!important;
+    right:auto!important;
+    bottom:auto!important;
+    pointer-events:auto!important;
+  }
+  /* Card section should begin after the scene. Never use negative overlap. */
+  main.main .stats{
+    position:relative!important;
+    margin-top:20px!important;
+    margin-bottom:28px!important;
+    gap:13px!important;
+  }
+  main.main .stat{
+    min-height:144px!important;
+    border-radius:23px!important;
+    padding:14px 12px!important;
+  }
+  main.main .stat .icon{
+    width:44px!important;
+    height:44px!important;
+    flex-basis:44px!important;
+  }
+  main.main .stat small{font-size:11px!important}
+  main.main .stat strong{font-size:clamp(16px,4.2vw,21px)!important}
+  /* The navigation is a useful dock, not the star of the screen. */
+  .bottom-nav{
+    left:12px!important;
+    right:12px!important;
+    bottom:calc(9px + env(safe-area-inset-bottom))!important;
+    padding:5px 6px!important;
+    border-radius:24px!important;
+    background:rgba(10,12,29,.94)!important;
+    border:1px solid rgba(187,159,229,.42)!important;
+    box-shadow:0 12px 35px rgba(0,2,15,.48)!important;
+    -webkit-backdrop-filter:blur(16px);
+    backdrop-filter:blur(16px);
+  }
+  .bottom-nav a{
+    min-height:52px!important;
+    padding:7px 2px!important;
+    font-size:10px!important;
+  }
+  .bottom-nav a span{font-size:20px!important}
+  .bottom-nav a[aria-current="page"]{
+    background:linear-gradient(125deg,rgba(108,68,156,.92),rgba(52,55,103,.93))!important;
+    border-radius:18px!important;
+  }
+  main.main{padding-bottom:calc(105px + env(safe-area-inset-bottom))!important}
+}
+@media(max-width:380px){
+  .hero .hero-content{padding:83px 15px 18px!important}
+  .hero .hero-intro h1{font-size:clamp(37px,10.4vw,45px)!important}
+  .hero .hero-intro p{font-size:12px!important;margin-bottom:12px!important}
+}
+@media(prefers-reduced-motion:reduce){
+  .hero .pill,.bottom-nav a{transition:none!important}
+}
