@@ -1,0 +1,28 @@
+name: BodyMind full-frame public site validation
+on:
+  push:
+    branches: [bodymind-site-full-video-20261025]
+jobs:
+  verify-public-video:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify mobile and desktop contain full video, not fullscreen crop
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          css=Path('site/static/hero_integral_video.css').read_text()
+          html=Path('site/templates/index.html').read_text()
+          assert 'hero_integral_video.css' in html
+          assert 'data-hero-video' in html and '<video autoplay muted loop playsinline' in html
+          assert 'object-fit:contain!important' in css
+          assert 'object-fit:cover' not in css
+          assert '.hero-fullscreen .film-shade' in css
+          assert '@media(max-width:980px)' in css
+          assert 'order:2;' in css and '.hero-fullscreen .hero-copy' in css
+          print('SITE_FULL_FRAME_QA_PASS')
+          PY
+      - name: Validate Python application compiles
+        run: python -m py_compile site/app.py
+      - name: Build site's production Dockerfile
+        run: docker build -f site/Dockerfile -t bodymind-site-fullframe:qa site
