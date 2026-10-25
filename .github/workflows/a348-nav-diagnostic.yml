@@ -1,0 +1,21 @@
+name: A348 read original mobile navigation layout
+on:
+  push:
+    branches: [bodymind-a348-mobile-nav-fix-20261025]
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Report nav definitions from versioned public family styles
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import base64,zlib,re
+          for name in ('a337','a340'):
+              css=zlib.decompress(base64.b64decode(Path(f'bootstrap/family_{name}.css.zlib.base64').read_text().strip())).decode()
+              print(f'{name} length {len(css)}')
+              for sel,body in re.findall(r'([^{}]+)\{([^{}]*)\}',css):
+                  if any(key in sel for key in ('.bottom-nav','.hero .pill')):
+                      print('NAV_RULE',repr(sel.strip()[:160]),repr(body.strip()[:1000]))
+          PY
