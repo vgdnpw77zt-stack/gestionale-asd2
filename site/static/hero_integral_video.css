@@ -1,0 +1,166 @@
+/* BODYMIND SITE | Integral video presentation — A345 family/site parity.
+   This corrects the source of the crop: fullscreen background + object-fit:cover.
+   Keeps the existing footage, autoplay/play controls, menus and site content. */
+.hero-stage.hero-fullscreen{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) minmax(280px, min(43vw,520px));
+  grid-template-rows:1fr auto;
+  gap:clamp(24px,4vw,70px);
+  align-items:center;
+  min-height:100svh;
+  padding:clamp(170px,17vh,210px) clamp(22px,6vw,96px) 52px;
+  background:
+    radial-gradient(ellipse at 79% 30%,rgba(138,105,219,.16),transparent 49%),
+    linear-gradient(135deg,#080b19 0%,#130b21 60%,#0b0d1c 100%);
+}
+.hero-stage.hero-fullscreen::before{
+  display:none!important;
+}
+.hero-fullscreen .hero-film{
+  position:relative!important;
+  inset:auto!important;
+  order:unset;
+  grid-row:1;
+  grid-column:2;
+  justify-self:center;
+  align-self:center;
+  width:min(100%,430px)!important;
+  height:auto!important;
+  aspect-ratio:9/16;
+  max-width:100%;
+  max-height:76svh;
+  overflow:hidden;
+  padding:0!important;
+  border-radius:26px;
+  background:#070b15;
+  box-shadow:0 24px 80px rgba(0,0,0,.4),0 0 0 1px rgba(211,190,251,.26);
+}
+.hero-fullscreen .hero-film video{
+  display:block!important;
+  position:absolute!important;
+  inset:0!important;
+  width:100%!important;
+  height:100%!important;
+  max-width:100%!important;
+  max-height:100%!important;
+  aspect-ratio:auto!important;
+  object-fit:contain!important;
+  object-position:center center!important;
+  filter:none!important;
+  transform:none!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+  background:#070b15!important;
+}
+.hero-fullscreen .film-shade{
+  display:none!important;
+}
+.hero-fullscreen .hero-copy{
+  position:relative;
+  z-index:5;
+  grid-row:1;
+  grid-column:1;
+  min-height:0!important;
+  width:100%!important;
+  max-width:760px;
+  align-self:center;
+  justify-content:center;
+  padding:0!important;
+}
+.hero-fullscreen .hero-copy h1{
+  font-size:clamp(62px,7.5vw,126px);
+  line-height:.89;
+}
+.hero-fullscreen .hero-foot{
+  position:relative!important;
+  order:unset;
+  grid-row:2;
+  grid-column:1/-1;
+  left:auto!important;
+  right:auto!important;
+  bottom:auto!important;
+  width:100%;
+  padding-top:20px;
+}
+.hero-fullscreen .hero-light{pointer-events:none}
+@media(max-width:980px){
+  .hero-stage.hero-fullscreen{
+    display:flex!important;
+    flex-direction:column;
+    align-items:center;
+    justify-content:flex-start;
+    gap:24px;
+    min-height:0!important;
+    padding:105px 18px 34px!important;
+  }
+  .hero-fullscreen .achievement-marquee{
+    position:relative!important;
+    order:0;
+    top:auto!important;
+    left:auto!important;
+    right:auto!important;
+    margin:0 0 2px;
+    width:100%;
+    max-width:580px;
+    flex:none;
+  }
+  .hero-fullscreen .hero-film{
+    order:1;
+    grid-row:auto;
+    grid-column:auto;
+    width:min(100%,440px)!important;
+    max-height:none!important;
+    height:auto!important;
+    flex:none;
+    border-radius:24px;
+  }
+  .hero-fullscreen .hero-copy{
+    order:2;
+    grid-row:auto;
+    grid-column:auto;
+    width:min(100%,570px)!important;
+    min-height:0!important;
+    padding:8px 0 0!important;
+    align-self:center;
+    justify-content:flex-start;
+    gap:0;
+  }
+  .hero-fullscreen .hero-copy h1{
+    font-size:clamp(50px,12.5vw,78px);
+    line-height:.95;
+    margin:12px 0 16px;
+  }
+  .hero-fullscreen .hero-foot{
+    order:3;
+    grid-row:auto;
+    grid-column:auto;
+    flex:none;
+    width:min(100%,570px);
+    align-self:center;
+    margin-top:6px;
+    padding:15px 0 0;
+  }
+}
+@media(max-width:600px){
+  .hero-stage.hero-fullscreen{
+    gap:20px;
+    padding:92px 14px 26px!important;
+  }
+  .hero-fullscreen .hero-film{
+    width:min(100%,430px)!important;
+    border-radius:20px;
+  }
+  .hero-fullscreen .hero-copy h1{
+    font-size:clamp(48px,13vw,68px);
+    line-height:.94;
+  }
+  .hero-fullscreen .hero-text{
+    max-width:100%;
+  }
+  .hero-fullscreen .hero-actions{
+    margin-top:22px;
+  }
+}
+@media(prefers-reduced-motion:reduce){
+  .hero-fullscreen .hero-film video{transition:none!important}
+}
