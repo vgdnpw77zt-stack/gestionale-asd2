@@ -20,3 +20,5 @@ jobs:
               if any(key in selector.lower() for key in ['hero','video','film','main','media','wave']):
                   print('CSS_RULE',repr(selector.strip()[:180]),repr(body.strip()[:330]))
           PY
+      - name: Pin full-frame CSS and control script digests
+        run: sha256sum bootstrap/family_a345_fullframe.css bootstrap/family_a345_fullframe.js
