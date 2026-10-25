@@ -1,0 +1,24 @@
+name: A347 overlay asset inspection
+on:
+  push:
+    branches: [bodymind-a347-cinematic-overlay-20261025]
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify only safe CSS, calculate source fingerprint
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          css=Path('bootstrap/family_a347_overlay.css').read_text()
+          assert 'object-fit:contain!important' in css
+          assert 'object-fit:cover' not in css
+          assert '.hero .hero-content' in css and 'position:absolute!important' in css
+          assert '.hero .hero-intro h1' in css
+          assert '.bottom-nav' in css and 'main.main .stats' in css
+          assert css.count('{')==css.count('}')
+          assert not any(s in css for s in ('</style>', '@import','url(http'))
+          print('A347_CSS_SHA256',hashlib.sha256(css.encode()).hexdigest())
+          PY
