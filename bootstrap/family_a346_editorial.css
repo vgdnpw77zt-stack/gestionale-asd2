@@ -1,0 +1,261 @@
+/* BODYMIND A346 • BOUTIQUE EDITORIAL FAMILY UI
+   Genuine hierarchy and legibility on top of verified A345 full-frame video.
+   Design-only: no routes, user data, playback source, link targets or DB changes. */
+:root{
+  --bm346-obsidian:#090d20;
+  --bm346-night:#0d1532;
+  --bm346-plum:#291531;
+  --bm346-iris:#c2b0ff;
+  --bm346-blush:#e5b0d1;
+  --bm346-ivory:#f9f5ff;
+  --bm346-muted:#c6cee5;
+  --bm346-rule:rgba(196,183,246,.33);
+}
+html{background:#090d20}
+body{
+  color:var(--bm346-ivory);
+  background:
+    radial-gradient(ellipse 90% 65% at 92% 2%,rgba(117,65,163,.15),transparent 73%),
+    #090d20!important;
+}
+/* Editorial rather than technical: deliberate glow with plenty of darkness. */
+.hero{
+  background:
+    radial-gradient(ellipse 61% 44% at 93% 9%,rgba(183,115,210,.23),transparent 77%),
+    radial-gradient(ellipse 70% 39% at 12% 94%,rgba(76,100,176,.15),transparent 76%),
+    linear-gradient(140deg,#0a1029 0%,#11162f 51%,#1b122c 100%)!important;
+}
+.hero h1{
+  font-family:Georgia,'Times New Roman',serif!important;
+  font-weight:400!important;
+  letter-spacing:-.065em!important;
+  line-height:.99!important;
+  text-shadow:0 14px 36px rgba(0,3,17,.38);
+}
+.hero p{
+  color:#e8e7f5!important;
+  font-weight:450;
+  letter-spacing:.004em;
+  text-wrap:pretty;
+}
+.hero .pill{
+  color:#fff!important;
+  background:linear-gradient(118deg,#7550b6 0%,#855bba 48%,#ab629d 100%)!important;
+  border:1px solid rgba(240,218,255,.72)!important;
+  box-shadow:0 14px 34px rgba(85,43,142,.38),inset 0 1px rgba(255,255,255,.24)!important;
+  border-radius:999px!important;
+  font-weight:700!important;
+  letter-spacing:.012em;
+}
+.hero .pill:hover{
+  background:linear-gradient(118deg,#8964cc,#ad6cab)!important;
+}
+.hero-media{
+  background:#090d20!important;
+}
+.family-hero-video{
+  object-fit:contain!important;
+  object-position:center center!important;
+  filter:none!important;
+  -webkit-filter:none!important;
+}
+/* True glass with an intentional silhouette; large numbers read first. */
+main.main{
+  background:
+    radial-gradient(ellipse 68% 25% at 82% 8%,rgba(154,102,204,.20),transparent 80%),
+    radial-gradient(ellipse 80% 29% at -5% 52%,rgba(88,122,215,.17),transparent 80%),
+    radial-gradient(ellipse 65% 27% at 83% 91%,rgba(150,81,154,.14),transparent 84%),
+    linear-gradient(180deg,#0c1533,#0b1430 45%,#0a1026 100%)!important;
+}
+main.main::before{
+  opacity:.83!important;
+  filter:drop-shadow(0 0 13px rgba(140,123,239,.42))!important;
+}
+main.main .stats{
+  gap:clamp(13px,1.7vw,22px)!important;
+}
+main.main .stat{
+  position:relative;
+  isolation:isolate;
+  overflow:hidden;
+  background:linear-gradient(148deg,rgba(32,44,89,.97) 0%,rgba(22,29,65,.97) 56%,rgba(31,21,58,.97) 100%)!important;
+  border:1px solid rgba(206,187,255,.34)!important;
+  border-radius:28px!important;
+  box-shadow:0 24px 42px rgba(3,7,28,.31),inset 0 1px rgba(255,255,255,.10)!important;
+}
+main.main .stat::after{
+  content:"";
+  position:absolute;
+  z-index:-1;
+  width:130px;
+  height:130px;
+  top:-83px;
+  right:-55px;
+  border-radius:50%;
+  background:radial-gradient(circle,rgba(216,169,241,.15),transparent 72%);
+  pointer-events:none;
+}
+main.main .stat .icon{
+  border-color:rgba(191,180,255,.70)!important;
+  background:linear-gradient(140deg,#534582,#283e86)!important;
+  box-shadow:inset 0 1px rgba(255,255,255,.22),0 9px 18px rgba(5,8,32,.2)!important;
+}
+main.main .stat:nth-child(2) .icon{
+  border-color:rgba(135,236,194,.67)!important;
+  background:linear-gradient(135deg,#0e806c,#105040)!important;
+}
+main.main .stat:nth-child(4) .icon{
+  border-color:rgba(222,168,248,.70)!important;
+  background:linear-gradient(135deg,#7b4c9e,#4d336e)!important;
+}
+main.main .stat small{
+  color:#dbd9f0!important;
+  font-weight:500;
+  letter-spacing:.006em;
+}
+main.main .stat strong{
+  color:#fff!important;
+  font-weight:720!important;
+  letter-spacing:-.035em!important;
+}
+main.main .stat strong.ok{color:#8cf0b7!important}
+main.main .section-heading h2{
+  font-family:Georgia,'Times New Roman',serif!important;
+  font-weight:400!important;
+  color:#f6f1ff!important;
+  letter-spacing:-.05em!important;
+  line-height:1.09;
+  text-wrap:balance;
+}
+main.main .section-heading p,
+main.main .panel p,
+main.main .muted{
+  color:#d0d4ea!important;
+}
+main.main .panel{
+  background:linear-gradient(146deg,rgba(26,37,74,.96),rgba(19,23,51,.96))!important;
+  border:1px solid rgba(187,177,231,.31)!important;
+  border-radius:28px!important;
+  box-shadow:0 18px 46px rgba(2,7,28,.30),inset 0 1px rgba(255,255,255,.08)!important;
+}
+main.main .media-track{
+  gap:18px!important;
+  scroll-padding-inline:15px;
+  padding-bottom:18px;
+}
+main.main .media-card{
+  background:#11152b!important;
+  border:1px solid rgba(210,191,245,.30)!important;
+  border-radius:30px!important;
+  box-shadow:0 22px 48px rgba(0,4,19,.38)!important;
+}
+main.main .media-card figcaption{
+  background:linear-gradient(0deg,rgba(6,7,24,.97),rgba(6,7,24,.63) 65%,transparent)!important;
+}
+main.main .media-card .bodymind-media-outbound-label{
+  background:rgba(24,20,47,.91)!important;
+  border:1px solid rgba(226,205,253,.69)!important;
+  box-shadow:0 9px 24px rgba(5,5,19,.3)!important;
+}
+.bottom-nav{
+  background:rgba(12,15,35,.96)!important;
+  border:1px solid rgba(174,147,209,.44)!important;
+  box-shadow:0 -10px 40px rgba(1,4,19,.46),inset 0 1px rgba(255,255,255,.06)!important;
+  -webkit-backdrop-filter:blur(20px);
+  backdrop-filter:blur(20px);
+}
+.bottom-nav a{
+  color:#e4ddf3!important;
+}
+.bottom-nav a[aria-current="page"]{
+  color:#fff!important;
+  background:linear-gradient(138deg,rgba(94,70,157,.87),rgba(48,57,124,.75))!important;
+  border-color:rgba(203,177,251,.79)!important;
+  box-shadow:0 6px 24px rgba(73,60,145,.25)!important;
+}
+a:focus-visible,button:focus-visible{
+  outline-color:#eed5ff!important;
+}
+@media(max-width:760px){
+  .hero{
+    gap:0!important;
+    padding-top:24px!important;
+    background:
+      radial-gradient(ellipse 115% 37% at 50% -4%,rgba(141,103,218,.24),transparent 78%),
+      linear-gradient(175deg,#0b122c,#11182f 55%,#1a1430 100%)!important;
+  }
+  .hero-media{
+    border-radius:24px!important;
+    border:1px solid rgba(224,190,248,.52)!important;
+    box-shadow:0 0 0 5px rgba(134,101,192,.09),0 26px 52px rgba(1,5,25,.52)!important;
+  }
+  .hero-content{
+    padding:22px 0 24px!important;
+  }
+  .hero-intro{
+    padding:8px 0 0!important;
+  }
+  .hero-intro h1{
+    font-size:clamp(48px,12.4vw,71px)!important;
+    max-width:100%!important;
+    margin:9px 0 12px!important;
+  }
+  .hero-intro p{
+    font-size:clamp(14px,3.55vw,16px)!important;
+    line-height:1.63!important;
+    max-width:100%!important;
+    margin:0 0 18px!important;
+  }
+  /* Critical regression fix: old absolute top:415px CTA must never float across cards. */
+  .hero-intro .pill,
+  .hero .pill{
+    position:relative!important;
+    top:auto!important;
+    left:auto!important;
+    right:auto!important;
+    bottom:auto!important;
+    margin:5px 0 0!important;
+    padding:15px 22px!important;
+    min-height:54px!important;
+    max-width:100%!important;
+    transform:none!important;
+    white-space:normal!important;
+    text-align:center;
+    align-self:flex-start!important;
+  }
+  main.main .stats{
+    margin:16px 0 32px!important;
+    gap:13px!important;
+  }
+  main.main .stat{
+    border-radius:24px!important;
+    min-height:159px!important;
+    padding:17px 15px!important;
+    gap:9px!important;
+  }
+  main.main .stat .icon{
+    width:48px!important;
+    height:48px!important;
+    flex-basis:48px!important;
+  }
+  main.main .stat strong{
+    font-size:clamp(17px,4.2vw,21px)!important;
+    overflow-wrap:anywhere;
+  }
+  main.main .panel{border-radius:24px!important}
+  main.main .media-card{
+    flex:0 0 min(82vw,330px)!important;
+    border-radius:27px!important;
+  }
+  .bottom-nav a{
+    font-size:10px!important;
+    line-height:1.22!important;
+  }
+}
+@media(max-width:380px){
+  .hero-intro h1{font-size:clamp(42px,12vw,52px)!important}
+  main.main .stat{padding:13px 11px!important}
+}
+@media(prefers-reduced-motion:reduce){
+  main.main .stat,main.main .media-card{transition:none!important}
+}
