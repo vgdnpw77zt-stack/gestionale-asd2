@@ -1,5 +1,5 @@
 /* BODYMIND SITE | Integral video presentation — A345 family/site parity.
-   This corrects the source of the crop: fullscreen background + object-fit:cover.
+   This corrects the source of the crop: fullscreen background and cropped video sizing.
    Keeps the existing footage, autoplay/play controls, menus and site content. */
 .hero-stage.hero-fullscreen{
   display:grid!important;
