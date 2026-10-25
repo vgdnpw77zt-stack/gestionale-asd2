@@ -1,0 +1,20 @@
+name: BodyMind A346 legacy UI selector inventory
+on:
+  push:
+    branches: [bodymind-a346-luxury-ux-20261025]
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Print active-style class rule definitions from public A340
+        run: |
+          python - <<'PY'
+          import zlib,base64,re
+          from pathlib import Path
+          css=zlib.decompress(base64.b64decode(Path("bootstrap/family_a340.css.zlib.base64").read_text().strip())).decode()
+          tokens=("stat","panel","hero","topnav","bottom","nav","media-card","media-track","section","button","pill","main","stats","info","card")
+          for sel,body in re.findall(r'([^{}]+)\{([^{}]*)\}',css):
+              if any(t in sel.lower() for t in tokens):
+                  print("UI",sel.strip().replace("\n"," ")[:120],body.strip().replace("\n"," ")[:280])
+          PY
