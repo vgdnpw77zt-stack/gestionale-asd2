@@ -18,3 +18,5 @@ jobs:
               if any(t in sel.lower() for t in tokens):
                   print("UI",sel.strip().replace("\n"," ")[:120],body.strip().replace("\n"," ")[:280])
           PY
+      - name: Pin exact visual CSS SHA256
+        run: sha256sum bootstrap/family_a346_editorial.css
