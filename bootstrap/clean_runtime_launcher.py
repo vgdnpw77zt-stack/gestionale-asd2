@@ -90,7 +90,7 @@ def preflight(root:Path,db:Path)->dict:
     valid={(EXPECTED_SOURCE_COUNT,EXPECTED_SOURCE_DIGEST),(UPGRADE_SOURCE_COUNT,UPGRADE_SOURCE_DIGEST),
            (MANUAL_ROSTER_SOURCE_COUNT,MANUAL_ROSTER_SOURCE_DIGEST),
            (SIMPLE_GROUP_SOURCE_COUNT,SIMPLE_GROUP_SOURCE_DIGEST),(A317_SOURCE_COUNT,A317_SOURCE_DIGEST),(A328_SOURCE_COUNT,A328_SOURCE_DIGEST),(A330_SOURCE_COUNT,A330_SOURCE_DIGEST),(A336_SOURCE_COUNT,A336_SOURCE_DIGEST),(A337_SOURCE_COUNT,A337_SOURCE_DIGEST)}
-    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found) and not a343_matches(root,found):
+    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found) and not a343_matches(root,found) and not a344_matches(root,found):
         raise RuntimeError(f'source lock mismatch files={len(found)} expected={EXPECTED_SOURCE_COUNT}')
     return {'source_files':len(found),'sqlite':'ok','rows':sqlite_readonly_check(db),
             'historical_migrations_executed':0,'automatic_backup_cleanup':False,
@@ -472,6 +472,81 @@ def maybe_apply_a343_family_ui(root:Path,db:Path)->None:
         raise RuntimeError('A343 post-write manifest mismatch')
     print('BODYMIND A343 VISIBLE WAVES APPLIED; photo links retained; SQLite unchanged',flush=True)
 
+# A344 — boutique editorial finish, verified over active A343; no DB/route/media changes.
+A344_REL=A343_REL
+A344_BACKUP=Path('/data/release_packages/BODYMIND_A344_PREUI_A343.py')
+A344_STYLE_PATH=Path('/opt/bodymind/family_a344_luxury.css')
+A344_CSS_SHA256='896a7bbfe4c58caee6c85f9ef50409ed675f6ca76d995a6d6d57c9f8e25799eb'
+
+def a344_source_from_a343(old:bytes)->tuple[bytes,str]:
+    if not A343_BACKUP.is_file() or A343_BACKUP.is_symlink():
+        raise RuntimeError('A344 verified A342 rollback unavailable')
+    _,prior_sha=a343_source_from_a342(A343_BACKUP.read_bytes())
+    if hashlib.sha256(old).hexdigest()!=prior_sha:
+        raise RuntimeError('A344 A343 source checksum mismatch')
+    css=A344_STYLE_PATH.read_bytes()
+    if hashlib.sha256(css).hexdigest()!=A344_CSS_SHA256:
+        raise RuntimeError('A344 boutique style checksum mismatch')
+    if b'</style>' in css or b"'''" in css:
+        raise RuntimeError('A344 unsafe style delimiter')
+    anchor=b'</style>\n</head>'
+    if old.count(anchor)!=1:
+        raise RuntimeError('A344 stylesheet anchor mismatch')
+    new=old.replace(anchor,b'\n'+css+b'\n'+anchor,1)
+    compile(new,A344_REL,'exec')
+    return new,hashlib.sha256(new).hexdigest()
+
+def a344_matches(root:Path,found:dict[str,str])->bool:
+    if len(found)!=214 or A344_REL not in found or not A344_BACKUP.is_file() or A344_BACKUP.is_symlink():
+        return False
+    old=A344_BACKUP.read_bytes()
+    _,expected=a344_source_from_a343(old)
+    if found[A344_REL]!=expected:
+        return False
+    preceding=dict(found)
+    preceding[A344_REL]=hashlib.sha256(old).hexdigest()
+    return a343_matches(root,preceding)
+
+def maybe_apply_a344_family_ui(root:Path,db:Path)->None:
+    found=source_inventory(root)
+    if a344_matches(root,found):
+        return
+    if not a343_matches(root,found):
+        return
+    sqlite_readonly_check(db)
+    target=root/A344_REL
+    if target.is_symlink() or not target.is_file():
+        raise RuntimeError('A344 unsafe target source path')
+    old=target.read_bytes()
+    new,new_sha=a344_source_from_a343(old)
+    if A344_BACKUP.exists():
+        if A344_BACKUP.is_symlink() or A344_BACKUP.read_bytes()!=old:
+            raise RuntimeError('A344 rollback conflict, no source write')
+    else:
+        if not A344_BACKUP.parent.is_dir() or A344_BACKUP.parent.is_symlink():
+            raise RuntimeError('A344 protected rollback directory unavailable')
+        with open(A344_BACKUP,'xb') as fh:
+            fh.write(old)
+            fh.flush()
+            os.fsync(fh.fileno())
+    tmp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a344_boutique_',suffix='.py',dir=str(target.parent),delete=False) as fh:
+            tmp=Path(fh.name)
+            fh.write(new)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(tmp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(tmp),str(target))
+        tmp=None
+    finally:
+        if tmp is not None:
+            tmp.unlink(missing_ok=True)
+    final=source_inventory(root)
+    if not a344_matches(root,final) or final[A344_REL]!=new_sha:
+        raise RuntimeError('A344 post-write manifest mismatch')
+    print('BODYMIND A344 BOUTIQUE VISUAL APPLIED; links and video retained; SQLite unchanged',flush=True)
+
 def main(argv=None):
     parser=argparse.ArgumentParser()
     parser.add_argument('mode',nargs='?',choices=('check','start'),default='start')
@@ -485,6 +560,7 @@ def main(argv=None):
             maybe_apply_a341_family_ui(args.root,args.db)
             maybe_apply_a342_family_ui(args.root,args.db)
             maybe_apply_a343_family_ui(args.root,args.db)
+            maybe_apply_a344_family_ui(args.root,args.db)
         result=preflight(args.root,args.db)
     except (OSError,RuntimeError,ValueError,sqlite3.DatabaseError) as exc:
         print('BODYMIND CLEAN BOOT STOP: '+str(exc),file=sys.stderr,flush=True)
