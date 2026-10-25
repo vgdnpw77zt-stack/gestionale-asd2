@@ -90,7 +90,7 @@ def preflight(root:Path,db:Path)->dict:
     valid={(EXPECTED_SOURCE_COUNT,EXPECTED_SOURCE_DIGEST),(UPGRADE_SOURCE_COUNT,UPGRADE_SOURCE_DIGEST),
            (MANUAL_ROSTER_SOURCE_COUNT,MANUAL_ROSTER_SOURCE_DIGEST),
            (SIMPLE_GROUP_SOURCE_COUNT,SIMPLE_GROUP_SOURCE_DIGEST),(A317_SOURCE_COUNT,A317_SOURCE_DIGEST),(A328_SOURCE_COUNT,A328_SOURCE_DIGEST),(A330_SOURCE_COUNT,A330_SOURCE_DIGEST),(A336_SOURCE_COUNT,A336_SOURCE_DIGEST),(A337_SOURCE_COUNT,A337_SOURCE_DIGEST)}
-    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found) and not a343_matches(root,found) and not a344_matches(root,found) and not a345_matches(root,found) and not a346_matches(root,found):
+    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found) and not a343_matches(root,found) and not a344_matches(root,found) and not a345_matches(root,found) and not a346_matches(root,found) and not a347_matches(root,found):
         raise RuntimeError(f'source lock mismatch files={len(found)} expected={EXPECTED_SOURCE_COUNT}')
     return {'source_files':len(found),'sqlite':'ok','rows':sqlite_readonly_check(db),
             'historical_migrations_executed':0,'automatic_backup_cleanup':False,
@@ -801,6 +801,113 @@ def maybe_recover_a346_to_a345(root:Path,db:Path)->bool:
     print('BODYMIND A346 RECOVERY SUCCESS: verified A345 restored; DB unchanged',flush=True)
     return True
 
+# A347 — cinematic personal greeting over uncut family video, visual-only.
+A347_REL=A346_REL
+A347_BACKUP=Path('/data/release_packages/BODYMIND_A347_PREUI_A346.py')
+A347_CSS_PATH=Path('/opt/bodymind/family_a347_overlay.css')
+A347_CSS_SHA256='df14c0503d1a7f85a4f0680f7c7583c9c83753f487c0943941b6218d2ec5870e'
+
+def a347_source_from_a346(old:bytes)->tuple[bytes,str]:
+    if not A346_BACKUP.is_file() or A346_BACKUP.is_symlink():
+        raise RuntimeError('A347 required A345 source backup missing')
+    _,prior_sha=a346_source_from_a345(A346_BACKUP.read_bytes())
+    if hashlib.sha256(old).hexdigest()!=prior_sha:
+        raise RuntimeError('A347 A346 exact source digest mismatch')
+    css=A347_CSS_PATH.read_bytes()
+    if hashlib.sha256(css).hexdigest()!=A347_CSS_SHA256:
+        raise RuntimeError('A347 overlay asset checksum mismatch')
+    if b'</style>' in css or b"'''" in css:
+        raise RuntimeError('A347 unsafe CSS delimiter')
+    anchor=b'</style>\n</head>'
+    if old.count(anchor)!=1:
+        raise RuntimeError('A347 unique style anchor unavailable')
+    new=old.replace(anchor,b'\n'+css+b'\n'+anchor,1)
+    compile(new,A347_REL,'exec')
+    return new,hashlib.sha256(new).hexdigest()
+
+def a347_matches(root:Path,found:dict[str,str])->bool:
+    if len(found)!=214 or A347_REL not in found or not A347_BACKUP.is_file() or A347_BACKUP.is_symlink():
+        return False
+    old=A347_BACKUP.read_bytes()
+    _,new_sha=a347_source_from_a346(old)
+    if found[A347_REL]!=new_sha:
+        return False
+    previous=dict(found)
+    previous[A347_REL]=hashlib.sha256(old).hexdigest()
+    return a346_matches(root,previous)
+
+def maybe_apply_a347_family_ui(root:Path,db:Path)->None:
+    found=source_inventory(root)
+    if a347_matches(root,found):
+        return
+    if not a346_matches(root,found):
+        return
+    sqlite_readonly_check(db)
+    target=root/A347_REL
+    if target.is_symlink() or not target.is_file():
+        raise RuntimeError('A347 unsafe source target')
+    old=target.read_bytes()
+    new,new_sha=a347_source_from_a346(old)
+    if A347_BACKUP.exists():
+        if A347_BACKUP.is_symlink() or A347_BACKUP.read_bytes()!=old:
+            raise RuntimeError('A347 rollback copy conflict')
+    else:
+        if not A347_BACKUP.parent.is_dir() or A347_BACKUP.parent.is_symlink():
+            raise RuntimeError('A347 protected rollback path absent')
+        with open(A347_BACKUP,'xb') as fh:
+            fh.write(old)
+            fh.flush()
+            os.fsync(fh.fileno())
+    tmp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a347_overlay_',suffix='.py',dir=str(target.parent),delete=False) as fh:
+            tmp=Path(fh.name)
+            fh.write(new)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(tmp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(tmp),str(target))
+        tmp=None
+    finally:
+        if tmp is not None:
+            tmp.unlink(missing_ok=True)
+    final=source_inventory(root)
+    if not a347_matches(root,final) or final[A347_REL]!=new_sha:
+        raise RuntimeError('A347 source post-write verification failed')
+    print('BODYMIND A347 CINEMATIC GREETING OVER VIDEO APPLIED; SQLite untouched',flush=True)
+
+def maybe_recover_a347_to_a346(root:Path,db:Path)->bool:
+    if os.environ.get('BODYMIND_A347_RECOVER_A346')!='1':
+        return False
+    found=source_inventory(root)
+    if a346_matches(root,found):
+        print('BODYMIND A347 RECOVERY: verified A346 already active',flush=True)
+        return True
+    if not a347_matches(root,found):
+        raise RuntimeError('A347 recovery declined: unexpected source digest')
+    sqlite_readonly_check(db)
+    target=root/A347_REL
+    if target.is_symlink() or not target.is_file():
+        raise RuntimeError('A347 recovery unsafe target')
+    old=A347_BACKUP.read_bytes()
+    tmp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a347_recover_',suffix='.py',dir=str(target.parent),delete=False) as fh:
+            tmp=Path(fh.name)
+            fh.write(old)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(tmp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(tmp),str(target))
+        tmp=None
+    finally:
+        if tmp is not None:
+            tmp.unlink(missing_ok=True)
+    if not a346_matches(root,source_inventory(root)):
+        raise RuntimeError('A347 recovery did not restore exact A346')
+    print('BODYMIND A347 RECOVERY PASS: A346 verified, SQLite unchanged',flush=True)
+    return True
+
 def main(argv=None):
     parser=argparse.ArgumentParser()
     parser.add_argument('mode',nargs='?',choices=('check','start'),default='start')
@@ -820,6 +927,8 @@ def main(argv=None):
                 maybe_apply_a345_family_ui(args.root,args.db)
             if not maybe_recover_a346_to_a345(args.root,args.db):
                 maybe_apply_a346_family_ui(args.root,args.db)
+            if not maybe_recover_a347_to_a346(args.root,args.db):
+                maybe_apply_a347_family_ui(args.root,args.db)
         result=preflight(args.root,args.db)
     except (OSError,RuntimeError,ValueError,sqlite3.DatabaseError) as exc:
         print('BODYMIND CLEAN BOOT STOP: '+str(exc),file=sys.stderr,flush=True)
