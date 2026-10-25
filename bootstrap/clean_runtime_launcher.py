@@ -547,6 +547,40 @@ def maybe_apply_a344_family_ui(root:Path,db:Path)->None:
         raise RuntimeError('A344 post-write manifest mismatch')
     print('BODYMIND A344 BOUTIQUE VISUAL APPLIED; links and video retained; SQLite unchanged',flush=True)
 
+# Emergency rollback switch: A344 image can restore its verified A343 source
+# without touching SQLite or the other 213 protected application sources.
+def maybe_recover_a344_to_a343(root:Path,db:Path)->bool:
+    if os.environ.get('BODYMIND_A344_RECOVER_A343')!='1':
+        return False
+    found=source_inventory(root)
+    if a343_matches(root,found):
+        print('BODYMIND A344 RECOVERY: verified A343 already active; database unchanged',flush=True)
+        return True
+    if not a344_matches(root,found):
+        raise RuntimeError('A344 recovery declined: source not exactly A344')
+    sqlite_readonly_check(db)
+    target=root/A344_REL
+    if target.is_symlink() or not target.is_file():
+        raise RuntimeError('A344 recovery unsafe target')
+    old=A344_BACKUP.read_bytes()
+    temp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a344_recover_',suffix='.py',dir=str(target.parent),delete=False) as fh:
+            temp=Path(fh.name)
+            fh.write(old)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(temp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(temp),str(target))
+        temp=None
+    finally:
+        if temp is not None:
+            temp.unlink(missing_ok=True)
+    if not a343_matches(root,source_inventory(root)):
+        raise RuntimeError('A344 recovery did not restore verified A343')
+    print('BODYMIND A344 RECOVERY SUCCESS: verified A343 restored; SQLite and documents unchanged',flush=True)
+    return True
+
 def main(argv=None):
     parser=argparse.ArgumentParser()
     parser.add_argument('mode',nargs='?',choices=('check','start'),default='start')
@@ -560,7 +594,8 @@ def main(argv=None):
             maybe_apply_a341_family_ui(args.root,args.db)
             maybe_apply_a342_family_ui(args.root,args.db)
             maybe_apply_a343_family_ui(args.root,args.db)
-            maybe_apply_a344_family_ui(args.root,args.db)
+            if not maybe_recover_a344_to_a343(args.root,args.db):
+                maybe_apply_a344_family_ui(args.root,args.db)
         result=preflight(args.root,args.db)
     except (OSError,RuntimeError,ValueError,sqlite3.DatabaseError) as exc:
         print('BODYMIND CLEAN BOOT STOP: '+str(exc),file=sys.stderr,flush=True)
