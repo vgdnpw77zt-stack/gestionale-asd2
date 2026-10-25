@@ -1,0 +1,27 @@
+/* BodyMind A343 - clear luminous waves layered ABOVE the flat navy background.
+   Design only: no structural, personal, payment, document or behavior changes. */
+main.main{
+  background:
+    radial-gradient(ellipse 75% 34% at 85% 7%,rgba(78,136,238,.18),transparent 75%),
+    radial-gradient(ellipse 75% 30% at 5% 50%,rgba(166,114,238,.10),transparent 78%),
+    radial-gradient(ellipse 85% 35% at 76% 88%,rgba(54,151,250,.16),transparent 82%)!important;
+  border-radius:0 0 36px 36px;
+}
+main.main::before{
+  z-index:0!important;
+  inset:0 -3vw 0!important;
+  opacity:1!important;
+  pointer-events:none!important;
+  filter:drop-shadow(0 0 14px rgba(88,152,255,.64))!important;
+  background-size:100% 700px!important;
+  background-position:center top!important;
+}
+main.main > *{position:relative;z-index:1}
+main.main .stats,main.main .section,main.main .media-carousel{isolation:isolate}
+main.main .stat{box-shadow:0 9px 30px rgba(0,12,42,.28),0 0 25px rgba(77,134,235,.10)}
+main.main .media-card{box-shadow:0 12px 36px rgba(0,12,42,.38)}
+@media(max-width:760px){
+  main.main::before{inset:0 -12px!important;background-size:135% 560px!important;opacity:.9!important}
+  main.main{border-radius:0 0 25px 25px}
+}
+@media(prefers-reduced-motion:reduce){main.main::before{animation:none!important}}
