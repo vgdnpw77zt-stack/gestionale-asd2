@@ -90,7 +90,7 @@ def preflight(root:Path,db:Path)->dict:
     valid={(EXPECTED_SOURCE_COUNT,EXPECTED_SOURCE_DIGEST),(UPGRADE_SOURCE_COUNT,UPGRADE_SOURCE_DIGEST),
            (MANUAL_ROSTER_SOURCE_COUNT,MANUAL_ROSTER_SOURCE_DIGEST),
            (SIMPLE_GROUP_SOURCE_COUNT,SIMPLE_GROUP_SOURCE_DIGEST),(A317_SOURCE_COUNT,A317_SOURCE_DIGEST),(A328_SOURCE_COUNT,A328_SOURCE_DIGEST),(A330_SOURCE_COUNT,A330_SOURCE_DIGEST),(A336_SOURCE_COUNT,A336_SOURCE_DIGEST),(A337_SOURCE_COUNT,A337_SOURCE_DIGEST)}
-    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found) and not a343_matches(root,found) and not a344_matches(root,found) and not a345_matches(root,found) and not a346_matches(root,found) and not a347_matches(root,found) and not a348_matches(root,found):
+    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found) and not a343_matches(root,found) and not a344_matches(root,found) and not a345_matches(root,found) and not a346_matches(root,found) and not a347_matches(root,found) and not a348_matches(root,found) and not a349_matches(root,found):
         raise RuntimeError(f'source lock mismatch files={len(found)} expected={EXPECTED_SOURCE_COUNT}')
     return {'source_files':len(found),'sqlite':'ok','rows':sqlite_readonly_check(db),
             'historical_migrations_executed':0,'automatic_backup_cleanup':False,
@@ -1015,6 +1015,134 @@ def maybe_recover_a348_to_a347(root:Path,db:Path)->bool:
     print('BODYMIND A348 RECOVERY SUCCESS: verified A347 restored, SQLite untouched',flush=True)
     return True
 
+# A349 — one curated UI layer replaces eight post-A340 CSS append-only patches.
+# Existing JS playback and verified photo/social link script remain identical.
+A349_REL=A348_REL
+A349_BACKUP=Path('/data/release_packages/BODYMIND_A349_PREUI_A348.py')
+A349_CSS_PATH=Path('/opt/bodymind/family_a349_atelier.css')
+A349_CSS_SHA256='db983b38f78887ef5a7b9593f8199634467f15afd897e20cf734dfcbe2092f96'
+
+def a349_consolidate_styles(old:bytes,layers:list[bytes],curated:bytes)->bytes:
+    # Source is already verified as exact A348 before use. Each CSS span must occur once.
+    if len(layers)!=8 or any(not layer for layer in layers):
+        raise RuntimeError('A349 expected eight complete legacy CSS layers')
+    if b'</style>' in curated or b"'''" in curated:
+        raise RuntimeError('A349 stylesheet has unsafe delimiter')
+    new=old
+    for layer in layers:
+        needle=b'\n'+layer+b'\n'
+        if new.count(needle)!=1:
+            raise RuntimeError('A349 CSS inventory mismatch, source preserved')
+        new=new.replace(needle,b'\n',1)
+    anchor=b'</style>\n</head>'
+    if new.count(anchor)!=1:
+        raise RuntimeError('A349 missing unique style anchor')
+    # A341 contains working verified media link styles and waves;
+    # A342 contains accessible motion. Both become part of ONE curated insertion.
+    consolidated=b'\n/* BODYMIND A349 CONSOLIDATED STYLE */\n'+layers[0]+b'\n'+layers[1]+b'\n'+curated+b'\n'
+    new=new.replace(anchor,consolidated+anchor,1)
+    return new
+
+def a349_source_from_a348(old:bytes)->tuple[bytes,str]:
+    if not A348_BACKUP.is_file() or A348_BACKUP.is_symlink():
+        raise RuntimeError('A349 requires protected A347 rollback source')
+    _,prior_sha=a348_source_from_a347(A348_BACKUP.read_bytes())
+    if hashlib.sha256(old).hexdigest()!=prior_sha:
+        raise RuntimeError('A349 unexpected A348 source checksum')
+    curated=A349_CSS_PATH.read_bytes()
+    if hashlib.sha256(curated).hexdigest()!=A349_CSS_SHA256:
+        raise RuntimeError('A349 studio stylesheet checksum mismatch')
+    layers=[p.read_bytes() for p in (
+        A341_STYLE_PATH,A342_STYLE_PATH,A343_STYLE_PATH,A344_STYLE_PATH,
+        A345_CSS_PATH,A346_CSS_PATH,A347_CSS_PATH,A348_CSS_PATH
+    )]
+    new=a349_consolidate_styles(old,layers,curated)
+    compile(new,A349_REL,'exec')
+    return new,hashlib.sha256(new).hexdigest()
+
+def a349_matches(root:Path,found:dict[str,str])->bool:
+    if len(found)!=214 or A349_REL not in found or not A349_BACKUP.is_file() or A349_BACKUP.is_symlink():
+        return False
+    old=A349_BACKUP.read_bytes()
+    _,new_sha=a349_source_from_a348(old)
+    if found[A349_REL]!=new_sha:
+        return False
+    prior=dict(found)
+    prior[A349_REL]=hashlib.sha256(old).hexdigest()
+    return a348_matches(root,prior)
+
+def maybe_apply_a349_family_ui(root:Path,db:Path)->None:
+    found=source_inventory(root)
+    if a349_matches(root,found):
+        return
+    if not a348_matches(root,found):
+        return
+    sqlite_readonly_check(db)
+    target=root/A349_REL
+    if target.is_symlink() or not target.is_file():
+        raise RuntimeError('A349 protected source path invalid')
+    old=target.read_bytes()
+    new,new_sha=a349_source_from_a348(old)
+    if A349_BACKUP.exists():
+        if A349_BACKUP.is_symlink() or A349_BACKUP.read_bytes()!=old:
+            raise RuntimeError('A349 protected rollback source conflict')
+    else:
+        if not A349_BACKUP.parent.is_dir() or A349_BACKUP.parent.is_symlink():
+            raise RuntimeError('A349 rollback directory absent')
+        with open(A349_BACKUP,'xb') as fh:
+            fh.write(old)
+            fh.flush()
+            os.fsync(fh.fileno())
+    temp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a349_atelier_',suffix='.py',dir=str(target.parent),delete=False) as fh:
+            temp=Path(fh.name)
+            fh.write(new)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(temp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(temp),str(target))
+        temp=None
+    finally:
+        if temp is not None:
+            temp.unlink(missing_ok=True)
+    final=source_inventory(root)
+    if not a349_matches(root,final) or final[A349_REL]!=new_sha:
+        raise RuntimeError('A349 post-install source lock mismatch')
+    print('BODYMIND A349 BOUTIQUE CURATED UI APPLIED; OLD CSS LAYERS CONSOLIDATED; SQLITE UNCHANGED',flush=True)
+
+def maybe_recover_a349_to_a348(root:Path,db:Path)->bool:
+    if os.environ.get('BODYMIND_A349_RECOVER_A348')!='1':
+        return False
+    found=source_inventory(root)
+    if a348_matches(root,found):
+        print('BODYMIND A349 RECOVERY: already verified A348',flush=True)
+        return True
+    if not a349_matches(root,found):
+        raise RuntimeError('A349 recovery declined: source digest unexpected')
+    sqlite_readonly_check(db)
+    target=root/A349_REL
+    if target.is_symlink() or not target.is_file():
+        raise RuntimeError('A349 recovery unsafe target')
+    old=A349_BACKUP.read_bytes()
+    temp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a349_recover_',suffix='.py',dir=str(target.parent),delete=False) as fh:
+            temp=Path(fh.name)
+            fh.write(old)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(temp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(temp),str(target))
+        temp=None
+    finally:
+        if temp is not None:
+            temp.unlink(missing_ok=True)
+    if not a348_matches(root,source_inventory(root)):
+        raise RuntimeError('A349 recovery failed to verify exact A348')
+    print('BODYMIND A349 RECOVERY PASS: A348 restored, no data changes',flush=True)
+    return True
+
 def main(argv=None):
     parser=argparse.ArgumentParser()
     parser.add_argument('mode',nargs='?',choices=('check','start'),default='start')
@@ -1038,6 +1166,8 @@ def main(argv=None):
                 maybe_apply_a347_family_ui(args.root,args.db)
             if not maybe_recover_a348_to_a347(args.root,args.db):
                 maybe_apply_a348_family_ui(args.root,args.db)
+            if not maybe_recover_a349_to_a348(args.root,args.db):
+                maybe_apply_a349_family_ui(args.root,args.db)
         result=preflight(args.root,args.db)
     except (OSError,RuntimeError,ValueError,sqlite3.DatabaseError) as exc:
         print('BODYMIND CLEAN BOOT STOP: '+str(exc),file=sys.stderr,flush=True)
