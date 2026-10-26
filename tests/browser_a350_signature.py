@@ -116,6 +116,10 @@ with sync_playwright() as p:
         page.add_script_tag(content=gallery_js)
         assert page.locator('.bm350-gallery-footer').count()==1,(width,'duplicate gallery action')
         page.screenshot(path=str(ROOT/f'a350_synthetic_{width}.png'))
+        # A failed photo cannot remain a clickable external reel.
+        page.locator('.media-card').first.locator('img').dispatch_event('error')
+        assert page.locator('.media-card').first.locator('a.bm350-media-link').count()==0
+        assert page.locator('.media-card').first.locator('.bm350-media-unavailable').count()==1
         print(f'A350 SYNTHETIC CHROMIUM PASS {width}x{height} scroll={dims["scroll"]} nav={dims["nav"]} gallery-button={dims["gallery"]:.1f}px')
         page.close()
     browser.close()
