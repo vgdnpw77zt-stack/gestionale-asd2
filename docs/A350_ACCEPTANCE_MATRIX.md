@@ -14,7 +14,8 @@
 2. **Backend contract read-only:** https://github.com/vgdnpw77zt-stack/gestionale-asd2/actions/runs/40373216916 — tre handler reali individuati: `bodymind_portal`, `bodymind_upload`, `bodymind_doc`; campi medici, quote, tesserati, presenze e `documenti.visibile` confermati. Nel sorgente A349 mancava il controllo esplicito `visibile` sul download diretto. Il template mostrava un successo upload tramite query string, e Home richiamava inizializzazione schema quote. Quest'ultimo comportamento non è stato modificato senza prova di regressione.
 3. **Trasformazione A350 completa in memoria:** https://github.com/vgdnpw77zt-stack/gestionale-asd2/actions/runs/40374692327 — codice originale A349 hash `12391e9f3fdc3dd92f91325c26f7e695cab28cbc771a721165708c2dfc4c9021` trasformato con gli asset A350 e compilato senza scritture. Codice candidato prodotto `8bbb503c24242e88aa97bc1eb973f92e69aa395df27c00d38f6809c9435532d1`.
 4. **Funzione download A350, due famiglie sintetiche:** https://github.com/vgdnpw77zt-stack/gestionale-asd2/actions/runs/40374884396 — PASS con SQLite solo in memoria: download proprio visibile, cross-family negato, nascosto e NULL negati, token inesistente e documento mancante negati. File temporanei sintetici soltanto sotto `/tmp` nel test, rimossi automaticamente. Non è prova di autenticazione live reale.
-5. **QA isolata:** https://github.com/vgdnpw77zt-stack/gestionale-asd2/actions/workflows/a350-signature.yml — 29 unit test (inclusa nuova guardia), Chromium sintetico su 320/375/390/430/768/1024/1440, Dockerfile build e asset SHA. Citare soltanto run SUCCESS sul commit finale.
+5. **Upload su handler reale, dati sintetici e filesystem temporaneo:** https://github.com/vgdnpw77zt-stack/gestionale-asd2/actions/runs/40375229182 — PASS con tesserato fittizio, salvataggio e registrazione documentale solo su SQLite in memoria e /tmp; token estraneo rifiutato. Non comprova CSRF né upload su una sessione reale.
+6. **QA isolata:** https://github.com/vgdnpw77zt-stack/gestionale-asd2/actions/workflows/a350-signature.yml — 29 unit test (inclusa nuova guardia), Chromium sintetico su 320/375/390/430/768/1024/1440, Dockerfile build e asset SHA. Citare soltanto run SUCCESS sul commit finale.
 
 ## Matrice integrazione Area Famiglie ↔ gestionale
 
@@ -24,7 +25,7 @@
 | Corsi e presenze | `corsi`, `presenze`, `bodymind_rapid_roster` | Schema presente sul database live | Join, roster e orari verificati con famiglie autorizzate |
 | Pagamenti | `quote_mensili`, `pagamenti`, `ricevute` | Tabelle presenti; UI non introduce movimenti | Quotazioni contabili e ricevute riconciliate; accesso diretto autorizzato; checkout reale |
 | Video/galleria | Media esistenti da A349, sito ufficiale | Rimosso mapping per parole del titolo; solo asset/reel con associazione esplicita; demo mobile testata | Foto live e CTA effettive, riproduzione iPhone reale |
-| Documenti | `documenti`, `tesserati.online_token`, filesystem autorizzato | Handler reale A350 corretto in memoria, 2 famiglie sintetiche isolate | Upload reale, CSRF, antivirus/tipi file, comportamento su sessione reale |
+| Documenti | `documenti`, `tesserati.online_token`, filesystem autorizzato | Handler reale A350 corretto in memoria, 2 famiglie sintetiche isolate | Handler upload sintetico testato; mancano CSRF, tipi file, conferma e sessione reale |
 | Certificato | `tesserati.certificato_scadenza` + verifiche segreteria | Colonna confermata | Scadenze, validazione upload/documenti/flag con casi autorizzati |
 | Account | associazione nucleo / athlete token lato server | lookup token nell'handler reale | Multi-figlio, sessione, autorizzazioni di nucleo con due account autenticati |
 
@@ -44,7 +45,7 @@
 | B9 release/rollback | NON VERIFICATO | Rollback solo sintetico; no deployment A350, no smoke postdeploy |
 
 ## Blocchi release P0
-- Eseguire test upload contro handler live A350 in ambiente isolato con account sintetici; provare CSRF, tipo file, conferma successo e fascicolo.
+- Handler upload già testato su due token sintetici in SQLite solo in memoria; restano prove CSRF globale, controllo dei tipi/dimensioni file, feedback e upload autenticato end-to-end.
 - Validare corrispondenza pagamenti/ricevute/quote e certificati rispetto al backend con almeno due nuclei distinti, senza dati reali nei log.
 - Verificare completo frontend autenticato sulle dimensioni richieste e iOS; video senza blur e controlli funzionanti.
 - Solo in seguito valutare merge e deploy con source lock, backup codice, rollback testato, check `/health` e smoke post-deploy.
