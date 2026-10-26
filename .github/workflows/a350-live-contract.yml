@@ -1,0 +1,99 @@
+name: A350 live backend contract audit - read only
+on:
+  push:
+    branches: [bodymind-a350-signature-experience-20261026]
+    paths: ['.github/workflows/a350-live-contract.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  family-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SSH_KEY_AVAILABLE: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY != '' }}
+      RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Require configured read-only access
+        run: |
+          [[ "$SSH_KEY_AVAILABLE" == "true" ]] || { echo "::error::SSH credential missing; audit blocked"; exit 1; }
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$RAILWAY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          ssh-keygen -y -f "$HOME/.ssh/id_ed25519" > /dev/null
+      - name: Inspect live authenticated code contract without touching personal data
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 70s ssh -T -i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          import ast,hashlib,json,re,sqlite3
+          from pathlib import Path
+          root=Path('/data/top2_app')
+          portal=root/'asd_app'/'routes_bodymind_final.py'
+          dbpath=Path('/data/tenants/default/asd.db')
+          raw=portal.read_bytes()
+          src=raw.decode('utf8')
+          parsed=ast.parse(src)
+          fs={n.name:n for n in ast.walk(parsed) if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef))}
+          def body(name):
+              node=fs.get(name)
+              return ast.get_source_segment(src,node) if node else ''
+          def signal(name):
+              x=body(name)
+              return dict(
+                  exists=bool(x),
+                  athlete_token_lookup=('online_token' in x),
+                  explicit_csrf_validation=any(w in x for w in ('validate_csrf','csrf_protect','check_csrf','csrf_required')),
+                  references_athlete_id=('tesserato_id' in x),
+                  handles_visibility=('visibile' in x or 'family_visible_receipts' in x),
+                  invokes_quote_schema_initializer=('ensure_quote_schema(conn)' in x),
+                  performs_schema_writes=('CREATE TABLE' in x or 'ALTER TABLE' in x),
+                  has_file_extension_guard=any(w in x for w in ('allowed_file','allowed_extensions','ALLOWED_EXTENSIONS','mimetype','extension')),
+                  has_upload_length_guard=any(w in x for w in ('MAX_CONTENT_LENGTH','max_size','MAX_UPLOAD','content_length')),
+                  uses_flash_confirmation=('flash(' in x),
+                  uses_querystring_confirmation=('?upload=ok' in x),
+              )
+          h=''
+          for n in parsed.body:
+              if isinstance(n,ast.Assign) and any(isinstance(k,ast.Name) and k.id=='PORTAL' for k in n.targets):
+                  if isinstance(n.value,ast.Constant) and isinstance(n.value.value,str):h=n.value.value
+          paths=[]
+          for n in ast.walk(parsed):
+              if isinstance(n,ast.Call) and isinstance(n.func,ast.Attribute) and n.func.attr in ('route','add_url_rule') and n.args:
+                  a=n.args[0]
+                  if isinstance(a,ast.Constant) and isinstance(a.value,str) and a.value.startswith(('/area-famiglie','/app-tesserato')):
+                      paths.append(a.value)
+          checks={}
+          with sqlite3.connect(dbpath.resolve().as_uri()+'?mode=ro',uri=True,timeout=10) as db:
+              db.execute('PRAGMA query_only=ON')
+              for tab in ['tesserati','corsi','presenze','pagamenti','ricevute','documenti','quote_mensili','bodymind_rapid_roster']:
+                  exists=bool(db.execute('SELECT 1 FROM sqlite_master WHERE type=? AND name=?',('table',tab)).fetchone())
+                  fields={r[1] for r in db.execute('PRAGMA table_info("'+tab+'")')} if exists else set()
+                  checks[tab]={'exists':exists}
+                  if tab=='documenti':checks[tab].update({'has_athlete_id':'tesserato_id' in fields,'has_visibility_flag':'visibile' in fields})
+                  if tab=='tesserati':checks[tab].update({'has_online_token':'online_token' in fields,'has_medical_expiry':'certificato_scadenza' in fields})
+          result=dict(
+            module_sha256=hashlib.sha256(raw).hexdigest(),
+            route_count=len(paths),
+            funcs={name:signal(name) for name in ['bodymind_portal','bodymind_upload','bodymind_doc']},
+            html={
+              'querystring_claims_upload_success':bool(re.search(r'request\\.args\\.get\\([\\x27\\x22]upload',h)),
+              'media_track':('familyMediaTrack' in h),
+              'hero_video':('family-hero-video' in h),
+              'courses':('id="corsi"' in h),
+              'payments':('id="pagamenti"' in h),
+              'documents':('id="documenti"' in h),
+              'csrf_form':('csrf' in h.lower())
+            },
+            db_schema=checks
+          )
+          print('A350_LIVE_BACKEND_CONTRACT '+json.dumps(result,sort_keys=True))
+          print('AUDIT_READ_ONLY_SUCCESS_NO_PII')
+          PY
+      - name: Erase ephemeral SSH credential
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "$HOME/.ssh/id_ed25519" ]]; then
+            shred -u "$HOME/.ssh/id_ed25519" || rm -f "$HOME/.ssh/id_ed25519"
+          fi
