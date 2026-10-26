@@ -1194,21 +1194,37 @@ def a350_transform_html(old:bytes,old_js:bytes,css:bytes,js:bytes)->bytes:
 A350_A349_LIVE_MODULE_SHA='12391e9f3fdc3dd92f91325c26f7e695cab28cbc771a721165708c2dfc4c9021'
 
 def a350_secure_document_route(source:bytes,expected_sha:str=A350_A349_LIVE_MODULE_SHA)->bytes:
-    """Fail-closed source-only correction of hidden direct document downloads."""
     if hashlib.sha256(source).hexdigest()!=expected_sha:
         raise RuntimeError('A350 protected family source SHA mismatch')
     import ast
-    import re
     text=source.decode('utf-8')
     tree=ast.parse(text)
-    nodes=[n for n in ast.walk(tree)
-           if isinstance(n,ast.FunctionDef) and n.name=='bodymind_doc']
+    nodes=[n for n in ast.walk(tree) if isinstance(n,ast.FunctionDef) and n.name=='bodymind_doc']
     if len(nodes)!=1:
         raise RuntimeError('A350 document route missing or duplicated')
     original=ast.get_source_segment(text,nodes[0])
     if not original or text.count(original)!=1:
         raise RuntimeError('A350 document route anchor ambiguous')
-    matcher=r'(?m)^([ \t]*)if not d:[ \t]*abort\(404\)[ \t]*
+    needle='if not d: abort(404)'
+    if original.count(needle)!=1 or 'visibile' in original:
+        raise RuntimeError('A350 unexpected document access implementation')
+    line=next(x for x in original.splitlines() if needle in x)
+    indent=line[:line.index(needle)]
+    guard=needle+'\n'+indent+"if 'visibile' in dcols and int(d['visibile'] or 0) != 1: abort(404)"
+    text=text.replace(original,original.replace(needle,guard,1),1)
+    false_success="{% if request.args.get('upload')=='ok' %}"
+    if text.count(false_success)!=1:
+        raise RuntimeError('A350 misleading upload banner anchor unavailable')
+    start=text.index(false_success)
+    stop=text.find('{% endif %}',start)
+    if stop<0 or stop-start>500:
+        raise RuntimeError('A350 unexpected upload confirmation template')
+    text=text[:start]+text[stop+len('{% endif %}'):]
+    result=text.encode('utf-8')
+    compile(result,A350_REL,'exec')
+    return result
+
+def a350_expected_from_a349(old:bytes)->tuple[bytes,str]:
     if not A349_BACKUP.is_file() or A349_BACKUP.is_symlink():
         raise RuntimeError('A350 required A349 protected backup missing')
     _,prior_sha=a349_source_from_a348(A349_BACKUP.read_bytes())
