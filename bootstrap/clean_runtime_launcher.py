@@ -1020,7 +1020,9 @@ def maybe_recover_a348_to_a347(root:Path,db:Path)->bool:
 A349_REL=A348_REL
 A349_BACKUP=Path('/data/release_packages/BODYMIND_A349_PREUI_A348.py')
 A349_CSS_PATH=Path('/opt/bodymind/family_a349_atelier.css')
-A349_CSS_SHA256='db983b38f78887ef5a7b9593f8199634467f15afd897e20cf734dfcbe2092f96'
+A349_CSS_SHA256='2363a2ba8f2f343d82846cddff4fe084a5ffa4e0c01623acd72715fb6b3ebc06'
+A349_JS_PATH=Path('/opt/bodymind/family_a349_native_ratio.js')
+A349_JS_SHA256='64d1871b0deb7a7c17f41dd725c2e9d7f17f8c2fb94a0917891b986da16b13c9'
 
 def a349_consolidate_styles(old:bytes,layers:list[bytes],curated:bytes)->bytes:
     # Source is already verified as exact A348 before use. Each CSS span must occur once.
@@ -1057,6 +1059,14 @@ def a349_source_from_a348(old:bytes)->tuple[bytes,str]:
         A345_CSS_PATH,A346_CSS_PATH,A347_CSS_PATH,A348_CSS_PATH
     )]
     new=a349_consolidate_styles(old,layers,curated)
+    js=A349_JS_PATH.read_bytes()
+    if hashlib.sha256(js).hexdigest()!=A349_JS_SHA256 or b'</script>' in js or b"'''" in js:
+        raise RuntimeError('A349 native ratio helper verification failed')
+    script_anchor=b'</script>\n<section class="section"><div class="panel personal">'
+    if new.count(script_anchor)!=1:
+        raise RuntimeError('A349 unique video script anchor absent')
+    script=b'</script>\n<script id="bodymind-a349-native-ratio">\n'+js+b'\n</script>\n<section class="section"><div class="panel personal">'
+    new=new.replace(script_anchor,script,1)
     compile(new,A349_REL,'exec')
     return new,hashlib.sha256(new).hexdigest()
 
