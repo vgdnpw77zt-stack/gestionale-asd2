@@ -12,7 +12,7 @@
   --atelier-line:rgba(221,198,253,.30);
   --atelier-shine:rgba(172,138,232,.24);
 }
-html{background:var(--atelier-night)}
+html{background:var(--atelier-night);overflow-x:clip!important}
 body{
   color:var(--atelier-frost)!important;
   background:#090f25!important;
@@ -66,6 +66,8 @@ main.main{
     linear-gradient(180deg,#10172f 0%,#0d1532 47%,#0a1027 100%)!important;
 }
 main.main::before{
+  inset:0!important;
+  width:100%!important;
   z-index:0!important;
   opacity:.86!important;
   filter:drop-shadow(0 0 9px rgba(149,113,225,.52))!important;
@@ -182,7 +184,7 @@ a:focus-visible,button:focus-visible{
       radial-gradient(ellipse 90% 42% at 53% 21%,rgba(129,83,174,.18),transparent 85%),
       linear-gradient(180deg,#080e25,#17142f 83%,#0e1430)!important;
   }
-  .hero::before{opacity:.23!important;pointer-events:none!important}
+  .hero::before{opacity:0!important;display:none!important;pointer-events:none!important}
   .hero::after{display:none!important;content:none!important}
   .hero-media{
     position:relative!important;
@@ -219,7 +221,8 @@ a:focus-visible,button:focus-visible{
     max-width:100%!important;
     max-height:none!important;
     min-height:0!important;
-    aspect-ratio:auto!important;
+    /* Portrait fallback until loadedmetadata reports the video's real dimensions. */
+    aspect-ratio:var(--bm349-film-ratio, 9 / 16)!important;
     object-fit:contain!important;
     object-position:center center!important;
     margin:0!important;
