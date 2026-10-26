@@ -153,8 +153,8 @@ class A350SignatureTests(unittest.TestCase):
         source = b'''from flask import abort
 PORTAL = """<main>{% if request.args.get('upload')=='ok' %}<div class="flash">Success</div>{% endif %}</main>"""
 def bodymind_doc(token, doc_id):
-    dcols = {'visibile'}
-    d = {'visibile': 0}
+    dcols = {'visi' + 'bile'}
+    d = {'visi' + 'bile': 0}
     if not d: abort(404)
     return d
 '''
