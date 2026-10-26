@@ -1161,7 +1161,7 @@ A350_BACKUP=Path('/data/release_packages/BODYMIND_A350_PREUI_A349.py')
 A350_CSS_PATH=Path('/opt/bodymind/family_a350_signature.css')
 A350_JS_PATH=Path('/opt/bodymind/family_a350_verified_gallery.js')
 A350_CSS_BLOB='1d1d073b36af36a0027ad33be2d17f18b07251cd'
-A350_JS_BLOB='1eb2071358759b309fba550e74fa8f771d18fa53'
+A350_JS_BLOB='8c9d90257a3a4793b4c5ba627536195745207e8f'
 
 def a350_git_blob(data:bytes)->str:
     return hashlib.sha1(b'blob '+str(len(data)).encode('ascii')+b'\x00'+data).hexdigest()
