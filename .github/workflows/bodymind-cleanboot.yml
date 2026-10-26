@@ -1,7 +1,7 @@
 name: BodyMind clean boot isolated QA
 on:
   push:
-    branches: [bodymind-cleanboot-a301-20261020, bodymind-a344-boutique-editorial-20261025, bodymind-a345-full-video-mobile-20261025, bodymind-a346-luxury-ux-20261025, bodymind-a347-cinematic-overlay-20261025, bodymind-a348-mobile-nav-fix-20261025]
+    branches: [bodymind-cleanboot-a301-20261020, bodymind-a344-boutique-editorial-20261025, bodymind-a345-full-video-mobile-20261025, bodymind-a346-luxury-ux-20261025, bodymind-a347-cinematic-overlay-20261025, bodymind-a348-mobile-nav-fix-20261025, bodymind-a349-boutique-rebuild-20261026]
   pull_request:
     paths:
       - bootstrap/**
@@ -22,6 +22,7 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_a346_*.py' -v
       - run: python -m unittest discover -s tests -p 'test_a347_*.py' -v
       - run: python -m unittest discover -s tests -p 'test_a348_*.py' -v
+      - run: python -m unittest discover -s tests -p 'test_a349_*.py' -v
 
   image-build:
     runs-on: ubuntu-latest
