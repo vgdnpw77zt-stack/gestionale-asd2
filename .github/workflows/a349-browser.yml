@@ -12,10 +12,27 @@ jobs:
           python-version: '3.11'
       - name: Install Chromium harness
         run: |
-          pip install playwright==1.56.0
+          pip install playwright==1.56.0 pillow
           python -m playwright install --with-deps chromium
       - name: Verify phone, tablet and desktop geometry
         run: python tests/browser_a349_geometry.py
+      - name: Render compressed sanitized phone preview for designer QA
+        run: |
+          python - <<'PY'
+          from PIL import Image
+          import base64
+          from pathlib import Path
+          p=Path('a349_mock_390.png')
+          if not p.exists():
+              raise SystemExit('Missing 390px browser preview')
+          im=Image.open(p).convert('RGB')
+          im.save('a349_mock_390.jpg',quality=55,optimize=True)
+          encoded=base64.b64encode(Path('a349_mock_390.jpg').read_bytes()).decode('ascii')
+          print('A349_JPEG_BASE64_BEGIN')
+          for i in range(0,len(encoded),2500):
+              print('A349IMG:'+encoded[i:i+2500])
+          print('A349_JPEG_BASE64_END')
+          PY
       - name: Retain sanitized QA screenshots
         if: always()
         uses: actions/upload-artifact@v4
