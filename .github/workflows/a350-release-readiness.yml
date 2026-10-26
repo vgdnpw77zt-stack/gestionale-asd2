@@ -1,0 +1,72 @@
+name: A350 pre-release live integrity READ ONLY
+on:
+  push:
+    branches: [bodymind-a350-signature-experience-20261026]
+    paths: ['.github/workflows/a350-release-readiness.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  readonly-release-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      SSH_KEY_PRESENT: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY != '' }}
+      RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Prepare authorized SSH key
+        run: |
+          set -euo pipefail
+          [[ "$SSH_KEY_PRESENT" == "true" ]] || { echo "::error::No authorized SSH access"; exit 1; }
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$RAILWAY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          ssh-keygen -y -f "$HOME/.ssh/id_ed25519" >/dev/null
+      - name: Inspect live source, backup directory, and SQLite without DB mutations
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 110s ssh -T -i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          import hashlib,json,sqlite3,os,shutil,stat
+          from pathlib import Path
+          root=Path('/data/top2_app')
+          dbfile=Path('/data/tenants/default/asd.db')
+          code=root/'asd_app/routes_bodymind_final.py'
+          pkg=Path('/data/release_packages')
+          expected='12391e9f3fdc3dd92f91325c26f7e695cab28cbc771a721165708c2dfc4c9021'
+          assert code.is_file() and not code.is_symlink()
+          raw=code.read_bytes()
+          assert hashlib.sha256(raw).hexdigest()==expected,'source modified since audited A349'
+          assert pkg.is_dir() and not pkg.is_symlink(),'release backup directory must exist'
+          assert os.access(pkg,os.W_OK),'release backup directory must be writable'
+          usage=shutil.disk_usage('/data')
+          assert usage.free > max(len(raw)*10,64*1024*1024),'insufficient space for safe code backup'
+          assert dbfile.is_file() and not dbfile.is_symlink()
+          conn=sqlite3.connect(dbfile.resolve().as_uri()+'?mode=ro',uri=True,timeout=30)
+          conn.execute('PRAGMA query_only=ON')
+          quick=conn.execute('PRAGMA quick_check').fetchone()[0]
+          fk=conn.execute('PRAGMA foreign_key_check').fetchall()
+          conn.close()
+          assert quick=='ok','SQLite quick_check failed'
+          assert not fk,'SQLite foreign-key violations detected'
+          backup=pkg/'BODYMIND_A350_PREUI_A349.py'
+          if backup.exists():
+              assert backup.is_file() and not backup.is_symlink()
+              assert backup.read_bytes()==raw,'A350 rollback backup conflicts with current A349 source'
+          print('A350_RELEASE_GATE '+json.dumps({
+            'source_sha256':expected,
+            'sqlite_quick_check':'ok',
+            'sqlite_fk_violation_count':0,
+            'backup_directory':'present',
+            'prior_A350_backup':'verified' if backup.exists() else 'not_needed_yet',
+            'disk_free_MB':round(usage.free/1e6,1),
+            'source_bytes':len(raw)
+          },sort_keys=True))
+          print('A350_RELEASE_READONLY_PREFLIGHT_PASS')
+          PY
+      - name: Erase ephemeral SSH key
+        if: always()
+        run: |
+          if [[ -f "$HOME/.ssh/id_ed25519" ]]; then
+            shred -u "$HOME/.ssh/id_ed25519" || rm -f "$HOME/.ssh/id_ed25519"
+          fi

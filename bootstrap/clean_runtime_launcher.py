@@ -90,7 +90,7 @@ def preflight(root:Path,db:Path)->dict:
     valid={(EXPECTED_SOURCE_COUNT,EXPECTED_SOURCE_DIGEST),(UPGRADE_SOURCE_COUNT,UPGRADE_SOURCE_DIGEST),
            (MANUAL_ROSTER_SOURCE_COUNT,MANUAL_ROSTER_SOURCE_DIGEST),
            (SIMPLE_GROUP_SOURCE_COUNT,SIMPLE_GROUP_SOURCE_DIGEST),(A317_SOURCE_COUNT,A317_SOURCE_DIGEST),(A328_SOURCE_COUNT,A328_SOURCE_DIGEST),(A330_SOURCE_COUNT,A330_SOURCE_DIGEST),(A336_SOURCE_COUNT,A336_SOURCE_DIGEST),(A337_SOURCE_COUNT,A337_SOURCE_DIGEST)}
-    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found) and not a343_matches(root,found) and not a344_matches(root,found) and not a345_matches(root,found) and not a346_matches(root,found) and not a347_matches(root,found) and not a348_matches(root,found) and not a349_matches(root,found):
+    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found) and not a343_matches(root,found) and not a344_matches(root,found) and not a345_matches(root,found) and not a346_matches(root,found) and not a347_matches(root,found) and not a348_matches(root,found) and not a349_matches(root,found) and not a350_matches(root,found):
         raise RuntimeError(f'source lock mismatch files={len(found)} expected={EXPECTED_SOURCE_COUNT}')
     return {'source_files':len(found),'sqlite':'ok','rows':sqlite_readonly_check(db),
             'historical_migrations_executed':0,'automatic_backup_cleanup':False,
@@ -1153,6 +1153,174 @@ def maybe_recover_a349_to_a348(root:Path,db:Path)->bool:
     print('BODYMIND A349 RECOVERY PASS: A348 restored, no data changes',flush=True)
     return True
 
+# A350 - verified media mapping + scoped accessibility layer.
+# This is a surgical UI-only patch of the exact A349 source on the volume.
+# All administrative routes, IDs, SQLite, attachments and private files are untouched.
+A350_REL=A349_REL
+A350_BACKUP=Path('/data/release_packages/BODYMIND_A350_PREUI_A349.py')
+A350_CSS_PATH=Path('/opt/bodymind/family_a350_signature.css')
+A350_JS_PATH=Path('/opt/bodymind/family_a350_verified_gallery.js')
+A350_CSS_BLOB='1d1d073b36af36a0027ad33be2d17f18b07251cd'
+A350_JS_BLOB='8c9d90257a3a4793b4c5ba627536195745207e8f'
+
+def a350_git_blob(data:bytes)->str:
+    return hashlib.sha1(b'blob '+str(len(data)).encode('ascii')+b'\x00'+data).hexdigest()
+
+def a350_assets()->tuple[bytes,bytes]:
+    css=A350_CSS_PATH.read_bytes()
+    js=A350_JS_PATH.read_bytes()
+    if a350_git_blob(css)!=A350_CSS_BLOB or a350_git_blob(js)!=A350_JS_BLOB:
+        raise RuntimeError('A350 asset fingerprint mismatch')
+    if b'</style>' in css or b"'''" in css or b'</script>' in js or b"'''" in js:
+        raise RuntimeError('A350 unsafe template delimiter')
+    if b'verifiedImageLinks' not in js or b'bm350-gallery-footer' not in css:
+        raise RuntimeError('A350 required public gallery components unavailable')
+    return css,js
+
+def a350_transform_html(old:bytes,old_js:bytes,css:bytes,js:bytes)->bytes:
+    # The A341 guesswork must be REMOVED, not shadowed by another handler.
+    marker=b'<script id="bodymind-media-links">\n'+old_js+b'\n</script>'
+    style_anchor=b'</style>\n</head>'
+    if old.count(marker)!=1 or old.count(style_anchor)!=1:
+        raise RuntimeError('A350 expected verified template anchors absent')
+    new=old.replace(marker,
+        b'<script id="bodymind-media-links-a350">\n'+js+b'\n</script>',1)
+    new=new.replace(style_anchor,b'\n/* BODYMIND A350 SIGNATURE */\n'+css+b'\n'+style_anchor,1)
+    compile(new,A350_REL,'exec')
+    return new
+
+# A350 backend privacy guard based on verified A349 production module SHA.
+# Pure transform: no database writes, no document access, no changes to business rules.
+A350_A349_LIVE_MODULE_SHA='12391e9f3fdc3dd92f91325c26f7e695cab28cbc771a721165708c2dfc4c9021'
+
+def a350_secure_document_route(source:bytes,expected_sha:str=A350_A349_LIVE_MODULE_SHA)->bytes:
+    if hashlib.sha256(source).hexdigest()!=expected_sha:
+        raise RuntimeError('A350 protected family source SHA mismatch')
+    import ast
+    text=source.decode('utf-8')
+    tree=ast.parse(text)
+    nodes=[n for n in ast.walk(tree) if isinstance(n,ast.FunctionDef) and n.name=='bodymind_doc']
+    if len(nodes)!=1:
+        raise RuntimeError('A350 document route missing or duplicated')
+    original=ast.get_source_segment(text,nodes[0])
+    if not original or text.count(original)!=1:
+        raise RuntimeError('A350 document route anchor ambiguous')
+    needle='if not d: abort(404)'
+    if original.count(needle)!=1 or 'visibile' in original:
+        raise RuntimeError('A350 unexpected document access implementation')
+    line=next(x for x in original.splitlines() if needle in x)
+    indent=line[:line.index(needle)]
+    guard=needle+'\n'+indent+"if 'visibile' in dcols and int(d['visibile'] or 0) != 1: abort(404)"
+    text=text.replace(original,original.replace(needle,guard,1),1)
+    false_success="{% if request.args.get('upload')=='ok' %}"
+    if text.count(false_success)!=1:
+        raise RuntimeError('A350 misleading upload banner anchor unavailable')
+    start=text.index(false_success)
+    stop=text.find('{% endif %}',start)
+    if stop<0 or stop-start>500:
+        raise RuntimeError('A350 unexpected upload confirmation template')
+    text=text[:start]+text[stop+len('{% endif %}'):]
+    result=text.encode('utf-8')
+    compile(result,A350_REL,'exec')
+    return result
+
+def a350_expected_from_a349(old:bytes)->tuple[bytes,str]:
+    if not A349_BACKUP.is_file() or A349_BACKUP.is_symlink():
+        raise RuntimeError('A350 required A349 protected backup missing')
+    _,prior_sha=a349_source_from_a348(A349_BACKUP.read_bytes())
+    if hashlib.sha256(old).hexdigest()!=prior_sha:
+        raise RuntimeError('A350 source differs from exact A349')
+    css,js=a350_assets()
+    guarded=a350_secure_document_route(old)
+    new=a350_transform_html(guarded,A341_LINKS_PATH.read_bytes(),css,js)
+    return new,hashlib.sha256(new).hexdigest()
+
+def a350_matches(root:Path,found:dict[str,str])->bool:
+    if len(found)!=214 or A350_REL not in found or not A350_BACKUP.is_file() or A350_BACKUP.is_symlink():
+        return False
+    old=A350_BACKUP.read_bytes()
+    _,expected=a350_expected_from_a349(old)
+    if found[A350_REL]!=expected:
+        return False
+    previous=dict(found)
+    previous[A350_REL]=hashlib.sha256(old).hexdigest()
+    return a349_matches(root,previous)
+
+def maybe_apply_a350_family_ui(root:Path,db:Path)->None:
+    found=source_inventory(root)
+    if a350_matches(root,found):
+        return
+    if not a349_matches(root,found):
+        return
+    # Database validation is strictly read-only; not even a schema migration.
+    sqlite_readonly_check(db)
+    target=root/A350_REL
+    if target.is_symlink() or not target.is_file():
+        raise RuntimeError('A350 unsafe source target')
+    old=target.read_bytes()
+    new,new_sha=a350_expected_from_a349(old)
+    if A350_BACKUP.exists():
+        if A350_BACKUP.is_symlink() or A350_BACKUP.read_bytes()!=old:
+            raise RuntimeError('A350 rollback copy conflict')
+    else:
+        if not A350_BACKUP.parent.is_dir() or A350_BACKUP.parent.is_symlink():
+            raise RuntimeError('A350 protected backup directory unavailable')
+        with open(A350_BACKUP,'xb') as fh:
+            fh.write(old)
+            fh.flush()
+            os.fsync(fh.fileno())
+    temp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a350_signature_',suffix='.py',
+                                          dir=str(target.parent),delete=False) as fh:
+            temp=Path(fh.name)
+            fh.write(new)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(temp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(temp),str(target))
+        temp=None
+    finally:
+        if temp is not None:
+            temp.unlink(missing_ok=True)
+    final=source_inventory(root)
+    if not a350_matches(root,final) or final[A350_REL]!=new_sha:
+        raise RuntimeError('A350 post-install source fingerprint mismatch')
+    print('BODYMIND A350 SIGNATURE UI APPLIED; EXISTING SQLITE AND PRIVATE DATA UNCHANGED',flush=True)
+
+def maybe_recover_a350_to_a349(root:Path,db:Path)->bool:
+    if os.environ.get('BODYMIND_A350_RECOVER_A349')!='1':
+        return False
+    found=source_inventory(root)
+    if a349_matches(root,found):
+        print('BODYMIND A350 RECOVERY: A349 already active',flush=True)
+        return True
+    if not a350_matches(root,found):
+        raise RuntimeError('A350 recovery declined: nonmatching source')
+    sqlite_readonly_check(db)
+    target=root/A350_REL
+    if target.is_symlink() or not target.is_file():
+        raise RuntimeError('A350 recovery unsafe target')
+    old=A350_BACKUP.read_bytes()
+    temp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a350_recover_',suffix='.py',
+                                          dir=str(target.parent),delete=False) as fh:
+            temp=Path(fh.name)
+            fh.write(old)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(temp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(temp),str(target))
+        temp=None
+    finally:
+        if temp is not None:
+            temp.unlink(missing_ok=True)
+    if not a349_matches(root,source_inventory(root)):
+        raise RuntimeError('A350 rollback fingerprint failed')
+    print('BODYMIND A350 RECOVERY PASS: A349 exact source restored, no data change',flush=True)
+    return True
+
 def main(argv=None):
     parser=argparse.ArgumentParser()
     parser.add_argument('mode',nargs='?',choices=('check','start'),default='start')
@@ -1178,6 +1346,8 @@ def main(argv=None):
                 maybe_apply_a348_family_ui(args.root,args.db)
             if not maybe_recover_a349_to_a348(args.root,args.db):
                 maybe_apply_a349_family_ui(args.root,args.db)
+            if not maybe_recover_a350_to_a349(args.root,args.db):
+                maybe_apply_a350_family_ui(args.root,args.db)
         result=preflight(args.root,args.db)
     except (OSError,RuntimeError,ValueError,sqlite3.DatabaseError) as exc:
         print('BODYMIND CLEAN BOOT STOP: '+str(exc),file=sys.stderr,flush=True)

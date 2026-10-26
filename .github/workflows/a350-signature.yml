@@ -1,0 +1,52 @@
+name: BodyMind A350 Signature Experience QA
+on:
+  push:
+    branches:
+      - bodymind-a350-signature-experience-20261026
+  pull_request:
+    paths:
+      - 'bootstrap/**'
+      - 'tests/**'
+      - 'Dockerfile'
+      - '.github/workflows/a350-signature.yml'
+permissions:
+  contents: read
+jobs:
+  guards-and-clean-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test the exact preflight, source locking and safe UI transformation
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Parse all JavaScript assets
+        run: |
+          node --check bootstrap/family_a350_verified_gallery.js
+          node --check bootstrap/family_a349_native_ratio.js
+      - name: Python compiler rejects unsafe template injections
+        run: python -m py_compile bootstrap/clean_runtime_launcher.py tests/test_a350_signature.py
+      - name: Build identical Docker layout without any private source or DB
+        run: docker build --pull --tag bodymind-a350:qa .
+      - name: Check image contains expected immutable assets
+        run: |
+          docker run --rm --entrypoint python bodymind-a350:qa -c "import runpy; m=runpy.run_path('/opt/bodymind-migration/migration_upload.py',run_name='a350_ci'); css,js=m['a350_assets'](); assert css and js; print('A350_IMAGE_ASSET_LOCK_PASS')"
+  synthetic-browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install playwright==1.56.0
+      - run: python -m playwright install --with-deps chromium
+      - name: Test Chromium at 320 375 390 430 768 1024 1440 pixels
+        run: python tests/browser_a350_signature.py
+      - name: Attach sanitized synthetic screenshots only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bodymind-a350-synthetic-only
+          path: a350_synthetic_*.png
+          if-no-files-found: ignore

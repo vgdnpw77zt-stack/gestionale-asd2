@@ -1,0 +1,42 @@
+name: A350 live source security patch DRY-RUN ONLY
+on:
+  push:
+    branches: [bodymind-a350-signature-experience-20261026]
+    paths:
+      - '.github/workflows/a350-security-dryrun.yml'
+      - 'bootstrap/clean_runtime_launcher.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  exact-live-dryrun:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
+      SSH_KEY_PRESENT: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Strictly require preconfigured access
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SSH_KEY_PRESENT" == true ]] || { echo "::error::No remote credential"; exit 1; }
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$RAILWAY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          ssh-keygen -y -f "$HOME/.ssh/id_ed25519" >/dev/null
+      - name: Execute candidate pure transform in memory against actual running family source
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The launcher is streamed as stdin. It is NOT installed on Railway.
+          audit='import sys,pathlib,hashlib,ast;ns={"__name__":"a350_live_safety_dryrun"};exec(compile(sys.stdin.read(),"a350_candidate.py","exec"),ns);raw=pathlib.Path("/data/top2_app/asd_app/routes_bodymind_final.py").read_bytes();new=ns["a350_secure_document_route"](raw);ast.parse(new.decode("utf8"));assert new!=raw;assert b"int(d[" + bytes([39]) + b"visibile" + bytes([39]) + b"] or 0) != 1" in new;assert b"request.args.get(" + bytes([39]) + b"upload" + bytes([39]) + b")" not in new;print("A350_LIVE_SOURCE_SECURITY_DRYRUN_PASS");print("A350_ORIGINAL_SHA256="+hashlib.sha256(raw).hexdigest());print("A350_CORRECTED_SHA256="+hashlib.sha256(new).hexdigest());print("A350_RUNTIME_SOURCE_UNCHANGED")'
+          timeout 65s ssh -T -i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com "PYTHONDONTWRITEBYTECODE=1 python3 -c '$audit'" < bootstrap/clean_runtime_launcher.py
+      - name: Destroy ephemeral credential
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "$HOME/.ssh/id_ed25519" ]]; then
+            shred -u "$HOME/.ssh/id_ed25519" || rm -f "$HOME/.ssh/id_ed25519"
+          fi
