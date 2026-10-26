@@ -77,7 +77,7 @@ jobs:
             route_count=len(paths),
             funcs={name:signal(name) for name in ['bodymind_portal','bodymind_upload','bodymind_doc']},
             html={
-              'querystring_claims_upload_success':bool(re.search(r'request\\.args\\.get\\([\\x27\\x22]upload',h)),
+              'querystring_claims_upload_success':('request.args.get(' in h and 'upload' in h),
               'media_track':('familyMediaTrack' in h),
               'hero_video':('family-hero-video' in h),
               'courses':('id="corsi"' in h),
