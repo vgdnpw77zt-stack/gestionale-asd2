@@ -30,4 +30,5 @@ jobs:
           assert '</style>' not in css
           assert css.count('{')==css.count('}')
           print('A349_CSS_SHA256',hashlib.sha256(css.encode()).hexdigest())
+          print('A349_JS_SHA256',hashlib.sha256(Path('bootstrap/family_a349_native_ratio.js').read_bytes()).hexdigest())
           PY
