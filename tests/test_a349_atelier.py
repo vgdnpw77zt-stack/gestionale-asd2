@@ -9,10 +9,16 @@ class TestA349Atelier(unittest.TestCase):
     def test_sha_and_mobile_editorial(self):
         css=(ROOT/'bootstrap/family_a349_atelier.css').read_bytes()
         self.assertEqual(hashlib.sha256(css).hexdigest(),
-          'db983b38f78887ef5a7b9593f8199634467f15afd897e20cf734dfcbe2092f96')
+          '2363a2ba8f2f343d82846cddff4fe084a5ffa4e0c01623acd72715fb6b3ebc06')
+        video_js=(ROOT/'bootstrap/family_a349_native_ratio.js').read_bytes()
+        self.assertEqual(hashlib.sha256(video_js).hexdigest(),
+          '64d1871b0deb7a7c17f41dd725c2e9d7f17f8c2fb94a0917891b986da16b13c9')
+        self.assertIn(b'loadedmetadata',video_js)
+        self.assertIn(b'video.videoWidth',video_js)
         c=css.decode('utf-8')
         for req in (
           'aspect-ratio:auto!important','height:auto!important',
+          'aspect-ratio:var(--bm349-film-ratio, 9 / 16)!important',
           'object-fit:contain!important','.hero .hero-content',
           '.hero .hero-intro h1','.hero-media .hero-playback',
           'main.main .stat:first-child','grid-column:1 / -1!important',
@@ -63,6 +69,9 @@ class TestA349Atelier(unittest.TestCase):
         ):
             self.assertIn(req,launcher)
         self.assertIn('COPY bootstrap/family_a349_atelier.css',docker)
+        self.assertIn('COPY bootstrap/family_a349_native_ratio.js',docker)
+        self.assertIn('A349_JS_SHA256',launcher)
+        self.assertIn('bodymind-a349-native-ratio',launcher)
 
 if __name__=='__main__':
     unittest.main()
