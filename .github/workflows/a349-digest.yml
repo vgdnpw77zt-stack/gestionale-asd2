@@ -1,0 +1,33 @@
+name: A349 visual consolidation digest
+on:
+  push:
+    branches: [bodymind-a349-boutique-rebuild-20261026]
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check curated stylesheet and capture immutable SHA
+        run: |
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          css=Path('bootstrap/family_a349_atelier.css').read_text()
+          required=(
+            'aspect-ratio:auto!important',
+            'height:auto!important',
+            'object-fit:contain!important',
+            '.hero .hero-content',
+            '.hero .hero-intro h1',
+            '.hero-media .hero-playback',
+            '.bottom-nav',
+            'transform:none!important',
+            'grid-column:1 / -1!important',
+            'bodymind-media-outbound',
+            'prefers-reduced-motion',
+          )
+          assert all(q in css for q in required)
+          assert '</style>' not in css
+          assert css.count('{')==css.count('}')
+          print('A349_CSS_SHA256',hashlib.sha256(css.encode()).hexdigest())
+          PY
