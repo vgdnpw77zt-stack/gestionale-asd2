@@ -75,6 +75,8 @@ jobs:
           result=dict(
             module_sha256=hashlib.sha256(raw).hexdigest(),
             route_count=len(paths),
+            guarded_visibility_patch_anchor_count=body('bodymind_doc').count('if not d: abort(404)'),
+            upload_success_render_anchor_count=h.count("{% if request.args.get('upload')=='ok' %}"),
             funcs={name:{**signal(name),'ast_digest':hashlib.sha256(ast.dump(fs[name],include_attributes=False).encode()).hexdigest() if name in fs else None} for name in ['bodymind_portal','bodymind_upload','bodymind_doc']},
             html={
               'querystring_claims_upload_success':('request.args.get(' in h and 'upload' in h),
