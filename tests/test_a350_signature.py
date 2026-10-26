@@ -121,15 +121,15 @@ class A350SignatureTests(unittest.TestCase):
                 return result
             def is_a349(_root,found):
                 return found.get(LAUNCHER.A350_REL)==old_sha
-            with patch.object(LAUNCHER,"source_inventory",inventory), \\
-                 patch.object(LAUNCHER,"a349_matches",is_a349), \\
+            with patch.object(LAUNCHER,"source_inventory",inventory), \
+                 patch.object(LAUNCHER,"a349_matches",is_a349), \
                  patch.object(LAUNCHER,"a349_source_from_a348",
-                              lambda old_a348:(old,old_sha)), \\
-                 patch.object(LAUNCHER,"sqlite_readonly_check",return_value={}) as readonly, \\
-                 patch.object(LAUNCHER,"A349_BACKUP",original_backup), \\
-                 patch.object(LAUNCHER,"A350_BACKUP",a350_backup), \\
-                 patch.object(LAUNCHER,"A350_CSS_PATH",BOOTSTRAP/"family_a350_signature.css"), \\
-                 patch.object(LAUNCHER,"A350_JS_PATH",BOOTSTRAP/"family_a350_verified_gallery.js"), \\
+                              lambda old_a348:(old,old_sha)), \
+                 patch.object(LAUNCHER,"sqlite_readonly_check",return_value={}) as readonly, \
+                 patch.object(LAUNCHER,"A349_BACKUP",original_backup), \
+                 patch.object(LAUNCHER,"A350_BACKUP",a350_backup), \
+                 patch.object(LAUNCHER,"A350_CSS_PATH",BOOTSTRAP/"family_a350_signature.css"), \
+                 patch.object(LAUNCHER,"A350_JS_PATH",BOOTSTRAP/"family_a350_verified_gallery.js"), \
                  patch.object(LAUNCHER,"A341_LINKS_PATH",BOOTSTRAP/"family_a341.js"):
                 LAUNCHER.maybe_apply_a350_family_ui(root,fake_db)
                 patched=target.read_bytes()
