@@ -1,0 +1,43 @@
+name: A350 full candidate on live A349 - in-memory dry run
+on:
+  push:
+    branches: [bodymind-a350-signature-experience-20261026]
+    paths:
+      - '.github/workflows/a350-full-source-dryrun.yml'
+      - 'bootstrap/clean_runtime_launcher.py'
+      - 'bootstrap/family_a350_signature.css'
+      - 'bootstrap/family_a350_verified_gallery.js'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  complete-source-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
+      KEY_EXISTS: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare SSH credential without disclosure
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$KEY_EXISTS" == true ]] || { echo "::error::Missing prior Railway SSH credential"; exit 1; }
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$RAILWAY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          ssh-keygen -y -f "$HOME/.ssh/id_ed25519" >/dev/null
+      - name: Simulate entire A350 transformation against ACTUAL immutable A349 (memory only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          audit='import sys,tarfile,types,pathlib,hashlib,ast;tar=tarfile.open(fileobj=sys.stdin.buffer,mode="r|");files={m.name:tar.extractfile(m).read() for m in tar if m.isfile()};ns={"__name__":"a350_live_candidate_preview"};exec(compile(files["bootstrap/clean_runtime_launcher.py"],"a350_candidate.py","exec"),ns);ns["A350_CSS_PATH"]=types.SimpleNamespace(read_bytes=lambda:files["bootstrap/family_a350_signature.css"]);ns["A350_JS_PATH"]=types.SimpleNamespace(read_bytes=lambda:files["bootstrap/family_a350_verified_gallery.js"]);old=pathlib.Path("/data/top2_app/asd_app/routes_bodymind_final.py").read_bytes();new,sha=ns["a350_expected_from_a349"](old);ast.parse(new.decode("utf8"));assert old!=new;assert b"bodymind-media-links-a350" in new;assert b"BODYMIND A350 SIGNATURE" in new;assert b"if not d: abort(404)" in new;assert b"int(d[" + bytes([39]) + b"visibile" + bytes([39]) + b"] or 0) != 1" in new;assert b"targetFor(title)" not in new;assert b"request.args.get(" + bytes([39]) + b"upload" + bytes([39]) + b")" not in new;print("A350_FULL_LIVE_SOURCE_MEMORY_DRYRUN_PASS");print("A350_REWRITTEN_SHA256="+sha);print("A350_READONLY_PRODUCTION_UNCHANGED")'
+          tar -cf - bootstrap/clean_runtime_launcher.py bootstrap/family_a350_signature.css bootstrap/family_a350_verified_gallery.js | timeout 90s ssh -T -i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com "PYTHONDONTWRITEBYTECODE=1 python3 -c '$audit'"
+      - name: Wipe SSH key
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "$HOME/.ssh/id_ed25519" ]]; then
+            shred -u "$HOME/.ssh/id_ed25519" || rm -f "$HOME/.ssh/id_ed25519"
+          fi
