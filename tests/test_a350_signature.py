@@ -128,6 +128,7 @@ class A350SignatureTests(unittest.TestCase):
                  patch.object(LAUNCHER,"a349_matches",is_a349), \
                  patch.object(LAUNCHER,"a349_source_from_a348",
                               lambda old_a348:(old,old_sha)), \
+                 patch.object(LAUNCHER,"a350_secure_document_route",side_effect=lambda raw:raw), \
                  patch.object(LAUNCHER,"sqlite_readonly_check",return_value={}) as readonly, \
                  patch.object(LAUNCHER,"A349_BACKUP",original_backup), \
                  patch.object(LAUNCHER,"A350_BACKUP",a350_backup), \
@@ -146,6 +147,32 @@ class A350SignatureTests(unittest.TestCase):
                     self.assertTrue(LAUNCHER.maybe_recover_a350_to_a349(root,fake_db))
                 self.assertEqual(target.read_bytes(),old)
                 self.assertEqual(a350_backup.read_bytes(),old)
+
+
+    def test_hidden_document_guard_requires_exact_source_and_never_writes_db(self):
+        source = b'''from flask import abort
+PORTAL = """<main>{% if request.args.get('upload')=='ok' %}<div class="flash">Success</div>{% endif %}</main>"""
+def bodymind_doc(token, doc_id):
+    dcols = {'visibile'}
+    d = {'visibile': 0}
+    if not d: abort(404)
+    return d
+'''
+        checksum=hashlib.sha256(source).hexdigest()
+        with self.assertRaisesRegex(RuntimeError, 'SHA mismatch'):
+            LAUNCHER.a350_secure_document_route(source)
+        rewritten=LAUNCHER.a350_secure_document_route(source, expected_sha=checksum)
+        compile(rewritten, "synthetic_security.py", "exec")
+        self.assertIn(b"int(d['visibile'] or 0) != 1", rewritten)
+        self.assertNotIn(b"request.args.get('upload')", rewritten)
+        self.assertEqual(source.count(b"if not d: abort(404)"), 1)
+        bad=source.replace(b"if not d: abort(404)", b"if d is None: abort(404)")
+        with self.assertRaises(RuntimeError):
+            LAUNCHER.a350_secure_document_route(bad,expected_sha=hashlib.sha256(bad).hexdigest())
+        namespace={}
+        exec(compile(rewritten, "synthetic_security.py", "exec"), namespace)
+        with self.assertRaises(Exception):
+            namespace["bodymind_doc"]("SYNTHETIC",1)
 
 
 if __name__ == "__main__":
