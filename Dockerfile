@@ -19,6 +19,7 @@ COPY bootstrap/family_a346_editorial.css /opt/bodymind/family_a346_editorial.css
 COPY bootstrap/family_a347_overlay.css /opt/bodymind/family_a347_overlay.css
 COPY bootstrap/family_a348_navfix.css /opt/bodymind/family_a348_navfix.css
 COPY bootstrap/family_a349_atelier.css /opt/bodymind/family_a349_atelier.css
+COPY bootstrap/family_a349_native_ratio.js /opt/bodymind/family_a349_native_ratio.js
 # Existing Railway startCommand remains compatible, but now executes this CLEAN code only.
 RUN mkdir -p /opt/bodymind-migration && cp /opt/bodymind/clean_runtime_launcher.py /opt/bodymind-migration/migration_upload.py
 EXPOSE 8080
