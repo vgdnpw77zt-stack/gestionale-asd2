@@ -13,9 +13,20 @@
       const source = img.getAttribute("src");
       if (!source) return "";
       const url = new URL(source, document.baseURI);
-      // Never map an attacker-controlled third-party image by its filename.
-      if (url.origin !== window.location.origin) return "";
-      return url.pathname;
+      // Compare the displayed asset, not a potentially different srcset fallback.
+      // With srcset/picture, wait for currentSrc before associating a reel.
+      if ((img.hasAttribute("srcset") || img.closest("picture")) && !img.currentSrc) return "";
+      const shown = new URL(img.currentSrc || url.href, document.baseURI);
+      // Public official site hosts are explicitly trusted; every other origin fails closed.
+      const official = new Set([
+        window.location.origin,
+        "https://bodymindaerialstudio.life",
+        "https://www.bodymindaerialstudio.life"
+      ]);
+      if (shown.protocol !== "https:" && shown.origin !== window.location.origin) return "";
+      if (!official.has(shown.origin)) return "";
+      if (shown.search || shown.hash) return "";
+      return shown.pathname;
     } catch (_) {
       return "";
     }
