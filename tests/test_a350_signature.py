@@ -150,7 +150,8 @@ class A350SignatureTests(unittest.TestCase):
 
 
     def test_hidden_document_guard_requires_exact_source_and_never_writes_db(self):
-        source = b'''from flask import abort
+        source = b'''def abort(code):
+    raise ValueError("HTTP 404")
 PORTAL = """<main>{% if request.args.get('upload')=='ok' %}<div class="flash">Success</div>{% endif %}</main>"""
 def bodymind_doc(token, doc_id):
     dcols = {'visi' + 'bile'}
@@ -171,7 +172,7 @@ def bodymind_doc(token, doc_id):
             LAUNCHER.a350_secure_document_route(bad,expected_sha=hashlib.sha256(bad).hexdigest())
         namespace={}
         exec(compile(rewritten, "synthetic_security.py", "exec"), namespace)
-        with self.assertRaises(Exception):
+        with self.assertRaisesRegex(ValueError,"HTTP 404"):
             namespace["bodymind_doc"]("SYNTHETIC",1)
 
 
