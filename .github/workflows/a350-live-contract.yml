@@ -75,7 +75,7 @@ jobs:
           result=dict(
             module_sha256=hashlib.sha256(raw).hexdigest(),
             route_count=len(paths),
-            funcs={name:signal(name) for name in ['bodymind_portal','bodymind_upload','bodymind_doc']},
+            funcs={name:{**signal(name),'ast_digest':hashlib.sha256(ast.dump(fs[name],include_attributes=False).encode()).hexdigest() if name in fs else None} for name in ['bodymind_portal','bodymind_upload','bodymind_doc']},
             html={
               'querystring_claims_upload_success':('request.args.get(' in h and 'upload' in h),
               'media_track':('familyMediaTrack' in h),
