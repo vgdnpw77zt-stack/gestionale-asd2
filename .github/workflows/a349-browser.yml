@@ -1,0 +1,25 @@
+name: A349 responsive layout browser QA
+on:
+  push:
+    branches: [bodymind-a349-boutique-rebuild-20261026]
+jobs:
+  viewport-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Chromium harness
+        run: |
+          pip install playwright==1.56.0
+          python -m playwright install --with-deps chromium
+      - name: Verify phone, tablet and desktop geometry
+        run: python tests/browser_a349_geometry.py
+      - name: Retain sanitized QA screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a349-mock-viewports
+          path: a349_mock_*.png
+          if-no-files-found: ignore
