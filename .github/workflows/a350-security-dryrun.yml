@@ -13,8 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      RAILWAY_SSH_KEY: \${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
-      SSH_KEY_PRESENT: \${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY != '' }}
+      RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
+      SSH_KEY_PRESENT: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
       - name: Strictly require preconfigured access
