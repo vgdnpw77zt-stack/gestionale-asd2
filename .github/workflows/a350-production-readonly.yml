@@ -1,0 +1,94 @@
+name: A350 production source READ-ONLY gate
+on:
+  push:
+    branches: [bodymind-a350-signature-experience-20261026]
+    paths: ['.github/workflows/a350-production-readonly.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  live-source-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SSH_KEY_AVAILABLE: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY != '' }}
+      PROJECT_TOKEN_AVAILABLE: ${{ secrets.BODYMIND_RAILWAY_PROJECT_TOKEN != '' }}
+      RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Confirm existing remote access without showing secret values
+        shell: bash
+        run: |
+          echo "Existing BodyMind SSH credential configured: $SSH_KEY_AVAILABLE"
+          echo "Existing BodyMind Railway project credential configured: $PROJECT_TOKEN_AVAILABLE"
+          if [[ "$SSH_KEY_AVAILABLE" != "true" ]]; then
+            echo "::error::NO_READONLY_VOLUME_ACCESS - BodyMind SSH secret is not configured. No remote operation attempted."
+            exit 1
+          fi
+      - name: Prepare ephemeral credential securely
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$RAILWAY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          ssh-keygen -y -f "$HOME/.ssh/id_ed25519" >/dev/null
+          echo "SSH identity validated; no credential material printed."
+      - name: Audit EXACT live source and schema without writing to production
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 65s ssh -T -i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          import ast
+          import hashlib
+          import importlib.util
+          import json
+          import sqlite3
+          from pathlib import Path
+
+          root=Path('/data/top2_app')
+          database=Path('/data/tenants/default/asd.db')
+          launcher=Path('/opt/bodymind/clean_runtime_launcher.py')
+          if not launcher.is_file():
+              raise SystemExit('BLOCKED: immutable launcher not readable')
+          spec=importlib.util.spec_from_file_location('a350_prod_launcher',launcher)
+          module=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          files=module.source_inventory(root)
+          preflight=module.preflight(root,database)
+          is_a349=module.a349_matches(root,files)
+          portal=root/'asd_app'/'routes_bodymind_final.py'
+          raw=portal.read_bytes()
+          parsed=ast.parse(raw.decode('utf-8'))
+          routes=set()
+          for node in ast.walk(parsed):
+              if isinstance(node,ast.Call) and isinstance(node.func,ast.Attribute) and node.func.attr in ('add_url_rule','route') and node.args:
+                  x=node.args[0]
+                  if isinstance(x,ast.Constant) and isinstance(x.value,str) and x.value.startswith(('/app-tesserato','/area-famiglie')):
+                      routes.add(x.value)
+          # Only safe anonymous facts are printed. No source, token, record, receipt, env or file attachment leaves production.
+          with sqlite3.connect(database.resolve().as_uri()+'?mode=ro',uri=True,timeout=10) as db:
+              db.execute('PRAGMA query_only=ON')
+              table_names=set(row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'"))
+          print('A350_LIVE_READONLY_AUDIT '+json.dumps({
+              'source_file_count':len(files),
+              'source_manifest_digest':module.inventory_digest(files),
+              'family_module_sha256':hashlib.sha256(raw).hexdigest(),
+              'a349_source_lock':is_a349,
+              'cleanboot_readonly_pass':bool(preflight.get('sqlite')=='ok'),
+              'known_business_tables':{k:k in table_names for k in ['tesserati','pagamenti','ricevute','presenze','corsi','documenti']},
+              'known_family_route_count':len(routes),
+              'a341_keyword_links_still_live':b'targetFor(title)' in raw,
+              'a349_native_ratio_live':b'bodymind-a349-native-ratio' in raw
+          },sort_keys=True))
+          if not is_a349 or not routes:
+              raise SystemExit('BLOCKED: live source lock or family route inventory failed')
+          print('A350_READONLY_SOURCE_GATE_PASS - This does NOT verify two-family auth, payment or certificate correctness')
+          PY
+      - name: Remove temporary SSH credentials
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "$HOME/.ssh/id_ed25519" ]]; then
+            shred -u "$HOME/.ssh/id_ed25519" || rm -f "$HOME/.ssh/id_ed25519"
+          fi
