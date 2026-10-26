@@ -43,14 +43,22 @@
       if (!img.hasAttribute("alt") || !img.alt.trim()) img.alt = name;
       img.loading = "lazy";
       img.decoding = "async";
-      img.addEventListener("error", function () {
+      function showUnavailable() {
         if (img.dataset.bm350Failed === "1") return;
         img.dataset.bm350Failed = "1";
         const placeholder = document.createElement("span");
         placeholder.className = "bm350-media-unavailable";
         placeholder.textContent = "Immagine non disponibile";
-        img.replaceWith(placeholder);
-      }, {once:true});
+        // An unavailable photo must never retain an outbound reel action.
+        const wrapper = img.closest("a.bm350-media-link");
+        if (wrapper) wrapper.replaceWith(placeholder);
+        else img.replaceWith(placeholder);
+      }
+      img.addEventListener("error", showUnavailable, {once:true});
+      if (img.complete && img.naturalWidth === 0) {
+        showUnavailable();
+        continue;
+      }
       const destination = verifiedImageLinks[publicPath(img)];
       if (!destination) continue;
       const link = document.createElement("a");
