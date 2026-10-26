@@ -46,6 +46,10 @@ body{margin:0}
 <figcaption><strong>Fotografia uno</strong></figcaption></figure>
 <figure class="media-card"><img src="/bodymind-media/gallery_2">
 <figcaption><strong>Fotografia due</strong></figcaption></figure>
+<figure class="media-card"><img src="https://untrusted.example/static/media/bodymind-competition-double.webp">
+<figcaption><strong>Fotografia sospetta</strong></figcaption></figure>
+<figure class="media-card"><img src="https://bodymindaerialstudio.life/static/media/bodymind-competition-double.webp">
+<figcaption><strong>Competizione ufficiale</strong></figcaption></figure>
 </div></section>
 <section id="corsi" class="section">Corso sintetico</section>
 <section id="pagamenti" class="section">Pagamento sintetico</section>
@@ -75,13 +79,15 @@ with sync_playwright() as p:
             else:
                 route.fulfill(status=200,content_type='image/svg+xml',
                   body='<svg xmlns="http://www.w3.org/2000/svg" width="300" height="450"><rect width="300" height="450" fill="#645377"/></svg>')
-        page.route('http://bodymind.test/**',handler)
+        page.route('**/*',handler)
         page.goto('http://bodymind.test/',wait_until='domcontentloaded')
         page.locator('.bm350-gallery-footer').wait_for()
         assert not errors,(width,'JavaScript error',errors)
         assert page.locator('.bottom-nav a').count()==5
-        assert page.locator('.media-card a.bm350-media-link').count()==1
+        assert page.locator('.media-card a.bm350-media-link').count()==2
         assert page.locator('.media-card').nth(1).locator('a').count()==0
+        assert page.locator('.media-card').nth(2).locator('a').count()==0
+        assert page.locator('.media-card').nth(3).locator('a.bm350-media-link').count()==1
         reel=page.locator('.bm350-media-link')
         assert reel.get_attribute('href')=='https://www.instagram.com/reel/DIHPtAbsg7B/'
         assert reel.get_attribute('rel')=='noopener noreferrer'
