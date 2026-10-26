@@ -1,5 +1,7 @@
 """A350 isolated code and safety tests. No real family account or live DB is accessed."""
 import importlib.util
+import hashlib
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -93,6 +95,54 @@ class A350SignatureTests(unittest.TestCase):
         self.assertIn("bodymindaerialstudio.life/#movimento", js)
         self.assertNotIn("localStorage", js)
         self.assertNotIn("fetch(", js)
+
+
+    def test_atomic_a349_to_a350_and_exact_source_recovery_on_synthetic_volume(self):
+        old_js = (BOOTSTRAP / "family_a341.js").read_bytes()
+        old = (b"PAGE = '''<html>\n<style>\nCORE\n</style>\n</head>\n" +
+               b'<script id="bodymind-media-links">\n' + old_js +
+               b"\n</script>\n</html>'''\n")
+        old_sha = hashlib.sha256(old).hexdigest()
+        with tempfile.TemporaryDirectory() as tmp:
+            work=Path(tmp)
+            root=work/"top2_app"
+            target=root/"asd_app"/"routes_bodymind_final.py"
+            target.parent.mkdir(parents=True)
+            target.write_bytes(old)
+            packages=work/"release_packages"
+            packages.mkdir()
+            original_backup=packages/"A349_TEST_BASE.py"
+            original_backup.write_bytes(old)
+            a350_backup=packages/"A350_PREUI_TEST.py"
+            fake_db=work/"unused.db"
+            def inventory(_root):
+                result={"asd_app/fake_%03d.py" % n:"known" for n in range(213)}
+                result[LAUNCHER.A350_REL]=hashlib.sha256(target.read_bytes()).hexdigest()
+                return result
+            def is_a349(_root,found):
+                return found.get(LAUNCHER.A350_REL)==old_sha
+            with patch.object(LAUNCHER,"source_inventory",inventory), \\
+                 patch.object(LAUNCHER,"a349_matches",is_a349), \\
+                 patch.object(LAUNCHER,"a349_source_from_a348",
+                              lambda old_a348:(old,old_sha)), \\
+                 patch.object(LAUNCHER,"sqlite_readonly_check",return_value={}) as readonly, \\
+                 patch.object(LAUNCHER,"A349_BACKUP",original_backup), \\
+                 patch.object(LAUNCHER,"A350_BACKUP",a350_backup), \\
+                 patch.object(LAUNCHER,"A350_CSS_PATH",BOOTSTRAP/"family_a350_signature.css"), \\
+                 patch.object(LAUNCHER,"A350_JS_PATH",BOOTSTRAP/"family_a350_verified_gallery.js"), \\
+                 patch.object(LAUNCHER,"A341_LINKS_PATH",BOOTSTRAP/"family_a341.js"):
+                LAUNCHER.maybe_apply_a350_family_ui(root,fake_db)
+                patched=target.read_bytes()
+                self.assertNotEqual(patched,old)
+                self.assertEqual(a350_backup.read_bytes(),old)
+                self.assertTrue(LAUNCHER.a350_matches(root,inventory(root)))
+                self.assertGreaterEqual(readonly.call_count,1)
+                LAUNCHER.maybe_apply_a350_family_ui(root,fake_db)
+                self.assertEqual(target.read_bytes(),patched)
+                with patch.dict(os.environ,{"BODYMIND_A350_RECOVER_A349":"1"}):
+                    self.assertTrue(LAUNCHER.maybe_recover_a350_to_a349(root,fake_db))
+                self.assertEqual(target.read_bytes(),old)
+                self.assertEqual(a350_backup.read_bytes(),old)
 
 
 if __name__ == "__main__":
