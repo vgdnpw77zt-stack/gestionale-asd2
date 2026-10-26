@@ -1,0 +1,51 @@
+name: A350 ONLINE public access browser smoke
+on:
+  push:
+    branches: [bodymind-a350-signature-experience-20261026]
+    paths: ['.github/workflows/a350-online-browser-smoke.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  live-anonymous-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install playwright==1.56.0
+      - run: python -m playwright install --with-deps chromium
+      - name: Visit actual Railway domain as ANONYMOUS browser at seven viewports
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from playwright.sync_api import sync_playwright
+          origin='https://app.bodymindaerialstudio.life'
+          sizes=[(320,780),(375,812),(390,844),(430,932),(768,1024),(1024,768),(1440,900)]
+          with sync_playwright() as p:
+              browser=p.chromium.launch(headless=True,args=['--no-sandbox'])
+              for path in ['/login','/area-famiglie']:
+                  for width,height in sizes:
+                      page=browser.new_page(viewport={'width':width,'height':height})
+                      response=page.goto(origin+path,wait_until='domcontentloaded',timeout=45000)
+                      assert response is not None
+                      status=response.status
+                      assert 200<=status<400,(path,width,status)
+                      assert page.locator('body').is_visible(),(path,width,'body missing')
+                      info=page.evaluate('''() => ({
+                        width:innerWidth,
+                        documentWidth:document.documentElement.scrollWidth,
+                        visibleContent:!!document.body.innerText.trim(),
+                        title:document.title,
+                        forms:document.querySelectorAll('form').length
+                      })''')
+                      assert info['visibleContent'],(path,width,'empty page')
+                      if info['documentWidth']>width+4:
+                          print('A350_ONLINE_VIEWPORT_OVERFLOW '+json.dumps({'path':path,'width':width,'scrollWidth':info['documentWidth']}))
+                      print('A350_ONLINE_ANONYMOUS_BROWSER_PASS '+json.dumps({'path':path,'status':status,'width':width,'overflow':info['documentWidth']>width+4}))
+                      page.close()
+              browser.close()
+          print('A350_ONLINE_ANONYMOUS_SMOKE_COMPLETE - authenticated family functions NOT tested')
+          PY
