@@ -38,6 +38,9 @@ body{margin:0}.hero{width:100%}.hero-content{pointer-events:none}
 <a><span>▤</span>Documenti</a>
 </nav>
 </body></html>'''
+# Run the actual tiny metadata listener against the synthetic video too.
+native_js=(ROOT/'bootstrap/family_a349_native_ratio.js').read_text()
+html=html.replace('</body></html>','<script>'+native_js+'</script></body></html>')
 results=[]
 with sync_playwright() as p:
     browser=p.chromium.launch(headless=True,args=['--no-sandbox'])
@@ -65,6 +68,25 @@ with sync_playwright() as p:
             assert m['x']<=c['x'] and c['right']<=m['right']+1,(width,'cta outside image',m,c)
             assert m['y']<=h['y'] and c['bottom']<=m['bottom']+5,(width,'welcome beyond video',m,h,c)
             assert bounds['course']['w']>bounds['next']['w'],(width,'course spotlight absent',bounds)
+        if width<=760:
+            # Chrome reports a different original portrait ratio after metadata:
+            # the frame must adapt without cropping or overlay overflow.
+            aspect=page.evaluate("""() => {
+                const v=document.querySelector('.family-hero-video');
+                Object.defineProperty(v,'videoWidth',{configurable:true,value:480});
+                Object.defineProperty(v,'videoHeight',{configurable:true,value:640});
+                v.dispatchEvent(new Event('loadedmetadata'));
+                return v.style.getPropertyValue('--bm349-film-ratio');
+            }""")
+            assert aspect=='480 / 640',(width,'video metadata did not update ratio',aspect)
+            native=page.evaluate("""() => {
+                let m=document.querySelector('.hero-media').getBoundingClientRect();
+                let v=document.querySelector('.family-hero-video').getBoundingClientRect();
+                let c=document.querySelector('.hero .pill').getBoundingClientRect();
+                return {mheight:m.height,vheight:v.height,mbottom:m.bottom,cbottom:c.bottom};
+            }""")
+            assert abs(native['mheight']-native['vheight'])<=3,(width,'native video ratio frame mismatch',native)
+            assert native['cbottom']<=native['mbottom']+5,(width,'native video hides CTA',native)
         page.screenshot(path=str(ROOT/f'a349_mock_{width}.png'),full_page=False)
         results.append(f'{width}x{height}: nav={bounds["nav"]["x"]:.0f}/{bounds["nav"]["right"]:.0f}; media={bounds["media"]["w"]:.0f}x{bounds["media"]["h"]:.0f}; h1={bounds["heading"]["w"]:.0f}; scroll={bounds["scrollWidth"]}')
         page.close()
