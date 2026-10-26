@@ -1,0 +1,82 @@
+name: A350 POST-DEPLOY source backup and database audit
+on:
+  push:
+    branches: [bodymind-a350-signature-experience-20261026]
+    paths: ['.github/workflows/a350-postdeploy-audit.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  production-readonly-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
+      HAS_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY != '' }}
+    steps:
+      - name: Authorized session
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$HAS_KEY" == true ]] || { echo "::error::Authorized BodyMind SSH missing"; exit 1; }
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$RAILWAY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          ssh-keygen -y -f "$HOME/.ssh/id_ed25519" >/dev/null
+      - name: Verify A350 running, protected A349 recovery, SQLite and HTTP /health
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 120s ssh -T -i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          import hashlib,importlib.util,json,sqlite3,urllib.request
+          from pathlib import Path
+          root=Path('/data/top2_app')
+          dbfile=Path('/data/tenants/default/asd.db')
+          source=root/'asd_app/routes_bodymind_final.py'
+          backup=Path('/data/release_packages/BODYMIND_A350_PREUI_A349.py')
+          launcher=Path('/opt/bodymind/clean_runtime_launcher.py')
+          assert backup.is_file() and not backup.is_symlink(),'A349 rollback source missing or unsafe'
+          oldhash=hashlib.sha256(backup.read_bytes()).hexdigest()
+          assert oldhash=='12391e9f3fdc3dd92f91325c26f7e695cab28cbc771a721165708c2dfc4c9021','A349 recovery hash mismatch'
+          newhash=hashlib.sha256(source.read_bytes()).hexdigest()
+          assert newhash=='8bbb503c24242e88aa97bc1eb973f92e69aa395df27c00d38f6809c9435532d1','A350 live fingerprint mismatch'
+          spec=importlib.util.spec_from_file_location('a350_prod_launcher',launcher)
+          module=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          inv=module.source_inventory(root)
+          assert len(inv)==214,'source count drift'
+          assert module.a350_matches(root,inv),'A350 exact source guard failed'
+          assert module.a350_git_blob(module.A350_CSS_PATH.read_bytes())==module.A350_CSS_BLOB
+          assert module.a350_git_blob(module.A350_JS_PATH.read_bytes())==module.A350_JS_BLOB
+          db=sqlite3.connect(dbfile.resolve().as_uri()+'?mode=ro',uri=True,timeout=30)
+          db.execute('PRAGMA query_only=ON')
+          assert db.execute('PRAGMA quick_check').fetchone()[0]=='ok'
+          assert not db.execute('PRAGMA foreign_key_check').fetchall()
+          counts={name:db.execute('SELECT COUNT(*) FROM "'+name+'"').fetchone()[0] for name in ['tesserati','pagamenti','ricevute','quote_mensili']}
+          db.close()
+          with urllib.request.urlopen('http://127.0.0.1:8080/health',timeout=10) as resp:
+              health=resp.status
+          assert health==200,'live /health failed'
+          req=urllib.request.Request('http://127.0.0.1:8080/login',headers={'User-Agent':'BodyMind-A350-safe-postdeploy-audit'})
+          with urllib.request.urlopen(req,timeout=10) as resp:
+              login=resp.status
+          assert login==200,'login page unavailable'
+          print('A350_POSTDEPLOY_READONLY_AUDIT '+json.dumps({
+              'live_source_sha256':newhash,
+              'rollback_a349_sha256':oldhash,
+              'manifest_source_count':len(inv),
+              'sqlite_quick_check':'ok',
+              'sqlite_fk_errors':0,
+              'health_http_status':health,
+              'login_http_status':login,
+              'table_row_counts':counts
+          },sort_keys=True))
+          print('A350_PRODUCTION_POSTDEPLOY_PASS - NO DB OR DOCUMENT CHANGES')
+          PY
+      - name: Shred SSH secret
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "$HOME/.ssh/id_ed25519" ]]; then
+            shred -u "$HOME/.ssh/id_ed25519" || rm -f "$HOME/.ssh/id_ed25519"
+          fi
