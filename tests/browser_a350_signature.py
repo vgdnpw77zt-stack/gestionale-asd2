@@ -88,7 +88,7 @@ with sync_playwright() as p:
         assert page.locator('.media-card').nth(1).locator('a').count()==0
         assert page.locator('.media-card').nth(2).locator('a').count()==0
         assert page.locator('.media-card').nth(3).locator('a.bm350-media-link').count()==1
-        reel=page.locator('.bm350-media-link')
+        reel=page.locator('.bm350-media-link').first
         assert reel.get_attribute('href')=='https://www.instagram.com/reel/DIHPtAbsg7B/'
         assert reel.get_attribute('rel')=='noopener noreferrer'
         assert reel.get_attribute('target')=='_blank'
