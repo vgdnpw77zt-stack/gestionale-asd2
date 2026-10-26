@@ -45,6 +45,17 @@
 | B8 galleria e sicurezza | PASS PARZIALE | Link immagine esplicito e origini; non tutte le foto mappate |
 | B9 release/rollback | PASS PARZIALE | **Deploy A350 SUCCESS, health/login PASS, codice A349 salvato e hash verificato**; rollback operativo sul live non eseguito perché interromperebbe il servizio |
 
+## Browser LIVE anonimo dopo il deploy — evidenza 26 ottobre 2026
+
+GitHub Actions: https://github.com/vgdnpw77zt-stack/gestionale-asd2/actions/runs/40384934654
+
+- Playwright Chromium ha richiesto direttamente `https://app.bodymindaerialstudio.life/login` e `/area-famiglie`, senza account o credenziali.
+- **14 verifiche HTTP/UI** con larghezze 320, 375, 390, 430, 768, 1024, 1440 px: tutte HTTP 200, pagine non vuote, job SUCCESS.
+- Area Famiglie pubblica: **nessun overflow orizzontale** a tutte e sette le larghezze.
+- **Difetto rilevato in `/login`**: overflow orizzontale di 12px a 320/375/390/430 px; non si presenta a 768/1024/1440 px. La login è raggiungibile; questo è un bug di layout da correggere con intervento mirato successivo, **non corretto in questo rilascio**.
+- Le schermate post-login con token/famiglie reali **non sono state automatizzate**: test con credenziali autorizzate da svolgere nel browser dell'operatore. Mai annotare token, password, PDF o screenshot di dati personali nei log pubblici.
+- Il report riguarda la build Railway pin `1f043b8605d139ecec3f6ff22379ff47f986a664`; ulteriori commit documentali della PR non modificano il codice in produzione.
+
 ## Collaudi ancora necessari dopo la messa online
 - Handler upload già testato su due token sintetici in SQLite solo in memoria; restano prove CSRF globale, controllo dei tipi/dimensioni file, feedback e upload autenticato end-to-end.
 - Validare corrispondenza pagamenti/ricevute/quote e certificati rispetto al backend con almeno due nuclei distinti, senza dati reali nei log.
