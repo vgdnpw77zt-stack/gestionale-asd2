@@ -432,7 +432,8 @@ def install_family_film_studio(app,db_provider,album):
             if row:
                 db.execute('DELETE FROM studio_films WHERE athlete_id=?',(owner,))
             if erase_history:
-                db.execute('DELETE FROM studio_events WHERE athlete_id=?',(owner,))
+                try:db.execute('DELETE FROM studio_events WHERE athlete_id=?',(owner,))
+                except sqlite3.OperationalError:pass
             db.commit()
         finally:db.close()
         if row and re.fullmatch(r'studio_[0-9a-f]{28}\.mp4',row['filename']):
