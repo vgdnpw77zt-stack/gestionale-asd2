@@ -1463,7 +1463,7 @@ A352_A351_LIVE_SHA='f8ee6e88dc02dff83cc472016adf951f95d87a8e344b3161ebdbf870e3ae
 A352_BACKUP=Path('/data/release_packages/BODYMIND_A352_PREUI_A351.py')
 A352_CSS_PATH=Path('/opt/bodymind/family_a352_visible_atmosphere.css')
 A352_JS_PATH=Path('/opt/bodymind/family_a352_visible_atmosphere.js')
-A352_CSS_BLOB='6000d2a0eaf15fabe7fd0f6554fe54820f3f78fa'
+A352_CSS_BLOB='e38a62999ecc39e621afc5ccc0ccfb002af18789'
 A352_JS_BLOB='bbe0fed58534b3db0048602647ad757dcb65cd22'
 
 def a352_assets()->tuple[bytes,bytes]:
