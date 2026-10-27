@@ -1,0 +1,25 @@
+name: BodyMind A355 — Family Film Studio production gate
+on:
+  push:
+    branches:
+      - bodymind-a355-family-film-studio-20261027
+  workflow_dispatch:
+jobs:
+  secure-studio:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install media QA dependencies
+        run: pip install 'Flask>=3,<4' 'Pillow>=10,<12'
+      - name: Verify Python syntax
+        run: python -m py_compile bootstrap/bodymind_a355_film_studio.py bootstrap/clean_runtime_launcher.py tests/test_a355_film_studio.py
+      - name: Existing album privacy regressions
+        run: python -m unittest discover -s tests -p 'test_a351_private_album.py' -v
+      - name: A355 private video and media regression
+        run: python -m unittest discover -s tests -p 'test_a355_film_studio.py' -v
