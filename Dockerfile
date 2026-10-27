@@ -24,6 +24,8 @@ COPY bootstrap/family_a350_signature.css /opt/bodymind/family_a350_signature.css
 COPY bootstrap/family_a350_verified_gallery.js /opt/bodymind/family_a350_verified_gallery.js
 COPY bootstrap/family_a351_sunrise.css /opt/bodymind/family_a351_sunrise.css
 COPY bootstrap/family_a351_sunrise.js /opt/bodymind/family_a351_sunrise.js
+COPY bootstrap/family_a352_visible_atmosphere.css /opt/bodymind/family_a352_visible_atmosphere.css
+COPY bootstrap/family_a352_visible_atmosphere.js /opt/bodymind/family_a352_visible_atmosphere.js
 COPY bootstrap/bodymind_a351_private_album.py /opt/bodymind/bodymind_a351_private_album.py
 # Existing Railway startCommand remains compatible, but now executes this CLEAN code only.
 RUN mkdir -p /opt/bodymind-migration && cp /opt/bodymind/clean_runtime_launcher.py /opt/bodymind-migration/migration_upload.py
