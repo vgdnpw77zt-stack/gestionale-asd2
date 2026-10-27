@@ -1,0 +1,40 @@
+name: A352 visible atmosphere and true cinema QA
+on:
+  push:
+    branches: [bodymind-a352-visible-aurora-dock-20261027]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-css-and-source-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install Flask==3.1.1 Pillow==11.2.1
+      - name: Compile fixed launcher and new script
+        run: |
+          python -m py_compile bootstrap/clean_runtime_launcher.py tests/test_a352_visible_experience.py
+          node --check bootstrap/family_a352_visible_atmosphere.js
+      - name: Run 40+ safety and authorization tests from all existing generations
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Build actual BodyMind service image
+        run: docker build -t bodymind-a352:qa .
+      - name: Verify exact packed visual assets, 214-source security and FFmpeg
+        run: |
+          docker run --rm --entrypoint python bodymind-a352:qa -c "import runpy,os; r=runpy.run_path('/opt/bodymind/clean_runtime_launcher.py',run_name='a352_ci');a,b=r['a352_assets']();assert b'bm352-cloud--near' in a and b'bm352-dock-handle' in b;assert os.path.isfile('/usr/bin/ffmpeg');print('A352_IMAGE_DOCK_AND_VIDEO_ASSET_LOCK_PASS')"
+  chromium-7-actual-selectors:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install playwright==1.56.0
+      - run: python -m playwright install --with-deps chromium
+      - name: Validate opacity, motion, film perforations and true mobile footer slide
+        run: python tests/browser_a352_visual.py
