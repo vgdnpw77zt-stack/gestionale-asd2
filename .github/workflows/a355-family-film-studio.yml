@@ -17,6 +17,8 @@ jobs:
           python-version: '3.11'
       - name: Install media QA dependencies
         run: pip install 'Flask>=3,<4' 'Pillow>=10,<12'
+      - name: Install FFmpeg and film typography for actual render test
+        run: sudo apt-get update -qq && sudo apt-get install -y ffmpeg fonts-dejavu-core
       - name: Verify Python syntax
         run: python -m py_compile bootstrap/bodymind_a355_film_studio.py bootstrap/clean_runtime_launcher.py tests/test_a355_film_studio.py
       - name: Existing album privacy regressions
