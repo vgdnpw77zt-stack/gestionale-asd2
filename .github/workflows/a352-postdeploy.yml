@@ -1,4 +1,4 @@
-name: A352 live deployed visuals and integrity read-only
+name: A352 verified production visual/source integrity
 on:
   push:
     branches: [bodymind-a352-visible-aurora-dock-20261027]
