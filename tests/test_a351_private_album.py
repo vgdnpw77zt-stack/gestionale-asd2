@@ -126,7 +126,7 @@ class AthleteAlbumSafety(unittest.TestCase):
         with zipfile.ZipFile(BytesIO(exported.data)) as archive:
             names=archive.namelist()
             self.assertEqual(names,['foto/01.jpg'])
-            self.assertTrue(archive.read('foto/01.jpg').startswith(b'\\xff\\xd8'))
+            self.assertTrue(archive.read('foto/01.jpg').startswith(bytes((255,216))))
         self.assertEqual(self.client.get(self.endpoint(ATHLETE_B,'/export')).status_code,404)
         self.assertEqual(self.client.post(self.endpoint(ATHLETE_A,'/clear'),
            data={'csrf':self.token(),'confirm':'no'}).status_code,400)
