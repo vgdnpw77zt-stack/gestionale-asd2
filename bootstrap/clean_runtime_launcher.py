@@ -2023,7 +2023,7 @@ def maybe_recover_a356_to_a355(root:Path,db:Path)->bool:
 A357_REL=A356_REL
 A357_BACKUP=Path('/data/release_packages/BODYMIND_A357_PREUI_A356.py')
 A357_CSS_PATH=Path('/opt/bodymind/family_a357_ios_stability.css')
-A357_CSS_BLOB='8d16e8a4d770f98cb0beaa13503c0ab89ae9015a'
+A357_CSS_BLOB='5e51deae98b621c3fdfacbed70f3d2f24862b348'
 
 def a357_assets()->bytes:
     css=A357_CSS_PATH.read_bytes()
