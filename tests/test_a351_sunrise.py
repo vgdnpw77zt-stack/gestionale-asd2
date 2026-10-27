@@ -13,7 +13,8 @@ SPEC.loader.exec_module(M)
 
 class A351VisualSafety(unittest.TestCase):
     def test_locked_css_and_javascript(self):
-        css,js=M.a351_assets()
+        with patch.object(M,'A351_CSS_PATH',ROOT/'bootstrap/family_a351_sunrise.css'), patch.object(M,'A351_JS_PATH',ROOT/'bootstrap/family_a351_sunrise.js'):
+            css,js=M.a351_assets()
         self.assertEqual(M.a350_git_blob(css),M.A351_CSS_BLOB)
         self.assertEqual(M.a350_git_blob(js),M.A351_JS_BLOB)
         self.assertIn(b'bm351-atmosphere',css)
@@ -32,7 +33,7 @@ class A351VisualSafety(unittest.TestCase):
              b"<nav class=\"bottom-nav\"><a href=\"#home\">Home</a></nav>\n"+
              b"</body></html>'''\n")
         sha=hashlib.sha256(old).hexdigest()
-        with patch.object(M,'A351_A350_LIVE_SHA',sha):
+        with patch.object(M,'A351_A350_LIVE_SHA',sha), patch.object(M,'A351_CSS_PATH',ROOT/'bootstrap/family_a351_sunrise.css'), patch.object(M,'A351_JS_PATH',ROOT/'bootstrap/family_a351_sunrise.js'):
             new,newhash=M.a351_expected_from_a350(old)
             compile(new,'a351_mock.py','exec')
             self.assertEqual(hashlib.sha256(new).hexdigest(),newhash)
@@ -50,7 +51,7 @@ class A351VisualSafety(unittest.TestCase):
 
     def test_fails_closed_when_template_anchors_are_missing(self):
         old=b"PAGE = '''<html><body>HELLO</body></html>'''\n"
-        with patch.object(M,'A351_A350_LIVE_SHA',hashlib.sha256(old).hexdigest()):
+        with patch.object(M,'A351_A350_LIVE_SHA',hashlib.sha256(old).hexdigest()), patch.object(M,'A351_CSS_PATH',ROOT/'bootstrap/family_a351_sunrise.css'), patch.object(M,'A351_JS_PATH',ROOT/'bootstrap/family_a351_sunrise.js'):
             with self.assertRaisesRegex(RuntimeError,'anchors'):
                 M.a351_expected_from_a350(old)
 
