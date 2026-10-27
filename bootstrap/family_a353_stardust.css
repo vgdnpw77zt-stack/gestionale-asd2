@@ -1,0 +1,214 @@
+/* BODYMIND A353 — CINEMATIC STARDUST
+   Presentation-only enhancement to the A352 family home.
+   No private records, navigation URLs, payment logic or media sources are changed. */
+:root{
+  --bm353-night:#071a2a;--bm353-lagoon:#0c3444;
+  --bm353-teal:#48d5c9;--bm353-coral:#fc9c9e;--bm353-lilac:#ad99ff;
+}
+html,body{background:#071a2a!important}
+.hero{
+  isolation:isolate!important;
+  overflow:hidden!important;
+  background:
+    radial-gradient(ellipse 110% 50% at 52% 36%,rgba(33,92,116,.43),transparent 80%),
+    linear-gradient(180deg,#081b2d 0%,#0b2c3d 46%,#071a2a 93%,#071a2a 100%)!important;
+}
+main.main{
+  background:
+    radial-gradient(ellipse 90% 26% at 11% 8%,rgba(35,146,149,.19),transparent 80%),
+    radial-gradient(ellipse 95% 37% at 93% 61%,rgba(178,98,158,.13),transparent 82%),
+    linear-gradient(180deg,#071a2a 0%,#0d2d3e 47%,#071a2a 100%)!important;
+}
+.hero>.bm352-sky,main.main>.bm352-sky{
+  display:block!important;opacity:1!important;z-index:0!important;
+  background:
+    radial-gradient(ellipse 64% 42% at 14% 28%,rgba(41,184,196,.28),transparent 79%),
+    radial-gradient(ellipse 68% 58% at 83% 61%,rgba(193,93,148,.22),transparent 86%)!important;
+}
+.bm352-sky .bm352-cloud,
+.bm352-sky .bm352-cloud--far,
+.bm352-sky .bm352-cloud--near{
+  filter:blur(12px)!important;
+  opacity:.95!important;
+  mix-blend-mode:screen!important;
+  animation-duration:17s!important;
+}
+.bm352-sky .bm352-cloud--far{opacity:.85!important;filter:blur(23px)!important;animation-duration:28s!important}
+.bm352-sky .bm352-cloud--near{opacity:.88!important;filter:blur(8px)!important;animation-duration:14s!important}
+.bm352-sky .bm352-dust{opacity:.9!important;mix-blend-mode:screen!important}
+.bm352-sky .bm352-dust--far{opacity:.66!important}
+.bm353-vapor{
+  position:absolute!important;inset:-23% -34%!important;
+  display:block!important;pointer-events:none!important;
+  width:auto!important;height:auto!important;
+  transform-origin:center!important;
+  will-change:transform,opacity!important;
+  mix-blend-mode:screen!important;
+  filter:blur(15px) saturate(1.24)!important;
+  opacity:.88!important;
+  background:
+    radial-gradient(ellipse 28% 13% at 15% 19%,rgba(99,242,228,.71) 0%,rgba(56,173,188,.41) 52%,transparent 91%),
+    radial-gradient(ellipse 35% 17% at 57% 35%,rgba(94,201,233,.56) 0%,rgba(68,111,191,.30) 62%,transparent 95%),
+    radial-gradient(ellipse 29% 19% at 77% 64%,rgba(245,133,164,.61) 0%,rgba(181,97,151,.37) 52%,transparent 91%),
+    radial-gradient(ellipse 35% 15% at 35% 80%,rgba(88,226,206,.60) 0%,rgba(47,160,182,.29) 61%,transparent 94%)!important;
+  animation:bm353-river-a 22s ease-in-out infinite alternate!important;
+}
+.bm353-vapor--peach{
+  opacity:.83!important;
+  filter:blur(20px) saturate(1.16)!important;
+  background:
+    radial-gradient(ellipse 36% 16% at 91% 11%,rgba(255,190,148,.65) 0%,rgba(230,105,140,.31) 61%,transparent 95%),
+    radial-gradient(ellipse 24% 24% at 23% 49%,rgba(211,120,255,.49) 0%,rgba(124,102,214,.27) 65%,transparent 95%),
+    radial-gradient(ellipse 44% 18% at 64% 81%,rgba(255,170,162,.56) 0%,rgba(229,123,175,.23) 62%,transparent 95%)!important;
+  animation:bm353-river-b 29s ease-in-out infinite alternate-reverse!important;
+}
+.bm353-vapor--veils{
+  opacity:.81!important;
+  filter:blur(9px) saturate(1.29)!important;
+  background:
+    radial-gradient(ellipse 38% 10% at 23% 33%,rgba(130,245,221,.55) 0%,rgba(80,179,197,.23) 59%,transparent 100%),
+    radial-gradient(ellipse 44% 12% at 66% 54%,rgba(255,172,183,.56) 0%,rgba(136,115,209,.24) 65%,transparent 100%),
+    radial-gradient(ellipse 35% 11% at 46% 92%,rgba(92,229,218,.51) 0%,rgba(86,134,219,.21) 63%,transparent 100%)!important;
+  animation:bm353-river-c 13s ease-in-out infinite alternate!important;
+}
+.bm353-vapor--aura{
+  opacity:.74!important;
+  filter:blur(35px)!important;
+  background:
+    radial-gradient(ellipse 51% 30% at 16% 66%,rgba(53,214,208,.49),transparent 85%),
+    radial-gradient(ellipse 51% 32% at 84% 24%,rgba(221,137,180,.53),transparent 85%)!important;
+  animation:bm353-river-d 35s ease-in-out infinite alternate!important;
+}
+@keyframes bm353-river-a{
+  0%{transform:translate3d(-12%,-5%,0) rotate(-4deg) scale(.97);opacity:.82}
+  50%{transform:translate3d(4%,5%,0) rotate(2deg) scale(1.08);opacity:1}
+  100%{transform:translate3d(12%,-1%,0) rotate(7deg) scale(1.14);opacity:.83}
+}
+@keyframes bm353-river-b{
+  0%{transform:translate3d(10%,-10%,0) rotate(7deg) scale(1.13);opacity:.75}
+  50%{transform:translate3d(-3%,2%,0) rotate(-4deg) scale(.96);opacity:1}
+  100%{transform:translate3d(-12%,11%,0) rotate(-8deg) scale(1.12);opacity:.79}
+}
+@keyframes bm353-river-c{
+  0%{transform:translate3d(-7%,8%,0) rotate(-3deg) scale(1.02);opacity:.92}
+  50%{transform:translate3d(3%,-5%,0) rotate(4deg) scale(1.13);opacity:.70}
+  100%{transform:translate3d(11%,7%,0) rotate(-5deg) scale(1.02);opacity:1}
+}
+@keyframes bm353-river-d{
+  0%{transform:translate3d(9%,-1%,0) scale(1.1)}
+  100%{transform:translate3d(-10%,8%,0) scale(.99)}
+}
+/* The moving atmosphere is always BEHIND live controls and content. */
+.hero>.hero-media,.hero>.frame.hero-content{z-index:5!important}
+main.main>:not(.bm352-sky):not(.bm351-atmosphere){position:relative!important;z-index:2!important}
+/* Movie: keep pixels sharp, remove any rectangle, fade the border into deep space. */
+.hero .hero-media{
+  position:relative!important;outline:0!important;border:0!important;
+  border-radius:0!important;box-shadow:none!important;
+  background:transparent!important;overflow:visible!important;
+  filter:none!important;isolation:isolate!important;
+}
+.hero .hero-media::before{content:none!important;display:none!important}
+.hero .hero-media::after{
+  content:""!important;display:block!important;
+  position:absolute!important;inset:0!important;
+  border:0!important;border-radius:0!important;
+  z-index:2!important;pointer-events:none!important;
+  background:linear-gradient(180deg,
+    transparent 0%,transparent 46%,
+    rgba(7,24,39,.06) 58%,
+    rgba(7,24,39,.26) 72%,
+    rgba(7,24,39,.69) 88%,
+    #071a2a 100%)!important;
+  -webkit-mask-image:linear-gradient(180deg,transparent 0%,#000 43%,#000 100%)!important;
+  mask-image:linear-gradient(180deg,transparent 0%,#000 43%,#000 100%)!important;
+}
+.hero .hero-media :is(video.family-hero-video,#familyHeroVideo){
+  position:relative!important;z-index:1!important;
+  border:0!important;outline:0!important;border-radius:0!important;
+  box-shadow:none!important;filter:none!important;-webkit-filter:none!important;
+  background:transparent!important;object-fit:contain!important;
+  -webkit-mask-image:radial-gradient(ellipse 82% 82% at 50% 42%,
+    #000 47%,rgba(0,0,0,.97) 61%,rgba(0,0,0,.66) 78%,rgba(0,0,0,.20) 91%,transparent 100%)!important;
+  mask-image:radial-gradient(ellipse 82% 82% at 50% 42%,
+    #000 47%,rgba(0,0,0,.97) 61%,rgba(0,0,0,.66) 78%,rgba(0,0,0,.20) 91%,transparent 100%)!important;
+}
+.hero .hero-media .bm352-glow{opacity:.7!important}
+@media(max-width:760px){
+  .hero{
+    display:flex!important;flex-direction:column!important;align-items:center!important;
+    justify-content:flex-start!important;
+    gap:0!important;padding:0 0 17px!important;
+    min-height:0!important;height:auto!important;
+    overflow:hidden!important;
+    border-radius:0 0 22px 22px!important;
+  }
+  .hero>.hero-media{
+    order:0!important;
+    width:min(92vw,420px)!important;
+    max-width:calc(100vw - 22px)!important;
+    height:auto!important;max-height:none!important;
+    margin:0 auto!important;padding:0!important;
+    transform:none!important;
+  }
+  .hero .hero-media :is(video.family-hero-video,#familyHeroVideo){
+    display:block!important;width:100%!important;
+    height:auto!important;max-height:none!important;
+    margin:0!important;
+  }
+  .hero>.frame.hero-content,.hero .hero-content{
+    order:1!important;
+    position:relative!important;
+    inset:auto!important;left:auto!important;right:auto!important;top:auto!important;bottom:auto!important;
+    transform:none!important;
+    display:block!important;
+    width:min(94vw,450px)!important;
+    max-width:calc(100vw - 22px)!important;
+    min-height:0!important;height:auto!important;
+    margin:-32px auto 12px!important;
+    padding:6px 13px 24px!important;
+    border:0!important;outline:0!important;
+    border-radius:0!important;
+    box-shadow:none!important;
+    background:transparent!important;
+    -webkit-backdrop-filter:none!important;backdrop-filter:none!important;
+    pointer-events:auto!important;
+  }
+  .hero .hero-intro{
+    background:transparent!important;
+    border:0!important;box-shadow:none!important;
+    padding:0!important;
+    max-width:100%!important;
+  }
+  .hero .hero-intro .kicker,.hero .hero-intro small:first-child{
+    color:#b7eee2!important;font-size:10px!important;letter-spacing:.18em!important;
+  }
+  .hero .hero-intro h1{
+    font-size:clamp(40px,10vw,56px)!important;
+    line-height:.99!important;color:#fff6ed!important;
+    margin:10px 0 10px!important;
+    text-shadow:0 4px 23px rgba(1,11,26,.42)!important;
+  }
+  .hero .hero-intro p{
+    font-size:clamp(13px,3.65vw,15px)!important;
+    line-height:1.52!important;color:#e6f4f1!important;
+    text-shadow:0 2px 13px rgba(1,13,25,.38)!important;
+  }
+  .hero .hero-intro .pill,.hero .pill{
+    background:linear-gradient(125deg,rgba(18,74,93,.91),rgba(37,71,102,.90))!important;
+    border:1px solid rgba(163,238,218,.74)!important;
+    box-shadow:inset 0 1px rgba(251,247,231,.15),0 10px 25px rgba(1,21,35,.25)!important;
+    color:#f9f9f2!important;
+    margin-top:7px!important;
+  }
+  .hero .hero-media .hero-playback{z-index:7!important}
+  .bottom-nav.bm352-dock a{font-size:clamp(10px,2.7vw,12px)!important}
+}
+@media(max-width:390px){
+  .hero>.hero-media{width:min(96vw,370px)!important}
+  .hero>.frame.hero-content,.hero .hero-content{width:calc(100vw - 24px)!important;margin-top:-23px!important}
+}
+@media(prefers-reduced-motion:reduce){
+  .bm353-vapor{animation:none!important;will-change:auto!important}
+}
+/* Keep filmstrip and sliding navigation from A352 intact. */
