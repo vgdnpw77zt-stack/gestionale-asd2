@@ -1,0 +1,23 @@
+name: BodyMind A354 — Luxury Poetic quality gate
+on:
+  push:
+    branches:
+      - bodymind-a354-luxury-poetic-20261027
+  workflow_dispatch:
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile clean launcher and new visual tests
+        run: python -m py_compile bootstrap/clean_runtime_launcher.py tests/test_a353_stardust.py tests/test_a354_luxury_poetic.py
+      - name: Verify A353 baseline regression
+        run: python -m unittest discover -s tests -p 'test_a353_stardust.py' -v
+      - name: Verify A354 animated presentation and byte-exact upgrade
+        run: python -m unittest discover -s tests -p 'test_a354_luxury_poetic.py' -v
