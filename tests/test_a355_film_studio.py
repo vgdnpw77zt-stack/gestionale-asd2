@@ -102,6 +102,36 @@ class TwoFamilyFilmStudio(unittest.TestCase):
                                data={'csrf':ALBUM._csrf(self.app,A)})
         self.assertEqual(cross.status_code,403)
 
+    def test_original_album_erasure_removes_derived_film(self):
+        if not Path('/usr/bin/ffmpeg').is_file():
+            self.skipTest('Actual FFmpeg required')
+        self.assertEqual(self.upload().status_code,303)
+        ids=self.photos()
+        self.assertEqual(self.request_movie().status_code,303)
+        studio_dir=ALBUM.ROOT/'1'
+        self.assertEqual(len(list(studio_dir.glob('studio_*.mp4'))),1)
+        self.assertEqual(self.client.post(
+             '/app-tesserato/'+A+'/album/clear',
+             data={'csrf':ALBUM._csrf(self.app,A),'confirm':'yes'}
+        ).status_code,303)
+        self.assertEqual(self.client.get(self.path(A,'/film')).status_code,404)
+        self.assertEqual(len(list(studio_dir.glob('studio_*.mp4'))),0)
+        with sqlite3.connect(ALBUM.ROOT/'albums.sqlite3') as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM studio_events').fetchone()[0],0)
+
+    def test_photo_delete_invalidates_existing_derived_film(self):
+        if not Path('/usr/bin/ffmpeg').is_file():
+            self.skipTest('Actual FFmpeg required')
+        self.assertEqual(self.upload().status_code,303)
+        photoid=self.photos()[0]
+        self.assertEqual(self.request_movie().status_code,303)
+        self.assertEqual(self.client.post(
+           '/app-tesserato/'+A+'/album/delete/'+photoid,
+           data={'csrf':ALBUM._csrf(self.app,A)}
+        ).status_code,303)
+        self.assertEqual(self.client.get(self.path(A,'/film')).status_code,404)
+        self.assertEqual(len(list((ALBUM.ROOT/'1').glob('studio_*.mp4'))),0)
+
     def test_original_soundtrack_is_local_and_distinct(self):
         if not shutil.which('ffmpeg'):
             self.skipTest('No FFmpeg in this runner')
