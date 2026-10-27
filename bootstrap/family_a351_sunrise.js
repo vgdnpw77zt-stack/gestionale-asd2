@@ -9,6 +9,43 @@
       atmosphere.setAttribute("aria-hidden","true");
       area.insertBefore(atmosphere,area.firstChild);
     }
+    // No analytics, third-party uploads or cross-athlete galleries.
+    // Existing family URLs already carry a private bearer token; never
+    // construct a URL using an ID supplied by the browser.
+    var match=location.pathname.match(/^\\/app-tesserato\\/([A-Za-z0-9_-]{12,180})\\/?$/);
+    if(match){
+      var token=match[1];
+      var ownBase="/app-tesserato/"+token+"/album";
+      var section=document.querySelector("main.main .bm350-gallery-footer");
+      if(section&&!section.querySelector(".bm351-private-album")){
+        var albumLink=document.createElement("a");
+        albumLink.className="bm350-gallery-more bm351-private-album";
+        albumLink.href=ownBase;
+        albumLink.textContent="Le mie foto · Crea il mio film";
+        albumLink.setAttribute("aria-label","Apri il mio album privato e crea il mio film");
+        albumLink.referrerPolicy="no-referrer";
+        section.insertBefore(albumLink,section.firstChild);
+      }
+      var video=document.querySelector(".hero-media video.family-hero-video");
+      if(video){
+        fetch(ownBase+"/status",{credentials:"same-origin",cache:"no-store",redirect:"error"})
+          .then(function(resp){if(!resp.ok)throw new Error("Album unavailable");return resp.json();})
+          .then(function(data){
+            if(!data||!data.available||typeof data.url!=="string")return;
+            if(data.url!==ownBase+"/film")return;
+            if(document.hidden)return;
+            video.pause();
+            video.querySelectorAll("source").forEach(function(s){s.remove();});
+            video.src=data.url;
+            video.preload="metadata";
+            video.muted=true;
+            video.load();
+            var play=video.play();
+            if(play&&typeof play.catch==="function")play.catch(function(){});
+          })
+          .catch(function(){/* Original academy film remains on any error. */});
+      }
+    }
     var nav=document.querySelector(".bottom-nav");
     if(!nav||nav.querySelector(".bm351-dock-toggle"))return;
     if(!nav.querySelector("a"))return;
