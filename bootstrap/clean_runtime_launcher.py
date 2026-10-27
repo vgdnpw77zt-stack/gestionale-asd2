@@ -1352,7 +1352,7 @@ def a351_expected_from_a350(old:bytes)->tuple[bytes,str]:
     if b'BODYMIND A351 SUNRISE' in old or b'bm351-dock-script' in old:
         raise RuntimeError('A351 duplicate or premodified layout')
     new=old.replace(head,b'\n/* BODYMIND A351 SUNRISE */\n'+css+b'\n'+head,1)
-    new=new.replace(tail,b'<script id="bm351-dock-script">\\n'+js+b'\\n</script>\\n'+tail,1)
+    new=new.replace(tail,b'<script id="bm351-dock-script">\n'+js+b'\n</script>\n'+tail,1)
     # Attach private album routes at Python-module level only after all original
     # A350 Flask functions have been defined. No route/model changes to A350.
     album_loader=b"""
