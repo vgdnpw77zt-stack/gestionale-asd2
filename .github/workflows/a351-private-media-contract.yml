@@ -60,6 +60,24 @@ jobs:
              'route_registration_count':len(registered),
              'upload_extension_references':source.count('allowed_file'),
           },sort_keys=True))
+          parents={}
+          def walk(n,ancestor=None):
+              parents[id(n)]=ancestor
+              for child in ast.iter_child_nodes(n):
+                  walk(child,n)
+          walk(tree)
+          call_specs=[]
+          for n in ast.walk(tree):
+              if isinstance(n,ast.Call) and isinstance(n.func,ast.Attribute) and n.func.attr=='add_url_rule':
+                  chain=[];q=parents.get(id(n))
+                  while q is not None:
+                      if isinstance(q,(ast.FunctionDef,ast.ClassDef)):
+                          chain.append(q.name)
+                      q=parents.get(id(q))
+                  vals=[(a.value if isinstance(a,ast.Constant) and isinstance(a.value,str) else '<dynamic>') for a in n.args[:2]]
+                  call_specs.append(dict(names=vals,inside=chain[:3],calls=[ast.unparse(a)[:45] for a in n.args[2:3]]))
+          helper_names=[n.name for n in tree.body if isinstance(n,ast.FunctionDef) and any(z in n.name for z in ('register','bodymind','family'))]
+          print('A351_ROUTE_WIRING '+json.dumps({'routes':call_specs,'module_helpers':helper_names[:25]},sort_keys=True))
           print('A351_LIVE_MEDIA_READONLY_NO_USER_DATA_PASS')
           PY
       - name: Shred SSH key
