@@ -1,0 +1,21 @@
+name: BodyMind A353 — Stardust quality gate
+on:
+  push:
+    branches:
+      - bodymind-a353-stardust-cinematic-20261027
+  workflow_dispatch:
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile immutable launcher
+        run: python -m py_compile bootstrap/clean_runtime_launcher.py tests/test_a353_stardust.py
+      - name: Run pinned-source regression
+        run: python -m unittest discover -s tests -p 'test_a353_stardust.py' -v
