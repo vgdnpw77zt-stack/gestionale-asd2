@@ -177,7 +177,7 @@ main.main #pagamenti .number{
   .bottom-nav.bm351-collapsed a{display:none!important}
   .bottom-nav:not(.bm351-collapsed) .bm351-dock-toggle{flex-basis:100%;min-height:34px}
   main.main{padding-bottom:calc(137px + env(safe-area-inset-bottom))!important}
-  .hero-media::after{inset:-3px}
+  .hero .hero-media::after{inset:-3px;display:block!important;content:""!important;z-index:2!important}
 }
 @media(prefers-reduced-motion:reduce){
   .bm351-atmosphere::before,.bm351-atmosphere::after,.hero-media::after{animation:none!important}
