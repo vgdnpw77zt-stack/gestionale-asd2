@@ -4,6 +4,7 @@ from pathlib import Path
 import importlib.util
 import sqlite3
 import tempfile
+import zipfile
 import unittest
 from unittest.mock import patch
 
@@ -115,6 +116,30 @@ class AthleteAlbumSafety(unittest.TestCase):
              content_type='multipart/form-data')
         self.assertEqual(bad.status_code,403)
         self.assertEqual(self.upload().status_code,303)
+
+    def test_private_backup_export_and_full_erasure_are_owner_scoped(self):
+        self.assertEqual(self.upload().status_code,303)
+        exported=self.client.get(self.endpoint(ATHLETE_A,'/export'))
+        self.assertEqual(exported.status_code,200)
+        self.assertEqual(exported.mimetype,'application/zip')
+        self.assertIn('attachment',exported.headers['Content-Disposition'])
+        with zipfile.ZipFile(BytesIO(exported.data)) as archive:
+            names=archive.namelist()
+            self.assertEqual(names,['foto/01.jpg'])
+            self.assertTrue(archive.read('foto/01.jpg').startswith(b'\\xff\\xd8'))
+        self.assertEqual(self.client.get(self.endpoint(ATHLETE_B,'/export')).status_code,404)
+        self.assertEqual(self.client.post(self.endpoint(ATHLETE_A,'/clear'),
+           data={'csrf':self.token(),'confirm':'no'}).status_code,400)
+        self.assertEqual(self.client.post(self.endpoint(ATHLETE_A,'/clear'),
+           data={'csrf':'wrong','confirm':'yes'}).status_code,403)
+        erased=self.client.post(self.endpoint(ATHLETE_A,'/clear'),
+           data={'csrf':self.token(),'confirm':'yes'})
+        self.assertEqual(erased.status_code,303)
+        self.assertEqual(self.client.get(self.endpoint(ATHLETE_A,'/export')).status_code,404)
+        db=sqlite3.connect(ALBUM.ROOT/'albums.sqlite3')
+        self.assertEqual(db.execute('SELECT COUNT(*) FROM photos').fetchone()[0],0)
+        self.assertEqual(db.execute('SELECT COUNT(*) FROM consents').fetchone()[0],0)
+        db.close()
 
     def test_film_is_only_accessible_to_its_owner_when_renderer_available(self):
         if not Path('/usr/bin/ffmpeg').is_file():
