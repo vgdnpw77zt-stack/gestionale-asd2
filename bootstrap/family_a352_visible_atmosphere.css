@@ -1,0 +1,175 @@
+/* BODYMIND A352 — VISIBLE ATMOSPHERE, TRUE SLIDING FOOTER, FRAMELESS HERO
+   Strict presentation only. Existing routes, payments, albums and media preserved. */
+:root{--bm352-sea:#5acac0;--bm352-sun:#efb999;--bm352-cream:#f9f1df}
+.hero,main.main{isolation:isolate!important;position:relative!important}
+.hero{overflow:hidden!important}
+main.main{overflow:visible!important}
+.bm351-atmosphere{display:none!important}
+.bm352-sky{
+  position:absolute!important;inset:0!important;overflow:hidden!important;
+  border:0!important;pointer-events:none!important;
+  isolation:isolate!important;z-index:0!important;
+  background:
+    radial-gradient(ellipse 46% 30% at 4% 20%,rgba(104,217,206,.20),transparent 83%),
+    radial-gradient(ellipse 52% 44% at 84% 62%,rgba(235,174,146,.18),transparent 82%);
+}
+.bm352-sky .bm352-cloud{
+  position:absolute;display:block;inset:0;
+  width:125%;height:118%;left:-13%;top:-10%;
+  background:
+    radial-gradient(ellipse 35% 19% at 17% 22%,rgba(136,232,219,.50) 0%,rgba(83,176,183,.18) 58%,transparent 100%),
+    radial-gradient(ellipse 40% 23% at 76% 48%,rgba(249,193,164,.43) 0%,rgba(164,137,165,.13) 68%,transparent 100%),
+    radial-gradient(ellipse 27% 23% at 40% 84%,rgba(109,208,222,.40) 0%,transparent 93%);
+  filter:blur(24px);
+  opacity:.74;will-change:transform,opacity;
+  mix-blend-mode:screen;
+  animation:bm352-cloudstream 24s ease-in-out infinite alternate;
+}
+.bm352-sky .bm352-cloud--far{
+  transform-origin:65% 40%;
+  opacity:.62;filter:blur(40px);
+  animation:bm352-cloudback 31s ease-in-out infinite alternate-reverse;
+}
+.bm352-sky .bm352-cloud--near{
+  transform-origin:37% 59%;
+  opacity:.49;filter:blur(17px);
+  animation:bm352-cloudfront 18s ease-in-out infinite alternate;
+}
+@keyframes bm352-cloudstream{
+  from{transform:translate3d(-10%,-2%,0) rotate(-5deg) scale(.93)}
+  to{transform:translate3d(10%,6%,0) rotate(6deg) scale(1.12)}
+}
+@keyframes bm352-cloudback{
+  from{transform:translate3d(13%,-8%,0) rotate(9deg) scale(1.12)}
+  to{transform:translate3d(-13%,10%,0) rotate(-7deg) scale(.91)}
+}
+@keyframes bm352-cloudfront{
+  from{transform:translate3d(-6%,12%,0) scale(1.03)}
+  to{transform:translate3d(12%,-13%,0) scale(1.16)}
+}
+.bm352-sky .bm352-dust{
+  position:absolute;display:block;inset:-80px;
+  pointer-events:none;opacity:.82;
+  background-image:
+    radial-gradient(1.5px 1.5px at 12px 21px,#e9f8ec 85%,transparent 100%),
+    radial-gradient(1.2px 1.2px at 37px 63px,#a4efe5 85%,transparent 100%),
+    radial-gradient(1.8px 1.8px at 74px 17px,#ffdbbd 80%,transparent 100%),
+    radial-gradient(1.2px 1.2px at 99px 91px,#ecfef5 80%,transparent 100%),
+    radial-gradient(1.4px 1.4px at 48px 108px,#c2eaf0 85%,transparent 100%),
+    radial-gradient(2.2px 2.2px at 15px 114px,#eafff1 80%,transparent 100%);
+  background-size:118px 132px,143px 116px,171px 139px,127px 158px,184px 171px,211px 192px;
+  animation:bm352-starslide 26s linear infinite alternate,bm352-startwinkle 5.1s ease-in-out infinite alternate;
+}
+.bm352-sky .bm352-dust--far{
+  opacity:.54;background-size:87px 94px,159px 109px,128px 121px,103px 147px,178px 172px,203px 189px;
+  animation-duration:38s,7.4s;animation-direction:alternate-reverse,alternate;
+}
+@keyframes bm352-starslide{to{transform:translate3d(39px,-51px,0)}}
+@keyframes bm352-startwinkle{from{opacity:.38}to{opacity:.89}}
+/* The real Hero and Dashboard retain absolute control over readability. */
+.hero>.hero-media{z-index:5!important;position:relative!important}
+.hero>.frame.hero-content{z-index:6!important;position:relative!important}
+main.main>.stats,main.main>.section,main.main>.flash,main.main>.section-heading{
+  position:relative!important;z-index:3!important
+}
+.hero .hero-media{
+  outline:0!important;border:0!important;border-radius:0!important;
+  box-shadow:none!important;background:transparent!important;
+  overflow:visible!important;clip-path:none!important;
+  filter:none!important;-webkit-filter:none!important
+}
+.hero .hero-media::before,.hero .hero-media::after{
+  content:none!important;display:none!important;
+  border:0!important;background:none!important;box-shadow:none!important
+}
+/* A clipped/frosted wrapper would recreate a visible black rectangle;
+   only the video pixels themselves are softly feathered. */
+.hero video.family-hero-video,
+.hero #familyHeroVideo{
+  display:block!important;
+  position:relative!important;
+  border:0!important;outline:0!important;border-radius:0!important;
+  box-shadow:none!important;background:transparent!important;
+  filter:none!important;-webkit-filter:none!important;
+  object-fit:contain!important;
+  clip-path:none!important;
+  -webkit-mask-image:radial-gradient(ellipse 55% 57% at 50% 49%,#000 49%,rgba(0,0,0,.96) 62%,rgba(0,0,0,.44) 81%,transparent 100%)!important;
+  mask-image:radial-gradient(ellipse 55% 57% at 50% 49%,#000 49%,rgba(0,0,0,.96) 62%,rgba(0,0,0,.44) 81%,transparent 100%)!important;
+  -webkit-mask-repeat:no-repeat!important;mask-repeat:no-repeat!important;
+}
+.hero .hero-media video::-webkit-media-controls{opacity:0}
+.hero .hero-media:focus-within video::-webkit-media-controls{opacity:1}
+.hero video.family-hero-video{z-index:1}
+.hero .hero-media .bm352-glow{
+  position:absolute;inset:-12% -17%;z-index:-1;pointer-events:none;
+  border-radius:50%;
+  background:radial-gradient(ellipse at center,rgba(91,205,190,.35),rgba(231,173,143,.18) 45%,transparent 73%);
+  filter:blur(28px);
+  animation:bm352-aura 10s ease-in-out infinite alternate;
+}
+@keyframes bm352-aura{to{opacity:.57;transform:scale(1.12)}}
+/* DOCK: sliding as one complete menu. External tab always remains clickable. */
+@media(max-width:760px){
+  .bottom-nav.bm352-dock,
+  .bottom-nav.bm352-dock.bm351-collapsed{
+    position:fixed!important;display:flex!important;flex-wrap:nowrap!important;
+    width:calc(100vw - 22px)!important;max-width:530px!important;
+    left:50%!important;right:auto!important;
+    bottom:calc(12px + env(safe-area-inset-bottom,0px))!important;
+    padding:11px 8px!important;justify-content:space-around!important;align-items:center!important;
+    border:1px solid rgba(196,241,222,.50)!important;
+    border-radius:26px!important;
+    background:linear-gradient(135deg,rgba(15,67,77,.95),rgba(17,39,62,.96))!important;
+    box-shadow:0 17px 48px rgba(3,24,40,.44),inset 0 1px rgba(255,255,255,.12)!important;
+    z-index:9997!important;
+    transform:translate3d(-50%,0,0)!important;
+    transition:transform .52s cubic-bezier(.21,.87,.24,1),opacity .38s ease!important;
+    will-change:transform!important;
+  }
+  .bottom-nav.bm352-dock.bm352-tucked,
+  .bottom-nav.bm352-dock.bm351-collapsed.bm352-tucked{
+    transform:translate3d(-50%,calc(100% + 95px),0)!important;
+    opacity:.15!important;pointer-events:none!important
+  }
+  .bottom-nav.bm352-dock a,
+  .bottom-nav.bm352-dock.bm351-collapsed a{
+    display:flex!important;flex:1 1 0!important;align-items:center!important;
+    justify-content:center!important;min-width:0!important;min-height:44px!important;
+    border-radius:17px!important;font-size:12px!important;
+    color:#ebfbf7!important;text-decoration:none!important;
+    padding:6px 4px!important;
+  }
+  .bottom-nav.bm352-dock a:focus-visible{outline:2px solid #ffe0ba!important}
+  .bottom-nav.bm352-dock .bm351-dock-toggle{display:none!important}
+  body>.bm352-dock-handle{
+    display:flex!important;align-items:center!important;justify-content:center!important;
+    position:fixed!important;
+    left:50%!important;
+    bottom:calc(16px + env(safe-area-inset-bottom,0px))!important;
+    transform:translate3d(-50%,0,0)!important;
+    min-width:104px!important;min-height:37px!important;
+    z-index:9998!important;
+    padding:7px 16px!important;
+    border:1px solid rgba(231,251,237,.82)!important;
+    border-radius:99px!important;
+    box-shadow:0 6px 25px rgba(2,28,42,.46),inset 0 1px rgba(255,255,255,.47)!important;
+    background:linear-gradient(112deg,#a7e6dd,#f6d1af)!important;
+    color:#113b45!important;
+    font:750 12px/1.2 Manrope,system-ui,sans-serif!important;
+    cursor:pointer!important;
+    transition:bottom .52s cubic-bezier(.21,.87,.24,1),background .3s ease!important;
+    touch-action:manipulation;
+  }
+  body>.bm352-dock-handle[aria-expanded="true"]{
+    bottom:calc(var(--bm352-dock-height,80px) + 22px + env(safe-area-inset-bottom,0px))!important;
+  }
+  main.main{padding-bottom:calc(140px + env(safe-area-inset-bottom,0px))!important}
+}
+@media(min-width:761px){
+  body>.bm352-dock-handle{display:none!important}
+}
+@media(prefers-reduced-motion:reduce){
+  .bm352-sky .bm352-cloud,.bm352-sky .bm352-dust,.hero .bm352-glow{animation:none!important;will-change:auto!important}
+  .bottom-nav.bm352-dock,body>.bm352-dock-handle{transition:none!important}
+}
+@media(forced-colors:active){.bm352-sky{display:none!important}body>.bm352-dock-handle{forced-color-adjust:auto}}
