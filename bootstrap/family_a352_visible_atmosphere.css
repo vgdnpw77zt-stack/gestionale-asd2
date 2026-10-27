@@ -173,3 +173,111 @@ main.main>.stats,main.main>.section,main.main>.flash,main.main>.section-heading{
   .bottom-nav.bm352-dock,body>.bm352-dock-handle{transition:none!important}
 }
 @media(forced-colors:active){.bm352-sky{display:none!important}body>.bm352-dock-handle{forced-color-adjust:auto}}
+
+
+/* A352 CINEMA STRIP — strong photochemical perforations, unmistakable ribbon.
+   Existing figure/photo/video anchors remain in place and fully clickable. */
+main.main #familyMediaTrack.media-track{
+  position:relative!important;
+  display:flex!important;align-items:stretch!important;
+  gap:6px!important;padding:40px 15px 44px!important;
+  margin:12px 0 17px!important;
+  overflow-x:auto!important;overflow-y:visible!important;
+  scroll-snap-type:x mandatory!important;
+  background:
+    linear-gradient(180deg,#171d22 0%,#0a0e12 10%,#11181d 47%,#0b1117 85%,#171d22 100%)!important;
+  border-top:3px solid #66777c!important;border-bottom:3px solid #66777c!important;
+  border-radius:20px!important;
+  box-shadow:
+    inset 0 0 0 2px rgba(218,195,153,.22),
+    inset 0 8px 18px rgba(0,0,0,.85),
+    0 21px 38px rgba(3,16,23,.36)!important;
+}
+/* Sprocket holes: cream oblong perforations above/below every frame.
+   Not a faint dotted outline; these are cinema-real physical strips. */
+main.main #familyMediaTrack.media-track::before,
+main.main #familyMediaTrack.media-track::after{
+  content:""!important;
+  position:sticky!important;
+  display:block!important;
+  flex:0 0 0!important;
+  width:0!important;
+  top:auto!important;
+  bottom:auto!important;
+  left:0!important;
+  height:0!important;
+  background:none!important;
+  z-index:0!important;
+}
+main.main #familyMediaTrack .media-card{
+  position:relative!important;flex:0 0 clamp(185px,52vw,266px)!important;
+  min-height:255px!important;
+  box-sizing:border-box!important;
+  margin:0!important;padding:5px!important;
+  background:linear-gradient(160deg,#11191d,#0b1015)!important;
+  border:3px solid rgba(214,209,183,.86)!important;
+  border-left-width:4px!important;border-right-width:4px!important;
+  outline:1px solid #060a0c!important;
+  border-radius:8px!important;
+  box-shadow:inset 0 0 0 1px rgba(241,239,216,.16),0 8px 16px rgba(0,0,0,.5)!important;
+  scroll-snap-align:center!important;
+  isolation:isolate!important;
+  transform:rotate(var(--bm352-film-wave,0deg)) translateY(var(--bm352-film-lift,0px))!important;
+  transition:transform .35s ease,box-shadow .35s ease!important;
+}
+/* Gentle ondulation as a film ribbon, not distorted photography. */
+main.main #familyMediaTrack .media-card:nth-child(4n+1){--bm352-film-wave:-1deg;--bm352-film-lift:3px}
+main.main #familyMediaTrack .media-card:nth-child(4n+2){--bm352-film-wave:.7deg;--bm352-film-lift:-3px}
+main.main #familyMediaTrack .media-card:nth-child(4n+3){--bm352-film-wave:-.55deg;--bm352-film-lift:-5px}
+main.main #familyMediaTrack .media-card:nth-child(4n){--bm352-film-wave:1deg;--bm352-film-lift:2px}
+main.main #familyMediaTrack .media-card:is(:hover,:focus-within){
+  transform:translateY(-5px) rotate(0)!important;
+  z-index:3!important;
+  box-shadow:0 15px 28px rgba(0,0,0,.72)!important;
+}
+main.main #familyMediaTrack .media-card::before,
+main.main #familyMediaTrack .media-card::after{
+  content:""!important;display:block!important;
+  position:absolute!important;
+  left:0!important;right:0!important;height:23px!important;
+  border:0!important;border-radius:0!important;
+  opacity:1!important;pointer-events:none!important;
+  -webkit-mask:none!important;mask:none!important;
+  background:
+    repeating-linear-gradient(90deg,
+      #e1d8bb 0 13px, #f0e6cb 13px 18px,
+      #0a1016 18px 24px, #0a1016 24px 34px
+    ) center / 34px 12px repeat-x,
+    linear-gradient(180deg,#18252a,#111719)!important;
+  box-shadow:inset 0 1px rgba(240,232,201,.55),inset 0 -1px rgba(0,0,0,.75)!important;
+  z-index:6!important;
+}
+main.main #familyMediaTrack .media-card::before{top:-29px!important}
+main.main #familyMediaTrack .media-card::after{bottom:-29px!important}
+main.main #familyMediaTrack .media-card :is(img,video,picture){
+  border-radius:3px!important;
+  filter:none!important;-webkit-filter:none!important;
+}
+main.main #familyMediaTrack .media-card :is(img,video){
+  display:block!important;width:100%!important;max-width:100%!important;
+  object-fit:cover!important;
+}
+main.main #familyMediaTrack .media-card figcaption{
+  background:#10191c!important;color:#f4f2df!important;
+  padding:8px!important;border-radius:0!important;
+  font-size:13px!important;line-height:1.45!important;
+}
+main.main #familyMediaTrack .media-card a:focus-visible{
+  outline:3px solid #f5dfb7!important;outline-offset:4px!important;
+}
+@media(max-width:760px){
+  main.main #familyMediaTrack.media-track{
+    padding:39px 11px 42px!important;border-radius:14px!important
+  }
+  main.main #familyMediaTrack .media-card{flex-basis:clamp(180px,76vw,255px)!important}
+}
+@media(prefers-reduced-motion:reduce){
+  main.main #familyMediaTrack .media-card{
+    transition:none!important;transform:none!important;
+  }
+}
