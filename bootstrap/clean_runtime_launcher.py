@@ -90,7 +90,7 @@ def preflight(root:Path,db:Path)->dict:
     valid={(EXPECTED_SOURCE_COUNT,EXPECTED_SOURCE_DIGEST),(UPGRADE_SOURCE_COUNT,UPGRADE_SOURCE_DIGEST),
            (MANUAL_ROSTER_SOURCE_COUNT,MANUAL_ROSTER_SOURCE_DIGEST),
            (SIMPLE_GROUP_SOURCE_COUNT,SIMPLE_GROUP_SOURCE_DIGEST),(A317_SOURCE_COUNT,A317_SOURCE_DIGEST),(A328_SOURCE_COUNT,A328_SOURCE_DIGEST),(A330_SOURCE_COUNT,A330_SOURCE_DIGEST),(A336_SOURCE_COUNT,A336_SOURCE_DIGEST),(A337_SOURCE_COUNT,A337_SOURCE_DIGEST)}
-    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found) and not a343_matches(root,found) and not a344_matches(root,found) and not a345_matches(root,found) and not a346_matches(root,found) and not a347_matches(root,found) and not a348_matches(root,found) and not a349_matches(root,found) and not a350_matches(root,found) and not a351_matches(root,found) and not a352_matches(root,found):
+    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found) and not a343_matches(root,found) and not a344_matches(root,found) and not a345_matches(root,found) and not a346_matches(root,found) and not a347_matches(root,found) and not a348_matches(root,found) and not a349_matches(root,found) and not a350_matches(root,found) and not a351_matches(root,found) and not a352_matches(root,found) and not a353_matches(root,found):
         raise RuntimeError(f'source lock mismatch files={len(found)} expected={EXPECTED_SOURCE_COUNT}')
     return {'source_files':len(found),'sqlite':'ok','rows':sqlite_readonly_check(db),
             'historical_migrations_executed':0,'automatic_backup_cleanup':False,
@@ -1570,6 +1570,121 @@ def maybe_recover_a352_to_a351(root:Path,db:Path)->bool:
     print('BODYMIND A352 VERIFIED A351 CODE RESTORED',flush=True)
     return True
 
+
+# A353 — additive cinematic Stardust ONLY; A352 remains a byte-exact rollback state.
+A353_REL=A352_REL
+A353_BACKUP=Path('/data/release_packages/BODYMIND_A353_PREUI_A352.py')
+A353_CSS_PATH=Path('/opt/bodymind/family_a353_stardust.css')
+A353_JS_PATH=Path('/opt/bodymind/family_a353_stardust.js')
+A353_CSS_BLOB='ae34e7248179a6af8d4f6c0a51b09b4381a91700'
+A353_JS_BLOB='7af1e2133dad02e67f6a30d9162ef5260c98797a'
+
+def a353_assets()->tuple[bytes,bytes]:
+    css=A353_CSS_PATH.read_bytes()
+    js=A353_JS_PATH.read_bytes()
+    if a350_git_blob(css)!=A353_CSS_BLOB or a350_git_blob(js)!=A353_JS_BLOB:
+        raise RuntimeError('A353 approved stardust assets SHA mismatch')
+    if any(x in css for x in (b'</style>',b"'''")) or any(x in js for x in (b'</script>',b"'''")):
+        raise RuntimeError('A353 inline delimiter unsafe')
+    return css,js
+
+def a353_expected_from_a352(old:bytes)->tuple[bytes,str]:
+    base,base_sha=a352_expected_from_a351(A352_BACKUP.read_bytes())
+    if hashlib.sha256(old).hexdigest()!=base_sha or old!=base:
+        raise RuntimeError('A353 source is not the exact approved A352 build')
+    old_css=A352_CSS_PATH.read_bytes()
+    old_js=A352_JS_PATH.read_bytes()
+    if old.count(old_css)!=1 or old.count(old_js)!=1 or b'BODYMIND A353 STARDUST' in old:
+        raise RuntimeError('A353 source anchors missing, repeated or already upgraded')
+    css,js=a353_assets()
+    new=old.replace(old_css,old_css+b'\n/* BODYMIND A353 STARDUST VISUAL */\n'+css,1)
+    new=new.replace(old_js,old_js+b'\n/* BODYMIND A353 STARDUST SCRIPT */\n'+js,1)
+    compile(new,A353_REL,'exec')
+    return new,hashlib.sha256(new).hexdigest()
+
+def a353_matches(root:Path,found:dict[str,str])->bool:
+    if len(found)!=214 or A353_REL not in found or not A353_BACKUP.is_file() or A353_BACKUP.is_symlink():
+        return False
+    old=A353_BACKUP.read_bytes()
+    base,base_sha=a352_expected_from_a351(A352_BACKUP.read_bytes())
+    if old!=base or hashlib.sha256(old).hexdigest()!=base_sha:
+        return False
+    _,sha=a353_expected_from_a352(old)
+    if found[A353_REL]!=sha:
+        return False
+    prior=dict(found)
+    prior[A353_REL]=base_sha
+    return a352_matches(root,prior)
+
+def maybe_apply_a353(root:Path,db:Path)->None:
+    found=source_inventory(root)
+    if a353_matches(root,found):
+        return
+    if not a352_matches(root,found):
+        return
+    sqlite_readonly_check(db)
+    target=root/A353_REL
+    if not target.is_file() or target.is_symlink():
+        raise RuntimeError('A353 unsafe route target')
+    old=target.read_bytes()
+    new,sha=a353_expected_from_a352(old)
+    if A353_BACKUP.exists():
+        if not A353_BACKUP.is_file() or A353_BACKUP.is_symlink() or A353_BACKUP.read_bytes()!=old:
+            raise RuntimeError('A353 protected backup conflict')
+    else:
+        if not A353_BACKUP.parent.is_dir() or A353_BACKUP.parent.is_symlink():
+            raise RuntimeError('A353 protected rollback directory missing')
+        with open(A353_BACKUP,'xb') as fh:
+            fh.write(old)
+            fh.flush()
+            os.fsync(fh.fileno())
+    temp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a353_stardust_',suffix='.py',dir=str(target.parent),delete=False) as fh:
+            temp=Path(fh.name)
+            fh.write(new)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(temp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(temp),str(target))
+        temp=None
+    finally:
+        if temp is not None:
+            temp.unlink(missing_ok=True)
+    verified=source_inventory(root)
+    if verified[A353_REL]!=sha or not a353_matches(root,verified):
+        raise RuntimeError('A353 post-apply integrity mismatch')
+    print('BODYMIND A353 STARDUST UI APPLIED — PRIVATE DATA UNCHANGED',flush=True)
+
+def maybe_recover_a353_to_a352(root:Path,db:Path)->bool:
+    if os.environ.get('BODYMIND_A353_RECOVER_A352')!='1':
+        return False
+    found=source_inventory(root)
+    if a352_matches(root,found):
+        return True
+    if not a353_matches(root,found):
+        raise RuntimeError('A353 refuses rollback of unknown source')
+    sqlite_readonly_check(db)
+    target=root/A353_REL
+    old=A353_BACKUP.read_bytes()
+    temp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a353_rollback_',suffix='.py',dir=str(target.parent),delete=False) as fh:
+            temp=Path(fh.name)
+            fh.write(old)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(temp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(temp),str(target))
+        temp=None
+    finally:
+        if temp is not None:
+            temp.unlink(missing_ok=True)
+    if not a352_matches(root,source_inventory(root)):
+        raise RuntimeError('A353 rollback integrity mismatch')
+    print('BODYMIND A353 — exact A352 source restored',flush=True)
+    return True
+
 def main(argv=None):
     parser=argparse.ArgumentParser()
     parser.add_argument('mode',nargs='?',choices=('check','start'),default='start')
@@ -1601,6 +1716,8 @@ def main(argv=None):
                 maybe_apply_a351_sunrise(args.root,args.db)
             if not maybe_recover_a352_to_a351(args.root,args.db):
                 maybe_apply_a352(args.root,args.db)
+            if not maybe_recover_a353_to_a352(args.root,args.db):
+                maybe_apply_a353(args.root,args.db)
         result=preflight(args.root,args.db)
     except (OSError,RuntimeError,ValueError,sqlite3.DatabaseError) as exc:
         print('BODYMIND CLEAN BOOT STOP: '+str(exc),file=sys.stderr,flush=True)
