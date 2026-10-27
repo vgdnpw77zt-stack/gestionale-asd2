@@ -1329,7 +1329,7 @@ A351_A350_LIVE_SHA='8bbb503c24242e88aa97bc1eb973f92e69aa395df27c00d38f6809c94355
 A351_BACKUP=Path('/data/release_packages/BODYMIND_A351_PREUI_A350.py')
 A351_CSS_PATH=Path('/opt/bodymind/family_a351_sunrise.css')
 A351_JS_PATH=Path('/opt/bodymind/family_a351_sunrise.js')
-A351_CSS_BLOB='be65b405156905c772c3895e5210b32375da1530'
+A351_CSS_BLOB='261584759b405085f7f341831e55ff5d30128b9b'
 A351_JS_BLOB='8f91b985657d86142c7d95b673eb55ab905c3bb3'
 
 def a351_assets()->tuple[bytes,bytes]:
