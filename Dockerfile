@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 # BodyMind A301 immutable source + SQLite read-only guard, no historic release scripts.
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 ASDPRO_RUNTIME_DIR=/data ASD_PRO_DATA_DIR=/data ASD_MAX_UPLOAD_MB=500
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tesseract-ocr tesseract-ocr-ita poppler-utils libgl1 libglib2.0-0 fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tesseract-ocr tesseract-ocr-ita poppler-utils libgl1 libglib2.0-0 fonts-dejavu-core ffmpeg && rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/bodymind
 COPY requirements_runtime.txt /opt/bodymind/requirements_runtime.txt
 RUN pip install --no-cache-dir -r /opt/bodymind/requirements_runtime.txt
@@ -24,6 +24,7 @@ COPY bootstrap/family_a350_signature.css /opt/bodymind/family_a350_signature.css
 COPY bootstrap/family_a350_verified_gallery.js /opt/bodymind/family_a350_verified_gallery.js
 COPY bootstrap/family_a351_sunrise.css /opt/bodymind/family_a351_sunrise.css
 COPY bootstrap/family_a351_sunrise.js /opt/bodymind/family_a351_sunrise.js
+COPY bootstrap/bodymind_a351_private_album.py /opt/bodymind/bodymind_a351_private_album.py
 # Existing Railway startCommand remains compatible, but now executes this CLEAN code only.
 RUN mkdir -p /opt/bodymind-migration && cp /opt/bodymind/clean_runtime_launcher.py /opt/bodymind-migration/migration_upload.py
 EXPOSE 8080
