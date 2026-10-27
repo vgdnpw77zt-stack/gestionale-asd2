@@ -19,6 +19,7 @@ import secrets
 import sqlite3
 import subprocess
 import tempfile
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
@@ -239,6 +240,16 @@ small{color:#d5eae4}
 <input type="hidden" name="csrf" value="{{ csrf }}">
 <button type="submit">Crea il mio film</button></form>{% endif %}
 </section>
+<section class="card"><h2>I miei ricordi, sempre miei</h2>
+<p>Puoi scaricare una copia privata delle foto e del film oppure cancellare l'intero album.</p>
+{% if photos %}<p><a class="button" href="{{ export }}">Scarica il mio album</a></p>{% endif %}
+<form method="post" action="{{ clear }}">
+<input type="hidden" name="csrf" value="{{ csrf }}">
+<label class="check"><input type="checkbox" name="confirm" value="yes" required>
+<span>Confermo di voler cancellare tutte le mie foto e il film personale. Questa operazione non è reversibile.</span></label>
+<button type="submit">Cancella tutto il mio album</button>
+</form>
+</section>
 </main></body></html>"""
 
 def install_family_gallery(app,db_provider):
@@ -264,7 +275,8 @@ def install_family_gallery(app,db_provider):
             'delete':f'/app-tesserato/{token}/album/delete/{x["id"]}'} for x in rows]
         page=render_template_string(TEMPLATE,home=f'/app-tesserato/{token}',
           upload=f'/app-tesserato/{token}/album/upload',photos=p,csrf=_csrf(app,token),
-          film=film,generate=f'/app-tesserato/{token}/album/generate')
+          film=film,generate=f'/app-tesserato/{token}/album/generate',
+          export=f'/app-tesserato/{token}/album/export',clear=f'/app-tesserato/{token}/album/clear')
         return _no_cache(make_response(page))
 
     def upload(token):
@@ -377,6 +389,48 @@ def install_family_gallery(app,db_provider):
             finally:db.close()
         return _no_cache(jsonify({'available':present,'url':f'/app-tesserato/{token}/album/film' if present else None}))
 
+    def export(token):
+        owner=_owner(db_provider,token)
+        photos=_photos(owner)
+        if not photos:abort(404)
+        buf=io.BytesIO()
+        with zipfile.ZipFile(buf,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=3) as archive:
+            for i,row in enumerate(photos):
+                path=_safe_dir(owner)/row['filename']
+                if not path.is_file() or path.is_symlink():abort(500)
+                archive.writestr(f'foto/{i+1:02d}.jpg',path.read_bytes())
+            db=_open_album(owner)
+            if db:
+                try:
+                    filmrow=db.execute('SELECT filename FROM films WHERE athlete_id=?',(owner,)).fetchone()
+                    if filmrow:
+                        movie=_safe_dir(owner)/filmrow['filename']
+                        if movie.is_file() and not movie.is_symlink():
+                            archive.write(movie,arcname='il-mio-film.mp4')
+                finally:db.close()
+        buf.seek(0)
+        return _no_cache(send_file(buf,mimetype='application/zip',as_attachment=True,
+                                    download_name='bodymind-album-privato.zip'))
+
+    def clear(token):
+        owner=_owner(db_provider,token);_verify_post(app,token)
+        if request.form.get('confirm')!='yes':abort(400)
+        photos=_photos(owner)
+        db=_open_album(owner)
+        if not db:return _no_cache(redirect(f'/app-tesserato/{token}/album',code=303))
+        try:
+            filmrow=db.execute('SELECT filename FROM films WHERE athlete_id=?',(owner,)).fetchone()
+            db.execute('DELETE FROM photos WHERE athlete_id=?',(owner,))
+            db.execute('DELETE FROM films WHERE athlete_id=?',(owner,))
+            db.execute('DELETE FROM consents WHERE athlete_id=?',(owner,))
+            db.commit()
+        finally:db.close()
+        paths=[_safe_dir(owner)/p['filename'] for p in photos]
+        if filmrow:paths.append(_safe_dir(owner)/filmrow['filename'])
+        for path in paths:
+            if path.is_file() and not path.is_symlink():path.unlink()
+        return _no_cache(redirect(f'/app-tesserato/{token}/album',code=303))
+
     rules=[
       (base,'a351_album_home',home,['GET']),
       (base+'/upload','a351_album_upload',upload,['POST']),
@@ -385,6 +439,8 @@ def install_family_gallery(app,db_provider):
       (base+'/generate','a351_album_generate',generate,['POST']),
       (base+'/film','a351_album_film',film,['GET']),
       (base+'/status','a351_album_status',status,['GET']),
+      (base+'/export','a351_album_export',export,['GET']),
+      (base+'/clear','a351_album_clear',clear,['POST']),
     ]
     for url,endpoint,handler,methods in rules:
         app.add_url_rule(url,endpoint,handler,methods=methods)
