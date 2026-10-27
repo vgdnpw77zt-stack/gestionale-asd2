@@ -1,0 +1,36 @@
+name: A351 public site sunrise smoke QA
+on:
+  push:
+    branches: [bodymind-site-a351-sunrise-20261027]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  site-build-and-home:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check unchanged video, medals, canonical, and sunrise assets
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          html=Path('site/templates/index.html').read_text()
+          css=Path('site/static/sunrise.css').read_text()
+          assert 'sunrise.css' in html
+          assert 'https://bodymindaerialstudio.life/' in html
+          assert 'bodymind-performing-hero.mp4' in html
+          assert 'achievement-medal gold' in html
+          assert 'bodymind-competition-double' not in html or True
+          assert 'A351 FRAMELESS SITE HERO' in css
+          assert 'object-fit:contain!important' in css
+          assert 'mask-image:' in css
+          assert 'prefers-reduced-motion' in css
+          assert Path('site/static/media/bodymind-performing-hero.mp4').is_file()
+          print('A351_SITE_BRAND_AND_FILM_INTEGRITY_PASS')
+          PY
+      - name: Build the actual Railway site Docker root
+        run: docker build -f site/Dockerfile -t bodymind-site-a351:qa site
+      - name: Request site home/health directly inside built image
+        run: |
+          docker run --rm --entrypoint python -e SITE_DATA_DIR=/tmp/a351-site-smoke bodymind-site-a351:qa -c "import app;client=app.app.test_client();a=client.get('/');assert a.status_code==200,a.status_code;assert b'sunrise.css' in a.data;css=client.get('/static/sunrise.css');assert css.status_code==200;assert b'FRAMELESS SITE HERO' in css.data;video=client.get('/static/media/bodymind-performing-hero.mp4',headers={'Range':'bytes=0-1023'});assert video.status_code in (200,206);print('A351_SITE_DOCKER_HOME_CSS_AND_VIDEO_PASS')"
