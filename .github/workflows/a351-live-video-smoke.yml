@@ -1,0 +1,51 @@
+name: A351 live FFmpeg synthetic athlete isolation smoke
+on:
+  push:
+    branches: [bodymind-a351-aurora-stories-20261027]
+    paths: ['.github/workflows/a351-live-video-smoke.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-runtime-fake-data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      HAS_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY != '' }}
+      RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require existing read-only SSH access
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$HAS_KEY" == "true" ]] || exit 1
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$RAILWAY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+      - name: Prepare isolated test suite for real Pillow and FFmpeg in production
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          src=Path('tests/test_a351_private_album.py').read_text()
+          anchor="SOURCE=Path(__file__).resolve().parents[1]/'bootstrap/bodymind_a351_private_album.py'"
+          assert src.count(anchor)==1
+          src=src.replace(anchor,"SOURCE=Path('/opt/bodymind/bodymind_a351_private_album.py')")
+          assert "TemporaryDirectory(prefix='a351_test_')" in src
+          assert "unittest.main()" in src
+          Path('/tmp/a351_synthetic_private_runtime_test.py').write_text(src)
+          print('A351_SYNTHETIC_TEST_FIXTURES_ONLY_NO_PRIVATE_DATA')
+          PY
+      - name: Run synthetic album access tests and actual MP4 render on Railway
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 170s ssh -T -i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com 'PYTHONDONTWRITEBYTECODE=1 python3 -' < /tmp/a351_synthetic_private_runtime_test.py
+          echo "A351_REAL_FFMPEG_AND_TWO_SYNTHETIC_FAMILIES_PASS"
+      - name: Destroy temporary SSH identity and test source
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "$HOME/.ssh/id_ed25519" ]]; then shred -u "$HOME/.ssh/id_ed25519" || rm -f "$HOME/.ssh/id_ed25519"; fi
+          rm -f /tmp/a351_synthetic_private_runtime_test.py
