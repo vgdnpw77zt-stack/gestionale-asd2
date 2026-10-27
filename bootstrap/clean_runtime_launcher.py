@@ -90,7 +90,7 @@ def preflight(root:Path,db:Path)->dict:
     valid={(EXPECTED_SOURCE_COUNT,EXPECTED_SOURCE_DIGEST),(UPGRADE_SOURCE_COUNT,UPGRADE_SOURCE_DIGEST),
            (MANUAL_ROSTER_SOURCE_COUNT,MANUAL_ROSTER_SOURCE_DIGEST),
            (SIMPLE_GROUP_SOURCE_COUNT,SIMPLE_GROUP_SOURCE_DIGEST),(A317_SOURCE_COUNT,A317_SOURCE_DIGEST),(A328_SOURCE_COUNT,A328_SOURCE_DIGEST),(A330_SOURCE_COUNT,A330_SOURCE_DIGEST),(A336_SOURCE_COUNT,A336_SOURCE_DIGEST),(A337_SOURCE_COUNT,A337_SOURCE_DIGEST)}
-    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found) and not a343_matches(root,found) and not a344_matches(root,found) and not a345_matches(root,found) and not a346_matches(root,found) and not a347_matches(root,found) and not a348_matches(root,found) and not a349_matches(root,found) and not a350_matches(root,found) and not a351_matches(root,found) and not a352_matches(root,found) and not a353_matches(root,found) and not a354_matches(root,found) and not a355_matches(root,found):
+    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found) and not a343_matches(root,found) and not a344_matches(root,found) and not a345_matches(root,found) and not a346_matches(root,found) and not a347_matches(root,found) and not a348_matches(root,found) and not a349_matches(root,found) and not a350_matches(root,found) and not a351_matches(root,found) and not a352_matches(root,found) and not a353_matches(root,found) and not a354_matches(root,found) and not a355_matches(root,found) and not a356_matches(root,found):
         raise RuntimeError(f'source lock mismatch files={len(found)} expected={EXPECTED_SOURCE_COUNT}')
     return {'source_files':len(found),'sqlite':'ok','rows':sqlite_readonly_check(db),
             'historical_migrations_executed':0,'automatic_backup_cleanup':False,
@@ -1915,6 +1915,108 @@ def maybe_recover_a355_to_a354(root:Path,db:Path)->bool:
     print('BODYMIND A355 EXACT A354 UI RESTORED',flush=True)
     return True
 
+
+# A356 — frameless luminous family nebula. Immutable A355 is the exact rollback.
+# Only the already authenticated family HTML/CSS string is extended; no database
+# schema, admin route, private media path, or navigation action is modified.
+A356_REL=A355_REL
+A356_BACKUP=Path('/data/release_packages/BODYMIND_A356_PREUI_A355.py')
+A356_CSS_PATH=Path('/opt/bodymind/family_a356_luminous_nebula.css')
+A356_CSS_BLOB='ee6048b52c8a54f46484fd6f4d34e2db323eb2fa'
+
+def a356_assets()->bytes:
+    css=A356_CSS_PATH.read_bytes()
+    if a350_git_blob(css)!=A356_CSS_BLOB:
+        raise RuntimeError('A356 protected cinematic stylesheet mismatch')
+    if b'</style>' in css or b'</script>' in css or b"'''" in css:
+        raise RuntimeError('A356 unsafe stylesheet delimiter')
+    return css
+
+def a356_expected_from_a355(old:bytes)->tuple[bytes,str]:
+    if not A355_BACKUP.is_file() or A355_BACKUP.is_symlink():
+        raise RuntimeError('A356 requires exact A354 snapshot for A355 verification')
+    expected,sha=a355_expected_from_a354(A355_BACKUP.read_bytes())
+    if old!=expected or hashlib.sha256(old).hexdigest()!=sha:
+        raise RuntimeError('A356 source is not exact protected A355')
+    previous_css=A355_CSS_PATH.read_bytes()
+    if old.count(previous_css)!=1 or b'BODYMIND A356 LUMINOUS NEBULA' in old:
+        raise RuntimeError('A356 protected family CSS anchor missing or duplicated')
+    css=a356_assets()
+    new=old.replace(previous_css,previous_css+b'\\n/* BODYMIND A356 LUMINOUS NEBULA */\\n'+css,1)
+    compile(new,A356_REL,'exec')
+    return new,hashlib.sha256(new).hexdigest()
+
+def a356_matches(root:Path,found:dict[str,str])->bool:
+    if len(found)!=214 or A356_REL not in found or not A356_BACKUP.is_file() or A356_BACKUP.is_symlink():
+        return False
+    old=A356_BACKUP.read_bytes()
+    _,sha=a356_expected_from_a355(old)
+    if found[A356_REL]!=sha:
+        return False
+    previous=dict(found)
+    previous[A356_REL]=hashlib.sha256(old).hexdigest()
+    return a355_matches(root,previous)
+
+def maybe_apply_a356(root:Path,db:Path)->None:
+    found=source_inventory(root)
+    if a356_matches(root,found) or not a355_matches(root,found):
+        return
+    sqlite_readonly_check(db)
+    target=root/A356_REL
+    if target.is_symlink() or not target.is_file():
+        raise RuntimeError('A356 private source is missing or unsafe')
+    original=target.read_bytes()
+    upgraded,sha=a356_expected_from_a355(original)
+    if A356_BACKUP.exists():
+        if not A356_BACKUP.is_file() or A356_BACKUP.is_symlink() or A356_BACKUP.read_bytes()!=original:
+            raise RuntimeError('A356 immutable rollback conflict')
+    else:
+        if not A356_BACKUP.parent.is_dir() or A356_BACKUP.parent.is_symlink():
+            raise RuntimeError('A356 rollback directory unavailable')
+        with open(A356_BACKUP,'xb') as fh:
+            fh.write(original);fh.flush();os.fsync(fh.fileno())
+    tmp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a356_nebula_',suffix='.py',
+                                         dir=str(target.parent),delete=False) as fh:
+            tmp=Path(fh.name)
+            fh.write(upgraded);fh.flush();os.fsync(fh.fileno())
+        os.chmod(tmp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(tmp),str(target))
+        tmp=None
+    finally:
+        if tmp is not None:tmp.unlink(missing_ok=True)
+    final=source_inventory(root)
+    if final[A356_REL]!=sha or not a356_matches(root,final):
+        raise RuntimeError('A356 protected source verification failed')
+    print('BODYMIND A356 LUMINOUS NEBULA INSTALLED — PRIVATE RECORDS UNCHANGED',flush=True)
+
+def maybe_recover_a356_to_a355(root:Path,db:Path)->bool:
+    if os.environ.get('BODYMIND_A356_RECOVER_A355')!='1':return False
+    found=source_inventory(root)
+    if a355_matches(root,found):return True
+    if not a356_matches(root,found):
+        raise RuntimeError('A356 unknown live state; refusing rollback')
+    sqlite_readonly_check(db)
+    target=root/A356_REL
+    original=A356_BACKUP.read_bytes()
+    tmp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a356_restore_',suffix='.py',
+                                         dir=str(target.parent),delete=False) as fh:
+            tmp=Path(fh.name)
+            fh.write(original);fh.flush();os.fsync(fh.fileno())
+        os.chmod(tmp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(tmp),str(target))
+        tmp=None
+    finally:
+        if tmp is not None:tmp.unlink(missing_ok=True)
+    if not a355_matches(root,source_inventory(root)):
+        raise RuntimeError('A356 exact A355 rollback verification failed')
+    print('BODYMIND A356 EXACT A355 UI RESTORED',flush=True)
+    return True
+
+
 def main(argv=None):
     parser=argparse.ArgumentParser()
     parser.add_argument('mode',nargs='?',choices=('check','start'),default='start')
@@ -1952,6 +2054,8 @@ def main(argv=None):
                 maybe_apply_a354(args.root,args.db)
             if not maybe_recover_a355_to_a354(args.root,args.db):
                 maybe_apply_a355(args.root,args.db)
+            if not maybe_recover_a356_to_a355(args.root,args.db):
+                maybe_apply_a356(args.root,args.db)
         result=preflight(args.root,args.db)
     except (OSError,RuntimeError,ValueError,sqlite3.DatabaseError) as exc:
         print('BODYMIND CLEAN BOOT STOP: '+str(exc),file=sys.stderr,flush=True)
