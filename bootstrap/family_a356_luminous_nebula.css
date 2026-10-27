@@ -1,0 +1,217 @@
+/* BODYMIND A356 — Luminous Nebula, family home visual correction.
+   Visual-only layer, appended after immutable A355. No data, URLs, or actions change. */
+:root{--bm356-deep:#092331;--bm356-ink:#071b29;--bm356-glow:#6cf1dc}
+html,body{background:#071b29!important}
+.hero,main.main{position:relative!important;isolation:isolate!important}
+.hero{
+  background:
+    radial-gradient(ellipse 98% 43% at 6% 23%,rgba(31,133,144,.35),transparent 77%),
+    radial-gradient(ellipse 95% 44% at 96% 59%,rgba(177,91,145,.27),transparent 80%),
+    radial-gradient(ellipse 115% 41% at 47% 93%,rgba(26,111,131,.30),transparent 82%),
+    linear-gradient(180deg,#0b2735 0%,#102b3a 44%,#0a2937 77%,#092331 100%)!important;
+}
+main.main{
+  background:
+    radial-gradient(ellipse 88% 31% at 5% 13%,rgba(35,145,156,.32),transparent 81%),
+    radial-gradient(ellipse 96% 40% at 92% 47%,rgba(198,103,152,.25),transparent 83%),
+    radial-gradient(ellipse 104% 31% at 36% 79%,rgba(97,98,174,.19),transparent 84%),
+    linear-gradient(180deg,#092331 0%,#103243 43%,#092636 77%,#071b29 100%)!important;
+}
+/* The clouds live behind film and real UI; their dimensions extend outside the
+   viewport so no rectangle edge becomes visible as they drift. */
+.hero>.bm352-sky,main.main>.bm352-sky{
+  opacity:1!important;display:block!important;z-index:0!important;
+  background:
+    radial-gradient(ellipse 78% 38% at 19% 24%,rgba(71,220,210,.32),transparent 82%),
+    radial-gradient(ellipse 78% 39% at 83% 69%,rgba(246,139,178,.29),transparent 86%),
+    radial-gradient(ellipse 65% 26% at 45% 91%,rgba(129,122,231,.24),transparent 84%)!important;
+}
+.hero>.bm352-sky::before,main.main>.bm352-sky::before{
+  content:"";display:block;position:absolute;inset:-25% -37%;
+  pointer-events:none;opacity:.93;
+  background:
+    radial-gradient(ellipse 34% 13% at 13% 28%,rgba(91,245,220,.66) 0%,rgba(57,170,188,.28) 56%,transparent 94%),
+    radial-gradient(ellipse 38% 20% at 77% 48%,rgba(241,148,194,.59) 0%,rgba(134,100,188,.23) 63%,transparent 94%),
+    radial-gradient(ellipse 39% 15% at 38% 77%,rgba(98,206,231,.52) 0%,rgba(48,116,183,.20) 63%,transparent 96%);
+  filter:blur(21px) saturate(1.33);
+  mix-blend-mode:screen;
+  animation:bm356-nebula-east 29s ease-in-out infinite alternate;
+}
+.hero>.bm352-sky::after,main.main>.bm352-sky::after{
+  content:"";display:block;position:absolute;inset:-20% -35%;
+  pointer-events:none;opacity:.79;
+  background:
+    radial-gradient(ellipse 32% 11% at 68% 24%,rgba(125,238,222,.52),rgba(62,163,201,.20) 65%,transparent 96%),
+    radial-gradient(ellipse 37% 13% at 28% 59%,rgba(255,190,151,.48),rgba(224,114,175,.24) 67%,transparent 96%),
+    radial-gradient(ellipse 38% 16% at 79% 87%,rgba(164,150,250,.49),rgba(75,120,187,.19) 66%,transparent 96%);
+  filter:blur(17px) saturate(1.18);
+  mix-blend-mode:screen;
+  animation:bm356-nebula-west 36s ease-in-out infinite alternate-reverse;
+}
+.bm352-sky .bm352-cloud{opacity:.94!important;filter:blur(14px) saturate(1.28)!important;animation-duration:23s!important}
+.bm352-sky .bm352-cloud--far{opacity:.82!important;filter:blur(28px) saturate(1.18)!important;animation-duration:35s!important}
+.bm352-sky .bm352-cloud--near{opacity:.78!important;filter:blur(11px) saturate(1.18)!important;animation-duration:17s!important}
+.bm353-vapor{opacity:.87!important;filter:blur(19px) saturate(1.24)!important}
+.bm353-vapor--peach{opacity:.71!important;filter:blur(24px) saturate(1.17)!important}
+.bm353-vapor--veils{opacity:.77!important;filter:blur(12px) saturate(1.23)!important}
+.bm353-vapor--aura{opacity:.68!important;filter:blur(33px) saturate(1.14)!important}
+.bm354-silk{opacity:.78!important;filter:blur(16px) saturate(1.18)!important}
+.bm354-silk--second{opacity:.69!important;filter:blur(24px) saturate(1.12)!important}
+.bm354-silk--third{opacity:.73!important;filter:blur(11px) saturate(1.24)!important}
+.bm352-sky .bm352-dust{opacity:.64!important}
+.bm352-sky .bm352-dust--far{opacity:.45!important}
+.bm354-star-glimmer{opacity:.56!important}
+.bm354-hoop{opacity:.12!important}
+@keyframes bm356-nebula-east{
+  0%{transform:translate3d(-8%,4%,0) rotate(-5deg) scale(1.01);opacity:.76}
+  48%{transform:translate3d(5%,-4%,0) rotate(3deg) scale(1.15);opacity:1}
+  100%{transform:translate3d(11%,5%,0) rotate(7deg) scale(1.04);opacity:.82}
+}
+@keyframes bm356-nebula-west{
+  0%{transform:translate3d(10%,-8%,0) rotate(6deg) scale(1.13);opacity:.67}
+  50%{transform:translate3d(-4%,4%,0) rotate(-2deg) scale(1.01);opacity:.93}
+  100%{transform:translate3d(-11%,8%,0) rotate(-6deg) scale(1.13);opacity:.73}
+}
+/* Frame-free native film. The actual pixels stay crisp; feathering is applied
+   to the video element itself, never to a rectangle holding the video. */
+.hero>.hero-media{z-index:3!important;isolation:isolate!important}
+.hero .hero-media{
+  border:0!important;outline:0!important;border-radius:0!important;
+  box-shadow:none!important;background:transparent!important;
+  filter:none!important;-webkit-filter:none!important;overflow:visible!important;
+}
+.hero .hero-media::before{content:none!important;display:none!important}
+.hero .hero-media::after{
+  content:""!important;display:block!important;position:absolute!important;
+  inset:0!important;z-index:3!important;pointer-events:none!important;
+  border:0!important;border-radius:0!important;box-shadow:none!important;
+  -webkit-mask-image:none!important;mask-image:none!important;
+  background:linear-gradient(180deg,
+    rgba(7,27,41,.05) 0%,transparent 30%,
+    rgba(8,30,44,.05) 48%,rgba(8,31,45,.22) 62%,
+    rgba(9,35,49,.60) 81%,#092331 100%)!important;
+}
+.hero .hero-media :is(video.family-hero-video,#familyHeroVideo){
+  display:block!important;position:relative!important;z-index:1!important;
+  border:0!important;border-radius:0!important;box-shadow:none!important;
+  background:transparent!important;filter:none!important;-webkit-filter:none!important;
+  object-fit:contain!important;object-position:center top!important;
+  opacity:1!important;
+  -webkit-mask-image:radial-gradient(ellipse 102% 92% at 50% 36%,#000 0%,#000 53%,rgba(0,0,0,.96) 61%,rgba(0,0,0,.69) 77%,rgba(0,0,0,.24) 91%,transparent 100%)!important;
+  mask-image:radial-gradient(ellipse 102% 92% at 50% 36%,#000 0%,#000 53%,rgba(0,0,0,.96) 61%,rgba(0,0,0,.69) 77%,rgba(0,0,0,.24) 91%,transparent 100%)!important;
+  -webkit-mask-repeat:no-repeat!important;mask-repeat:no-repeat!important;
+}
+/* No independent text card, glass rectangle, border or frosted pane. */
+.hero>.frame.hero-content,.hero .hero-content,.hero .hero-intro{
+  border:0!important;outline:0!important;border-radius:0!important;
+  background:none!important;background-color:transparent!important;
+  box-shadow:none!important;filter:none!important;
+  backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+}
+.hero .hero-content::before,.hero .hero-content::after,
+.hero .hero-intro::before,.hero .hero-intro::after{
+  content:none!important;display:none!important
+}
+.hero .hero-intro h1{color:#fff8ed!important;text-shadow:0 3px 17px rgba(0,9,18,.88),0 1px 4px rgba(0,0,0,.89)!important}
+.hero .hero-intro p,.hero .hero-intro .kicker{
+  color:#edf9f5!important;
+  text-shadow:0 2px 9px rgba(0,10,19,.91)!important
+}
+/* One full-width veil bridges the last filmed pixels into the SAME backdrop
+   used for the first row of the dashboard. No visible left/right seams. */
+@media(max-width:760px){
+  .hero{
+    display:grid!important;grid-template-columns:minmax(0,1fr)!important;
+    grid-template-rows:auto!important;align-items:stretch!important;
+    align-content:start!important;justify-items:stretch!important;
+    gap:0!important;padding:0!important;margin:0!important;
+    min-height:0!important;height:auto!important;
+    border:0!important;border-radius:0!important;
+    overflow:hidden!important;
+  }
+  .hero>.hero-media{
+    grid-column:1!important;grid-row:1!important;grid-area:1 / 1!important;
+    order:unset!important;align-self:stretch!important;
+    position:relative!important;
+    display:block!important;width:100%!important;max-width:100vw!important;
+    height:auto!important;min-height:0!important;max-height:none!important;
+    aspect-ratio:auto!important;margin:0!important;padding:0!important;
+    transform:none!important;z-index:2!important;
+  }
+  .hero .hero-media :is(video.family-hero-video,#familyHeroVideo){
+    position:relative!important;inset:auto!important;
+    display:block!important;width:100%!important;height:auto!important;
+    max-width:100%!important;max-height:none!important;
+    object-fit:contain!important;
+    -webkit-mask-image:radial-gradient(ellipse 110% 93% at 50% 35%,#000 0%,#000 56%,rgba(0,0,0,.93) 68%,rgba(0,0,0,.51) 82%,transparent 100%)!important;
+    mask-image:radial-gradient(ellipse 110% 93% at 50% 35%,#000 0%,#000 56%,rgba(0,0,0,.93) 68%,rgba(0,0,0,.51) 82%,transparent 100%)!important;
+  }
+  .hero::after{
+    content:""!important;display:block!important;
+    position:absolute!important;inset:35% 0 0!important;z-index:4!important;
+    pointer-events:none!important;border:0!important;border-radius:0!important;
+    background:
+      radial-gradient(ellipse 80% 39% at 12% 70%,rgba(34,125,144,.24),transparent 86%),
+      radial-gradient(ellipse 75% 38% at 88% 85%,rgba(176,102,161,.17),transparent 87%),
+      linear-gradient(180deg,transparent 0%,rgba(9,35,49,.03) 23%,rgba(9,35,49,.32) 51%,rgba(9,35,49,.77) 80%,#092331 100%)!important;
+    -webkit-mask-image:none!important;mask-image:none!important;
+  }
+  .hero>.frame.hero-content,.hero .hero-content{
+    grid-column:1!important;grid-row:1!important;grid-area:1 / 1!important;
+    position:relative!important;inset:auto!important;
+    order:unset!important;z-index:6!important;
+    align-self:end!important;justify-self:stretch!important;
+    width:100%!important;max-width:100%!important;
+    min-height:0!important;height:auto!important;
+    margin:0!important;padding:clamp(42px,10vh,72px) clamp(21px,5vw,32px) 27px!important;
+    transform:none!important;
+    pointer-events:none!important;
+  }
+  .hero .hero-intro{
+    position:relative!important;z-index:7!important;
+    display:flex!important;flex-direction:column!important;align-items:flex-start!important;
+    width:100%!important;max-width:100%!important;
+    padding:0!important;margin:0!important;
+    pointer-events:none!important;
+  }
+  .hero .hero-intro :is(a,button,input),.hero .hero-content :is(a,button,input){
+    pointer-events:auto!important;
+  }
+  .hero .hero-intro h1{
+    font-size:clamp(39px,10.3vw,54px)!important;
+    line-height:1.04!important;margin:8px 0 9px!important;
+    text-wrap:balance;
+  }
+  .hero .hero-intro p{
+    font-size:clamp(14px,3.6vw,16px)!important;
+    line-height:1.51!important;max-width:400px!important;
+    margin-bottom:14px!important;
+  }
+  .hero .hero-intro .pill,.hero .pill{
+    color:#fff9f0!important;
+    background:linear-gradient(112deg,rgba(16,91,106,.93),rgba(53,77,117,.88))!important;
+    border:1px solid rgba(181,250,226,.76)!important;
+    border-radius:999px!important;
+    box-shadow:0 7px 22px rgba(0,10,23,.31),inset 0 1px rgba(255,255,255,.13)!important;
+    font-size:clamp(12px,3vw,14px)!important;
+  }
+  .hero>.bm352-sky{z-index:0!important}
+  .hero .hero-media .hero-playback{z-index:8!important}
+  main.main{margin-top:0!important;padding-top:18px!important}
+}
+@media(max-width:390px){
+  .hero .hero-content{padding-inline:19px!important;padding-bottom:24px!important}
+}
+@media(prefers-reduced-motion:reduce){
+  .hero>.bm352-sky::before,.hero>.bm352-sky::after,
+  main.main>.bm352-sky::before,main.main>.bm352-sky::after{
+    animation:none!important;transform:none!important;
+  }
+  .bm352-sky .bm352-cloud,.bm353-vapor,.bm354-silk,.bm354-star-glimmer{
+    animation:none!important;will-change:auto!important;
+  }
+}
+@media(forced-colors:active){
+  .hero>.bm352-sky::before,.hero>.bm352-sky::after,
+  main.main>.bm352-sky::before,main.main>.bm352-sky::after{display:none!important}
+}
