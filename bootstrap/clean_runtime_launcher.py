@@ -90,7 +90,7 @@ def preflight(root:Path,db:Path)->dict:
     valid={(EXPECTED_SOURCE_COUNT,EXPECTED_SOURCE_DIGEST),(UPGRADE_SOURCE_COUNT,UPGRADE_SOURCE_DIGEST),
            (MANUAL_ROSTER_SOURCE_COUNT,MANUAL_ROSTER_SOURCE_DIGEST),
            (SIMPLE_GROUP_SOURCE_COUNT,SIMPLE_GROUP_SOURCE_DIGEST),(A317_SOURCE_COUNT,A317_SOURCE_DIGEST),(A328_SOURCE_COUNT,A328_SOURCE_DIGEST),(A330_SOURCE_COUNT,A330_SOURCE_DIGEST),(A336_SOURCE_COUNT,A336_SOURCE_DIGEST),(A337_SOURCE_COUNT,A337_SOURCE_DIGEST)}
-    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found) and not a343_matches(root,found) and not a344_matches(root,found) and not a345_matches(root,found) and not a346_matches(root,found) and not a347_matches(root,found) and not a348_matches(root,found) and not a349_matches(root,found) and not a350_matches(root,found) and not a351_matches(root,found) and not a352_matches(root,found) and not a353_matches(root,found) and not a354_matches(root,found):
+    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found) and not a343_matches(root,found) and not a344_matches(root,found) and not a345_matches(root,found) and not a346_matches(root,found) and not a347_matches(root,found) and not a348_matches(root,found) and not a349_matches(root,found) and not a350_matches(root,found) and not a351_matches(root,found) and not a352_matches(root,found) and not a353_matches(root,found) and not a354_matches(root,found) and not a355_matches(root,found):
         raise RuntimeError(f'source lock mismatch files={len(found)} expected={EXPECTED_SOURCE_COUNT}')
     return {'source_files':len(found),'sqlite':'ok','rows':sqlite_readonly_check(db),
             'historical_migrations_executed':0,'automatic_backup_cleanup':False,
@@ -1792,6 +1792,129 @@ def maybe_recover_a354_to_a353(root:Path,db:Path)->bool:
     print('BODYMIND A354 — exact A353 restored',flush=True)
     return True
 
+
+# A355: authorized local family film studio + darker overlay. All previous releases immutable.
+A355_REL=A354_REL
+A355_BACKUP=Path('/data/release_packages/BODYMIND_A355_PREUI_A354.py')
+A355_CSS_PATH=Path('/opt/bodymind/family_a355_dark_cinema.css')
+A355_JS_PATH=Path('/opt/bodymind/family_a355_studio_link.js')
+A355_STUDIO_PATH=Path('/opt/bodymind/bodymind_a355_film_studio.py')
+A355_CSS_BLOB='45f8e54580f0213d0fc6b8de6878518838a03e99'
+A355_JS_BLOB='4b29eec08349c8401c5c7f99bb55ad9d4befc1ff'
+A355_STUDIO_BLOB='870984d12da3d1daa33144c128c3cc9a6a258166'
+
+def a355_assets():
+    css,js,studio=(A355_CSS_PATH.read_bytes(),A355_JS_PATH.read_bytes(),
+                   A355_STUDIO_PATH.read_bytes())
+    for content,expected in ((css,A355_CSS_BLOB),(js,A355_JS_BLOB),(studio,A355_STUDIO_BLOB)):
+        if a350_git_blob(content)!=expected:
+            raise RuntimeError('A355 protected source or studio asset mismatch')
+    for content in (css,js):
+        if b'</style>' in content or b'</script>' in content or b"'''" in content:
+            raise RuntimeError('A355 unsafe style/script delimiter')
+    compile(studio,'bodymind_a355_film_studio.py','exec')
+    return css,js,studio
+
+def a355_expected_from_a354(old:bytes)->tuple[bytes,str]:
+    if not A354_BACKUP.is_file() or A354_BACKUP.is_symlink():
+        raise RuntimeError('A355 requires exact A354 rollback state')
+    expected,sha=a354_expected_from_a353(A354_BACKUP.read_bytes())
+    if old!=expected or hashlib.sha256(old).hexdigest()!=sha:
+        raise RuntimeError('A355 source is not the exact approved A354')
+    previous_css=A354_CSS_PATH.read_bytes()
+    previous_js=A354_JS_PATH.read_bytes()
+    if old.count(previous_css)!=1 or old.count(previous_js)!=1 or b'BODYMIND A355 FILM STUDIO' in old:
+        raise RuntimeError('A355 source anchors unsafe')
+    if old.count(b'_bm351_album.install_family_gallery(app, db)')!=1:
+        raise RuntimeError('A355 existing private album installation missing')
+    css,js,_=a355_assets()
+    new=old.replace(previous_css,previous_css+b'\n/* BODYMIND A355 DARK CINEMA */\n'+css,1)
+    new=new.replace(previous_js,previous_js+b'\n/* BODYMIND A355 FILM STUDIO LINK */\n'+js,1)
+    studio_loader=b"""
+# BODYMIND A355 FILM STUDIO — PRIVATE AUTHORIZED EXTENSION
+import importlib.util as _bm355_import
+_bm355_spec=_bm355_import.spec_from_file_location(
+  'bodymind_a355_film_studio','/opt/bodymind/bodymind_a355_film_studio.py')
+if _bm355_spec is None or _bm355_spec.loader is None:
+    raise RuntimeError('A355 film studio module missing')
+_bm355_mod=_bm355_import.module_from_spec(_bm355_spec)
+_bm355_spec.loader.exec_module(_bm355_mod)
+_bm355_mod.install_family_film_studio(app, db, _bm351_album)
+"""
+    new+=studio_loader
+    compile(new,A355_REL,'exec')
+    return new,hashlib.sha256(new).hexdigest()
+
+def a355_matches(root:Path,found:dict[str,str])->bool:
+    if len(found)!=214 or A355_REL not in found or not A355_BACKUP.is_file() or A355_BACKUP.is_symlink():
+        return False
+    old=A355_BACKUP.read_bytes()
+    _,sha=a355_expected_from_a354(old)
+    if found[A355_REL]!=sha:
+        return False
+    previous=dict(found)
+    previous[A355_REL]=hashlib.sha256(old).hexdigest()
+    return a354_matches(root,previous)
+
+def maybe_apply_a355(root:Path,db:Path)->None:
+    found=source_inventory(root)
+    if a355_matches(root,found) or not a354_matches(root,found):
+        return
+    sqlite_readonly_check(db)
+    target=root/A355_REL
+    if target.is_symlink() or not target.is_file():
+        raise RuntimeError('A355 unsafe private route module')
+    original=target.read_bytes()
+    upgraded,sha=a355_expected_from_a354(original)
+    if A355_BACKUP.exists():
+        if not A355_BACKUP.is_file() or A355_BACKUP.is_symlink() or A355_BACKUP.read_bytes()!=original:
+            raise RuntimeError('A355 rollback backup conflict')
+    else:
+        if not A355_BACKUP.parent.is_dir() or A355_BACKUP.parent.is_symlink():
+            raise RuntimeError('A355 backup directory missing')
+        with open(A355_BACKUP,'xb') as fh:
+            fh.write(original);fh.flush();os.fsync(fh.fileno())
+    tmp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a355_film_',suffix='.py',
+                                         dir=str(target.parent),delete=False) as fh:
+            tmp=Path(fh.name)
+            fh.write(upgraded);fh.flush();os.fsync(fh.fileno())
+        os.chmod(tmp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(tmp),str(target))
+        tmp=None
+    finally:
+        if tmp is not None:tmp.unlink(missing_ok=True)
+    final=source_inventory(root)
+    if final[A355_REL]!=sha or not a355_matches(root,final):
+        raise RuntimeError('A355 upgraded source verification failed')
+    print('BODYMIND A355 FILM STUDIO INSTALLED — HISTORIC DOCUMENTS AND ACCOUNTING INTACT',flush=True)
+
+def maybe_recover_a355_to_a354(root:Path,db:Path)->bool:
+    if os.environ.get('BODYMIND_A355_RECOVER_A354')!='1':return False
+    found=source_inventory(root)
+    if a354_matches(root,found):return True
+    if not a355_matches(root,found):
+        raise RuntimeError('A355 unknown live source; refused rollback')
+    sqlite_readonly_check(db)
+    target=root/A355_REL
+    original=A355_BACKUP.read_bytes()
+    tmp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a355_restore_',suffix='.py',
+                                         dir=str(target.parent),delete=False) as fh:
+            tmp=Path(fh.name)
+            fh.write(original);fh.flush();os.fsync(fh.fileno())
+        os.chmod(tmp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(tmp),str(target))
+        tmp=None
+    finally:
+        if tmp is not None:tmp.unlink(missing_ok=True)
+    if not a354_matches(root,source_inventory(root)):
+        raise RuntimeError('A355 rollback SHA mismatch')
+    print('BODYMIND A355 EXACT A354 UI RESTORED',flush=True)
+    return True
+
 def main(argv=None):
     parser=argparse.ArgumentParser()
     parser.add_argument('mode',nargs='?',choices=('check','start'),default='start')
@@ -1827,6 +1950,8 @@ def main(argv=None):
                 maybe_apply_a353(args.root,args.db)
             if not maybe_recover_a354_to_a353(args.root,args.db):
                 maybe_apply_a354(args.root,args.db)
+            if not maybe_recover_a355_to_a354(args.root,args.db):
+                maybe_apply_a355(args.root,args.db)
         result=preflight(args.root,args.db)
     except (OSError,RuntimeError,ValueError,sqlite3.DatabaseError) as exc:
         print('BODYMIND CLEAN BOOT STOP: '+str(exc),file=sys.stderr,flush=True)
