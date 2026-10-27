@@ -1,0 +1,114 @@
+/* BODYMIND A357 — iOS low-memory cinematic compositor.
+   Only mobile presentation rules. The video, data, routes, dock and documents
+   are retained exactly. Older A356 styles remain immutable for rollback. */
+@media (max-width:760px) {
+  /* The mobile renderer previously combined twelve+ overlapping, blurred,
+     animated full-height layers. On long dashboards some covered many screens.
+     Suppress that compositing load; the base gradients retain color depth. */
+  main.main>.bm352-sky,
+  .hero .bm352-sky .bm352-cloud,
+  .hero .bm353-vapor,
+  .hero .bm354-silk,
+  .hero .bm354-star-glimmer,
+  .hero .bm354-hoop,
+  .hero .bm352-sky .bm352-dust--far,
+  .hero .hero-media .bm352-glow {
+    display:none!important;
+    animation:none!important;
+    filter:none!important;
+    mix-blend-mode:normal!important;
+    will-change:auto!important;
+  }
+  .hero>.bm352-sky{
+    position:absolute!important;
+    inset:0!important;
+    z-index:0!important;
+    overflow:hidden!important;
+    opacity:1!important;
+    contain:paint!important;
+    border-radius:0!important;
+    pointer-events:none!important;
+    /* Stardust stays static instead of continuously repainting the entire
+       dashboard. A slower drifting nebula still gives the home movement. */
+    background:
+      radial-gradient(ellipse 72% 27% at 14% 23%,rgba(69,198,198,.25),transparent 89%),
+      radial-gradient(ellipse 70% 32% at 91% 69%,rgba(226,126,161,.22),transparent 89%),
+      radial-gradient(1.4px 1.4px at 37px 57px,rgba(255,237,215,.66) 80%,transparent 100%),
+      radial-gradient(1px 1px at 79px 13px,rgba(178,255,227,.66) 80%,transparent 100%);
+    background-size:auto,auto,137px 153px,189px 201px;
+  }
+  .hero>.bm352-sky::before {
+    content:""!important;display:block!important;position:absolute!important;
+    inset:-4% -8%!important;z-index:0!important;
+    opacity:.87!important;filter:none!important;
+    mix-blend-mode:normal!important;
+    will-change:auto!important;
+    background:
+      radial-gradient(ellipse 48% 19% at 12% 20%,rgba(75,231,218,.52) 0%,rgba(67,172,184,.27) 51%,transparent 96%),
+      radial-gradient(ellipse 39% 19% at 79% 51%,rgba(246,150,187,.48) 0%,rgba(128,102,193,.22) 58%,transparent 96%),
+      radial-gradient(ellipse 43% 17% at 29% 82%,rgba(78,178,222,.45) 0%,rgba(40,114,150,.19) 60%,transparent 96%)!important;
+    animation:bm357-cloud-glide 34s ease-in-out infinite alternate!important;
+  }
+  .hero>.bm352-sky::after{
+    content:""!important;display:block!important;position:absolute!important;
+    inset:0!important;z-index:1!important;opacity:.72!important;
+    mix-blend-mode:normal!important;filter:none!important;
+    will-change:auto!important;animation:none!important;transform:none!important;
+    background:
+      radial-gradient(ellipse 66% 15% at 60% 13%,rgba(108,215,229,.34),transparent 97%),
+      radial-gradient(ellipse 58% 21% at 19% 63%,rgba(252,173,158,.30),transparent 98%),
+      radial-gradient(ellipse 59% 16% at 83% 91%,rgba(181,148,231,.30),transparent 97%)!important;
+  }
+  .hero>.bm352-sky .bm352-dust:not(.bm352-dust--far){
+    display:block!important;position:absolute!important;inset:0!important;
+    opacity:.45!important;animation:none!important;transform:none!important;
+    filter:none!important;mix-blend-mode:normal!important;
+    will-change:auto!important;
+  }
+  /* A video + radial mask + animated full-screen blur often forces Safari
+     to rasterize several extra video-sized surfaces. Keep native video pixels
+     unmasksed and grade its edges with one non-animated overlay instead. */
+  .hero .hero-media :is(video.family-hero-video,#familyHeroVideo){
+    -webkit-mask:none!important;
+    mask:none!important;
+    -webkit-mask-image:none!important;
+    mask-image:none!important;
+    filter:none!important;-webkit-filter:none!important;
+    will-change:auto!important;
+    transform:none!important;
+    opacity:1!important;
+  }
+  .hero .hero-media::after{
+    content:""!important;display:block!important;position:absolute!important;
+    inset:0!important;z-index:3!important;pointer-events:none!important;
+    filter:none!important;mix-blend-mode:normal!important;
+    -webkit-mask:none!important;mask:none!important;
+    border:0!important;box-shadow:none!important;border-radius:0!important;
+    background:
+      linear-gradient(90deg,
+        rgba(9,35,49,.80) 0%,rgba(9,35,49,.24) 11%,
+        transparent 21%,transparent 79%,
+        rgba(9,35,49,.24) 89%,rgba(9,35,49,.80) 100%),
+      linear-gradient(180deg,
+        rgba(9,35,49,.18) 0%,transparent 25%,
+        rgba(9,35,49,.10) 51%,rgba(9,35,49,.42) 71%,
+        rgba(9,35,49,.86) 91%,#092331 100%)!important;
+  }
+  .hero::after{
+    background:linear-gradient(180deg,transparent 0%,
+      rgba(9,35,49,.05) 36%,rgba(9,35,49,.29) 62%,
+      rgba(9,35,49,.68) 82%,#092331 100%)!important;
+    filter:none!important;mix-blend-mode:normal!important;
+  }
+}
+@keyframes bm357-cloud-glide{
+  0%{transform:translate3d(-2.5%,1%,0);opacity:.76}
+  50%{transform:translate3d(1.5%,-2%,0);opacity:.94}
+  100%{transform:translate3d(3%,-1%,0);opacity:.82}
+}
+@media (max-width:760px) and (prefers-reduced-motion:reduce){
+  .hero>.bm352-sky::before{animation:none!important;transform:none!important}
+}
+@media (max-width:760px) and (forced-colors:active){
+  .hero>.bm352-sky::before,.hero>.bm352-sky::after{display:none!important}
+}
