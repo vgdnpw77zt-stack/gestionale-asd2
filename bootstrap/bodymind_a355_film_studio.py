@@ -419,6 +419,45 @@ def install_family_film_studio(app,db_provider,album):
                 finally:db.close()
         return album._no_cache(redirect(f'/app-tesserato/{token}/studio',code=303))
 
+    # A351 delete/clear must also erase derived A355 video: a family must not
+    # accidentally retain pictures in a rendered film after deleting originals.
+    import fcntl
+    from functools import wraps
+    def erase_derived(owner,erase_history=False):
+        db=_db(album,owner)
+        if db is None:return
+        try:
+            try: row=db.execute('SELECT filename FROM studio_films WHERE athlete_id=?',(owner,)).fetchone()
+            except sqlite3.OperationalError:row=None
+            if row:
+                db.execute('DELETE FROM studio_films WHERE athlete_id=?',(owner,))
+            if erase_history:
+                db.execute('DELETE FROM studio_events WHERE athlete_id=?',(owner,))
+            db.commit()
+        finally:db.close()
+        if row and re.fullmatch(r'studio_[0-9a-f]{28}\.mp4',row['filename']):
+            path=_owner_path(album,owner)/row['filename']
+            if path.is_file() and not path.is_symlink():path.unlink()
+
+    for endpoint in ('a351_album_clear','a351_album_delete'):
+        original=app.view_functions[endpoint]
+        def wrapped(token,_original=original,_endpoint=endpoint,**kwargs):
+            owner=_access(album,db_provider,token)
+            folder=_owner_path(album,owner)
+            if not folder.is_dir():
+                return _original(token,**kwargs)
+            lockfile=folder/'.studio.lock'
+            if lockfile.is_symlink():abort(500)
+            with open(lockfile,'a+b') as lock:
+                os.chmod(lockfile,0o600)
+                try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+                except BlockingIOError:abort(409,'Un montaggio è in corso.')
+                response=_original(token,**kwargs)
+                if response.status_code==303:
+                    erase_derived(owner,erase_history=(_endpoint=='a351_album_clear'))
+                return response
+        app.view_functions[endpoint]=wrapped
+
     routes=[
       (base,'a355_studio_home',home,['GET']),
       (base+'/render','a355_studio_render',render,['POST']),
