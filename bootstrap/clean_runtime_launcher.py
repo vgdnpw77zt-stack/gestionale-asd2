@@ -1942,7 +1942,7 @@ def a356_expected_from_a355(old:bytes)->tuple[bytes,str]:
     if old.count(previous_css)!=1 or b'BODYMIND A356 LUMINOUS NEBULA' in old:
         raise RuntimeError('A356 protected family CSS anchor missing or duplicated')
     css=a356_assets()
-    new=old.replace(previous_css,previous_css+b'\\n/* BODYMIND A356 LUMINOUS NEBULA */\\n'+css,1)
+    new=old.replace(previous_css,previous_css+b'\n/* BODYMIND A356 LUMINOUS NEBULA */\n'+css,1)
     compile(new,A356_REL,'exec')
     return new,hashlib.sha256(new).hexdigest()
 
