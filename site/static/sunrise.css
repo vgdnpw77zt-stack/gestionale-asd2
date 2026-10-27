@@ -1,0 +1,97 @@
+/* BodyMind SUNRISE A351 — shared brand direction with the family app.
+   Decorative styling only: content, dates, SEO, links and videos unchanged. */
+:root{
+  --dark:#0C2533;
+  --dark2:#134451;
+  --wine:#25676C;
+  --wine2:#143E4A;
+  --rose:#E79C86;
+  --pink:#E5A48D;
+  --blush:#FCE3D5;
+  --cream:#FFF7ED;
+  --charcoal:#173440;
+  --muted:#D8EBE7;
+  --line:rgba(205,245,226,.20);
+  --bm351-seaglass:#B2E9DB;
+  --bm351-peach:#F5CAB1;
+  --bm351-ivory:#FFF7EB;
+}
+html,body{background:#0C2533;color:#F8FCFA}
+.site-header{background:linear-gradient(180deg,rgba(12,36,49,.87),transparent)}
+.site-header.scrolled{background:rgba(12,42,52,.93);border-color:rgba(180,237,220,.15)}
+.desktop-nav a{color:#DAEDE8}
+.desktop-nav a:hover{color:var(--bm351-seaglass)}
+.header-cta{border-color:rgba(190,245,228,.45);background:rgba(156,222,203,.09)}
+.header-cta:hover{background:var(--bm351-seaglass);color:#113542}
+.menu-btn{border-color:rgba(183,232,216,.46)}
+.hero-stage{
+  background:
+    radial-gradient(ellipse 54% 47% at 88% 18%,rgba(246,187,151,.21),transparent 82%),
+    radial-gradient(ellipse 72% 63% at 10% 83%,rgba(69,188,179,.21),transparent 82%),
+    linear-gradient(135deg,#092432,#164451 48%,#244B52 78%,#102E40)!important;
+}
+.hero-stage:after{
+  content:"";
+  position:absolute;inset:0;
+  pointer-events:none;
+  opacity:.19;
+  background:
+    radial-gradient(1px 1px at 22px 47px,rgba(255,251,235,.8) 96%,transparent),
+    radial-gradient(1px 1px at 81px 23px,rgba(181,235,224,.7) 96%,transparent);
+  background-size:131px 167px,197px 223px;
+  animation:bm351-site-dust 65s ease-in-out infinite alternate;
+}
+@keyframes bm351-site-dust{to{transform:translate3d(-12px,18px,0);opacity:.25}}
+.hero-stage .hero-light-a{background:rgba(244,186,158,.19)}
+.hero-stage .hero-light-b{background:rgba(68,182,174,.23)}
+.hero-text,.intro-right p{color:#DCEAE8}
+.hero-signature{color:#FFD7BC}
+.hero-copy h1,.hero-signature{font-weight:600}
+.primary-btn{
+  color:#0A3440!important;
+  background:linear-gradient(115deg,#B1E8DB,#F7D1AF)!important;
+  border:1px solid rgba(254,248,226,.60)!important;
+  box-shadow:0 17px 36px rgba(4,25,34,.25)!important;
+}
+.primary-btn:hover{box-shadow:0 21px 43px rgba(19,113,108,.32)!important}
+.text-link span{color:#F4C2A4}
+.hero-film .film-outline{
+  border-color:rgba(174,231,220,.35);
+  background:linear-gradient(145deg,rgba(177,239,220,.06),rgba(249,199,165,.10));
+}
+.hero-film video{
+  background:#0D303E;
+  box-shadow:0 35px 88px rgba(5,28,38,.55),0 0 50px rgba(115,213,202,.11);
+  filter:none!important;
+}
+.film-caption{background:rgba(9,44,54,.84);border-color:rgba(204,241,227,.34)}
+.film-caption span{color:#D5EBE5}
+.hero-foot{color:#B9DDD5;border-color:rgba(210,240,227,.22)}
+.section-light{background:linear-gradient(135deg,#FFF6E9,#EEF6EE 58%,#FBECDE)!important;color:#173B45}
+.section-blush{background:linear-gradient(135deg,#FFE8D9,#F5F5E8 53%,#E3F1E7)!important;color:#173843}
+.section-dark{
+  background:
+    radial-gradient(ellipse at 12% 14%,rgba(75,177,165,.16),transparent 47%),
+    linear-gradient(180deg,#0C2735,#113D48)!important;
+}
+.section-wine{
+  background:
+    radial-gradient(ellipse at 86% 8%,rgba(244,186,145,.16),transparent 52%),
+    linear-gradient(146deg,#143943,#1F6268 54%,#102E3F)!important;
+}
+.manifesto-band{background:linear-gradient(135deg,#0C2938,#265D64 48%,#103241)!important}
+.section-label{color:#276D68}
+.section-dark .section-label,.section-wine .section-label{color:#B5E5D9}
+.intro-left h2 em,.section-heading h2 em,.movement-head h2 em,.locations-head h2 em,.gallery-heading h2 em,.method-title h2 em,.kids-copy h2 em{color:#A66758}
+.section-dark h2 em,.section-wine h2 em{color:#FFD1B2}
+.program-card,.film-card{background:#123C47;border-color:rgba(202,240,226,.23)}
+.program-eyebrow,.film-card-copy small,.film-card-copy>span{color:#FFD1B4}
+.program-links a:first-child{color:#FBE2CB;border-color:rgba(245,200,168,.50)}
+.kids-copy>p,.kids-venue span{color:#395A60}
+.kids-image{box-shadow:0 28px 72px rgba(17,79,76,.15)}
+.dark-btn{background:#14525B;color:#FFF8ED}
+.dark-btn:hover{background:#216D70}
+.film-card:hover{border-color:rgba(174,237,218,.54)}
+.mobile-action-dock{background:rgba(10,50,59,.94);border-color:rgba(180,236,219,.45)}
+a:focus-visible,button:focus-visible{outline:3px solid #F8C8A2;outline-offset:3px}
+@media(prefers-reduced-motion:reduce){.hero-stage:after{animation:none}}
