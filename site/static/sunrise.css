@@ -116,3 +116,9 @@ a:focus-visible,button:focus-visible{outline:3px solid #F8C8A2;outline-offset:3p
   background:rgba(14,49,59,.62)!important;
 }
 @media (prefers-reduced-motion:reduce){.hero-film{filter:none}}
+
+/* Light editorial sections retain dark reading contrast after palette change. */
+.editorial-intro .intro-right p{color:#385760!important}
+.section-light :is(.intro-right p,.location-card p,.location-card span,.locations-head p){color:#36555A}
+.section-blush .kids-copy>p{color:#39585D!important}
+.section-light :is(h1,h2,h3,h4),.section-blush :is(h1,h2,h3,h4){color:#173944}
