@@ -38,6 +38,8 @@ jobs:
               os.environ['SITE_DATA_DIR']=p
               spec=spec_from_file_location('site_a351',root/'app.py')
               m=module_from_spec(spec);spec.loader.exec_module(m)
+              m.app.template_folder=str((root/'templates').resolve())
+              m.app.static_folder=str((root/'static').resolve())
               m.app.config['TESTING']=True
               with m.app.test_client() as c:
                   response=c.get('/')
