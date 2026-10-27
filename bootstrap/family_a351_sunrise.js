@@ -12,7 +12,7 @@
     // No analytics, third-party uploads or cross-athlete galleries.
     // Existing family URLs already carry a private bearer token; never
     // construct a URL using an ID supplied by the browser.
-    var match=location.pathname.match(/^\\/app-tesserato\\/([A-Za-z0-9_-]{12,180})\\/?$/);
+    var match=location.pathname.match(/^\/app-tesserato\/([A-Za-z0-9_-]{12,180})\/?$/);
     if(match){
       var token=match[1];
       var ownBase="/app-tesserato/"+token+"/album";
