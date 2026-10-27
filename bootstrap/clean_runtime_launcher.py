@@ -90,7 +90,7 @@ def preflight(root:Path,db:Path)->dict:
     valid={(EXPECTED_SOURCE_COUNT,EXPECTED_SOURCE_DIGEST),(UPGRADE_SOURCE_COUNT,UPGRADE_SOURCE_DIGEST),
            (MANUAL_ROSTER_SOURCE_COUNT,MANUAL_ROSTER_SOURCE_DIGEST),
            (SIMPLE_GROUP_SOURCE_COUNT,SIMPLE_GROUP_SOURCE_DIGEST),(A317_SOURCE_COUNT,A317_SOURCE_DIGEST),(A328_SOURCE_COUNT,A328_SOURCE_DIGEST),(A330_SOURCE_COUNT,A330_SOURCE_DIGEST),(A336_SOURCE_COUNT,A336_SOURCE_DIGEST),(A337_SOURCE_COUNT,A337_SOURCE_DIGEST)}
-    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found) and not a343_matches(root,found) and not a344_matches(root,found) and not a345_matches(root,found) and not a346_matches(root,found) and not a347_matches(root,found) and not a348_matches(root,found) and not a349_matches(root,found) and not a350_matches(root,found) and not a351_matches(root,found) and not a352_matches(root,found) and not a353_matches(root,found) and not a354_matches(root,found) and not a355_matches(root,found) and not a356_matches(root,found):
+    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found) and not a343_matches(root,found) and not a344_matches(root,found) and not a345_matches(root,found) and not a346_matches(root,found) and not a347_matches(root,found) and not a348_matches(root,found) and not a349_matches(root,found) and not a350_matches(root,found) and not a351_matches(root,found) and not a352_matches(root,found) and not a353_matches(root,found) and not a354_matches(root,found) and not a355_matches(root,found) and not a356_matches(root,found) and not a357_matches(root,found):
         raise RuntimeError(f'source lock mismatch files={len(found)} expected={EXPECTED_SOURCE_COUNT}')
     return {'source_files':len(found),'sqlite':'ok','rows':sqlite_readonly_check(db),
             'historical_migrations_executed':0,'automatic_backup_cleanup':False,
@@ -2017,6 +2017,106 @@ def maybe_recover_a356_to_a355(root:Path,db:Path)->bool:
     return True
 
 
+
+# A357 — low-memory iOS compositor, appended only to the protected A356 family UI.
+# Existing A356 and its private A355 studio, media and accounting remain immutable.
+A357_REL=A356_REL
+A357_BACKUP=Path('/data/release_packages/BODYMIND_A357_PREUI_A356.py')
+A357_CSS_PATH=Path('/opt/bodymind/family_a357_ios_stability.css')
+A357_CSS_BLOB='8d16e8a4d770f98cb0beaa13503c0ab89ae9015a'
+
+def a357_assets()->bytes:
+    css=A357_CSS_PATH.read_bytes()
+    if a350_git_blob(css)!=A357_CSS_BLOB:
+        raise RuntimeError('A357 CSS protected blob mismatch')
+    if b'</style>' in css or b'</script>' in css or b"'''" in css:
+        raise RuntimeError('A357 unsafe CSS source delimiters')
+    return css
+
+def a357_expected_from_a356(old:bytes)->tuple[bytes,str]:
+    if not A356_BACKUP.is_file() or A356_BACKUP.is_symlink():
+        raise RuntimeError('A357 missing immutable A355 parent backup')
+    baseline,sha=a356_expected_from_a355(A356_BACKUP.read_bytes())
+    if old!=baseline or hashlib.sha256(old).hexdigest()!=sha:
+        raise RuntimeError('A357 source is not exact approved A356')
+    previous_css=A356_CSS_PATH.read_bytes()
+    if old.count(previous_css)!=1 or b'BODYMIND A357 IOS STABILITY' in old:
+        raise RuntimeError('A357 family CSS anchor not found or duplicated')
+    new=old.replace(previous_css,previous_css+b'\n/* BODYMIND A357 IOS STABILITY */\n'+a357_assets(),1)
+    compile(new,A357_REL,'exec')
+    return new,hashlib.sha256(new).hexdigest()
+
+def a357_matches(root:Path,found:dict[str,str])->bool:
+    if len(found)!=214 or A357_REL not in found or not A357_BACKUP.is_file() or A357_BACKUP.is_symlink():
+        return False
+    old=A357_BACKUP.read_bytes()
+    _,sha=a357_expected_from_a356(old)
+    if found[A357_REL]!=sha:
+        return False
+    previous=dict(found)
+    previous[A357_REL]=hashlib.sha256(old).hexdigest()
+    return a356_matches(root,previous)
+
+def maybe_apply_a357(root:Path,db:Path)->None:
+    found=source_inventory(root)
+    if a357_matches(root,found) or not a356_matches(root,found):
+        return
+    sqlite_readonly_check(db)
+    target=root/A357_REL
+    if target.is_symlink() or not target.is_file():
+        raise RuntimeError('A357 unsafe private family route module')
+    original=target.read_bytes()
+    upgraded,sha=a357_expected_from_a356(original)
+    if A357_BACKUP.exists():
+        if not A357_BACKUP.is_file() or A357_BACKUP.is_symlink() or A357_BACKUP.read_bytes()!=original:
+            raise RuntimeError('A357 existing immutable source backup conflict')
+    else:
+        if not A357_BACKUP.parent.is_dir() or A357_BACKUP.parent.is_symlink():
+            raise RuntimeError('A357 private backup directory missing')
+        with open(A357_BACKUP,'xb') as fh:
+            fh.write(original);fh.flush();os.fsync(fh.fileno())
+    tmp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a357_ios_',suffix='.py',
+                                         dir=str(target.parent),delete=False) as fh:
+            tmp=Path(fh.name)
+            fh.write(upgraded);fh.flush();os.fsync(fh.fileno())
+        os.chmod(tmp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(tmp),str(target))
+        tmp=None
+    finally:
+        if tmp is not None:tmp.unlink(missing_ok=True)
+    final=source_inventory(root)
+    if final[A357_REL]!=sha or not a357_matches(root,final):
+        raise RuntimeError('A357 source verification failed')
+    print('BODYMIND A357 IOS STABILITY INSTALLED — DATA INTACT',flush=True)
+
+def maybe_recover_a357_to_a356(root:Path,db:Path)->bool:
+    if os.environ.get('BODYMIND_A357_RECOVER_A356')!='1':return False
+    found=source_inventory(root)
+    if a356_matches(root,found):return True
+    if not a357_matches(root,found):
+        raise RuntimeError('A357 live source unfamiliar; refusing rollback')
+    sqlite_readonly_check(db)
+    target=root/A357_REL
+    original=A357_BACKUP.read_bytes()
+    tmp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a357_restore_',suffix='.py',
+                                         dir=str(target.parent),delete=False) as fh:
+            tmp=Path(fh.name)
+            fh.write(original);fh.flush();os.fsync(fh.fileno())
+        os.chmod(tmp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(tmp),str(target))
+        tmp=None
+    finally:
+        if tmp is not None:tmp.unlink(missing_ok=True)
+    if not a356_matches(root,source_inventory(root)):
+        raise RuntimeError('A357 exact A356 restoration failed')
+    print('BODYMIND A357 EXACT A356 CSS RESTORED',flush=True)
+    return True
+
+
 def main(argv=None):
     parser=argparse.ArgumentParser()
     parser.add_argument('mode',nargs='?',choices=('check','start'),default='start')
@@ -2056,6 +2156,8 @@ def main(argv=None):
                 maybe_apply_a355(args.root,args.db)
             if not maybe_recover_a356_to_a355(args.root,args.db):
                 maybe_apply_a356(args.root,args.db)
+            if not maybe_recover_a357_to_a356(args.root,args.db):
+                maybe_apply_a357(args.root,args.db)
         result=preflight(args.root,args.db)
     except (OSError,RuntimeError,ValueError,sqlite3.DatabaseError) as exc:
         print('BODYMIND CLEAN BOOT STOP: '+str(exc),file=sys.stderr,flush=True)
