@@ -14,6 +14,7 @@ import hmac
 import io
 import os
 import re
+import shutil
 import secrets
 import sqlite3
 import subprocess
@@ -30,6 +31,7 @@ ROOT=Path('/data/tenants/default/private_gallery_a351')
 MAX_IMAGE_BYTES=10*1024*1024
 MAX_PIXELS=16000000
 MAX_PHOTOS=24
+MIN_FREE_BYTES=256*1024*1024
 MAX_FILM_PHOTOS=8
 Image.MAX_IMAGE_PIXELS=MAX_PIXELS
 
@@ -134,6 +136,7 @@ def _build_film(owner,rows):
     if not Path('/usr/bin/ffmpeg').is_file():abort(503)
     dest=_safe_dir(owner)
     dest.mkdir(parents=True,exist_ok=True,mode=0o700)
+    if shutil.disk_usage(dest).free<MIN_FREE_BYTES:abort(507)
     limited=rows[:MAX_FILM_PHOTOS]
     inputs=[]
     filters=[]
@@ -264,12 +267,14 @@ def install_family_gallery(app,db_provider):
         owner=_owner(db_provider,token)
         _verify_post(app,token)
         if request.form.get('privacy')!='yes':abort(400)
+        if shutil.disk_usage(ROOT.parent).free<MIN_FREE_BYTES:abort(507)
         files=request.files.getlist('photos')
         if not files or len(files)>4:abort(400)
         items=[_normalize_image(f.read(MAX_IMAGE_BYTES+1)) for f in files]
         db=_open_album(owner,create=True)
         target=_safe_dir(owner);target.mkdir(parents=True,exist_ok=True,mode=0o700)
         try:
+            oldfilm=db.execute('SELECT filename FROM films WHERE athlete_id=?',(owner,)).fetchone()
             total=db.execute('SELECT COUNT(*) FROM photos WHERE athlete_id=?',(owner,)).fetchone()[0]
             if total+len(items)>MAX_PHOTOS:abort(413)
             written=[]
@@ -285,6 +290,9 @@ def install_family_gallery(app,db_provider):
                       (photoid,owner,name,datetime.now(timezone.utc).isoformat()))
                 db.execute('DELETE FROM films WHERE athlete_id=?',(owner,))
                 db.commit()
+                if oldfilm:
+                    previous=target/oldfilm['filename']
+                    if previous.is_file() and not previous.is_symlink():previous.unlink()
             except Exception:
                 db.rollback()
                 for fn in written:fn.unlink(missing_ok=True)
@@ -312,12 +320,16 @@ def install_family_gallery(app,db_provider):
         try:
             row=db.execute('SELECT filename FROM photos WHERE id=? AND athlete_id=?',(photoid,owner)).fetchone()
             if not row:abort(404)
+            oldfilm=db.execute('SELECT filename FROM films WHERE athlete_id=?',(owner,)).fetchone()
             db.execute('DELETE FROM photos WHERE id=? AND athlete_id=?',(photoid,owner))
             db.execute('DELETE FROM films WHERE athlete_id=?',(owner,))
             db.commit()
         finally:db.close()
         path=_safe_dir(owner)/row['filename']
         if path.is_file() and not path.is_symlink():path.unlink()
+        if oldfilm:
+            stale=_safe_dir(owner)/oldfilm['filename']
+            if stale.is_file() and not stale.is_symlink():stale.unlink()
         return _no_cache(redirect(f'/app-tesserato/{token}/album',code=303))
 
     def generate(token):
@@ -346,7 +358,7 @@ def install_family_gallery(app,db_provider):
         if not row:abort(404)
         target=_safe_dir(owner)/row['filename']
         if not target.is_file() or target.is_symlink():abort(404)
-        return _no_cache(send_file(target,mimetype='video/mp4',conditional=False))
+        return _no_cache(send_file(target,mimetype='video/mp4',conditional=True))
 
     def status(token):
         owner=_owner(db_provider,token)
