@@ -78,6 +78,19 @@ jobs:
                   call_specs.append(dict(names=vals,inside=chain[:3],calls=[ast.unparse(a)[:45] for a in n.args[2:3]]))
           helper_names=[n.name for n in tree.body if isinstance(n,ast.FunctionDef) and any(z in n.name for z in ('register','bodymind','family'))]
           print('A351_ROUTE_WIRING '+json.dumps({'routes':call_specs,'module_helpers':helper_names[:25]},sort_keys=True))
+          route_details=[]
+          for n in ast.walk(tree):
+              if isinstance(n,ast.Call) and isinstance(n.func,ast.Attribute) and n.func.attr in ('route','get','post','add_url_rule'):
+                  safe='?'
+                  if n.args and isinstance(n.args[0],ast.Constant) and isinstance(n.args[0].value,str):
+                      safe=n.args[0].value
+                  if ('tesserato' in safe or 'famigl' in safe or 'album' in safe):
+                      route_details.append({'api':n.func.attr,'url':safe,'line':n.lineno,'receiver':ast.unparse(n.func.value)[:35]})
+          globals_whitelist=[]
+          for n in tree.body:
+              if isinstance(n,ast.Assign):
+                  globals_whitelist.extend(x.id for x in n.targets if isinstance(x,ast.Name) and x.id in ('app','bp','router','bodymind_bp'))
+          print('A351_APP_BINDINGS '+json.dumps({'router':route_details[:30],'app_globals':globals_whitelist,'top_level_end_line':tree.body[-1].end_lineno},sort_keys=True))
           print('A351_LIVE_MEDIA_READONLY_NO_USER_DATA_PASS')
           PY
       - name: Shred SSH key
