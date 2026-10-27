@@ -1,4 +1,4 @@
-name: A351 real deployment privacy and integrity audit — read only
+name: A351 verified production security smoke — read only
 on:
   push:
     branches: [bodymind-a351-aurora-stories-20261027]
