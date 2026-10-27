@@ -1,0 +1,73 @@
+name: A351 real deployment privacy and integrity audit — read only
+on:
+  push:
+    branches: [bodymind-a351-aurora-stories-20261027]
+    paths: ['.github/workflows/a351-postdeploy.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-live-postdeploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      HAS_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY != '' }}
+      RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Use existing ephemeral Railway credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$HAS_KEY" == "true" ]] || { echo "::error::SSH secret unavailable"; exit 1; }
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$RAILWAY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+      - name: Test exact live source, backup, real health and denied fake athlete without data writes
+        shell: bash
+        run: |
+          timeout 100s ssh -T -i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          from pathlib import Path
+          import hashlib,sqlite3,urllib.request,urllib.error,json
+          path=Path('/data/top2_app/asd_app/routes_bodymind_final.py')
+          previous=Path('/data/release_packages/BODYMIND_A351_PREUI_A350.py')
+          assert path.is_file() and not path.is_symlink()
+          assert previous.is_file() and not previous.is_symlink()
+          code=path.read_bytes()
+          sha=hashlib.sha256(code).hexdigest()
+          before=hashlib.sha256(previous.read_bytes()).hexdigest()
+          assert sha=='f8ee6e88dc02dff83cc472016adf951f95d87a8e344b3161ebdbf870e3ae36ed',sha
+          assert before=='8bbb503c24242e88aa97bc1eb973f92e69aa395df27c00d38f6809c9435532d1',before
+          assert b'BODYMIND A351 SUNRISE' in code
+          assert b'BODYMIND A351 PRIVATE ATHLETE ALBUM' in code
+          with sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True,timeout=15) as db:
+              db.execute('PRAGMA query_only=ON')
+              ok=db.execute('PRAGMA quick_check').fetchone()[0]
+              fk=db.execute('PRAGMA foreign_key_check').fetchall()
+              assert ok=='ok' and not fk
+          def code_for(route):
+              try:
+                  with urllib.request.urlopen('http://127.0.0.1:8080'+route,timeout=10) as response:
+                      return response.status
+              except urllib.error.HTTPError as exc:
+                  return exc.code
+          health=code_for('/health')
+          login=code_for('/login')
+          denied=code_for('/app-tesserato/A351_NOT_REAL_0000000000/album')
+          denied_status=code_for('/app-tesserato/A351_NOT_REAL_0000000000/album/status')
+          assert health==200 and login==200,(health,login)
+          assert denied==404 and denied_status==404,(denied,denied_status)
+          print('A351_PRODUCTION_PRIVACY_READONLY_PASS '+json.dumps({
+              'live_source_sha256':sha,'rollback_A350_sha256':before,
+              'sqlite_quick_check':'ok','foreign_key_errors':0,
+              'health':health,'login':login,
+              'fake_athlete_album':denied,'fake_athlete_status':denied_status,
+              'database_mutations':'none',
+          },sort_keys=True))
+          PY
+      - name: Destroy SSH key
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "$HOME/.ssh/id_ed25519" ]]; then
+            shred -u "$HOME/.ssh/id_ed25519" || rm -f "$HOME/.ssh/id_ed25519"
+          fi
