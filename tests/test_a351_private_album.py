@@ -72,9 +72,9 @@ class AthleteAlbumSafety(unittest.TestCase):
         self.assertEqual(self.upload(csrf='FAKE').status_code,403)
         self.assertEqual(self.upload(consent='no').status_code,400)
         self.assertEqual(self.upload(payload=b'not an image').status_code,415)
-        self.assertEqual(self.client.post(self.endpoint('/oops','/upload')).status_code,404)
+        self.assertEqual(self.client.post(self.endpoint('GUESS_NONEXISTENT_12345','/upload')).status_code,404)
         self.assertFalse((ALBUM.ROOT/'albums.sqlite3').exists())
-        forbidden=self.client.post(self.endpoint('/oops'),data={})
+        forbidden=self.client.post(self.endpoint('GUESS_NONEXISTENT_12345'),data={})
         self.assertIn(forbidden.status_code,(404,405))
 
     def test_images_are_owned_stripped_and_inaccessible_between_families(self):
