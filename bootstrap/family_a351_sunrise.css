@@ -247,3 +247,47 @@ main.main #familyMediaTrack .media-card img{filter:none!important;-webkit-filter
 @media(prefers-reduced-motion:reduce){
   main.main #familyMediaTrack .media-card{transition:none!important;transform:none!important}
 }
+
+
+/* A351 — FRAMELESS VIDEO FUSION. Center remains crisp; fade ONLY the
+   outer 7–11% of the original pixels. No blur/filter/crop of central film. */
+.hero .hero-media{
+  border:0!important;
+  outline:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  border-radius:0!important;
+  overflow:visible!important;
+  isolation:isolate;
+}
+.hero .hero-media::before,.hero .hero-media::after{
+  content:none!important;
+  display:none!important;
+  border:0!important;
+  box-shadow:none!important;
+}
+.hero .hero-media video.family-hero-video{
+  border:0!important;
+  outline:0!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+  background:transparent!important;
+  filter:none!important;
+  -webkit-filter:none!important;
+  object-fit:contain!important;
+  -webkit-mask-image:radial-gradient(ellipse 76% 72% at center,#000 72%,rgba(0,0,0,.92) 81%,rgba(0,0,0,.48) 93%,transparent 100%);
+  mask-image:radial-gradient(ellipse 76% 72% at center,#000 72%,rgba(0,0,0,.92) 81%,rgba(0,0,0,.48) 93%,transparent 100%);
+}
+.hero .hero-media{filter:drop-shadow(0 0 24px rgba(123,223,205,.15))}
+@media (max-width:760px){
+  .hero .hero-media{
+    width:min(85vw,366px)!important;
+    max-width:calc(100vw - 36px)!important;
+    overflow:visible!important;
+  }
+  .hero .hero-media video.family-hero-video{
+    -webkit-mask-image:radial-gradient(ellipse 82% 78% at center,#000 75%,rgba(0,0,0,.94) 85%,rgba(0,0,0,.60) 96%,transparent 100%);
+    mask-image:radial-gradient(ellipse 82% 78% at center,#000 75%,rgba(0,0,0,.94) 85%,rgba(0,0,0,.60) 96%,transparent 100%);
+  }
+}
+@media (prefers-reduced-motion:reduce){.hero .hero-media{filter:none}}
