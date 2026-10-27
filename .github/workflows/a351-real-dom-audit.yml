@@ -1,0 +1,71 @@
+name: A351 actual family DOM selectors read-only
+on:
+  push:
+    branches: [bodymind-a351-aurora-stories-20261027]
+    paths: ['.github/workflows/a351-real-dom-audit.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect-live-structure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Prepare ephemeral SSH
+        shell: bash
+        run: |
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+      - name: Inspect only literal markup structure in live source, never user records
+        shell: bash
+        run: |
+          timeout 65s ssh -T -i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          import ast,json,re
+          from collections import Counter
+          from html.parser import HTMLParser
+          from pathlib import Path
+          src=Path('/data/top2_app/asd_app/routes_bodymind_final.py').read_text()
+          tree=ast.parse(src)
+          names={}
+          for n in ast.walk(tree):
+              if isinstance(n,ast.Assign) and isinstance(n.value,ast.Constant) and isinstance(n.value.value,str):
+                  for a in n.targets:
+                      if isinstance(a,ast.Name) and len(n.value.value)>500:
+                          names[a.id]=n.value.value
+          candidates=[(k,v) for k,v in names.items() if 'familyMediaTrack' in v and 'bottom-nav' in v]
+          print('A351_TEMPLATE_CANDIDATES',[(k,len(v)) for k,v in candidates])
+          if not candidates:raise SystemExit('No family template found')
+          k,html=max(candidates,key=lambda x:len(x[1]))
+          class Parser(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.stack=[]
+                  self.nodes=[]
+              def handle_starttag(self,tag,attrs):
+                  a=dict(attrs)
+                  entry=(tag,a.get('id',''),a.get('class',''),self.stack[-1][0] if self.stack else 'ROOT')
+                  if any(z in entry[2].lower() for z in ['hero','video','bottom','footer','main','navbar','dock','wave','ambient','media','nav','film','section']) or tag in ('video','footer','nav','main'):
+                      self.nodes.append(entry)
+                  if tag not in ('img','meta','link','br','hr','input','source','path','rect','use','wbr'):self.stack.append((tag,a))
+              def handle_endtag(self,tag):
+                  for idx in range(len(self.stack)-1,-1,-1):
+                      if self.stack[idx][0]==tag:
+                          del self.stack[idx:]
+                          break
+          p=Parser();p.feed(html)
+          compact=[]
+          for tag,id,cls,parent in p.nodes:
+              if len(compact)<120:
+                  compact.append({'tag':tag,'id':id,'class':cls[:130],'parent':parent})
+          patterns=['<video','family-hero-video','bottom-nav','footer','main class','familyMediaTrack','bm351-atmosphere','bm351-dock-toggle','bm351-dock-script','BODYMIND A351 SUNRISE','bodymind-media-links-a350']
+          print('A351_LIVE_DOM_STRUCTURE '+json.dumps({'template':k,'markup_nodes':compact,'occurrences':{q:html.count(q) for q in patterns},'font_sizes':Counter(re.findall(r'font-size:\\s*([0-9.]+(?:px|rem))',html)).most_common(9)},ensure_ascii=False))
+          print('A351_ACTUAL_TEMPLATE_INSPECTION_PASS')
+          PY
+      - name: Erase credential
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "$HOME/.ssh/id_ed25519" ]]; then shred -u "$HOME/.ssh/id_ed25519" || rm -f "$HOME/.ssh/id_ed25519"; fi
