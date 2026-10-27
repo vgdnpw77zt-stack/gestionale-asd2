@@ -1,0 +1,41 @@
+name: A351 private film and sunrise release QA
+on:
+  push:
+    branches: [bodymind-a351-aurora-stories-20261027]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  backend-privacy-and-clean-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install only synthetic-test dependencies
+        run: pip install Flask==3.1.1 Pillow==11.2.1
+      - name: Validate syntax and JavaScript sources
+        run: |
+          python -m py_compile bootstrap/clean_runtime_launcher.py bootstrap/bodymind_a351_private_album.py tests/test_a351_private_album.py tests/test_a351_sunrise.py
+          node --check bootstrap/family_a351_sunrise.js
+      - name: Run full original regression suite and athlete privacy tests
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Build Railway-identical image with private video renderer
+        run: docker build --tag bodymind-a351:qa .
+      - name: Require album, FFmpeg and locked assets in container
+        run: |
+          docker run --rm --entrypoint python bodymind-a351:qa -c "import runpy,os,subprocess,ast; m=runpy.run_path('/opt/bodymind/clean_runtime_launcher.py',run_name='a351_ci'); css,js=m['a351_assets'](); assert css and js; ast.parse(open('/opt/bodymind/bodymind_a351_private_album.py').read()); assert os.path.exists('/usr/bin/ffmpeg'); print('A351_IMAGE_ASSET_AND_FFMPEG_PASS')"
+  synthetic-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install playwright==1.56.0
+      - run: python -m playwright install --with-deps chromium
+      - name: Responsive private album and cinema ribbon seven viewports
+        run: python tests/browser_a351_sunrise.py
