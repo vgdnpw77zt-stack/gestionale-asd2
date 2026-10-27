@@ -24,6 +24,9 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Build Railway-identical image with private video renderer
         run: docker build --tag bodymind-a351:qa .
+      - name: Run real FFmpeg two-photo private movie integration inside Docker, no production files
+        run: |
+          docker run --rm --entrypoint sh -v "$PWD:/work:ro" bodymind-a351:qa -c "cd /work && python -m unittest discover -s tests -p 'test_a351_private_album.py' -v"
       - name: Require album, FFmpeg and locked assets in container
         run: |
           docker run --rm --entrypoint python bodymind-a351:qa -c "import runpy,os,subprocess,ast; m=runpy.run_path('/opt/bodymind/clean_runtime_launcher.py',run_name='a351_ci'); css,js=m['a351_assets'](); assert css and js; ast.parse(open('/opt/bodymind/bodymind_a351_private_album.py').read()); assert os.path.exists('/usr/bin/ffmpeg'); print('A351_IMAGE_ASSET_AND_FFMPEG_PASS')"
