@@ -111,8 +111,8 @@ def _normalize_image(data):
     try:
         with Image.open(io.BytesIO(data)) as im:
             if im.format not in ('JPEG','PNG','WEBP'):abort(415)
+            if im.width<1 or im.height<1 or im.width*im.height>MAX_PIXELS:abort(413)
             im.load()
-            if im.width*im.height>MAX_PIXELS:abort(413)
             im=ImageOps.exif_transpose(im)
             im.thumbnail((1800,2400),Image.Resampling.LANCZOS)
             if im.mode not in ('RGB','RGBA'):
