@@ -95,3 +95,24 @@ html,body{background:#0C2533;color:#F8FCFA}
 .mobile-action-dock{background:rgba(10,50,59,.94);border-color:rgba(180,236,219,.45)}
 a:focus-visible,button:focus-visible{outline:3px solid #F8C8A2;outline-offset:3px}
 @media(prefers-reduced-motion:reduce){.hero-stage:after{animation:none}}
+
+
+/* A351 FRAMELESS SITE HERO — photo/video center stays sharp and un-cropped */
+.hero-film{filter:drop-shadow(0 0 26px rgba(156,224,202,.12))}
+.hero-film .film-outline,.hero-film .film-shade{display:none!important}
+.hero-film video{
+  border:0!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+  filter:none!important;
+  object-fit:contain!important;
+  background:transparent!important;
+  -webkit-mask-image:radial-gradient(ellipse 79% 77% at center,#000 75%,rgba(0,0,0,.91) 84%,rgba(0,0,0,.5) 96%,transparent);
+  mask-image:radial-gradient(ellipse 79% 77% at center,#000 75%,rgba(0,0,0,.91) 84%,rgba(0,0,0,.5) 96%,transparent);
+}
+.hero-film .film-caption{
+  border:1px solid rgba(197,238,220,.24)!important;
+  box-shadow:none!important;
+  background:rgba(14,49,59,.62)!important;
+}
+@media (prefers-reduced-motion:reduce){.hero-film{filter:none}}
