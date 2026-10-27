@@ -1801,7 +1801,7 @@ A355_JS_PATH=Path('/opt/bodymind/family_a355_studio_link.js')
 A355_STUDIO_PATH=Path('/opt/bodymind/bodymind_a355_film_studio.py')
 A355_CSS_BLOB='45f8e54580f0213d0fc6b8de6878518838a03e99'
 A355_JS_BLOB='4b29eec08349c8401c5c7f99bb55ad9d4befc1ff'
-A355_STUDIO_BLOB='870984d12da3d1daa33144c128c3cc9a6a258166'
+A355_STUDIO_BLOB='dfc68df535441bb096a4cbb9f17bf50c7bab35fd'
 
 def a355_assets():
     css,js,studio=(A355_CSS_PATH.read_bytes(),A355_JS_PATH.read_bytes(),
