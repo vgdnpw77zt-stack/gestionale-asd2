@@ -1,0 +1,36 @@
+name: A352 production exact-source memory preview
+on:
+  push:
+    branches: [bodymind-a352-visible-aurora-dock-20261027]
+    paths: ['.github/workflows/a352-real-source-preview.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  realtime-unchanged-source-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      HAS_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY != '' }}
+      RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require existing protected SSH credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$HAS_KEY" == "true" ]] || { echo "::error::Missing SSH key"; exit 1; }
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$RAILWAY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+      - name: SHA-pin and compile A352 over the actual A351 PRIVATE template in memory
+        shell: bash
+        run: |
+          set -euo pipefail
+          audit='import sys,tarfile,types,pathlib,hashlib,ast,json;tar=tarfile.open(fileobj=sys.stdin.buffer,mode="r|");f={e.name:tar.extractfile(e).read() for e in tar if e.isfile()};ns={"__name__":"a352_production_memory_only"};exec(compile(f["bootstrap/clean_runtime_launcher.py"],"candidate.py","exec"),ns);ns["A352_CSS_PATH"]=types.SimpleNamespace(read_bytes=lambda:f["bootstrap/family_a352_visible_atmosphere.css"]);ns["A352_JS_PATH"]=types.SimpleNamespace(read_bytes=lambda:f["bootstrap/family_a352_visible_atmosphere.js"]);ns["A351_CSS_PATH"]=types.SimpleNamespace(read_bytes=lambda:f["bootstrap/family_a351_sunrise.css"]);ns["A351_JS_PATH"]=types.SimpleNamespace(read_bytes=lambda:f["bootstrap/family_a351_sunrise.js"]);old=pathlib.Path("/data/top2_app/asd_app/routes_bodymind_final.py").read_bytes();new,sha=ns["a352_expected_from_a351"](old);a=ast.parse(old.decode());b=ast.parse(new.decode());handlers=("bodymind_upload","bodymind_doc");functions=lambda t,n:[ast.dump(x,include_attributes=False) for x in ast.walk(t) if isinstance(x,ast.FunctionDef) and x.name==n];assert all(functions(a,n)==functions(b,n) for n in handlers),"A352 business code modified";assert b"BODYMIND A352 VISIBLE AURORA" in new and b"BODYMIND A352 VISIBLE DOCK" in new;assert b"BODYMIND A351 PRIVATE ATHLETE ALBUM" in new;assert b"bodymind-media-links-a350" in new;assert hashlib.sha256(old).hexdigest()==ns["A352_A351_LIVE_SHA"];print("A352_REAL_PRIVATE_PORTAL_MEMORY_DRYRUN_PASS");print("A352_CANDIDATE_SHA256="+sha);print("A352_PAYMENTS_DOCUMENTS_ORIGINAL_AST_IDENTICAL");print("A352_REAL_PRODUCTION_UNTOUCHED")'
+          tar -cf - bootstrap/clean_runtime_launcher.py bootstrap/family_a352_visible_atmosphere.css bootstrap/family_a352_visible_atmosphere.js bootstrap/family_a351_sunrise.css bootstrap/family_a351_sunrise.js | timeout 90s ssh -T -i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com "PYTHONDONTWRITEBYTECODE=1 python3 -c '$audit'"
+      - name: Erase ephemeral SSH key
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "$HOME/.ssh/id_ed25519" ]]; then shred -u "$HOME/.ssh/id_ed25519" || rm -f "$HOME/.ssh/id_ed25519"; fi
