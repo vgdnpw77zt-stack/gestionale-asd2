@@ -1831,7 +1831,7 @@ def a355_expected_from_a354(old:bytes)->tuple[bytes,str]:
     new=old.replace(previous_css,previous_css+b'\n/* BODYMIND A355 DARK CINEMA */\n'+css,1)
     new=new.replace(previous_js,previous_js+b'\n/* BODYMIND A355 FILM STUDIO LINK */\n'+js,1)
     studio_loader=b"""
-# BODYMIND A355 FILM STUDIO — PRIVATE AUTHORIZED EXTENSION
+# BODYMIND A355 FILM STUDIO - PRIVATE AUTHORIZED EXTENSION
 import importlib.util as _bm355_import
 _bm355_spec=_bm355_import.spec_from_file_location(
   'bodymind_a355_film_studio','/opt/bodymind/bodymind_a355_film_studio.py')
