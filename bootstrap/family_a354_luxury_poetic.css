@@ -1,0 +1,152 @@
+/* BODYMIND A354 — LUXURY POETIC | Visual-only family experience
+   Preserve original film, family content, routes, photos, and authenticated actions. */
+:root{
+  --bm354-navy:#091c2b;--bm354-aqua:#67ead9;--bm354-peach:#ffbaa9;
+  --bm354-orchid:#b4a2f5;--bm354-gold:#f8d7a0;
+}
+html,body{background:#091c2b!important}
+.hero{
+  position:relative!important;isolation:isolate!important;
+  background:
+    radial-gradient(ellipse 125% 68% at 12% 15%,rgba(39,129,138,.34) 0%,transparent 72%),
+    radial-gradient(ellipse 86% 55% at 92% 61%,rgba(137,91,153,.30) 0%,transparent 77%),
+    linear-gradient(180deg,#0c2532 0%,#112a3a 51%,#0b2130 76%,#091c2b 100%)!important;
+}
+main.main{
+  isolation:isolate!important;
+  background:
+    radial-gradient(ellipse 80% 22% at 12% 15%,rgba(58,191,190,.24),transparent 87%),
+    radial-gradient(ellipse 85% 30% at 94% 43%,rgba(239,157,178,.20),transparent 85%),
+    radial-gradient(ellipse 100% 35% at 11% 82%,rgba(154,125,218,.17),transparent 90%),
+    linear-gradient(180deg,#091c2b 0%,#0d2938 40%,#122f3e 70%,#0a1c2b 100%)!important;
+}
+.hero>.bm352-sky,main.main>.bm352-sky{
+  opacity:1!important;z-index:0!important;
+  background:
+    radial-gradient(ellipse 61% 36% at 16% 16%,rgba(109,226,210,.30),transparent 88%),
+    radial-gradient(ellipse 80% 40% at 91% 78%,rgba(225,142,173,.26),transparent 88%)!important;
+}
+.bm354-silk{
+  position:absolute;inset:-30% -45%;
+  display:block;pointer-events:none;
+  transform-origin:center;will-change:transform,opacity;
+  filter:blur(16px) saturate(1.20);
+  mix-blend-mode:screen;opacity:.81;
+  background:
+    radial-gradient(ellipse 34% 16% at 18% 21%,rgba(101,237,213,.62) 0%,rgba(67,180,201,.39) 43%,transparent 83%),
+    radial-gradient(ellipse 32% 17% at 71% 39%,rgba(249,189,156,.61) 0%,rgba(206,115,153,.35) 48%,transparent 87%),
+    radial-gradient(ellipse 35% 17% at 33% 76%,rgba(179,150,244,.53) 0%,rgba(113,126,205,.30) 50%,transparent 89%);
+  animation:bm354-cloud-sweep 31s cubic-bezier(.35,.04,.65,.96) infinite alternate;
+}
+.bm354-silk--second{
+  opacity:.72;filter:blur(26px) saturate(1.19);
+  background:
+    radial-gradient(ellipse 32% 15% at 79% 19%,rgba(114,215,240,.61),rgba(73,126,177,.29) 55%,transparent 90%),
+    radial-gradient(ellipse 40% 20% at 17% 64%,rgba(251,173,178,.54),rgba(196,100,170,.25) 61%,transparent 93%),
+    radial-gradient(ellipse 31% 14% at 71% 85%,rgba(242,211,157,.53),rgba(135,211,203,.24) 60%,transparent 90%);
+  animation:bm354-cloud-return 38s ease-in-out infinite alternate-reverse;
+}
+.bm354-silk--third{
+  opacity:.76;filter:blur(9px);
+  background:
+    radial-gradient(ellipse 26% 9% at 15% 36%,rgba(157,251,224,.56),rgba(66,166,175,.16) 65%,transparent 96%),
+    radial-gradient(ellipse 38% 12% at 67% 57%,rgba(249,171,204,.48),rgba(131,118,211,.23) 63%,transparent 95%),
+    radial-gradient(ellipse 39% 10% at 51% 89%,rgba(110,203,215,.52),rgba(117,171,212,.20) 69%,transparent 96%);
+  animation:bm354-cloud-drift 19s ease-in-out infinite alternate;
+}
+.bm354-star-glimmer{
+  position:absolute;inset:-45px;
+  opacity:.63;pointer-events:none;mix-blend-mode:screen;
+  background-image:
+    radial-gradient(1.3px 1.3px at 21px 38px,rgba(255,246,212,.96) 80%,transparent 100%),
+    radial-gradient(1px 1px at 77px 89px,rgba(169,254,226,.90) 85%,transparent 100%),
+    radial-gradient(1.1px 1.1px at 114px 26px,rgba(255,204,214,.91) 85%,transparent 100%);
+  background-size:149px 131px,197px 168px,223px 213px;
+  animation:bm354-twinkle 6.7s ease-in-out infinite alternate,bm354-star-travel 47s linear infinite alternate;
+}
+.bm354-hoop{
+  position:absolute;width:clamp(120px,25vw,240px);height:auto;
+  pointer-events:none;z-index:1;opacity:.24;
+  filter:drop-shadow(0 0 14px rgba(121,235,228,.22));
+  animation:bm354-hover 15s ease-in-out infinite alternate;
+}
+.bm354-hoop--hero{right:-4%;top:21%}
+.bm354-hoop--main{left:-3%;top:27%;opacity:.19;transform:rotate(-13deg);animation-duration:19s}
+.bm354-hoop circle,.bm354-hoop path{vector-effect:non-scaling-stroke}
+@keyframes bm354-cloud-sweep{
+  0%{transform:translate3d(-10%,-4%,0) rotate(-4deg) scale(1.02);opacity:.72}
+  50%{transform:translate3d(4%,8%,0) rotate(2deg) scale(1.17);opacity:.94}
+  100%{transform:translate3d(11%,-5%,0) rotate(7deg) scale(1.04);opacity:.80}
+}
+@keyframes bm354-cloud-return{
+  0%{transform:translate3d(9%,-9%,0) rotate(8deg) scale(1.08);opacity:.69}
+  100%{transform:translate3d(-12%,10%,0) rotate(-6deg) scale(1.15);opacity:.93}
+}
+@keyframes bm354-cloud-drift{
+  0%{transform:translate3d(-6%,5%,0) rotate(-2deg)}
+  100%{transform:translate3d(8%,-9%,0) rotate(5deg)}
+}
+@keyframes bm354-hover{
+  from{translate:0 -10px;rotate:-4deg;opacity:.18}
+  to{translate:0 18px;rotate:6deg;opacity:.31}
+}
+@keyframes bm354-twinkle{from{opacity:.37}to{opacity:.75}}
+@keyframes bm354-star-travel{to{transform:translate3d(26px,-39px,0)}}
+.hero>.hero-media{z-index:5!important}
+.hero>.frame.hero-content{z-index:6!important}
+.hero .hero-media{
+  border:0!important;outline:0!important;background:transparent!important;
+  border-radius:0!important;box-shadow:none!important;filter:none!important;
+  -webkit-filter:none!important;overflow:visible!important;
+}
+.hero .hero-media::before{display:none!important;content:none!important}
+.hero .hero-media::after{
+  position:absolute!important;inset:0!important;z-index:2!important;
+  background:linear-gradient(180deg,
+    transparent 0%,transparent 44%,rgba(9,28,43,.08) 61%,
+    rgba(9,28,43,.28) 73%,rgba(9,28,43,.75) 90%,#091c2b 100%)!important;
+  mask-image:none!important;-webkit-mask-image:none!important;
+  pointer-events:none!important;
+}
+.hero .hero-media :is(video.family-hero-video,#familyHeroVideo){
+  border:0!important;box-shadow:none!important;filter:none!important;
+  border-radius:0!important;object-fit:contain!important;
+  -webkit-mask-image:radial-gradient(ellipse 87% 85% at 50% 41%,
+    #000 0%,#000 53%,rgba(0,0,0,.95) 66%,rgba(0,0,0,.48) 84%,transparent 100%)!important;
+  mask-image:radial-gradient(ellipse 87% 85% at 50% 41%,
+    #000 0%,#000 53%,rgba(0,0,0,.95) 66%,rgba(0,0,0,.48) 84%,transparent 100%)!important;
+}
+.hero .hero-content,.hero .hero-intro{
+  border:0!important;outline:0!important;box-shadow:none!important;
+  background:transparent!important;backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+}
+.hero .hero-intro h1{color:#fff5e7!important;text-shadow:0 4px 21px rgba(2,25,34,.48)!important}
+.hero .hero-intro p{color:#eaf5ee!important;text-shadow:0 2px 10px rgba(2,25,34,.52)!important}
+.hero .hero-intro .kicker{color:#baf8dc!important}
+@media(max-width:760px){
+  .hero{border-radius:0 0 20px 20px!important;padding-bottom:24px!important}
+  .hero>.hero-media{
+    width:min(100vw,490px)!important;max-width:100vw!important;
+    margin:0 auto!important;border-radius:0!important;
+  }
+  .hero>.frame.hero-content,.hero .hero-content{
+    width:min(94vw,450px)!important;max-width:calc(100vw - 24px)!important;
+    margin:-18px auto 0!important;padding:0 12px 15px!important;
+    border:0!important;background:transparent!important;
+    border-radius:0!important;box-shadow:none!important;
+  }
+  .hero .hero-intro{padding:0!important;background:transparent!important}
+  .hero .hero-intro h1{font-size:clamp(39px,10vw,54px)!important}
+  .bm354-hoop--hero{width:130px;right:-71px;top:29%;opacity:.15}
+  .bm354-hoop--main{width:148px;left:-70px;opacity:.12}
+  .bm354-silk{filter:blur(12px) saturate(1.15)}
+  .bm354-silk--second{filter:blur(18px) saturate(1.15)}
+  .bm354-silk--third{filter:blur(8px)}
+}
+@media(prefers-reduced-motion:reduce){
+  .bm354-silk,.bm354-star-glimmer,.bm354-hoop{animation:none!important;will-change:auto!important}
+}
+@media(forced-colors:active){
+  .bm354-silk,.bm354-star-glimmer,.bm354-hoop{display:none!important}
+}
