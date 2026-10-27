@@ -120,6 +120,7 @@ class AthleteAlbumSafety(unittest.TestCase):
         if not Path('/usr/bin/ffmpeg').is_file():
             self.skipTest('FFmpeg is tested in the built Docker image')
         self.assertEqual(self.upload().status_code,303)
+        self.assertEqual(self.upload().status_code,303)
         resp=self.client.post(self.endpoint(ATHLETE_A,'/generate'),data={'csrf':self.token()})
         self.assertEqual(resp.status_code,303,resp.get_data(as_text=True)[:200])
         self.assertTrue(self.client.get(self.endpoint(ATHLETE_A,'/status')).json['available'])
