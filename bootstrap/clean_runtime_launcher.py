@@ -1345,14 +1345,17 @@ def a351_expected_from_a350(old:bytes)->tuple[bytes,str]:
     if hashlib.sha256(old).hexdigest()!=A351_A350_LIVE_SHA:
         raise RuntimeError('A351 source SHA not equal to deployed A350')
     css,js=a351_assets()
-    head=b'</style>\n</head>'
-    tail=b'</body></html>'
-    if old.count(head)!=1 or old.count(tail)!=1:
-        raise RuntimeError('A351 family template injection anchors missing/duplicated')
-    if b'BODYMIND A351 SUNRISE' in old or b'bm351-dock-script' in old:
+    # Never depend on globally ambiguous HTML closing tags. A350 contains
+    # multiple independent HTML views; anchor to the single hashed CSS/JS payload
+    # injected only into the authenticated family page in the exact A350 release.
+    old_css=A350_CSS_PATH.read_bytes()
+    old_js=A350_JS_PATH.read_bytes()
+    if old.count(old_css)!=1 or old.count(old_js)!=1:
+        raise RuntimeError('A351 verified family CSS/JS asset anchors missing or duplicated')
+    if b'BODYMIND A351 SUNRISE' in old or b'BODYMIND A351 DOCK' in old:
         raise RuntimeError('A351 duplicate or premodified layout')
-    new=old.replace(head,b'\n/* BODYMIND A351 SUNRISE */\n'+css+b'\n'+head,1)
-    new=new.replace(tail,b'<script id="bm351-dock-script">\n'+js+b'\n</script>\n'+tail,1)
+    new=old.replace(old_css,old_css+b'\n/* BODYMIND A351 SUNRISE */\n'+css,1)
+    new=new.replace(old_js,old_js+b'\n/* BODYMIND A351 DOCK */\n'+js,1)
     # Attach private album routes at Python-module level only after all original
     # A350 Flask functions have been defined. No route/model changes to A350.
     album_loader=b"""
