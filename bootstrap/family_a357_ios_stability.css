@@ -112,3 +112,19 @@
 @media (max-width:760px) and (forced-colors:active){
   .hero>.bm352-sky::before,.hero>.bm352-sky::after{display:none!important}
 }
+/* Legacy A341/A349 animated, filtered SVG filled the ENTIRE scrolling
+   dashboard. Avoid rasterizing that enormous canvas on mobile WebKit. */
+@media (max-width:760px){
+  main.main::before,
+  main.main::after{
+    display:none!important;content:none!important;
+    animation:none!important;filter:none!important;
+    will-change:auto!important;
+  }
+  main.main .stat,main.main .panel,
+  .bottom-nav,body>.bm352-dock-handle,
+  .hero .hero-playback{
+    -webkit-backdrop-filter:none!important;
+    backdrop-filter:none!important;
+  }
+}
