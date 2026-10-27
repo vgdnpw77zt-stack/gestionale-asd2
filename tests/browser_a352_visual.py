@@ -91,7 +91,8 @@ with sync_playwright() as p:
             handle.click()
             assert nav.evaluate("(n)=>n.classList.contains('bm352-tucked')")
             assert handle.get_attribute('aria-expanded')=='false'
-            assert not nav.locator('a').first.is_visible()
+            assert nav.locator('a').first.get_attribute('tabindex')=='-1'
+            assert nav.evaluate("(n)=>getComputedStyle(n).pointerEvents")=='none'
             handle.click()
             assert handle.get_attribute('aria-expanded')=='true'
             assert nav.locator('a').first.is_visible()
