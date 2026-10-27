@@ -31,11 +31,11 @@ class A351VisualSafety(unittest.TestCase):
     def test_patch_is_additive_and_reversible_on_synthetic_html(self):
         old_css=(ROOT/'bootstrap/family_a350_signature.css').read_bytes()
         old_js=(ROOT/'bootstrap/family_a350_verified_gallery.js').read_bytes()
-        old=(b"PAGE = '''<html><head><style>BASE VIDEO\\n"+old_css+b"\\n</style>\\n</head>\\n"
-             b"<body><main class=\\\"main\\\">PRIVATE CONTENT</main>\\n"
-             b"<script>\\n"+old_js+b"\\n</script>\\n"
-             b"<nav class=\\\"bottom-nav\\\"><a href=\\\"#home\\\">Home</a></nav>\\n"
-             b"</body></html>'''\\n")
+        old=(b"PAGE = '''<html><head><style>BASE VIDEO\n"+old_css+b"\n</style>\n</head>\n"
+             b"<body><main class=\\"main\\">PRIVATE CONTENT</main>\n"
+             b"<script>\n"+old_js+b"\n</script>\n"
+             b"<nav class=\\"bottom-nav\\"><a href=\\"#home\\">Home</a></nav>\n"
+             b"</body></html>'''\n")
         sha=hashlib.sha256(old).hexdigest()
         with patch.object(M,'A351_A350_LIVE_SHA',sha), patch.object(M,'A351_CSS_PATH',ROOT/'bootstrap/family_a351_sunrise.css'), patch.object(M,'A351_JS_PATH',ROOT/'bootstrap/family_a351_sunrise.js'), patch.object(M,'A350_CSS_PATH',ROOT/'bootstrap/family_a350_signature.css'), patch.object(M,'A350_JS_PATH',ROOT/'bootstrap/family_a350_verified_gallery.js'):
             new,newhash=M.a351_expected_from_a350(old)
