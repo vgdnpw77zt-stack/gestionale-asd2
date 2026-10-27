@@ -31,6 +31,7 @@ COPY bootstrap/family_a353_stardust.js /opt/bodymind/family_a353_stardust.js
 COPY bootstrap/family_a354_luxury_poetic.css /opt/bodymind/family_a354_luxury_poetic.css
 COPY bootstrap/family_a354_luxury_poetic.js /opt/bodymind/family_a354_luxury_poetic.js
 COPY bootstrap/family_a355_dark_cinema.css /opt/bodymind/family_a355_dark_cinema.css
+COPY bootstrap/family_a356_luminous_nebula.css /opt/bodymind/family_a356_luminous_nebula.css
 COPY bootstrap/family_a355_studio_link.js /opt/bodymind/family_a355_studio_link.js
 COPY bootstrap/bodymind_a355_film_studio.py /opt/bodymind/bodymind_a355_film_studio.py
 COPY bootstrap/bodymind_a351_private_album.py /opt/bodymind/bodymind_a351_private_album.py
