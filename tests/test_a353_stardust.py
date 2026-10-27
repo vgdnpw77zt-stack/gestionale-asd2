@@ -42,7 +42,7 @@ class StardustVisualTests(unittest.TestCase):
             for ctx in pinned():stack.enter_context(ctx)
             original_css=M.A351_CSS_PATH.read_bytes()
             original_js=M.A351_JS_PATH.read_bytes()
-            a351=b"PORTAL='''"+original_css+b'\\n/*END CSS*/\\n'+original_js+b"\\n'''\\n"
+            a351=b"PORTAL='''"+original_css+b'\n/*END CSS*/\n'+original_js+b"\n'''\n"
             stack.enter_context(patch.object(M,'A352_A351_LIVE_SHA',hashlib.sha256(a351).hexdigest()))
             baseline=Path(td)/'a351.py'
             baseline.write_bytes(a351)
