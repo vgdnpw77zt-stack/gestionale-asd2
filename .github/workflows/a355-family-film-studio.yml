@@ -25,3 +25,5 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_a351_private_album.py' -v
       - name: A355 private video and media regression
         run: python -m unittest discover -s tests -p 'test_a355_film_studio.py' -v
+      - name: A355 strict A354 source migration gate
+        run: python -m unittest discover -s tests -p 'test_a355_release.py' -v
