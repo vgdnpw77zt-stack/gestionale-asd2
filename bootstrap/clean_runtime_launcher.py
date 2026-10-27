@@ -90,7 +90,7 @@ def preflight(root:Path,db:Path)->dict:
     valid={(EXPECTED_SOURCE_COUNT,EXPECTED_SOURCE_DIGEST),(UPGRADE_SOURCE_COUNT,UPGRADE_SOURCE_DIGEST),
            (MANUAL_ROSTER_SOURCE_COUNT,MANUAL_ROSTER_SOURCE_DIGEST),
            (SIMPLE_GROUP_SOURCE_COUNT,SIMPLE_GROUP_SOURCE_DIGEST),(A317_SOURCE_COUNT,A317_SOURCE_DIGEST),(A328_SOURCE_COUNT,A328_SOURCE_DIGEST),(A330_SOURCE_COUNT,A330_SOURCE_DIGEST),(A336_SOURCE_COUNT,A336_SOURCE_DIGEST),(A337_SOURCE_COUNT,A337_SOURCE_DIGEST)}
-    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found) and not a343_matches(root,found) and not a344_matches(root,found) and not a345_matches(root,found) and not a346_matches(root,found) and not a347_matches(root,found) and not a348_matches(root,found) and not a349_matches(root,found) and not a350_matches(root,found) and not a351_matches(root,found) and not a352_matches(root,found) and not a353_matches(root,found):
+    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found) and not a343_matches(root,found) and not a344_matches(root,found) and not a345_matches(root,found) and not a346_matches(root,found) and not a347_matches(root,found) and not a348_matches(root,found) and not a349_matches(root,found) and not a350_matches(root,found) and not a351_matches(root,found) and not a352_matches(root,found) and not a353_matches(root,found) and not a354_matches(root,found):
         raise RuntimeError(f'source lock mismatch files={len(found)} expected={EXPECTED_SOURCE_COUNT}')
     return {'source_files':len(found),'sqlite':'ok','rows':sqlite_readonly_check(db),
             'historical_migrations_executed':0,'automatic_backup_cleanup':False,
@@ -1685,6 +1685,113 @@ def maybe_recover_a353_to_a352(root:Path,db:Path)->bool:
     print('BODYMIND A353 — exact A352 source restored',flush=True)
     return True
 
+
+# A354 Luxury Poetic — visual-only atomic upgrade and exact A353 rollback.
+A354_REL=A353_REL
+A354_BACKUP=Path('/data/release_packages/BODYMIND_A354_PREUI_A353.py')
+A354_CSS_PATH=Path('/opt/bodymind/family_a354_luxury_poetic.css')
+A354_JS_PATH=Path('/opt/bodymind/family_a354_luxury_poetic.js')
+A354_CSS_BLOB='dfb8735968b980ba88738a2027b1a70afb92b756'
+A354_JS_BLOB='6e9bb7a3a24027e7facdbd8f62c82e072625d730'
+
+def a354_assets():
+    css,js=A354_CSS_PATH.read_bytes(),A354_JS_PATH.read_bytes()
+    if a350_git_blob(css)!=A354_CSS_BLOB or a350_git_blob(js)!=A354_JS_BLOB:
+        raise RuntimeError('A354 visual asset SHA mismatch')
+    if any(x in css for x in (b'</style>',b"'''")) or any(x in js for x in (b'</script>',b"'''")):
+        raise RuntimeError('A354 unsafe inline delimiter')
+    return css,js
+
+def a354_expected_from_a353(old:bytes)->tuple[bytes,str]:
+    if not A353_BACKUP.is_file() or A353_BACKUP.is_symlink():
+        raise RuntimeError('A354 missing verified A353 ancestry')
+    approved,approved_sha=a353_expected_from_a352(A353_BACKUP.read_bytes())
+    if old!=approved or hashlib.sha256(old).hexdigest()!=approved_sha:
+        raise RuntimeError('A354 source differs from exact A353')
+    previous_css,previous_js=A353_CSS_PATH.read_bytes(),A353_JS_PATH.read_bytes()
+    if old.count(previous_css)!=1 or old.count(previous_js)!=1 or b'BODYMIND A354 LUXURY POETIC' in old:
+        raise RuntimeError('A354 visual anchors ambiguous')
+    css,js=a354_assets()
+    new=old.replace(previous_css,previous_css+b'\n/* BODYMIND A354 LUXURY POETIC VISUAL */\n'+css,1)
+    new=new.replace(previous_js,previous_js+b'\n/* BODYMIND A354 LUXURY POETIC SCRIPT */\n'+js,1)
+    compile(new,A354_REL,'exec')
+    return new,hashlib.sha256(new).hexdigest()
+
+def a354_matches(root:Path,found:dict[str,str])->bool:
+    if len(found)!=214 or A354_REL not in found or not A354_BACKUP.is_file() or A354_BACKUP.is_symlink():
+        return False
+    old=A354_BACKUP.read_bytes()
+    _,sha=a354_expected_from_a353(old)
+    if found[A354_REL]!=sha:
+        return False
+    previous=dict(found)
+    previous[A354_REL]=hashlib.sha256(old).hexdigest()
+    return a353_matches(root,previous)
+
+def maybe_apply_a354(root:Path,db:Path)->None:
+    found=source_inventory(root)
+    if a354_matches(root,found) or not a353_matches(root,found):
+        return
+    sqlite_readonly_check(db)
+    target=root/A354_REL
+    if not target.is_file() or target.is_symlink():
+        raise RuntimeError('A354 unsafe target')
+    old=target.read_bytes()
+    new,sha=a354_expected_from_a353(old)
+    if A354_BACKUP.exists():
+        if not A354_BACKUP.is_file() or A354_BACKUP.is_symlink() or A354_BACKUP.read_bytes()!=old:
+            raise RuntimeError('A354 rollback backup conflict')
+    else:
+        if not A354_BACKUP.parent.is_dir() or A354_BACKUP.parent.is_symlink():
+            raise RuntimeError('A354 protected backup directory missing')
+        with open(A354_BACKUP,'xb') as fh:
+            fh.write(old)
+            fh.flush()
+            os.fsync(fh.fileno())
+    temp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a354_poetic_',suffix='.py',dir=str(target.parent),delete=False) as fh:
+            temp=Path(fh.name)
+            fh.write(new)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(temp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(temp),str(target))
+        temp=None
+    finally:
+        if temp is not None:temp.unlink(missing_ok=True)
+    if source_inventory(root)[A354_REL]!=sha or not a354_matches(root,source_inventory(root)):
+        raise RuntimeError('A354 post-write source verification failed')
+    print('BODYMIND A354 LUXURY POETIC APPLIED — PRIVATE DATA UNCHANGED',flush=True)
+
+def maybe_recover_a354_to_a353(root:Path,db:Path)->bool:
+    if os.environ.get('BODYMIND_A354_RECOVER_A353')!='1':
+        return False
+    found=source_inventory(root)
+    if a353_matches(root,found):
+        return True
+    if not a354_matches(root,found):
+        raise RuntimeError('A354 refused rollback of unknown source')
+    sqlite_readonly_check(db)
+    target=root/A354_REL
+    old=A354_BACKUP.read_bytes()
+    temp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a354_rollback_',suffix='.py',dir=str(target.parent),delete=False) as fh:
+            temp=Path(fh.name)
+            fh.write(old)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(temp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(temp),str(target))
+        temp=None
+    finally:
+        if temp is not None:temp.unlink(missing_ok=True)
+    if not a353_matches(root,source_inventory(root)):
+        raise RuntimeError('A354 rollback verification failed')
+    print('BODYMIND A354 — exact A353 restored',flush=True)
+    return True
+
 def main(argv=None):
     parser=argparse.ArgumentParser()
     parser.add_argument('mode',nargs='?',choices=('check','start'),default='start')
@@ -1718,6 +1825,8 @@ def main(argv=None):
                 maybe_apply_a352(args.root,args.db)
             if not maybe_recover_a353_to_a352(args.root,args.db):
                 maybe_apply_a353(args.root,args.db)
+            if not maybe_recover_a354_to_a353(args.root,args.db):
+                maybe_apply_a354(args.root,args.db)
         result=preflight(args.root,args.db)
     except (OSError,RuntimeError,ValueError,sqlite3.DatabaseError) as exc:
         print('BODYMIND CLEAN BOOT STOP: '+str(exc),file=sys.stderr,flush=True)
