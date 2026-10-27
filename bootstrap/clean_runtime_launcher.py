@@ -1330,7 +1330,7 @@ A351_BACKUP=Path('/data/release_packages/BODYMIND_A351_PREUI_A350.py')
 A351_CSS_PATH=Path('/opt/bodymind/family_a351_sunrise.css')
 A351_JS_PATH=Path('/opt/bodymind/family_a351_sunrise.js')
 A351_CSS_BLOB='be65b405156905c772c3895e5210b32375da1530'
-A351_JS_BLOB='4ab33e552dbb89fe45c92725371becb94581f184'
+A351_JS_BLOB='ec1141533bdd03a34d8a781ac7209f6fa0e4b744'
 
 def a351_assets()->tuple[bytes,bytes]:
     css=A351_CSS_PATH.read_bytes()
@@ -1352,7 +1352,23 @@ def a351_expected_from_a350(old:bytes)->tuple[bytes,str]:
     if b'BODYMIND A351 SUNRISE' in old or b'bm351-dock-script' in old:
         raise RuntimeError('A351 duplicate or premodified layout')
     new=old.replace(head,b'\n/* BODYMIND A351 SUNRISE */\n'+css+b'\n'+head,1)
-    new=new.replace(tail,b'<script id="bm351-dock-script">\n'+js+b'\n</script>\n'+tail,1)
+    new=new.replace(tail,b'<script id="bm351-dock-script">\\n'+js+b'\\n</script>\\n'+tail,1)
+    # Attach private album routes at Python-module level only after all original
+    # A350 Flask functions have been defined. No route/model changes to A350.
+    album_loader=b"""
+# A351 PRIVATE ATHLETE ALBUM
+import importlib.util as _bm351_import
+_bm351_spec=_bm351_import.spec_from_file_location(
+    'bodymind_a351_private_album','/opt/bodymind/bodymind_a351_private_album.py')
+if _bm351_spec is None or _bm351_spec.loader is None:
+    raise RuntimeError('A351 album module missing')
+_bm351_album=_bm351_import.module_from_spec(_bm351_spec)
+_bm351_spec.loader.exec_module(_bm351_album)
+_bm351_album.install_family_gallery(app, db)
+"""
+    if b'BODYMIND A351 PRIVATE ATHLETE ALBUM' in new:
+        raise RuntimeError('A351 album injection conflict')
+    new+=album_loader
     compile(new,A351_REL,'exec')
     return new,hashlib.sha256(new).hexdigest()
 
