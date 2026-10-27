@@ -1,0 +1,53 @@
+name: BodyMind Site A351 Sea-Glass Sunrise QA
+on:
+  push:
+    branches: [bodymind-site-a351-sunrise-20261027]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-site:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r site/requirements.txt
+      - name: Verify site design assets and baseline content are intact
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from importlib.util import spec_from_file_location,module_from_spec
+          import tempfile,os
+          root=Path('site')
+          css=(root/'static/sunrise.css').read_text()
+          template=(root/'templates/index.html').read_text()
+          assert 'sunrise.css' in template and 'site.css' in template
+          assert template.index("filename='site.css'")<template.index("filename='sunrise.css'")
+          for value in ('--bm351-seaglass','#B2E9DB','prefers-reduced-motion','hero-stage','hero-film'):
+              assert value in css,value
+          assert 'Cormorant+Garamond' in template and 'Manrope' in template
+          assert '4 medaglie' in template and '3 di bronzo' in template
+          assert 'data-hero-video' in template
+          assert 'data-kids-video' in template
+          assert 'http://' not in css
+          with tempfile.TemporaryDirectory() as p:
+              os.environ['SITE_DATA_DIR']=p
+              spec=spec_from_file_location('site_a351',root/'app.py')
+              m=module_from_spec(spec);spec.loader.exec_module(m)
+              m.app.config['TESTING']=True
+              with m.app.test_client() as c:
+                  response=c.get('/')
+                  assert response.status_code==200,response.status_code
+                  html=response.get_data(as_text=True)
+                  assert 'sunrise.css' in html
+                  assert 'bodymindaerialstudio.life' in html
+                  assert c.get('/static/sunrise.css').status_code==200
+                  assert c.get('/healthz').status_code==200
+          print('A351_SITE_CSS_AND_ORIGINAL_CONTENT_QA_PASS')
+          PY
+      - name: Build identical site Docker without production media or volume
+        run: docker build -f site/Dockerfile -t bodymind-site-a351:qa site
