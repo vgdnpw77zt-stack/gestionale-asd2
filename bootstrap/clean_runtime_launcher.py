@@ -90,7 +90,7 @@ def preflight(root:Path,db:Path)->dict:
     valid={(EXPECTED_SOURCE_COUNT,EXPECTED_SOURCE_DIGEST),(UPGRADE_SOURCE_COUNT,UPGRADE_SOURCE_DIGEST),
            (MANUAL_ROSTER_SOURCE_COUNT,MANUAL_ROSTER_SOURCE_DIGEST),
            (SIMPLE_GROUP_SOURCE_COUNT,SIMPLE_GROUP_SOURCE_DIGEST),(A317_SOURCE_COUNT,A317_SOURCE_DIGEST),(A328_SOURCE_COUNT,A328_SOURCE_DIGEST),(A330_SOURCE_COUNT,A330_SOURCE_DIGEST),(A336_SOURCE_COUNT,A336_SOURCE_DIGEST),(A337_SOURCE_COUNT,A337_SOURCE_DIGEST)}
-    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found) and not a343_matches(root,found) and not a344_matches(root,found) and not a345_matches(root,found) and not a346_matches(root,found) and not a347_matches(root,found) and not a348_matches(root,found) and not a349_matches(root,found) and not a350_matches(root,found) and not a351_matches(root,found):
+    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found) and not a343_matches(root,found) and not a344_matches(root,found) and not a345_matches(root,found) and not a346_matches(root,found) and not a347_matches(root,found) and not a348_matches(root,found) and not a349_matches(root,found) and not a350_matches(root,found) and not a351_matches(root,found) and not a352_matches(root,found):
         raise RuntimeError(f'source lock mismatch files={len(found)} expected={EXPECTED_SOURCE_COUNT}')
     return {'source_files':len(found),'sqlite':'ok','rows':sqlite_readonly_check(db),
             'historical_migrations_executed':0,'automatic_backup_cleanup':False,
@@ -1455,6 +1455,121 @@ def maybe_recover_a351_to_a350(root:Path,db:Path)->bool:
     print('BODYMIND A351 RECOVERY COMPLETE - VERIFIED A350 CODE RESTORED',flush=True)
     return True
 
+
+# A352 — ACTUAL visible atmosphere and footer slide, pinned to verified A351.
+# Fully additive design on the private page; existing album, payments, and data stay unchanged.
+A352_REL=A351_REL
+A352_A351_LIVE_SHA='f8ee6e88dc02dff83cc472016adf951f95d87a8e344b3161ebdbf870e3ae36ed'
+A352_BACKUP=Path('/data/release_packages/BODYMIND_A352_PREUI_A351.py')
+A352_CSS_PATH=Path('/opt/bodymind/family_a352_visible_atmosphere.css')
+A352_JS_PATH=Path('/opt/bodymind/family_a352_visible_atmosphere.js')
+A352_CSS_BLOB='6000d2a0eaf15fabe7fd0f6554fe54820f3f78fa'
+A352_JS_BLOB='bbe0fed58534b3db0048602647ad757dcb65cd22'
+
+def a352_assets()->tuple[bytes,bytes]:
+    css=A352_CSS_PATH.read_bytes()
+    js=A352_JS_PATH.read_bytes()
+    if a350_git_blob(css)!=A352_CSS_BLOB or a350_git_blob(js)!=A352_JS_BLOB:
+        raise RuntimeError('A352 approved visual assets SHA mismatch')
+    if any(x in css for x in (b'</style>',b"'''")) or any(x in js for x in (b'</script>',b"'''")):
+        raise RuntimeError('A352 inline style/script delimiter unsafe')
+    return css,js
+
+def a352_expected_from_a351(old:bytes)->tuple[bytes,str]:
+    if hashlib.sha256(old).hexdigest()!=A352_A351_LIVE_SHA:
+        raise RuntimeError('A352 original A351 source hash mismatch')
+    css,js=a352_assets()
+    original_css=A351_CSS_PATH.read_bytes()
+    original_js=A351_JS_PATH.read_bytes()
+    if old.count(original_css)!=1 or old.count(original_js)!=1:
+        raise RuntimeError('A352 original private layout anchors missing/duplicated')
+    if b'BODYMIND A352' in old:
+        raise RuntimeError('A352 duplicate insertion')
+    new=old.replace(original_css,original_css+b'\n/* BODYMIND A352 VISIBLE AURORA */\n'+css,1)
+    new=new.replace(original_js,original_js+b'\n/* BODYMIND A352 VISIBLE DOCK */\n'+js,1)
+    compile(new,A352_REL,'exec')
+    return new,hashlib.sha256(new).hexdigest()
+
+def a352_matches(root:Path,found:dict[str,str])->bool:
+    if len(found)!=214 or A352_REL not in found or not A352_BACKUP.is_file() or A352_BACKUP.is_symlink():
+        return False
+    old=A352_BACKUP.read_bytes()
+    if hashlib.sha256(old).hexdigest()!=A352_A351_LIVE_SHA:
+        return False
+    _,sha=a352_expected_from_a351(old)
+    if found[A352_REL]!=sha:
+        return False
+    prior=dict(found)
+    prior[A352_REL]=hashlib.sha256(old).hexdigest()
+    return a351_matches(root,prior)
+
+def maybe_apply_a352(root:Path,db:Path)->None:
+    found=source_inventory(root)
+    if a352_matches(root,found):
+        return
+    if not a351_matches(root,found):
+        return
+    sqlite_readonly_check(db)
+    target=root/A352_REL
+    if not target.is_file() or target.is_symlink():
+        raise RuntimeError('A352 unsafe route target')
+    old=target.read_bytes()
+    new,sha=a352_expected_from_a351(old)
+    if A352_BACKUP.exists():
+        if not A352_BACKUP.is_file() or A352_BACKUP.is_symlink() or A352_BACKUP.read_bytes()!=old:
+            raise RuntimeError('A352 protected backup conflict')
+    else:
+        if not A352_BACKUP.parent.is_dir() or A352_BACKUP.parent.is_symlink():
+            raise RuntimeError('A352 protected recovery directory missing')
+        with open(A352_BACKUP,'xb') as f:
+            f.write(old)
+            f.flush()
+            os.fsync(f.fileno())
+    temp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a352_ui_',suffix='.py',dir=str(target.parent),delete=False) as f:
+            temp=Path(f.name)
+            f.write(new)
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(temp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(temp),str(target))
+        temp=None
+    finally:
+        if temp is not None:temp.unlink(missing_ok=True)
+    verified=source_inventory(root)
+    if verified[A352_REL]!=sha or not a352_matches(root,verified):
+        raise RuntimeError('A352 post-apply manifest mismatch')
+    print('BODYMIND A352 VISIBLE AURORA AND SLIDING FOOTER APPLIED - NO DB OR DOCUMENT CHANGES',flush=True)
+
+def maybe_recover_a352_to_a351(root:Path,db:Path)->bool:
+    if os.environ.get('BODYMIND_A352_RECOVER_A351')!='1':
+        return False
+    found=source_inventory(root)
+    if a351_matches(root,found):
+        return True
+    if not a352_matches(root,found):
+        raise RuntimeError('A352 refused to recover unknown source')
+    sqlite_readonly_check(db)
+    target=root/A352_REL
+    old=A352_BACKUP.read_bytes()
+    temp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a352_recovery_',suffix='.py',dir=str(target.parent),delete=False) as f:
+            temp=Path(f.name)
+            f.write(old)
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(temp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(temp),str(target))
+        temp=None
+    finally:
+        if temp is not None:temp.unlink(missing_ok=True)
+    if not a351_matches(root,source_inventory(root)):
+        raise RuntimeError('A352 recovery fingerprint mismatch')
+    print('BODYMIND A352 VERIFIED A351 CODE RESTORED',flush=True)
+    return True
+
 def main(argv=None):
     parser=argparse.ArgumentParser()
     parser.add_argument('mode',nargs='?',choices=('check','start'),default='start')
@@ -1484,6 +1599,8 @@ def main(argv=None):
                 maybe_apply_a350_family_ui(args.root,args.db)
             if not maybe_recover_a351_to_a350(args.root,args.db):
                 maybe_apply_a351_sunrise(args.root,args.db)
+            if not maybe_recover_a352_to_a351(args.root,args.db):
+                maybe_apply_a352(args.root,args.db)
         result=preflight(args.root,args.db)
     except (OSError,RuntimeError,ValueError,sqlite3.DatabaseError) as exc:
         print('BODYMIND CLEAN BOOT STOP: '+str(exc),file=sys.stderr,flush=True)
