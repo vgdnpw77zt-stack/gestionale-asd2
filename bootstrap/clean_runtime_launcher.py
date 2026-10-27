@@ -1359,7 +1359,7 @@ def a351_expected_from_a350(old:bytes)->tuple[bytes,str]:
     # Attach private album routes at Python-module level only after all original
     # A350 Flask functions have been defined. No route/model changes to A350.
     album_loader=b"""
-# A351 PRIVATE ATHLETE ALBUM
+# BODYMIND A351 PRIVATE ATHLETE ALBUM
 import importlib.util as _bm351_import
 _bm351_spec=_bm351_import.spec_from_file_location(
     'bodymind_a351_private_album','/opt/bodymind/bodymind_a351_private_album.py')
