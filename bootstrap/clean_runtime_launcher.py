@@ -1321,6 +1321,121 @@ def maybe_recover_a350_to_a349(root:Path,db:Path)->bool:
     print('BODYMIND A350 RECOVERY PASS: A349 exact source restored, no data change',flush=True)
     return True
 
+
+# A351 SUNRISE: strictly cosmetic additive layer over the *deployed* A350
+# source. This never edits document records, user permissions or video files.
+A351_REL=A350_REL
+A351_A350_LIVE_SHA='8bbb503c24242e88aa97bc1eb973f92e69aa395df27c00d38f6809c9435532d1'
+A351_BACKUP=Path('/data/release_packages/BODYMIND_A351_PREUI_A350.py')
+A351_CSS_PATH=Path('/opt/bodymind/family_a351_sunrise.css')
+A351_JS_PATH=Path('/opt/bodymind/family_a351_sunrise.js')
+A351_CSS_BLOB='b2daa79b8fce0d24b3ae81d9d77c7c85a95bd2ad'
+A351_JS_BLOB='4ab33e552dbb89fe45c92725371becb94581f184'
+
+def a351_assets()->tuple[bytes,bytes]:
+    css=A351_CSS_PATH.read_bytes()
+    js=A351_JS_PATH.read_bytes()
+    if a350_git_blob(css)!=A351_CSS_BLOB or a350_git_blob(js)!=A351_JS_BLOB:
+        raise RuntimeError('A351 design assets changed after review')
+    if any(k in css for k in (b'</style>',b"'''")) or any(k in js for k in (b'</script>',b"'''")):
+        raise RuntimeError('A351 unsafe inline template delimiter')
+    return css,js
+
+def a351_expected_from_a350(old:bytes)->tuple[bytes,str]:
+    if hashlib.sha256(old).hexdigest()!=A351_A350_LIVE_SHA:
+        raise RuntimeError('A351 source SHA not equal to deployed A350')
+    css,js=a351_assets()
+    head=b'</style>\n</head>'
+    tail=b'</body></html>'
+    if old.count(head)!=1 or old.count(tail)!=1:
+        raise RuntimeError('A351 family template injection anchors missing/duplicated')
+    if b'BODYMIND A351 SUNRISE' in old or b'bm351-dock-script' in old:
+        raise RuntimeError('A351 duplicate or premodified layout')
+    new=old.replace(head,b'\n/* BODYMIND A351 SUNRISE */\n'+css+b'\n'+head,1)
+    new=new.replace(tail,b'<script id="bm351-dock-script">\n'+js+b'\n</script>\n'+tail,1)
+    compile(new,A351_REL,'exec')
+    return new,hashlib.sha256(new).hexdigest()
+
+def a351_matches(root:Path,found:dict[str,str])->bool:
+    if len(found)!=214 or A351_REL not in found or not A351_BACKUP.is_file() or A351_BACKUP.is_symlink():
+        return False
+    old=A351_BACKUP.read_bytes()
+    if hashlib.sha256(old).hexdigest()!=A351_A350_LIVE_SHA:
+        return False
+    _,sha=a351_expected_from_a350(old)
+    if found[A351_REL]!=sha:
+        return False
+    previous=dict(found)
+    previous[A351_REL]=hashlib.sha256(old).hexdigest()
+    return a350_matches(root,previous)
+
+def maybe_apply_a351_sunrise(root:Path,db:Path)->None:
+    found=source_inventory(root)
+    if a351_matches(root,found):
+        return
+    if not a350_matches(root,found):
+        return
+    sqlite_readonly_check(db)
+    target=root/A351_REL
+    if not target.is_file() or target.is_symlink():
+        raise RuntimeError('A351 unsafe route source')
+    old=target.read_bytes()
+    new,new_sha=a351_expected_from_a350(old)
+    if A351_BACKUP.exists():
+        if not A351_BACKUP.is_file() or A351_BACKUP.is_symlink() or A351_BACKUP.read_bytes()!=old:
+            raise RuntimeError('A351 recovery copy conflict')
+    else:
+        if not A351_BACKUP.parent.is_dir() or A351_BACKUP.parent.is_symlink():
+            raise RuntimeError('A351 protected backup directory unavailable')
+        with open(A351_BACKUP,'xb') as fh:
+            fh.write(old)
+            fh.flush()
+            os.fsync(fh.fileno())
+    tmp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a351_sunrise_',suffix='.py',dir=str(target.parent),delete=False) as fh:
+            tmp=Path(fh.name)
+            fh.write(new)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(tmp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(tmp),str(target))
+        tmp=None
+    finally:
+        if tmp is not None: tmp.unlink(missing_ok=True)
+    updated=source_inventory(root)
+    if updated[A351_REL]!=new_sha or not a351_matches(root,updated):
+        raise RuntimeError('A351 source verification failed after update')
+    print('BODYMIND A351 SUNRISE UI APPLIED - DATABASE AND MEDIA UNCHANGED',flush=True)
+
+def maybe_recover_a351_to_a350(root:Path,db:Path)->bool:
+    if os.environ.get('BODYMIND_A351_RECOVER_A350')!='1':
+        return False
+    found=source_inventory(root)
+    if a350_matches(root,found):
+        return True
+    if not a351_matches(root,found):
+        raise RuntimeError('A351 cannot recover unknown source')
+    sqlite_readonly_check(db)
+    target=root/A351_REL
+    original=A351_BACKUP.read_bytes()
+    tmp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a351_recover_',suffix='.py',dir=str(target.parent),delete=False) as fh:
+            tmp=Path(fh.name)
+            fh.write(original)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(tmp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(tmp),str(target))
+        tmp=None
+    finally:
+        if tmp is not None: tmp.unlink(missing_ok=True)
+    if not a350_matches(root,source_inventory(root)):
+        raise RuntimeError('A351 recovery fingerprint mismatch')
+    print('BODYMIND A351 RECOVERY COMPLETE - VERIFIED A350 CODE RESTORED',flush=True)
+    return True
+
 def main(argv=None):
     parser=argparse.ArgumentParser()
     parser.add_argument('mode',nargs='?',choices=('check','start'),default='start')
@@ -1348,6 +1463,8 @@ def main(argv=None):
                 maybe_apply_a349_family_ui(args.root,args.db)
             if not maybe_recover_a350_to_a349(args.root,args.db):
                 maybe_apply_a350_family_ui(args.root,args.db)
+            if not maybe_recover_a351_to_a350(args.root,args.db):
+                maybe_apply_a351_sunrise(args.root,args.db)
         result=preflight(args.root,args.db)
     except (OSError,RuntimeError,ValueError,sqlite3.DatabaseError) as exc:
         print('BODYMIND CLEAN BOOT STOP: '+str(exc),file=sys.stderr,flush=True)
