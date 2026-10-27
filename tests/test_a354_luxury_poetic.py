@@ -44,7 +44,7 @@ class LuxuryPoeticTests(unittest.TestCase):
             for ctx in assets(): stack.enter_context(ctx)
             original_css=M.A351_CSS_PATH.read_bytes()
             original_js=M.A351_JS_PATH.read_bytes()
-            a351=b"PORTAL='''"+original_css+b'\\n/*END CSS*/\\n'+original_js+b"\\n'''\\n"
+            a351=b"PORTAL='''"+original_css+bytes([10])+b'/*END CSS*/'+bytes([10])+original_js+bytes([10])+b"'''"+bytes([10])
             a351_path=Path(tmp)/'a351.py'
             a351_path.write_bytes(a351)
             stack.enter_context(patch.object(M,'A352_A351_LIVE_SHA',hashlib.sha256(a351).hexdigest()))
