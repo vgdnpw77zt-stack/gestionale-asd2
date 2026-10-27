@@ -1,0 +1,71 @@
+name: A351 private athlete media contract READ ONLY
+on:
+  push:
+    branches: [bodymind-a351-aurora-stories-20261027]
+    paths: ['.github/workflows/a351-private-media-contract.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  live-private-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
+      HAS_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY != '' }}
+    steps:
+      - name: Authorized SSH to currently running A350
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$HAS_KEY" == true ]] || exit 1
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$RAILWAY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+      - name: Read structure and route decorators ONLY; no token/PII/files
+        shell: bash
+        run: |
+          timeout 85s ssh -T -i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          import ast,importlib.util,json,shutil
+          from pathlib import Path
+          path=Path('/data/top2_app/asd_app/routes_bodymind_final.py')
+          source=path.read_text()
+          tree=ast.parse(source)
+          sought={'bodymind_portal','bodymind_upload','bodymind_doc'}
+          handlers={}
+          for n in ast.walk(tree):
+              if isinstance(n,ast.FunctionDef) and n.name in sought:
+                  methods=[]
+                  for d in n.decorator_list:
+                      if isinstance(d,ast.Call):
+                          methods.append({'func':ast.unparse(d.func),'arguments':[ast.unparse(a) for a in d.args][:2]})
+                  body=ast.get_source_segment(source,n) or ''
+                  handlers[n.name]=dict(params=[a.arg for a in n.args.args],decorators=methods,
+                     has_form_csrf=('csrf_token' in body),has_upload_mime=('mimetype' in body),uses_db=('db()' in body))
+          registered=[]
+          for n in tree.body:
+              if isinstance(n,ast.Expr) and isinstance(n.value,ast.Call):
+                  x=n.value
+                  if isinstance(x.func,ast.Attribute) and x.func.attr in ('add_url_rule','register_blueprint') and x.args:
+                      registered.append(str(ast.unparse(x.func))[:90])
+          libs={name:importlib.util.find_spec(name) is not None for name in ('PIL','cv2','ffmpeg','imageio','flask_wtf')}
+          imports=[(n.module or '') for n in tree.body if isinstance(n,ast.ImportFrom)]
+          print('A351_PRIVATE_MEDIA_CONTRACT '+json.dumps({
+             'handlers':handlers,'has_main_form_csrf':('csrf_token' in source),
+             'installed_modules':libs,'system_ffmpeg':bool(shutil.which('ffmpeg')),
+             'has_family_carousel_id':('familyMediaTrack' in source),
+             'has_family_hero_video_class':('family-hero-video' in source),
+             'has_workspace_media_helper':('get_workspace_media_dir' in source),
+             'has_python_blueprint_import':('flask' in imports),
+             'route_registration_count':len(registered),
+             'upload_extension_references':source.count('allowed_file'),
+          },sort_keys=True))
+          print('A351_LIVE_MEDIA_READONLY_NO_USER_DATA_PASS')
+          PY
+      - name: Shred SSH key
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "$HOME/.ssh/id_ed25519" ]]; then
+            shred -u "$HOME/.ssh/id_ed25519" || rm -f "$HOME/.ssh/id_ed25519"
+          fi
