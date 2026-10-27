@@ -75,6 +75,10 @@ def _open_album(owner,create=False):
            caption TEXT DEFAULT '')""")
         d.execute("""CREATE INDEX IF NOT EXISTS album_owner_idx
                      ON photos(athlete_id,created_at)""")
+        d.execute("""CREATE TABLE IF NOT EXISTS consents(
+           athlete_id INTEGER PRIMARY KEY,
+           notice_version TEXT NOT NULL,
+           accepted_at TEXT NOT NULL)""")
         d.execute("""CREATE TABLE IF NOT EXISTS films(
            athlete_id INTEGER PRIMARY KEY,
            filename TEXT NOT NULL,
@@ -213,7 +217,7 @@ small{color:#d5eae4}
 <input type="hidden" name="csrf" value="{{ csrf }}">
 <input type="file" name="photos" accept="image/jpeg,image/png,image/webp" multiple required>
 <label class="check"><input type="checkbox" name="privacy" value="yes" required>
-<span>Confermo di essere la persona autorizzata a gestire queste fotografie. Se raffigurano una minorenne, confermo di essere il genitore o tutore autorizzato. Le immagini restano nell'area privata.</span></label>
+<span>Confermo di essere la persona autorizzata a gestire queste fotografie. Se raffigurano una minorenne, confermo di essere il genitore o tutore autorizzato. Le immagini restano nell'area privata, sono utilizzate solo per il tuo album e per creare il film richiesto, e puoi cancellarle qui quando vuoi. Questa scelta viene registrata.</span></label>
 <button type="submit">Aggiungi al mio album</button>
 </form></section>
 <section class="card"><h2>La mia pellicola</h2>
@@ -288,6 +292,8 @@ def install_family_gallery(app,db_provider):
                     written.append(fn)
                     db.execute('INSERT INTO photos(id,athlete_id,filename,created_at) VALUES(?,?,?,?)',
                       (photoid,owner,name,datetime.now(timezone.utc).isoformat()))
+                db.execute('INSERT OR REPLACE INTO consents(athlete_id,notice_version,accepted_at) VALUES(?,?,?)',
+                   (owner,'a351-private-images-v1',datetime.now(timezone.utc).isoformat()))
                 db.execute('DELETE FROM films WHERE athlete_id=?',(owner,))
                 db.commit()
                 if oldfilm:
