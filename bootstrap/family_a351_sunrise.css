@@ -188,3 +188,62 @@ main.main #pagamenti .number{
   .bm351-atmosphere{display:none!important}
   .bottom-nav .bm351-dock-toggle{forced-color-adjust:auto}
 }
+
+
+/* A351 Film Ribbon: existing family images retain source/captions/links.
+   Semi-transparent sprocket perforations sit OUTSIDE the photo itself. */
+main.main #familyMediaTrack.media-track{
+  align-items:stretch;
+  gap:clamp(14px,2vw,25px)!important;
+  padding:23px 8px 27px!important;
+  scroll-snap-type:x mandatory;
+  scroll-padding-inline:8px;
+}
+main.main #familyMediaTrack .media-card{
+  position:relative!important;
+  flex-shrink:0;
+  overflow:visible!important;
+  margin-block:12px!important;
+  border:1px solid rgba(196,246,221,.56)!important;
+  border-radius:17px!important;
+  box-shadow:0 18px 30px rgba(3,30,40,.35),0 0 0 5px rgba(168,225,217,.055)!important;
+  scroll-snap-align:center;
+  isolation:isolate;
+  transform:rotate(var(--bm351-frame-tilt,0deg));
+  transition:transform .35s ease,box-shadow .35s ease;
+}
+main.main #familyMediaTrack .media-card:nth-child(3n+1){--bm351-frame-tilt:-.65deg}
+main.main #familyMediaTrack .media-card:nth-child(3n+2){--bm351-frame-tilt:.8deg}
+main.main #familyMediaTrack .media-card:nth-child(3n+3){--bm351-frame-tilt:-.3deg}
+main.main #familyMediaTrack .media-card:is(:hover,:focus-within){
+  transform:rotate(0) translateY(-3px);
+  box-shadow:0 22px 39px rgba(3,30,40,.45)!important;
+}
+main.main #familyMediaTrack .media-card::before,
+main.main #familyMediaTrack .media-card::after{
+  content:"";
+  position:absolute;
+  z-index:4;
+  left:12px;right:12px;height:11px;
+  pointer-events:none;
+  background:
+    repeating-linear-gradient(90deg,
+      rgba(194,245,225,.78) 0 11px,
+      transparent 11px 23px);
+  opacity:.72;
+  -webkit-mask:repeating-linear-gradient(90deg,#000 0 10px,transparent 10px 23px);
+  mask:repeating-linear-gradient(90deg,#000 0 10px,transparent 10px 23px);
+}
+main.main #familyMediaTrack .media-card::before{top:-13px;border-radius:4px 4px 0 0}
+main.main #familyMediaTrack .media-card::after{bottom:-13px;border-radius:0 0 4px 4px}
+main.main #familyMediaTrack .media-card > :is(img,a),
+main.main #familyMediaTrack .media-card .bm350-media-link{border-radius:16px 16px 0 0;overflow:hidden}
+main.main #familyMediaTrack .media-card figcaption{border-radius:0 0 16px 16px}
+main.main #familyMediaTrack .media-card img{filter:none!important;-webkit-filter:none!important}
+@media(max-width:760px){
+  main.main #familyMediaTrack.media-track{padding-inline:8px!important}
+  main.main #familyMediaTrack .media-card{scroll-snap-align:center}
+}
+@media(prefers-reduced-motion:reduce){
+  main.main #familyMediaTrack .media-card{transition:none!important;transform:none!important}
+}
