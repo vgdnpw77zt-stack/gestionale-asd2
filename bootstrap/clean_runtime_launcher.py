@@ -2578,8 +2578,9 @@ def main(argv=None):
     if not port.isdigit() or not 1<=int(port)<=65535:
         print('BODYMIND CLEAN BOOT STOP: invalid port',file=sys.stderr)
         return 2
-    os.execvp('gunicorn',['gunicorn','--bind','0.0.0.0:'+port,'--workers','1','--threads','4','--timeout','300','--access-logfile','-','--error-logfile','-','app:app'])
+    os.execvp('gunicorn',['gunicorn','--bind','0.0.0.0:'+port,'--workers','1','--threads','4','--timeout','300','--access-logfile','-','--error-logfile','-','--pythonpath','/opt/bodymind','family_a362_wsgi:app'])
     return 0
 
 if __name__=='__main__':
     raise SystemExit(main())
+

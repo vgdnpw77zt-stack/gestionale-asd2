@@ -17,7 +17,7 @@ jobs:
         with: {python-version: '3.11'}
       - name: Install WebKit
         run: |
-          pip install playwright
+          pip install playwright flask
           python -m playwright install --with-deps webkit
       - name: Read existing family access privately
         shell: bash
@@ -37,7 +37,7 @@ jobs:
           db.close()
           PY
       - name: Inspect real authenticated iPhone WebKit page
-        run: python tests/a362_live_webkit.py
+        run: A362_PREVIEW=1 A362_EXPECT=1 python tests/a362_live_webkit.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -45,7 +45,9 @@ jobs:
           path: |
             webkit-iphone.jpg
             webkit-state.json
+            webkit-iphone-after.jpg
           retention-days: 7
       - name: Remove ephemeral credentials
         if: always()
         run: rm -f "$HOME/.ssh/id_ed25519" /tmp/bm-family-token
+

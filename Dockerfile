@@ -5,6 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 WORKDIR /opt/bodymind
 COPY requirements_runtime.txt /opt/bodymind/requirements_runtime.txt
 RUN pip install --no-cache-dir -r /opt/bodymind/requirements_runtime.txt
+COPY bootstrap/family_a362_base.css bootstrap/family_a362_scene.css bootstrap/family_a362_navigation.js bootstrap/family_a362_runtime.py bootstrap/family_a362_wsgi.py /opt/bodymind/
 COPY bootstrap/clean_runtime_launcher.py /opt/bodymind/clean_runtime_launcher.py
 COPY bootstrap/family_a337.css.zlib.base64 /opt/bodymind/family_a337.css.zlib.base64
 COPY bootstrap/family_a340.css.zlib.base64 /opt/bodymind/family_a340.css.zlib.base64
@@ -46,3 +47,4 @@ COPY bootstrap/bodymind_a351_private_album.py /opt/bodymind/bodymind_a351_privat
 RUN mkdir -p /opt/bodymind-migration && cp /opt/bodymind/clean_runtime_launcher.py /opt/bodymind-migration/migration_upload.py
 EXPOSE 8080
 CMD ["python","/opt/bodymind/clean_runtime_launcher.py","start"]
+
