@@ -37,6 +37,8 @@ COPY bootstrap/family_a358_mobile_waves.css /opt/bodymind/family_a358_mobile_wav
 COPY bootstrap/family_a359_cinematic_home.css /opt/bodymind/family_a359_cinematic_home.css
 COPY bootstrap/family_a360_cinematic_delivery.css /opt/bodymind/family_a360_cinematic_delivery.css
 COPY bootstrap/family_a360_runtime.py /opt/bodymind/family_a360_runtime.py
+COPY bootstrap/family_a361_runtime.py /opt/bodymind/family_a361_runtime.py
+COPY bootstrap/family_a361_probe.js /opt/bodymind/family_a361_probe.js
 COPY bootstrap/family_a355_studio_link.js /opt/bodymind/family_a355_studio_link.js
 COPY bootstrap/bodymind_a355_film_studio.py /opt/bodymind/bodymind_a355_film_studio.py
 COPY bootstrap/bodymind_a351_private_album.py /opt/bodymind/bodymind_a351_private_album.py

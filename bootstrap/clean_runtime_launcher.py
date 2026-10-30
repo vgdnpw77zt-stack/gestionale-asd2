@@ -90,7 +90,7 @@ def preflight(root:Path,db:Path)->dict:
     valid={(EXPECTED_SOURCE_COUNT,EXPECTED_SOURCE_DIGEST),(UPGRADE_SOURCE_COUNT,UPGRADE_SOURCE_DIGEST),
            (MANUAL_ROSTER_SOURCE_COUNT,MANUAL_ROSTER_SOURCE_DIGEST),
            (SIMPLE_GROUP_SOURCE_COUNT,SIMPLE_GROUP_SOURCE_DIGEST),(A317_SOURCE_COUNT,A317_SOURCE_DIGEST),(A328_SOURCE_COUNT,A328_SOURCE_DIGEST),(A330_SOURCE_COUNT,A330_SOURCE_DIGEST),(A336_SOURCE_COUNT,A336_SOURCE_DIGEST),(A337_SOURCE_COUNT,A337_SOURCE_DIGEST)}
-    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found) and not a343_matches(root,found) and not a344_matches(root,found) and not a345_matches(root,found) and not a346_matches(root,found) and not a347_matches(root,found) and not a348_matches(root,found) and not a349_matches(root,found) and not a350_matches(root,found) and not a351_matches(root,found) and not a352_matches(root,found) and not a353_matches(root,found) and not a354_matches(root,found) and not a355_matches(root,found) and not a356_matches(root,found) and not a357_matches(root,found) and not a358_matches(root,found) and not a359_matches(root,found) and not a360_matches(root,found):
+    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found) and not a343_matches(root,found) and not a344_matches(root,found) and not a345_matches(root,found) and not a346_matches(root,found) and not a347_matches(root,found) and not a348_matches(root,found) and not a349_matches(root,found) and not a350_matches(root,found) and not a351_matches(root,found) and not a352_matches(root,found) and not a353_matches(root,found) and not a354_matches(root,found) and not a355_matches(root,found) and not a356_matches(root,found) and not a357_matches(root,found) and not a358_matches(root,found) and not a359_matches(root,found) and not a360_matches(root,found) and not a361_matches(root,found):
         raise RuntimeError(f'source lock mismatch files={len(found)} expected={EXPECTED_SOURCE_COUNT}')
     return {'source_files':len(found),'sqlite':'ok','rows':sqlite_readonly_check(db),
             'historical_migrations_executed':0,'automatic_backup_cleanup':False,
@@ -2426,6 +2426,98 @@ def maybe_recover_a360_to_a359(root:Path,db:Path)->bool:
     return True
 
 
+# A361 diagnostic overlay: zero edits to business data and A360 source.
+A361_REL=A360_REL
+A361_BACKUP=Path('/data/release_packages/BODYMIND_A361_PREUI_A360.py')
+A361_JS_PATH=Path('/opt/bodymind/family_a361_probe.js')
+A361_RUNTIME_PATH=Path('/opt/bodymind/family_a361_runtime.py')
+A361_JS_BLOB='0e853f2fb37bad5d7487f78f1c6398e70f3cfb0b'
+A361_RUNTIME_BLOB='bec82d7bca227c999158b6f67bc85ffb74456359'
+def a361_assets()->tuple[bytes,bytes]:
+    js=A361_JS_PATH.read_bytes()
+    code=A361_RUNTIME_PATH.read_bytes()
+    if a350_git_blob(js)!=A361_JS_BLOB or a350_git_blob(code)!=A361_RUNTIME_BLOB:
+        raise RuntimeError('A361 diagnostic assets checksum mismatch')
+    compile(code,'family_a361_runtime.py','exec')
+    return js,code
+def a361_expected_from_a360(old:bytes)->tuple[bytes,str]:
+    if not A360_BACKUP.is_file() or A360_BACKUP.is_symlink():
+        raise RuntimeError('A361 missing immutable A359 parent')
+    expected,sha=a360_expected_from_a359(A360_BACKUP.read_bytes())
+    if old!=expected or hashlib.sha256(old).hexdigest()!=sha:
+        raise RuntimeError('A361 exact A360 parent mismatch')
+    a361_assets()
+    if b'BODYMIND A361 DIAGNOSTICS' in old:
+        raise RuntimeError('A361 duplicate diagnostics')
+    appended=b"""
+# BODYMIND A361 DIAGNOSTICS
+import importlib.util as _bm361_import
+_bm361_spec=_bm361_import.spec_from_file_location('family_a361_runtime','/opt/bodymind/family_a361_runtime.py')
+_bm361_module=_bm361_import.module_from_spec(_bm361_spec)
+_bm361_spec.loader.exec_module(_bm361_module)
+_bm361_module.install(app,lambda:open('/opt/bodymind/family_a361_probe.js','rb').read())
+"""
+    new=old+appended
+    compile(new,A361_REL,'exec')
+    return new,hashlib.sha256(new).hexdigest()
+def a361_matches(root:Path,found:dict[str,str])->bool:
+    if len(found)!=214 or A361_REL not in found or not A361_BACKUP.is_file() or A361_BACKUP.is_symlink():
+        return False
+    old=A361_BACKUP.read_bytes()
+    _,sha=a361_expected_from_a360(old)
+    if found[A361_REL]!=sha:return False
+    prior=dict(found)
+    prior[A361_REL]=hashlib.sha256(old).hexdigest()
+    return a360_matches(root,prior)
+def maybe_apply_a361(root:Path,db:Path)->None:
+    found=source_inventory(root)
+    if a361_matches(root,found) or not a360_matches(root,found):
+        return
+    sqlite_readonly_check(db)
+    target=root/A361_REL
+    if target.is_symlink() or not target.is_file():raise RuntimeError('A361 unsafe family route source')
+    original=target.read_bytes()
+    upgraded,sha=a361_expected_from_a360(original)
+    if A361_BACKUP.exists():
+        if not A361_BACKUP.is_file() or A361_BACKUP.is_symlink() or A361_BACKUP.read_bytes()!=original:
+            raise RuntimeError('A361 backup conflict')
+    else:
+        if not A361_BACKUP.parent.is_dir() or A361_BACKUP.parent.is_symlink():
+            raise RuntimeError('A361 backup directory unavailable')
+        with open(A361_BACKUP,'xb') as fh:fh.write(original);fh.flush();os.fsync(fh.fileno())
+    tmp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a361_',suffix='.py',dir=str(target.parent),delete=False) as fh:
+            tmp=Path(fh.name);fh.write(upgraded);fh.flush();os.fsync(fh.fileno())
+        os.chmod(tmp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(tmp),str(target));tmp=None
+    finally:
+        if tmp is not None:tmp.unlink(missing_ok=True)
+    final=source_inventory(root)
+    if final[A361_REL]!=sha or not a361_matches(root,final):
+        raise RuntimeError('A361 source verification failed')
+    print('BODYMIND A361 SAFE DOM PROBE INSTALLED',flush=True)
+def maybe_recover_a361_to_a360(root:Path,db:Path)->bool:
+    if os.environ.get('BODYMIND_A361_RECOVER_A360')!='1':return False
+    found=source_inventory(root)
+    if a360_matches(root,found):return True
+    if not a361_matches(root,found):raise RuntimeError('A361 unknown rollback source')
+    sqlite_readonly_check(db)
+    target=root/A361_REL
+    original=A361_BACKUP.read_bytes()
+    tmp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a361_restore_',suffix='.py',dir=str(target.parent),delete=False) as fh:
+            tmp=Path(fh.name);fh.write(original);fh.flush();os.fsync(fh.fileno())
+        os.chmod(tmp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(tmp),str(target));tmp=None
+    finally:
+        if tmp is not None:tmp.unlink(missing_ok=True)
+    if not a360_matches(root,source_inventory(root)):
+        raise RuntimeError('A361 rollback verification failed')
+    print('BODYMIND A361 EXACT A360 RESTORED',flush=True)
+
+
 def main(argv=None):
     parser=argparse.ArgumentParser()
     parser.add_argument('mode',nargs='?',choices=('check','start'),default='start')
@@ -2473,6 +2565,8 @@ def main(argv=None):
                 maybe_apply_a359(args.root,args.db)
             if not maybe_recover_a360_to_a359(args.root,args.db):
                 maybe_apply_a360(args.root,args.db)
+            if not maybe_recover_a361_to_a360(args.root,args.db):
+                maybe_apply_a361(args.root,args.db)
         result=preflight(args.root,args.db)
     except (OSError,RuntimeError,ValueError,sqlite3.DatabaseError) as exc:
         print('BODYMIND CLEAN BOOT STOP: '+str(exc),file=sys.stderr,flush=True)
