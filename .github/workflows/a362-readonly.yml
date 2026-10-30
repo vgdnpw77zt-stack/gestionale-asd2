@@ -2,7 +2,7 @@ name: A362 real authenticated WebKit read-only audit
 on:
   push:
     branches: [bodymind-a362-readonly-investigation-20261030]
-    paths: ['.github/workflows/a362-readonly.yml', 'tests/a362_live_webkit.py']
+    paths: ['.github/workflows/a362-readonly.yml', 'tests/a362_live_webkit.py', 'bootstrap/family_a362*']
 permissions:
   contents: read
 jobs:
@@ -41,7 +41,7 @@ jobs:
         run: |
           set -euo pipefail
           timeout 90s ssh -T -i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com 'PYTHONDONTWRITEBYTECODE=1 python3 -' > /tmp/bm-source-audit.json <<'PY'
-          import ast,hashlib,json,importlib.util
+          import ast,hashlib,json,importlib.util,sqlite3
           from pathlib import Path
           root=Path('/data/top2_app')
           spec=importlib.util.spec_from_file_location('guard','/opt/bodymind/clean_runtime_launcher.py')
@@ -57,6 +57,12 @@ jobs:
               with p.open('rb') as f:
                   for block in iter(lambda:f.read(1024*1024),b''):digest.update(block)
               count+=1
+          con=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True)
+          con.execute('PRAGMA query_only=ON')
+          logical=hashlib.sha256()
+          for row in con.iterdump():logical.update(row.encode())
+          con.close()
+          result['database_logical_sha256']=logical.hexdigest()
           result.update(family_source_sha256=hashlib.sha256(raw).hexdigest(),protected_files=count,protected_files_digest=digest.hexdigest())
           print(json.dumps({'template':template,'audit':result}))
           PY
