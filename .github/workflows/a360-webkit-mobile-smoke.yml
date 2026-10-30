@@ -1,0 +1,64 @@
+name: BodyMind A360 — iPhone WebKit CSS render smoke
+on:
+  push:
+    branches: [bodymind-a360-family-css-delivery-20261030]
+  workflow_dispatch:
+jobs:
+  safari-css:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions: { contents: read }
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: Install real WebKit browser
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps webkit
+      - name: Simulate iPhone family DOM and verify final body stylesheet
+        run: |
+          python - <<'PY'
+          import asyncio
+          from playwright.async_api import async_playwright
+          CSS='https://app.bodymindaerialstudio.life/_bodymind_family_a360.css?v=20261030-a360'
+          HTML='''<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>
+          <section class="hero"><div class="bm352-sky"></div><div class="hero-media"><video class="family-hero-video" playsinline muted></video></div>
+          <div class="frame hero-content"><div class="hero-intro"><span class="kicker">AREA ALLIEVE &amp; FAMIGLIE</span><h1>Ciao GAIA,</h1><p>Il tuo percorso BodyMind</p><a class="pill" href="#test">Scopri il tuo percorso</a></div></div></section>
+          <main class="main"><div class="bm352-sky"></div><div class="stats"><p>Test</p></div></main>
+          <link id="bodymind-a360-style" rel="stylesheet" href="'''+CSS+'''"></body></html>'''
+          async def run():
+              async with async_playwright() as p:
+                  browser=await p.webkit.launch()
+                  page=await browser.new_page(viewport={'width':390,'height':844},device_scale_factor=3,is_mobile=True,has_touch=True)
+                  await page.set_content(HTML,wait_until='load',timeout=45000)
+                  await page.wait_for_function("""() => {
+                    const h=document.querySelector('.hero');
+                    return getComputedStyle(h).minHeight !== '0px' &&
+                      getComputedStyle(h,'::before').animationName.includes('bm360-cloud-flow')
+                  }""",timeout=15000)
+                  state=await page.evaluate("""() => {
+                    const hero=document.querySelector('.hero');
+                    const content=document.querySelector('.hero-content');
+                    const video=document.querySelector('.hero-media');
+                    const main=document.querySelector('main.main');
+                    return {
+                      heroHeight:getComputedStyle(hero).height,
+                      heroPos:getComputedStyle(hero).position,
+                      textPos:getComputedStyle(content).position,
+                      videoPos:getComputedStyle(video).position,
+                      animation:getComputedStyle(hero,'::before').animationName,
+                      cloudAnimation:getComputedStyle(main.querySelector('.bm352-sky'),'::after').animationName,
+                      mainBackground:getComputedStyle(main).backgroundImage.slice(0,100),
+                      linkCount:document.querySelectorAll('#bodymind-a360-style').length
+                    }
+                  }""")
+                  print('WEBKIT IPHONE CSS:',state)
+                  assert state['textPos']=='absolute',state
+                  assert state['videoPos']=='absolute',state
+                  assert state['animation']=='bm360-cloud-flow',state
+                  assert state['cloudAnimation']=='bm360-under-clouds',state
+                  assert state['linkCount']==1,state
+                  print('A360 WEBKIT IPHONE RENDER PASS')
+                  await browser.close()
+          asyncio.run(run())
+          PY
