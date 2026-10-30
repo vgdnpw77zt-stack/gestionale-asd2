@@ -1,4 +1,4 @@
-(()=>{'use strict';
+(()=>{'use strict';function init(){
 const nav=document.querySelector('.bottom-nav');if(!nav)return;
 nav.id='bm362-dock';
 const toggle=document.createElement('button');toggle.type='button';toggle.className='bm362-menu';toggle.setAttribute('aria-controls',nav.id);toggle.setAttribute('aria-label','Mostra o nascondi il menu BodyMind');document.body.appendChild(toggle);
@@ -10,4 +10,6 @@ setOpen(false);
 const footer=document.querySelector('.bm350-gallery-footer');
 const studio=document.querySelector('.bm362-studio a');
 if(footer&&studio){const a=document.createElement('a');a.href=studio.getAttribute('href').replace(/\/studio$/,'/album');a.className='bm350-gallery-more bm351-private-album';a.textContent='Il mio album privato';footer.prepend(a)}
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
