@@ -1,0 +1,25 @@
+name: BodyMind A359 — mobile cinematic home safety
+on:
+  push:
+    branches:
+      - bodymind-a359-cinematic-home-20261030
+  workflow_dispatch:
+jobs:
+  a359-cinematic-ui:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile clean boot and A359 tests
+        run: python -m py_compile bootstrap/clean_runtime_launcher.py tests/test_a359_cinematic_home.py
+      - name: A357 iOS stability guard
+        run: python -m unittest discover -s tests -p 'test_a357_ios_stability.py' -v
+      - name: A358 waves immutable parent
+        run: python -m unittest discover -s tests -p 'test_a358_mobile_waves.py' -v
+      - name: A359 cinematic assets and rollback isolation
+        run: python -m unittest discover -s tests -p 'test_a359_cinematic_home.py' -v
