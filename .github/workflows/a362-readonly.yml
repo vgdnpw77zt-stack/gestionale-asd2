@@ -1,42 +1,43 @@
-name: A362 read-only live source and Clean Boot audit
+name: A362 real authenticated WebKit read-only audit
 on:
   push:
     branches: [bodymind-a362-readonly-investigation-20261030]
-    paths: ['.github/workflows/a362-readonly.yml']
+    paths: ['.github/workflows/a362-readonly.yml', 'tests/a362_live_webkit.py']
 permissions:
   contents: read
 jobs:
   audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 12
     env:
       RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
     steps:
-      - name: Read-only audit using existing SSH access
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Install WebKit
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps webkit
+      - name: Read existing family access privately
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -z "$RAILWAY_SSH_KEY" ]]; then
-            echo "::error::BLOCKED_EXISTING_SSH_KEY_UNAVAILABLE"
-            exit 1
-          fi
+          umask 077
+          test -n "$RAILWAY_SSH_KEY"
           install -d -m 700 "$HOME/.ssh"
           printf '%s\n' "$RAILWAY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
-          chmod 600 "$HOME/.ssh/id_ed25519"
-          timeout 65s ssh -T -i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
-          import ast, hashlib, importlib.util, json
-          from pathlib import Path
-          root=Path('/data/top2_app')
-          spec=importlib.util.spec_from_file_location('audit_launcher','/opt/bodymind/clean_runtime_launcher.py')
-          module=importlib.util.module_from_spec(spec)
-          spec.loader.exec_module(module)
-          print('A362_READONLY_CLEANBOOT',json.dumps(module.preflight(root,Path('/data/tenants/default/asd.db')),sort_keys=True))
-          import base64,zlib
-          for name in ('routes_bodymind_final.py','routes_iscrizione_online.py'):
-              data=(root/'asd_app'/name).read_bytes()
-              print('A362_SOURCE_PAYLOAD',name,base64.b64encode(zlib.compress(data)).decode())
-          print('A362_NO_APPLICATION_IMPORT_NO_VOLUME_WRITES')
+          timeout 60s ssh -T -i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com 'PYTHONDONTWRITEBYTECODE=1 python3 -' > /tmp/bm-family-token <<'PY'
+          import sqlite3
+          db=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True)
+          db.execute('PRAGMA query_only=ON')
+          rows=db.execute("SELECT online_token FROM tesserati WHERE upper(nome)=? AND upper(cognome)=?",('GAIA','ABATINI')).fetchall()
+          assert len(rows)==1 and rows[0][0]
+          print(rows[0][0])
+          db.close()
           PY
-      - name: Remove ephemeral SSH credential
+      - name: Inspect real authenticated iPhone WebKit page
+        run: python tests/a362_live_webkit.py
+      - name: Remove ephemeral credentials
         if: always()
-        run: rm -f "$HOME/.ssh/id_ed25519"
+        run: rm -f "$HOME/.ssh/id_ed25519" /tmp/bm-family-token
