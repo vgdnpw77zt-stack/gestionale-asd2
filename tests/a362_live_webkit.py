@@ -22,7 +22,7 @@ async def main():
           }
           function rules(rs,owner,active=true){
             for(const r of rs){
-              if(r.cssRules){rules(r.cssRules,owner,active && (!r.conditionText || !r.constructor.name.includes('Media') || matchMedia(r.conditionText).matches));continue;}
+              if(r.cssRules && !r.selectorText){rules(r.cssRules,owner,active && (!r.conditionText || !r.constructor.name.includes('Media') || matchMedia(r.conditionText).matches));continue;}
               if(!active||!r.selectorText)continue;
               try{
                 if(sels.some(sel=>document.querySelector(sel)?.matches(r.selectorText)) && ['position','display','width','height','min-height','max-height','background','z-index','animation','transform'].some(k=>r.style.getPropertyValue(k)))
@@ -36,7 +36,8 @@ async def main():
         }""")
         print('A362_LIVE_STATE '+json.dumps(state))
         screenshot=await page.screenshot(type='jpeg',quality=75)
-        print('A362_SCREENSHOT '+base64.b64encode(screenshot).decode())
+        Path('webkit-iphone.jpg').write_bytes(screenshot)
+        Path('webkit-state.json').write_text(json.dumps(state,indent=2))
         await page.wait_for_timeout(2500)
         print('A362_VIDEO_TIME '+str(await page.locator('#familyHeroVideo').evaluate('(e)=>e.currentTime')))
         await browser.close()
