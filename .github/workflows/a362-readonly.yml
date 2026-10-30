@@ -31,20 +31,10 @@ jobs:
           module=importlib.util.module_from_spec(spec)
           spec.loader.exec_module(module)
           print('A362_READONLY_CLEANBOOT',json.dumps(module.preflight(root,Path('/data/tenants/default/asd.db')),sort_keys=True))
-          for path in sorted((root/'asd_app').glob('*.py')):
-              raw=path.read_bytes()
-              if b'/app-tesserato/' not in raw and b'csrf' not in raw.lower():
-                  continue
-              tree=ast.parse(raw)
-              print('SOURCE',path.name,hashlib.sha256(raw).hexdigest())
-              for node in ast.walk(tree):
-                  if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)):
-                      segment=ast.get_source_segment(raw.decode('utf-8'),node) or ''
-                      if 'csrf' in segment.lower() and len(segment)<6000:
-                          print('CSRF_CONTROL',segment)
-                  if isinstance(node,ast.Call) and isinstance(node.func,ast.Attribute) and node.func.attr in ('route','add_url_rule'):
-                      if node.args and isinstance(node.args[0],ast.Constant) and isinstance(node.args[0].value,str) and '/app-tesserato/' in node.args[0].value:
-                          print('FAMILY_ROUTE',path.name,node.lineno,node.args[0].value)
+          import base64,zlib
+          for name in ('routes_bodymind_final.py','routes_iscrizione_online.py'):
+              data=(root/'asd_app'/name).read_bytes()
+              print('A362_SOURCE_PAYLOAD',name,base64.b64encode(zlib.compress(data)).decode())
           print('A362_NO_APPLICATION_IMPORT_NO_VOLUME_WRITES')
           PY
       - name: Remove ephemeral SSH credential
