@@ -1,0 +1,26 @@
+name: BodyMind A361 — live probe asset smoke
+on:
+  push:
+    branches: [bodymind-a361-family-dom-diagnostics-20261030]
+  workflow_dispatch:
+jobs:
+  public-smoke:
+    runs-on: ubuntu-latest
+    permissions: { contents: read }
+    timeout-minutes: 5
+    steps:
+      - name: Verify CSS and probe endpoints on production
+        run: |
+          python - <<'PY'
+          import urllib.request
+          base="https://app.bodymindaerialstudio.life"
+          for path,marker in [
+              ("/_bodymind_a361_probe.js","getComputedStyle"),
+              ("/_bodymind_family_a360.css?v=20261030-a360","BODYMIND A360"),
+              ("/health",'"ok":true')]:
+              req=urllib.request.Request(base+path,headers={'Cache-Control':'no-cache'})
+              with urllib.request.urlopen(req,timeout=25) as response:
+                  data=response.read(200000).decode('utf-8','replace')
+                  assert response.status==200 and marker in data,(path,response.status)
+                  print('PUBLIC CHECK PASS',path,response.status,response.headers.get('Content-Type'))
+          PY
