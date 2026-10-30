@@ -1,0 +1,52 @@
+name: A362 read-only live source and Clean Boot audit
+on:
+  push:
+    branches: [bodymind-a362-readonly-investigation-20261030]
+    paths: ['.github/workflows/a362-readonly.yml']
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Read-only audit using existing SSH access
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$RAILWAY_SSH_KEY" ]]; then
+            echo "::error::BLOCKED_EXISTING_SSH_KEY_UNAVAILABLE"
+            exit 1
+          fi
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$RAILWAY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          timeout 65s ssh -T -i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          import ast, hashlib, importlib.util, json
+          from pathlib import Path
+          root=Path('/data/top2_app')
+          spec=importlib.util.spec_from_file_location('audit_launcher','/opt/bodymind/clean_runtime_launcher.py')
+          module=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          print('A362_READONLY_CLEANBOOT',json.dumps(module.preflight(root,Path('/data/tenants/default/asd.db')),sort_keys=True))
+          for path in sorted((root/'asd_app').glob('*.py')):
+              raw=path.read_bytes()
+              if b'/app-tesserato/' not in raw and b'csrf' not in raw.lower():
+                  continue
+              tree=ast.parse(raw)
+              print('SOURCE',path.name,hashlib.sha256(raw).hexdigest())
+              for node in ast.walk(tree):
+                  if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)):
+                      segment=ast.get_source_segment(raw.decode('utf-8'),node) or ''
+                      if 'csrf' in segment.lower() and len(segment)<6000:
+                          print('CSRF_CONTROL',segment)
+                  if isinstance(node,ast.Call) and isinstance(node.func,ast.Attribute) and node.func.attr in ('route','add_url_rule'):
+                      if node.args and isinstance(node.args[0],ast.Constant) and isinstance(node.args[0].value,str) and '/app-tesserato/' in node.args[0].value:
+                          print('FAMILY_ROUTE',path.name,node.lineno,node.args[0].value)
+          print('A362_NO_APPLICATION_IMPORT_NO_VOLUME_WRITES')
+          PY
+      - name: Remove ephemeral SSH credential
+        if: always()
+        run: rm -f "$HOME/.ssh/id_ed25519"
