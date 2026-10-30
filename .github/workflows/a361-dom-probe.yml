@@ -1,0 +1,25 @@
+name: BodyMind A361 — actual family DOM probe verification
+on:
+  push:
+    branches: [bodymind-a361-family-dom-diagnostics-20261030]
+  workflow_dispatch:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions: { contents: read }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install 'Flask>=3,<4'
+      - name: Compile safe addon
+        run: python -m py_compile bootstrap/clean_runtime_launcher.py bootstrap/family_a361_runtime.py tests/test_a361_dom_probe.py
+      - name: Test CSS delivery and diagnostic privacy
+        run: |
+          python -m unittest discover -s tests -p 'test_a360_family_delivery.py' -v
+          python -m unittest discover -s tests -p 'test_a361_dom_probe.py' -v
+      - name: Retained A358/A359 guards
+        run: |
+          python -m unittest discover -s tests -p 'test_a358_mobile_waves.py' -v
+          python -m unittest discover -s tests -p 'test_a359_cinematic_home.py' -v
