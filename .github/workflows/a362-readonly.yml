@@ -36,6 +36,39 @@ jobs:
           print(rows[0][0])
           db.close()
           PY
+      - name: Verify live volume and exact source without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 90s ssh -T -i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com 'PYTHONDONTWRITEBYTECODE=1 python3 -' > /tmp/bm-source-audit.json <<'PY'
+          import ast,hashlib,json,importlib.util
+          from pathlib import Path
+          root=Path('/data/top2_app')
+          spec=importlib.util.spec_from_file_location('guard','/opt/bodymind/clean_runtime_launcher.py')
+          guard=importlib.util.module_from_spec(spec);spec.loader.exec_module(guard)
+          result=guard.preflight(root,Path('/data/tenants/default/asd.db'))
+          raw=(root/'asd_app/routes_bodymind_final.py').read_bytes()
+          tree=ast.parse(raw)
+          template=next(ast.literal_eval(n.value) for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(x,ast.Name) and x.id=='PORTAL' for x in n.targets))
+          digest=hashlib.sha256();count=0
+          for p in sorted(Path('/data/tenants/default').rglob('*')):
+              if not p.is_file() or p.is_symlink() or any(x in p.name for x in ('.db','.sqlite','.log','.pyc')):continue
+              digest.update(str(p.relative_to('/data/tenants/default')).encode())
+              with p.open('rb') as f:
+                  for block in iter(lambda:f.read(1024*1024),b''):digest.update(block)
+              count+=1
+          result.update(family_source_sha256=hashlib.sha256(raw).hexdigest(),protected_files=count,protected_files_digest=digest.hexdigest())
+          print(json.dumps({'template':template,'audit':result}))
+          PY
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          data=json.loads(Path('/tmp/bm-source-audit.json').read_text())
+          Path('/tmp/bm-template.html').write_text(data['template'])
+          Path('volume-audit.json').write_text(json.dumps(data['audit'],indent=2))
+          print('A362_VOLUME_READONLY',json.dumps(data['audit']))
+          PY
+          python -m unittest discover -s tests -p 'test_a362_presentation.py' -v
       - name: Inspect real authenticated iPhone WebKit page
         run: A362_PREVIEW=1 A362_EXPECT=1 python tests/a362_live_webkit.py
       - uses: actions/upload-artifact@v4
@@ -45,6 +78,7 @@ jobs:
           path: |
             webkit-iphone.jpg
             webkit-state.json
+            volume-audit.json
             webkit-iphone-after.jpg
           retention-days: 7
       - name: Remove ephemeral credentials
