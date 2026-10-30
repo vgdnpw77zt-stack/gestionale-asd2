@@ -5,6 +5,7 @@ from playwright.async_api import async_playwright
 async def main():
     token=Path('/tmp/bm-family-token').read_text().strip()
     assert token and len(token)<200
+    print('::add-mask::'+token)
     async with async_playwright() as p:
         browser=await p.webkit.launch()
         page=await browser.new_page(**p.devices['iPhone 13'])
@@ -19,14 +20,14 @@ async def main():
                 html=await response.text()
                 if 'familyHeroVideo' not in html:
                     await route.fulfill(response=response);return
-                styles=list(re.finditer(r'<style\\b[^>]*>.*?</style>',html,re.S|re.I))
+                styles=list(re.finditer(r'<style\b[^>]*>.*?</style>',html,re.S|re.I))
                 first=styles[0].group(0)
-                html=re.sub(r'<style\\b[^>]*>.*?</style>',lambda m:first if m.start()==styles[0].start() else '',html,flags=re.S|re.I)
+                html=re.sub(r'<style\b[^>]*>.*?</style>',lambda m:first if m.start()==styles[0].start() else '',html,flags=re.S|re.I)
                 def scripts(m):
                     v=m.group(0)
-                    return v if any(k in v.split('>',1)[0] for k in ('bodymind-media-links-a350','bodymind-a345-video','bodymind-a349-native-ratio')) or v.startswith("<script>\\n(()=>{'use strict';const track=") else ''
-                html=re.sub(r'<script\\b[^>]*>.*?</script>',scripts,html,flags=re.S|re.I)
-                html=re.sub(r'<body\\b[^>]*>','<body>',html,count=1)
+                    return v if any(k in v.split('>',1)[0] for k in ('bodymind-media-links-a350','bodymind-a345-video','bodymind-a349-native-ratio')) or v.startswith("<script>\n(()=>{'use strict';const track=") else ''
+                html=re.sub(r'<script\b[^>]*>.*?</script>',scripts,html,flags=re.S|re.I)
+                html=re.sub(r'<body\b[^>]*>','<body>',html,count=1)
                 html=clean_response_markup(compose(html,verify=False))
                 await route.fulfill(response=response,body=html)
             await page.route('**/app-tesserato/**',preview)
