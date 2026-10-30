@@ -1,0 +1,26 @@
+name: BodyMind A360 — real family stylesheet delivery gate
+on:
+  push:
+    branches: [bodymind-a360-family-css-delivery-20261030]
+  workflow_dispatch:
+jobs:
+  verify-family-html:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install lightweight Flask test runtime
+        run: pip install 'Flask>=3,<4'
+      - name: Python compile checks
+        run: python -m py_compile bootstrap/clean_runtime_launcher.py bootstrap/family_a360_runtime.py tests/test_a360_family_delivery.py
+      - name: A360 tests using fake-only family HTML
+        run: python -m unittest discover -s tests -p 'test_a360_family_delivery.py' -v
+      - name: Retain previous safe visual guards
+        run: |
+          python -m unittest discover -s tests -p 'test_a358_mobile_waves.py' -v
+          python -m unittest discover -s tests -p 'test_a359_cinematic_home.py' -v
