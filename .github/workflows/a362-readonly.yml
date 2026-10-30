@@ -38,6 +38,14 @@ jobs:
           PY
       - name: Inspect real authenticated iPhone WebKit page
         run: python tests/a362_live_webkit.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: a362-real-webkit-evidence
+          path: |
+            webkit-iphone.jpg
+            webkit-state.json
+          retention-days: 7
       - name: Remove ephemeral credentials
         if: always()
         run: rm -f "$HOME/.ssh/id_ed25519" /tmp/bm-family-token
