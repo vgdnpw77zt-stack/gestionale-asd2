@@ -1,0 +1,36 @@
+name: BodyMind A359 — public service worker diagnostic
+on:
+  push:
+    branches: [bodymind-a359-cinematic-home-20261030]
+  workflow_dispatch:
+jobs:
+  inspect-public-network:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check public service-worker cache rules and app responses
+        run: |
+          python - <<'PY'
+          import urllib.request, urllib.error, re
+          base='https://app.bodymindaerialstudio.life'
+          for path in ['/service-worker.js','/health','/','/app-tesserato/__a359_missing_token__']:
+              url=base+path
+              req=urllib.request.Request(url,headers={'User-Agent':'BodyMind-SW-Diag/1.0','Cache-Control':'no-cache'})
+              try:
+                  with urllib.request.urlopen(req,timeout=15) as response:
+                      content=response.read(260000).decode('utf-8','replace')
+                      print('PATH',path,'status',response.status,'content-type',response.headers.get('Content-Type'),'cache-control',response.headers.get('Cache-Control'),'size',len(content))
+                      if path=='/service-worker.js':
+                          for i,line in enumerate(content.splitlines(),1):
+                              if any(s in line.lower() for s in ['cache', 'fetch', 'navigation', 'network', 'skipwaiting','clients.claim','app-tesserato','famiglia','activate','version']):
+                                  print('SW_LINE',i,line[:250])
+                      if path=='/health':
+                          print('HEALTH_START',content[:180])
+              except urllib.error.HTTPError as e:
+                  print('PATH',path,'HTTP',e.code,'cache-control',e.headers.get('Cache-Control'))
+              except Exception as e:
+                  print('PATH',path,'ERROR',type(e).__name__,str(e)[:160])
+          PY
