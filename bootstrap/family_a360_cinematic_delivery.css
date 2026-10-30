@@ -1,0 +1,141 @@
+/* BODYMIND A360 — delivered last through the real family HTML response.
+   Forces immersive film and warmer moving nebula; no heavy blur or full-page filter. */
+@media(max-width:760px){
+  .hero {
+    position:relative!important;display:block!important;overflow:hidden!important;
+    min-height:clamp(700px,100svh,925px)!important;height:auto!important;
+    padding:0!important;margin:0!important;border-radius:0!important;
+    background:
+      radial-gradient(ellipse 92% 37% at 3% 20%,rgba(55,186,175,.45),transparent 89%),
+      radial-gradient(ellipse 86% 37% at 98% 53%,rgba(224,131,170,.40),transparent 90%),
+      radial-gradient(ellipse 87% 35% at 48% 82%,rgba(119,109,204,.33),transparent 91%),
+      linear-gradient(180deg,#062331,#0b2c3c 49%,#0b2a3b 78%,#092636)!important
+  }
+  .hero>.hero-media{
+    position:absolute!important;inset:0!important;width:100%!important;
+    height:100%!important;z-index:2!important;overflow:hidden!important;
+    background:none!important;box-shadow:none!important;border:0!important;border-radius:0!important
+  }
+  .hero .hero-media :is(video.family-hero-video,#familyHeroVideo){
+    width:100%!important;height:auto!important;object-fit:contain!important;
+    background:transparent!important;border:0!important;border-radius:0!important;
+    box-shadow:none!important;filter:none!important;
+    -webkit-mask:none!important;mask:none!important;
+    -webkit-mask-image:none!important;mask-image:none!important
+  }
+  /* Feather all four film edges with a dark but colorful base. */
+  .hero .hero-media::after{
+    content:""!important;display:block!important;position:absolute!important;
+    inset:0!important;z-index:3!important;pointer-events:none!important;
+    border:0!important;border-radius:0!important;box-shadow:none!important;
+    -webkit-mask:none!important;mask:none!important;filter:none!important;
+    background:
+      linear-gradient(90deg,rgba(8,34,47,.83) 0%,transparent 17%,
+                        transparent 83%,rgba(8,34,47,.83) 100%),
+      linear-gradient(180deg,rgba(7,31,44,.08),transparent 31%,
+                        rgba(9,38,51,.19) 54%,rgba(9,38,51,.65) 78%,
+                        #092636 100%)!important
+  }
+  /* Large clouds with overlapping edges; animated inside the hero only. */
+  .hero::before{
+    content:""!important;display:block!important;position:absolute!important;
+    inset:-8% -17%!important;z-index:4!important;pointer-events:none!important;
+    opacity:.92!important;filter:none!important;mix-blend-mode:normal!important;
+    background:
+      radial-gradient(ellipse 35% 24% at 11% 22%,rgba(79,236,217,.51),rgba(53,152,166,.24) 59%,transparent 98%),
+      radial-gradient(ellipse 39% 22% at 91% 33%,rgba(249,163,182,.49),rgba(167,98,181,.21) 63%,transparent 98%),
+      radial-gradient(ellipse 42% 22% at 17% 60%,rgba(86,210,224,.45),rgba(61,113,171,.16) 63%,transparent 98%),
+      radial-gradient(ellipse 40% 24% at 84% 80%,rgba(177,152,246,.46),rgba(97,112,185,.19) 62%,transparent 98%)!important;
+    animation:bm360-cloud-flow 22s ease-in-out infinite alternate!important
+  }
+  .hero::after{
+    content:""!important;display:block!important;position:absolute!important;
+    inset:29% 0 0!important;z-index:6!important;pointer-events:none!important;
+    background:
+      radial-gradient(ellipse 99% 33% at 11% 80%,rgba(52,154,168,.27),transparent 94%),
+      radial-gradient(ellipse 88% 35% at 93% 89%,rgba(184,107,169,.22),transparent 94%),
+      linear-gradient(180deg,transparent 0%,rgba(9,38,51,.02) 20%,
+         rgba(9,38,51,.27) 49%,rgba(9,38,51,.76) 81%,#092636 100%)!important
+  }
+  /* No glass card between welcome text and film. */
+  .hero>.frame.hero-content,.hero .hero-content{
+    position:absolute!important;top:auto!important;left:0!important;right:0!important;
+    bottom:0!important;display:block!important;z-index:10!important;
+    width:100%!important;max-width:100%!important;height:auto!important;
+    margin:0!important;padding:0 24px max(35px,env(safe-area-inset-bottom))!important;
+    background:transparent!important;background-color:transparent!important;
+    background-image:none!important;border:0!important;border-radius:0!important;
+    outline:0!important;box-shadow:none!important;
+    filter:none!important;-webkit-backdrop-filter:none!important;
+    backdrop-filter:none!important;transform:none!important;
+    pointer-events:none!important
+  }
+  .hero .hero-intro{
+    width:100%!important;max-width:100%!important;
+    background:transparent!important;background-image:none!important;
+    border:0!important;border-radius:0!important;box-shadow:none!important;
+    filter:none!important;-webkit-backdrop-filter:none!important;
+    backdrop-filter:none!important;padding:0!important;margin:0!important
+  }
+  .hero .hero-content::before,.hero .hero-content::after,
+  .hero .hero-intro::before,.hero .hero-intro::after{
+    content:none!important;display:none!important
+  }
+  .hero .hero-intro h1{
+    font-size:clamp(41px,10.3vw,56px)!important;line-height:1.03!important;
+    color:#fffaf4!important;margin:7px 0 12px!important;
+    text-shadow:0 3px 18px rgba(0,13,23,.96),0 1px 5px rgba(0,0,0,.85)!important
+  }
+  .hero .hero-intro p{
+    font-size:clamp(14px,3.5vw,16px)!important;line-height:1.52!important;
+    color:#f0f8f3!important;margin:0 0 16px!important;
+    text-shadow:0 2px 11px rgba(0,8,18,.95)!important
+  }
+  .hero .hero-intro .kicker{color:#d6f5e9!important}
+  .hero .hero-content :is(a,button,input),
+  .hero .hero-intro :is(a,button,input){pointer-events:auto!important}
+  .hero>.bm352-sky{
+    display:block!important;z-index:0!important;opacity:1!important;
+    background:
+      radial-gradient(ellipse 78% 43% at 12% 25%,rgba(70,187,192,.35),transparent 94%),
+      radial-gradient(ellipse 82% 40% at 91% 76%,rgba(207,121,194,.29),transparent 94%),
+      radial-gradient(1.4px 1.4px at 43px 54px,rgba(255,232,204,.72) 75%,transparent 100%),
+      radial-gradient(1px 1px at 100px 22px,rgba(179,244,235,.70) 76%,transparent 100%)!important;
+    background-size:auto,auto,151px 177px,203px 229px!important
+  }
+  main.main{
+    margin-top:0!important;background:
+      radial-gradient(ellipse 95% 30% at 4% 9%,rgba(51,167,179,.37),transparent 94%),
+      radial-gradient(ellipse 98% 34% at 97% 46%,rgba(197,112,169,.32),transparent 94%),
+      radial-gradient(ellipse 94% 29% at 27% 82%,rgba(135,127,216,.24),transparent 96%),
+      linear-gradient(180deg,#092636 0%,#103448 33%,#142d47 63%,#061c2b 100%)!important
+  }
+  main.main>.bm352-sky::after{
+    opacity:.95!important;
+    animation:bm360-under-clouds 27s ease-in-out infinite alternate!important;
+    background:
+      radial-gradient(ellipse 54% 26% at 13% 22%,rgba(76,220,215,.43),rgba(48,138,173,.12) 65%,transparent 98%),
+      radial-gradient(ellipse 52% 25% at 89% 53%,rgba(241,140,185,.38),rgba(149,105,182,.12) 66%,transparent 98%),
+      radial-gradient(ellipse 48% 23% at 43% 85%,rgba(157,148,237,.32),rgba(86,106,174,.11) 65%,transparent 98%),
+      radial-gradient(1.2px 1.2px at 37px 42px,rgba(255,234,210,.63) 75%,transparent 100%)!important;
+    background-size:auto,auto,auto,167px 191px!important
+  }
+}
+@keyframes bm360-cloud-flow{
+  0%{transform:translate3d(-4%,2%,0) scale(1);opacity:.73}
+  50%{transform:translate3d(2%,-2%,0) scale(1.05);opacity:1}
+  100%{transform:translate3d(5%,1%,0) scale(1.02);opacity:.84}
+}
+@keyframes bm360-under-clouds{
+  0%{transform:translate3d(-2%,1%,0);opacity:.74}
+  50%{transform:translate3d(2%,-2%,0);opacity:1}
+  100%{transform:translate3d(-1%,1%,0);opacity:.8}
+}
+@media(max-width:760px) and (prefers-reduced-motion:reduce){
+ .hero::before,main.main>.bm352-sky::after{
+   animation:none!important;transform:none!important
+ }
+}
+@media(max-width:760px) and (forced-colors:active){
+ .hero::before,main.main>.bm352-sky::after{display:none!important}
+}

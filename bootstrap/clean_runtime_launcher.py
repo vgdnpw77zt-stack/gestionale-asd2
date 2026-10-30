@@ -90,7 +90,7 @@ def preflight(root:Path,db:Path)->dict:
     valid={(EXPECTED_SOURCE_COUNT,EXPECTED_SOURCE_DIGEST),(UPGRADE_SOURCE_COUNT,UPGRADE_SOURCE_DIGEST),
            (MANUAL_ROSTER_SOURCE_COUNT,MANUAL_ROSTER_SOURCE_DIGEST),
            (SIMPLE_GROUP_SOURCE_COUNT,SIMPLE_GROUP_SOURCE_DIGEST),(A317_SOURCE_COUNT,A317_SOURCE_DIGEST),(A328_SOURCE_COUNT,A328_SOURCE_DIGEST),(A330_SOURCE_COUNT,A330_SOURCE_DIGEST),(A336_SOURCE_COUNT,A336_SOURCE_DIGEST),(A337_SOURCE_COUNT,A337_SOURCE_DIGEST)}
-    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found) and not a343_matches(root,found) and not a344_matches(root,found) and not a345_matches(root,found) and not a346_matches(root,found) and not a347_matches(root,found) and not a348_matches(root,found) and not a349_matches(root,found) and not a350_matches(root,found) and not a351_matches(root,found) and not a352_matches(root,found) and not a353_matches(root,found) and not a354_matches(root,found) and not a355_matches(root,found) and not a356_matches(root,found) and not a357_matches(root,found) and not a358_matches(root,found) and not a359_matches(root,found):
+    if (len(found),inventory_digest(found)) not in valid and not a340_matches(root,found) and not a341_matches(root,found) and not a342_matches(root,found) and not a343_matches(root,found) and not a344_matches(root,found) and not a345_matches(root,found) and not a346_matches(root,found) and not a347_matches(root,found) and not a348_matches(root,found) and not a349_matches(root,found) and not a350_matches(root,found) and not a351_matches(root,found) and not a352_matches(root,found) and not a353_matches(root,found) and not a354_matches(root,found) and not a355_matches(root,found) and not a356_matches(root,found) and not a357_matches(root,found) and not a358_matches(root,found) and not a359_matches(root,found) and not a360_matches(root,found):
         raise RuntimeError(f'source lock mismatch files={len(found)} expected={EXPECTED_SOURCE_COUNT}')
     return {'source_files':len(found),'sqlite':'ok','rows':sqlite_readonly_check(db),
             'historical_migrations_executed':0,'automatic_backup_cleanup':False,
@@ -2313,6 +2313,119 @@ def maybe_recover_a359_to_a358(root:Path,db:Path)->bool:
     return True
 
 
+# A360 — ensure actual HTML delivery of the family stylesheet.
+# A359 source remains an immutable rollback parent.
+A360_REL=A359_REL
+A360_BACKUP=Path('/data/release_packages/BODYMIND_A360_PREUI_A359.py')
+A360_CSS_PATH=Path('/opt/bodymind/family_a360_cinematic_delivery.css')
+A360_RUNTIME_PATH=Path('/opt/bodymind/family_a360_runtime.py')
+A360_CSS_BLOB='13023b10eb129bdefb4aab842ca065ee7f8277ea'
+A360_RUNTIME_BLOB='c7fe2db369962e3475a27e3cfd1a2bfea37f5f78'
+
+def a360_assets()->tuple[bytes,bytes]:
+    css=A360_CSS_PATH.read_bytes()
+    runtime=A360_RUNTIME_PATH.read_bytes()
+    if a350_git_blob(css)!=A360_CSS_BLOB or a350_git_blob(runtime)!=A360_RUNTIME_BLOB:
+        raise RuntimeError('A360 asset integrity failure')
+    if any(t in css for t in (b'</style>',b'</script>',b"'''")):
+        raise RuntimeError('A360 unsafe css delimiter')
+    compile(runtime,'family_a360_runtime.py','exec')
+    return css,runtime
+
+def a360_expected_from_a359(old:bytes)->tuple[bytes,str]:
+    if not A359_BACKUP.is_file() or A359_BACKUP.is_symlink():
+        raise RuntimeError('A360 missing immutable A358 parent')
+    expected,sha=a359_expected_from_a358(A359_BACKUP.read_bytes())
+    if old!=expected or hashlib.sha256(old).hexdigest()!=sha:
+        raise RuntimeError('A360 requires exact A359 parent')
+    css,runtime=a360_assets()
+    if b'BODYMIND A360 EXTERNAL STYLE' in old:
+        raise RuntimeError('A360 duplicate injection')
+    appended=b"""
+# BODYMIND A360 EXTERNAL STYLE
+import importlib.util as _bm360_import
+_bm360_spec=_bm360_import.spec_from_file_location('family_a360_runtime','/opt/bodymind/family_a360_runtime.py')
+if _bm360_spec is None or _bm360_spec.loader is None:
+    raise RuntimeError('A360 runtime unavailable')
+_bm360_module=_bm360_import.module_from_spec(_bm360_spec)
+_bm360_spec.loader.exec_module(_bm360_module)
+def _bm360_css_payload():
+    return open('/opt/bodymind/family_a359_cinematic_home.css','rb').read() + b'\\n' + open('/opt/bodymind/family_a360_cinematic_delivery.css','rb').read()
+_bm360_module.install(app,_bm360_css_payload)
+"""
+    new=old+appended
+    compile(new,A360_REL,'exec')
+    return new,hashlib.sha256(new).hexdigest()
+
+def a360_matches(root:Path,found:dict[str,str])->bool:
+    if len(found)!=214 or A360_REL not in found or not A360_BACKUP.is_file() or A360_BACKUP.is_symlink():
+        return False
+    old=A360_BACKUP.read_bytes()
+    _,sha=a360_expected_from_a359(old)
+    if found[A360_REL]!=sha:
+        return False
+    prior=dict(found)
+    prior[A360_REL]=hashlib.sha256(old).hexdigest()
+    return a359_matches(root,prior)
+
+def maybe_apply_a360(root:Path,db:Path)->None:
+    found=source_inventory(root)
+    if a360_matches(root,found) or not a359_matches(root,found):
+        return
+    sqlite_readonly_check(db)
+    target=root/A360_REL
+    if target.is_symlink() or not target.is_file():
+        raise RuntimeError('A360 unsafe source')
+    original=target.read_bytes()
+    upgraded,sha=a360_expected_from_a359(original)
+    if A360_BACKUP.exists():
+        if not A360_BACKUP.is_file() or A360_BACKUP.is_symlink() or A360_BACKUP.read_bytes()!=original:
+            raise RuntimeError('A360 backup collision')
+    else:
+        if not A360_BACKUP.parent.is_dir() or A360_BACKUP.parent.is_symlink():
+            raise RuntimeError('A360 backup folder unavailable')
+        with open(A360_BACKUP,'xb') as fh:
+            fh.write(original);fh.flush();os.fsync(fh.fileno())
+    tmp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a360_',suffix='.py',dir=str(target.parent),delete=False) as fh:
+            tmp=Path(fh.name)
+            fh.write(upgraded);fh.flush();os.fsync(fh.fileno())
+        os.chmod(tmp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(tmp),str(target))
+        tmp=None
+    finally:
+        if tmp is not None:tmp.unlink(missing_ok=True)
+    final=source_inventory(root)
+    if final[A360_REL]!=sha or not a360_matches(root,final):
+        raise RuntimeError('A360 verification failed')
+    print('BODYMIND A360 FAMILY CSS DELIVERY INSTALLED — A359 BACKUP OK',flush=True)
+
+def maybe_recover_a360_to_a359(root:Path,db:Path)->bool:
+    if os.environ.get('BODYMIND_A360_RECOVER_A359')!='1':return False
+    found=source_inventory(root)
+    if a359_matches(root,found):return True
+    if not a360_matches(root,found):
+        raise RuntimeError('A360 unknown source, rollback refused')
+    sqlite_readonly_check(db)
+    target=root/A360_REL
+    original=A360_BACKUP.read_bytes()
+    tmp=None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.a360_restore_',suffix='.py',dir=str(target.parent),delete=False) as fh:
+            tmp=Path(f.name)
+            fh.write(original);fh.flush();os.fsync(fh.fileno())
+        os.chmod(tmp,stat.S_IMODE(target.stat().st_mode))
+        os.replace(str(tmp),str(target))
+        tmp=None
+    finally:
+        if tmp is not None:tmp.unlink(missing_ok=True)
+    if not a359_matches(root,source_inventory(root)):
+        raise RuntimeError('A360 restoration verification failed')
+    print('BODYMIND A360 EXACT A359 UI RESTORED',flush=True)
+    return True
+
+
 def main(argv=None):
     parser=argparse.ArgumentParser()
     parser.add_argument('mode',nargs='?',choices=('check','start'),default='start')
@@ -2358,6 +2471,8 @@ def main(argv=None):
                 maybe_apply_a358(args.root,args.db)
             if not maybe_recover_a359_to_a358(args.root,args.db):
                 maybe_apply_a359(args.root,args.db)
+            if not maybe_recover_a360_to_a359(args.root,args.db):
+                maybe_apply_a360(args.root,args.db)
         result=preflight(args.root,args.db)
     except (OSError,RuntimeError,ValueError,sqlite3.DatabaseError) as exc:
         print('BODYMIND CLEAN BOOT STOP: '+str(exc),file=sys.stderr,flush=True)
