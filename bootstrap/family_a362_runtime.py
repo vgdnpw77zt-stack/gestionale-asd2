@@ -1,4 +1,5 @@
 """A362 family-only in-memory presentation. No DB, media or volume writes."""
+import ast
 import hashlib
 import re
 from pathlib import Path
@@ -52,7 +53,12 @@ def install(app,portal_module):
     source=Path(portal_module.__file__).read_bytes()
     if hashlib.sha256(source).hexdigest()!=SOURCE_SHA:
         raise RuntimeError('A362 live source differs from audited A361')
-    portal_module.PORTAL=compose(portal_module.PORTAL)
+    # Earlier runtime hooks mutate PORTAL during app import. Compose the audited
+    # literal instead; its source hash and template hash are both verified.
+    tree=ast.parse(source)
+    original=next(ast.literal_eval(n.value) for n in tree.body
+                  if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='PORTAL' for t in n.targets))
+    portal_module.PORTAL=compose(original)
     def finish(response):
         if request.endpoint!='app_tesserato' or response.status_code!=200 or response.mimetype!='text/html' or response.direct_passthrough:
             return response
