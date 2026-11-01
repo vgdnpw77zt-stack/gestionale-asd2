@@ -62,7 +62,13 @@ jobs:
           con.execute('PRAGMA query_only=ON')
           logical=hashlib.sha256()
           for row in con.iterdump():logical.update(row.encode())
+          table_hashes={}
+          for (name,) in con.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"):
+              quoted='"'+name.replace('"','""')+'"'
+              rows=sorted(repr(tuple(row)) for row in con.execute('SELECT * FROM '+quoted))
+              table_hashes[name]={'count':len(rows),'sha256':hashlib.sha256('\n'.join(rows).encode()).hexdigest()}
           con.close()
+          result['table_hashes']=table_hashes
           result['database_logical_sha256']=logical.hexdigest()
           result.update(family_source_sha256=hashlib.sha256(raw).hexdigest(),protected_files=count,protected_files_digest=digest.hexdigest())
           print(json.dumps({'template':template,'audit':result}))
@@ -78,6 +84,31 @@ jobs:
           python -m unittest discover -s tests -p 'test_a362_presentation.py' -v
       - name: Inspect real authenticated iPhone WebKit page
         run: A362_EXPECT=1 python tests/a362_live_webkit.py
+      - name: Compare database tables after read-only navigation
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 90s ssh -T -i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com 'PYTHONDONTWRITEBYTECODE=1 python3 -' > /tmp/bm-tables-after.json <<'PY'
+          import sqlite3,hashlib,json
+          con=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True)
+          con.execute('PRAGMA query_only=ON')
+          table_hashes={}
+          for (name,) in con.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"):
+              quoted='"'+name.replace('"','""')+'"'
+              rows=sorted(repr(tuple(row)) for row in con.execute('SELECT * FROM '+quoted))
+              table_hashes[name]={'count':len(rows),'sha256':hashlib.sha256('\n'.join(rows).encode()).hexdigest()}
+          con.close()
+          print(json.dumps(table_hashes))
+          PY
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          before=json.loads(Path('volume-audit.json').read_text())['table_hashes']
+          after=json.loads(Path('/tmp/bm-tables-after.json').read_text())
+          changed={k:{'before':before.get(k),'after':after.get(k)} for k in set(before)|set(after) if before.get(k)!=after.get(k)}
+          Path('table-comparison.json').write_text(json.dumps({'changed':changed,'table_count':len(after)},indent=2))
+          print('A362_DATABASE_TABLE_CHANGES',json.dumps(changed))
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -86,6 +117,7 @@ jobs:
             webkit-iphone.jpg
             webkit-state.json
             volume-audit.json
+            table-comparison.json
             webkit-iphone-after.jpg
           retention-days: 7
       - name: Remove ephemeral credentials
