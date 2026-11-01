@@ -28,7 +28,7 @@ jobs:
           t=con.execute("SELECT id FROM tesserati WHERE upper(nome)=? AND upper(cognome)=?",('GAIA','ABATINI')).fetchall()
           assert len(t)==1
           tid=t[0]['id'];out={'today':str(datetime.date.today()),'athlete_id':tid,'tables':{}}
-          allowed={'id','tesserato_id','atleta_id','mese','anno','importo','importo_previsto','importo_pagato','quota','quota_mensile','tariffa','data','data_pagamento','stato','status','tipo','causale','descrizione','pagamento_id','ricevuta_id','quota_id','sconto','esente','dovuto','pagato','residuo','attivo','corso','mensilita','periodo','created_at','updated_at'}
+          allowed={'id','tesserato_id','atleta_id','mese','anno','importo','importo_previsto','importo_pagato','quota','quota_mensile','quota_tipo','quota_personalizzata','quota_sconto_fisso','tariffa_codice','importo_base','importo_dovuto','motivo_non_dovuto','online_status','tariffa','data','data_pagamento','stato','status','tipo','causale','descrizione','pagamento_id','ricevuta_id','quota_id','sconto','esente','dovuto','pagato','residuo','attivo','corso','mensilita','periodo','created_at','updated_at'}
           for table in ('tesserati','quote_mensili','pagamenti','ricevute'):
               cols=[r[1] for r in con.execute('PRAGMA table_info("'+table+'")')]
               key='id' if table=='tesserati' else next((k for k in ('tesserato_id','atleta_id') if k in cols),None)
