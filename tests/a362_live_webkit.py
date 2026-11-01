@@ -33,6 +33,8 @@ async def main():
             await page.route('**/app-tesserato/**',preview)
         response=await page.goto('https://app.bodymindaerialstudio.life/app-tesserato/'+token,wait_until='networkidle',timeout=60000)
         assert response.status==200
+        if os.environ.get('A362_PREVIEW')!='1' and os.environ.get('A362_EXPECT')=='1':
+            assert response.headers.get('x-bodymind-family-release')=='A362'
         await page.locator('.hero h1').wait_for()
         await page.wait_for_timeout(1500)
         state=await page.evaluate("""() => {
@@ -66,6 +68,8 @@ async def main():
         if os.environ.get('A362_EXPECT')=='1':
             assert await page.locator('body').get_attribute('data-bodymind-family')=='A362'
             assert await page.locator('style').count()==1
+            assert not state['video']['paused'] and state['video']['ready']>=2
+            assert await page.locator('#familyHeroVideo').evaluate('(e)=>e.currentTime')!=state['video']['time'], 'Autoplay did not advance'
             assert await page.locator('#bodymind-a361-probe').count()==0
             video=page.locator('#familyHeroVideo')
             v=await video.bounding_box(); intro=await page.locator('.hero-intro').bounding_box()
