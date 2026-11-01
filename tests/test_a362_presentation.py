@@ -21,4 +21,15 @@ class Presentation(unittest.TestCase):
   self.assertEqual(scene.clean_response_markup('<html><style>admin</style></html>'),'<html><style>admin</style></html>')
  def test_unknown_source_rejected(self):
   with self.assertRaises(RuntimeError):scene.compose(self.old+' ')
+ def test_install_ignores_legacy_memory_mutation(self):
+  import tempfile,types
+  from unittest.mock import patch
+  with tempfile.TemporaryDirectory() as tmp:
+   source=Path(tmp)/'portal.py';source.write_text('PORTAL='+repr(self.old))
+   module=types.SimpleNamespace(__file__=str(source),PORTAL='legacy runtime injection')
+   app=types.SimpleNamespace(after_request_funcs={},view_functions={})
+   with patch.object(scene,'SOURCE_SHA',hashlib.sha256(source.read_bytes()).hexdigest()):
+    scene.install(app,module)
+   self.assertEqual(module.PORTAL,self.new)
+   self.assertEqual(len(app.after_request_funcs[None]),1)
 if __name__=='__main__':unittest.main()
