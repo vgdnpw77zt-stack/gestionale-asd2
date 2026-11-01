@@ -1,8 +1,9 @@
 name: A362 real authenticated WebKit read-only audit
 on:
+  workflow_dispatch:
   push:
     branches: [bodymind-a362-readonly-investigation-20261030]
-    paths: ['.github/workflows/a362-readonly.yml', 'tests/a362_live_webkit.py', 'bootstrap/family_a362*']
+    paths: ['.github/workflows/a362-readonly.yml', 'tests/a362_live_webkit.py', 'bootstrap/family_a362*', 'tests/test_a362_presentation.py']
 permissions:
   contents: read
 jobs:
