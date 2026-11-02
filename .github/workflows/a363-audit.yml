@@ -1,0 +1,51 @@
+name: A363 attendance source audit
+on:
+  push:
+    branches: [bodymind-a363-monthly-attendance-20261103]
+    paths: ['.github/workflows/a363-audit.yml']
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Inspect attendance source and volume read-only
+        run: |
+          set -eu
+          umask 077
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$RAILWAY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          mkdir evidence
+          timeout 90s ssh -T -i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com 'PYTHONDONTWRITEBYTECODE=1 python3 -' > evidence/source.json <<'PY'
+          import ast,hashlib,json,re,sqlite3
+          from pathlib import Path
+          root=Path('/data/top2_app')
+          files={}
+          for p in root.rglob('*.py'):
+              if any(x in p.parts for x in ('venv','.venv','__pycache__')):continue
+              s=p.read_text(errors='replace')
+              if re.search(r"def \w*(?:presenz|attendance|registro)|route\([^\n]*(?:presenz|registro)",s) or ('view_functions' in s and 'presenz' in s):
+                  files[str(p.relative_to(root))]={'source':s,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()}
+          con=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True)
+          con.execute('PRAGMA query_only=ON')
+          months=con.execute("SELECT substr(data,1,7),count(*) FROM presenze GROUP BY substr(data,1,7)").fetchall()
+          cols={t:[list(x) for x in con.execute('PRAGMA table_info('+t+')')] for t in ('presenze','corsi')}
+          tables={}
+          for (name,) in con.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"):
+              q='"'+name.replace('"','""')+'"'
+              rows=sorted(repr(tuple(x)) for x in con.execute('SELECT * FROM '+q))
+              tables[name]={'count':len(rows),'sha256':hashlib.sha256('\n'.join(rows).encode()).hexdigest()}
+          con.close()
+          print(json.dumps({'files':files,'months':months,'columns':cols,'table_hashes':tables}))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: a363-attendance-source
+          path: evidence/source.json
+          retention-days: 2
+      - name: Cleanup key
+        if: always()
+        run: rm -f "$HOME/.ssh/id_ed25519"
