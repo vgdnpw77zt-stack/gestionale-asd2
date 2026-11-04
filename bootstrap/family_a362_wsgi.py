@@ -10,3 +10,7 @@ install_a364(app)
 # A365: show A364 attendance chart inside the existing Family Home.
 from a365_home_inline import install as install_a365
 install_a365(app)
+
+# A366: replace numeric family due display with status-only presentation.
+from a366_family_dues_status import install as install_a366
+install_a366(app,importlib.import_module('asd_app.routes_bodymind_final'))
