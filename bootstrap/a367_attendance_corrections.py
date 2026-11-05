@@ -75,7 +75,13 @@ def apply_change(conn, *, presenza_id, expected_updated_at, operation, new_statu
         if operation=='modifica' and previous['stato']==new_status:
             raise ValueError('Lo stato è già impostato così')
         conn.execute(AUDIT_DDL)
+        # For deletions, restore any package entry BEFORE removing the presence.
+        # A future FK cascade must never erase the usage before reconciliation.
         if operation=='elimina':
+            active={int(r[0]) for r in conn.execute(
+                "SELECT tesserato_id FROM presenze WHERE corso_id=? AND data=? AND stato='presente' AND id<>?",
+                (int(previous['corso_id']),previous['data'],presenza_id)).fetchall()}
+            reconciler(conn.cursor(),int(previous['corso_id']),previous['data'],active)
             result=conn.execute('DELETE FROM presenze WHERE id=?',(presenza_id,))
             if result.rowcount!=1:
                 raise RuntimeError('Cancellazione non confermata')
@@ -84,6 +90,10 @@ def apply_change(conn, *, presenza_id, expected_updated_at, operation, new_statu
                                 (new_status,now,presenza_id))
             if result.rowcount!=1:
                 raise RuntimeError('Modifica non confermata')
+            active={int(r[0]) for r in conn.execute(
+                "SELECT tesserato_id FROM presenze WHERE corso_id=? AND data=? AND stato='presente'",
+                (int(previous['corso_id']),previous['data'])).fetchall()}
+            reconciler(conn.cursor(),int(previous['corso_id']),previous['data'],active)
         conn.execute("""INSERT INTO bodymind_a367_attendance_corrections
               (presenza_id,tesserato_id,corso_id,data,operazione,
                precedente_json,nuovo_stato,motivo,operatore,creato_il)
@@ -91,11 +101,6 @@ def apply_change(conn, *, presenza_id, expected_updated_at, operation, new_statu
               (presenza_id,int(previous['tesserato_id']),int(previous['corso_id']),previous['data'],
                operation,json.dumps(previous,ensure_ascii=False,sort_keys=True),
                new_status if operation=='modifica' else None,reason,actor,now))
-        # Reconcile pack usages by the *remaining* real presences for this course/date.
-        active={int(r[0]) for r in conn.execute(
-            "SELECT tesserato_id FROM presenze WHERE corso_id=? AND data=? AND stato='presente'",
-            (int(previous['corso_id']),previous['data'])).fetchall()}
-        reconciler(conn.cursor(),int(previous['corso_id']),previous['data'],active)
         conn.commit()
     except Exception:
         conn.rollback()
