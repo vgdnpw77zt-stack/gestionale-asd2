@@ -14,3 +14,7 @@ install_a365(app)
 # A366: replace numeric family due display with status-only presentation.
 from a366_family_dues_status import install as install_a366
 install_a366(app,importlib.import_module('asd_app.routes_bodymind_final'))
+
+# A367: administrator-only correction and audit of individual historical attendance.
+from a367_attendance_corrections import install as install_a367
+install_a367(app)
