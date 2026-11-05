@@ -6,7 +6,7 @@ WORKDIR /opt/bodymind
 COPY requirements_runtime.txt /opt/bodymind/requirements_runtime.txt
 RUN pip install --no-cache-dir -r /opt/bodymind/requirements_runtime.txt
 COPY bootstrap/family_a362_base.css bootstrap/family_a362_scene.css bootstrap/family_a362_navigation.js bootstrap/family_a362_runtime.py bootstrap/family_a362_wsgi.py /opt/bodymind/
-COPY bootstrap/a364_monthly_attendance.py bootstrap/a365_home_inline.py bootstrap/a366_family_dues_status.py /opt/bodymind/
+COPY bootstrap/a364_monthly_attendance.py bootstrap/a365_home_inline.py bootstrap/a366_family_dues_status.py bootstrap/a367_attendance_corrections.py /opt/bodymind/
 COPY bootstrap/clean_runtime_launcher.py /opt/bodymind/clean_runtime_launcher.py
 COPY bootstrap/family_a337.css.zlib.base64 /opt/bodymind/family_a337.css.zlib.base64
 COPY bootstrap/family_a340.css.zlib.base64 /opt/bodymind/family_a340.css.zlib.base64
