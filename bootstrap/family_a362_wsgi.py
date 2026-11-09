@@ -38,3 +38,7 @@ install_a372(app)
 # A375: restore outgoing expenses navigation and unify administrator payment settings.
 from a375_uscite_nav import install as install_a375
 install_a375(app)
+
+# A376: simplify legacy WhatsApp queue; show active shared SumUp in Communications.
+from a376_simple_communications import install as install_a376
+install_a376(app)
