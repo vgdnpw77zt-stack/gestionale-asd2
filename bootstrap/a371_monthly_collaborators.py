@@ -517,6 +517,26 @@ def install(app):
     @app.before_request
     def enforce_monthly_default_and_privacy():
         path=request.path or ''
+        if request.method=='POST' and path in ('/collaboratori/delete_ora','/collaboratori/delete'):
+            # A legacy handler must never delete a source row/person with
+            # A371 monthly declarations and signed documents attached.
+            try:
+                original_id=int(request.form.get('id') or 0)
+            except (TypeError,ValueError):
+                original_id=0
+            if original_id:
+                con=db()
+                try:
+                    if exists_table(con,'bodymind_collab_monthly'):
+                        if path.endswith('/delete_ora'):
+                            protected=con.execute(
+                                'SELECT 1 FROM bodymind_collab_monthly WHERE ore_id=?',(original_id,)).fetchone()
+                        else:
+                            protected=con.execute(
+                                'SELECT 1 FROM bodymind_collab_monthly WHERE collaboratore_id=?',(original_id,)).fetchone()
+                        if protected:
+                            return layout(CSS+'<main class="bm371"><h1>Eliminazione protetta</h1><p>Questo elemento è collegato al registro mensile e ai documenti del collaboratore: non può essere eliminato dalla vecchia schermata giornaliera.</p><a href="/collaboratori/mensile">Torna alle ore mensili</a></main>'),409
+                finally:con.close()
         if request.method=='GET' and path=='/collaboratori':
             if not auth() or not has_role('admin'):return None
             if request.args.get('new')=='1' or request.args.get('edit') or request.args.get('vista')=='giornaliera':
