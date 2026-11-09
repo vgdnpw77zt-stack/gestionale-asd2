@@ -243,7 +243,7 @@ def render_page(conn,y,m,csrf,root,info=''):
     base='/collaboratori/mensile'
     header=f'''{CSS}<main class="bm371"><div class="top"><div><small class="kicker">BODYMIND · GESTIONE COLLABORATORI</small><h1>Ore mensili e documenti firmati</h1></div>
     <div class="links"><a class="btn secondary" href="/collaboratori?new=1">Nuovo collaboratore</a>
-    <a class="btn secondary" href="/documenti/asd/cartelle?cartella=Collaboratori">Archivio cartelle</a>
+    <a class="btn secondary" href="/documenti/asd/cartelle">Archivio cartelle</a>
     <a class="btn secondary" href="/collaboratori?vista=giornaliera&mese={m}&anno={y}">Storico giornaliero precedente</a></div></div>
     <p>Una sola registrazione di ore per mese e per collaboratore. Il foglio da firmare conferma le ore svolte e non sostituisce la ricevuta di pagamento.</p>
     <section class="panel"><form class="form" method="get"><label>Mese<input type="month" name="periodo" value="{y:04d}-{m:02d}" required></label>
@@ -287,11 +287,11 @@ def render_page(conn,y,m,csrf,root,info=''):
                 url='/documenti/asd/download/'+quote(d['percorso'],safe='/')
                 downloadlinks.append(f'<a class="btn secondary" href="{hx(url,quote=True)}">{hx(label)}</a>')
             docarea=f'<div class="links">{"".join(downloadlinks) if downloadlinks else "<small>Nessun documento generato.</small>"}</div>'
-            if not locked:
+            if not pdfs:
                 docarea+=f'''<form method="post" action="{base}/genera" class="form" style="margin-top:16px">
                     {csrf}<input type="hidden" name="collaboratore_id" value="{cid}"><input type="hidden" name="anno" value="{y}"><input type="hidden" name="mese" value="{m}">
                     <button type="submit" class="secondary">Genera e archivia foglio PDF da firmare</button></form>'''
-            if pdfs and not signed and not row['liquidato']:
+            if pdfs and not signed:
                 docarea+=f'''<form method="post" enctype="multipart/form-data" action="{base}/carica-firmato" class="form" style="margin-top:16px">
                     {csrf}<input type="hidden" name="collaboratore_id" value="{cid}"><input type="hidden" name="anno" value="{y}"><input type="hidden" name="mese" value="{m}">
                     <label>Carica foglio firmato (PDF, JPG o PNG, max 16 MB)<input type="file" name="allegato" accept=".pdf,.jpg,.jpeg,.png" required></label>
@@ -399,7 +399,6 @@ def install(app):
         try:
             cid,y,m=_posted_ids()
             collab,row,docs=_snapshot(con,cid,y,m)
-            if row['liquidato']:raise ValueError('Mese liquidato: foglio non modificabile')
             content=generate_pdf(collab,y,m,row)
             folder=period_folder(get_asd_media_dir(),collab,y,m,create=True)
             name=f"Foglio_Ore_{y}_{m:02d}_v{row['revision']}_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%f')}.pdf"
@@ -425,7 +424,6 @@ def install(app):
         try:
             cid,y,m=_posted_ids()
             collab,row,docs=_snapshot(con,cid,y,m)
-            if row['liquidato']:raise ValueError('Mese già liquidato: caricare una rettifica separata')
             if not any(d['tipo']=='da_firmare' and d['revision']==row['revision'] for d in docs):
                 raise ValueError('Genera prima il foglio corretto da far firmare')
             upload=request.files.get('allegato')
@@ -520,6 +518,7 @@ def install(app):
     def enforce_monthly_default_and_privacy():
         path=request.path or ''
         if request.method=='GET' and path=='/collaboratori':
+            if not auth() or not has_role('admin'):return None
             if request.args.get('new')=='1' or request.args.get('edit') or request.args.get('vista')=='giornaliera':
                 return None
             y,m=_period_from_request()
