@@ -5,6 +5,8 @@ on:
     paths:
       - 'bootstrap/a371_monthly_collaborators.py'
       - 'bootstrap/a372_sumup_shared.py'
+      - 'bootstrap/family_a362_wsgi.py'
+      - 'Dockerfile'
       - 'tests/test_a371_monthly_collaborators.py'
       - 'tests/test_a372_shared_sumup.py'
       - '.github/workflows/a372-regression.yml'
