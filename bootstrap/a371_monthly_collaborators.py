@@ -143,8 +143,8 @@ def persist_month(conn,cid,y,m,minutes,cents):
     row,docs,legacy=month_state(conn,cid,y,m)
     if legacy:raise ValueError('Sono già presenti ore giornaliere in questo mese. Non è possibile sommarle automaticamente: verificare lo storico prima di inserire il riepilogo.')
     if row and int(row['liquidato'] or 0):raise ValueError('Mese già liquidato: impossibile modificarlo')
-    if row and any(d['tipo']=='firmato' and d['revision']==row['revision'] for d in docs):
-        raise ValueError('Il foglio delle ore è già firmato. Conservare la versione originale e predisporre una rettifica separata.')
+    if row and any(d['tipo']=='da_firmare' and d['revision']==row['revision'] for d in docs):
+        raise ValueError('Mese già chiuso con foglio PDF. Conservare il documento e predisporre una rettifica separata.')
     stamp=now_iso()
     if row:
         old=row['minuti'],row['tariffa_centesimi']
@@ -255,11 +255,11 @@ def render_page(conn,y,m,csrf,root,info=''):
         row,docs,legacy=month_state(conn,cid,y,m)
         pdfs=[d for d in docs if d['tipo']=='da_firmare' and d['revision']==row['revision']] if row else []
         signed=[d for d in docs if d['tipo']=='firmato' and d['revision']==row['revision']] if row else []
-        locked=bool(row and (row['liquidato'] or signed))
+        locked=bool(row and (row['liquidato'] or pdfs or signed))
         folder=collaborator_folder(root,c,create=False)
         path=folder.relative_to(root).as_posix()
         link='/documenti/asd/cartelle?'+urlencode({'cartella':path}) if folder.exists() else ''
-        rate=(row['tariffa_centesimi']/100 if row else round(float(c['paga_oraria'] or 0),2))
+        rate=(row['tariffa_centesimi']/100 if row else (10.89 if str(c['nome']).strip().casefold() in ('elena','ela') and str(c['cognome']).strip().casefold()=='mastandrea' and (y,m)==(2026,10) else 11.17 if str(c['nome']).strip().casefold() in ('elena','ela') and str(c['cognome']).strip().casefold()=='mastandrea' and (y,m)>=(2026,11) else round(float(c['paga_oraria'] or 0),2)))
         if row:
             minrec=row['minuti']
             value=f'<div class="metric"><span>Ore registrate <strong>{format_hours(minrec)}</strong></span><span>Compenso lordo <strong>{money(gross_cents(minrec,row["tariffa_centesimi"]))}</strong></span></div>'
@@ -290,7 +290,7 @@ def render_page(conn,y,m,csrf,root,info=''):
             if not locked:
                 docarea+=f'''<form method="post" action="{base}/genera" class="form" style="margin-top:16px">
                     {csrf}<input type="hidden" name="collaboratore_id" value="{cid}"><input type="hidden" name="anno" value="{y}"><input type="hidden" name="mese" value="{m}">
-                    <button type="submit" class="secondary">Genera e archivia foglio PDF da firmare</button></form>'''
+                    <button type="submit" class="secondary">Chiudi mese e genera il foglio PDF da firmare</button></form>'''
             if pdfs and not signed and not row['liquidato']:
                 docarea+=f'''<form method="post" enctype="multipart/form-data" action="{base}/carica-firmato" class="form" style="margin-top:16px">
                     {csrf}<input type="hidden" name="collaboratore_id" value="{cid}"><input type="hidden" name="anno" value="{y}"><input type="hidden" name="mese" value="{m}">
@@ -302,7 +302,7 @@ def render_page(conn,y,m,csrf,root,info=''):
                 docarea+=f'''<form method="post" class="form" action="{base}/registra-pagamento" style="margin-top:16px"
                     onsubmit="return confirm('Hai verificato che il pagamento a questo collaboratore sia stato effettuato? Questa azione registrerà una uscita e una ricevuta.');">
                     {csrf}<input type="hidden" name="collaboratore_id" value="{cid}"><input type="hidden" name="anno" value="{y}"><input type="hidden" name="mese" value="{m}">
-                    <button type="submit" class="secondary">Registra pagamento effettuato e crea ricevuta</button></form>
+                    <label>Riferimento del pagamento già effettuato<input name="rif_pagamento" required minlength="6" maxlength="100" placeholder="Es. bonifico del 10/11/2026"></label><button type="submit" class="secondary">Registra pagamento effettuato e crea ricevuta</button></form>
                     <small>Non premere prima di aver effettuato il pagamento. Il foglio firmato attesta le ore, non il bonifico.</small>'''
         else:
             docarea='<small>Salva prima le ore del mese per generare il foglio da firmare.</small>'
@@ -400,6 +400,8 @@ def install(app):
             cid,y,m=_posted_ids()
             collab,row,docs=_snapshot(con,cid,y,m)
             if row['liquidato']:raise ValueError('Mese liquidato: foglio non modificabile')
+            if (y,m) >= (date.today().year,date.today().month):raise ValueError('Si può chiudere il mese soltanto dopo la sua conclusione')
+            if any(d['tipo']=='da_firmare' and d['revision']==row['revision'] for d in docs):raise ValueError('Il mese è già chiuso e il foglio è disponibile in archivio')
             content=generate_pdf(collab,y,m,row)
             folder=period_folder(get_asd_media_dir(),collab,y,m,create=True)
             name=f"Foglio_Ore_{y}_{m:02d}_v{row['revision']}_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%f')}.pdf"
@@ -468,6 +470,9 @@ def install(app):
             with con:
                 collab,row,docs=_snapshot(con,cid,y,m)
                 if row['liquidato']:raise ValueError('Mese già liquidato')
+                if not any(d['tipo']=='da_firmare' and d['revision']==row['revision'] for d in docs):raise ValueError('Prima chiudi il mese e genera il foglio ore')
+                ref=(request.form.get('rif_pagamento') or '').strip()
+                if not 6 <= len(ref) <= 100:raise ValueError('Indica il riferimento del bonifico o del pagamento già effettuato')
                 if con.execute("""SELECT 1 FROM collaboratori_ricevute
                     WHERE collaboratore_id=? AND anno=? AND mese=?""",(cid,y,m)).fetchone():
                     raise ValueError('Esiste già una ricevuta per questo mese: verificare prima di duplicare il pagamento')
@@ -476,7 +481,7 @@ def install(app):
                 if legacy:raise ValueError('Righe giornaliere presenti: chiusura bloccata per evitare doppi conteggi')
                 cents=gross_cents(row['minuti'],row['tariffa_centesimi'])
                 amount=cents/100
-                desc=f"Compenso collaboratore {collab['nome']} {collab['cognome']} - {m:02d}/{y:04d}"
+                desc=f"Compenso collaboratore {collab['nome']} {collab['cognome']} - {m:02d}/{y:04d} - {ref}"
                 stamp=date.today().isoformat()
                 con.execute("INSERT INTO movimenti(tipo,categoria,descrizione,importo,data) VALUES (?,?,?,?,?)",
                             ('uscita','collaboratori',desc,amount,stamp))
