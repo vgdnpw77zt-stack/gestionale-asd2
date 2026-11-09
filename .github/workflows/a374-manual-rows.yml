@@ -1,4 +1,4 @@
-name: A374 manual row counts
+name: A374 outstanding manual ledger rows read only
 on:
   push:
     branches: [bodymind-a374-uscite-onlinepagamenti-audit-20261109]
@@ -6,8 +6,37 @@ on:
 permissions:
   contents: read
 jobs:
-  count:
+  inspect:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
     steps:
-      - uses: actions/checkout@v4
-      - run: echo 'A374 read only checks - no data changes'
+      - name: SQL read-only audit for manual expense duplicates
+        run: |
+          set -eu
+          umask 077
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$RAILWAY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          mkdir evidence
+          timeout 80s ssh -T -i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com 'PYTHONDONTWRITEBYTECODE=1 python3 -' > evidence/manual.json <<'PY'
+          import json,sqlite3
+          db=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True)
+          db.row_factory=sqlite3.Row;db.execute('PRAGMA query_only=ON')
+          tables=[str(x['name']) for x in db.execute("SELECT name FROM sqlite_master WHERE type='table'")]
+          selected=[x for x in tables if 'manual' in x.lower() or 'metod' in x.lower()]
+          result={'manual_tables':selected}
+          for t in selected:
+              result[t]={'columns':[str(x['name']) for x in db.execute('PRAGMA table_info("'+t+'")')],
+                         'count':int(db.execute('SELECT count(*) FROM "'+t+'"').fetchone()[0])}
+          result['unlinked']=[dict(r) for r in db.execute("SELECT id,tipo,data,descrizione,categoria,importo,auto_generato,pagamento_id FROM movimenti WHERE pagamento_id IS NULL AND tipo IN ('uscita','entrata') ORDER BY id DESC LIMIT 30")]
+          result['registered_expenses']=[dict(r) for r in db.execute("SELECT id,data,descrizione,importo,metodo FROM bodymind_uscite ORDER BY id DESC LIMIT 12")]
+          print(json.dumps(result,ensure_ascii=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: a374-unlinked-audit
+          path: evidence/manual.json
+          retention-days: 1
+      - if: always()
+        run: rm -f "$HOME/.ssh/id_ed25519"
