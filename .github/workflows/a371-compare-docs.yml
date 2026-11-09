@@ -1,0 +1,51 @@
+name: A371 verify duplicates in ASD statutes folder read only
+on:
+  push:
+    branches: [bodymind-a371-mensili-sumup-documenti-20261109]
+    paths: ['.github/workflows/a371-compare-docs.yml']
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Hash and compare ASD registrations versus athlete archives (no changes)
+        run: |
+          set -eu
+          umask 077
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$RAILWAY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          mkdir evidence
+          timeout 100s ssh -T -i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com 'PYTHONDONTWRITEBYTECODE=1 python3 -' > evidence/duplicate-check.json <<'PY'
+          from pathlib import Path
+          import hashlib,json,collections
+          root=Path('/data/tenants/default/media')
+          asd=root/'documenti_asd/Statuto_e_atti'
+          athlete=root/'tesserati'
+          def digest(p):
+              h=hashlib.sha256()
+              with p.open('rb') as f:
+                  for block in iter(lambda:f.read(1024*1024),b''):h.update(block)
+              return h.hexdigest()
+          lookup=collections.defaultdict(list)
+          for p in athlete.rglob('*'):
+              if p.is_file() and not p.is_symlink() and p.stat().st_size:
+                  lookup[digest(p)].append(str(p.relative_to(root)))
+          rows=[]
+          for p in sorted(asd.iterdir()):
+              if not p.is_file() or p.is_symlink():continue
+              h=digest(p)
+              rows.append({'name':p.name,'size':p.stat().st_size,'sha256':h,'copies':lookup.get(h,[])[:5],'exact_match_count':len(lookup.get(h,[]))})
+          print(json.dumps({'examined':len(rows),'matched':sum(bool(x['copies']) for x in rows),
+                'unmatched':[x['name'] for x in rows if not x['copies']],'rows':rows}))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: a371-iscrizioni-hash-comparison
+          path: evidence/duplicate-check.json
+          retention-days: 1
+      - if: always()
+        run: rm -f "$HOME/.ssh/id_ed25519"
