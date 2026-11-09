@@ -63,13 +63,15 @@ def review_html(conn):
        ORDER BY data DESC,id DESC LIMIT 300""")]
     total=sum((Decimal(str(x['importo'] or 0)) for x in expenses),Decimal('0'))
     rows=[]
+    duplicate_count=0
     for x in missing:
         duplicates=[y for y in expenses
                     if x['tipo']=='uscita' and y['data']==x['data']
                     and Decimal(str(x['importo'] or 0))==Decimal(str(y['importo'] or 0))]
-        detail=('Possibile doppia registrazione: '+', '.join(
+        if duplicates: duplicate_count+=1
+        detail=('Possibile duplicato tecnico del gestionale, NON un nuovo bonifico: '+', '.join(
                f'<a href="/pagamenti/uscite?modifica={int(y["id"])}">uscita #{int(y["id"])}</a>'
-               for y in duplicates)) if duplicates else 'Verificare metodo e prova del movimento'
+               for y in duplicates)+'. Non registrare nuovamente il pagamento.' ) if duplicates else 'Verificare metodo e prova del movimento'
         rows.append('<tr><td>#'+str(x['id'])+'</td><td>'+e(str(x['data']))+'</td>'
                     '<td>'+e(str(x['descrizione']))+'</td><td>'+euro(x['importo'])+'</td>'
                     '<td>'+detail+'</td></tr>')
@@ -90,7 +92,12 @@ def review_html(conn):
       '<th>Importo</th><th>Allegato</th><th>Apri</th></tr></thead><tbody>'
       +''.join(expense_rows)+'</tbody></table></div></section>'
       f'<section><h2>Movimenti da verificare: {len(missing)}</h2>'
-      +('<p class="notice">Questi movimenti non hanno un metodo contabile verificato. '
+      +((f'<p class="notice">{duplicate_count} movimento/i già presente/i come uscita, dello stesso giorno e importo. '
+           'È una possibile doppia registrazione prodotta dai moduli del gestionale: '
+           '<strong>non devi eseguire né registrare altri bonifici</strong>. '
+           'Il movimento tecnico va verificato e rettificato mantenendo la traccia originale.</p>')
+         if missing and duplicate_count==len(missing) else
+        '<p class="notice">Questi movimenti non hanno un metodo contabile verificato. '
         'Prima di riconciliarli confronta conto corrente, giustificativo e registro Uscite. '
         'Non registrare nuovamente un pagamento già presente.</p>' if missing else
         '<p>Nessun movimento manuale in attesa nella verifica corrente.</p>')
