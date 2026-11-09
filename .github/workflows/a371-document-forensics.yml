@@ -1,0 +1,72 @@
+name: A371 forensic index of historical BodyMind document records (read only)
+on:
+  push:
+    branches: [bodymind-a371-mensili-sumup-documenti-20261109]
+    paths: ['.github/workflows/a371-document-forensics.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Check stored archive paths and historical document references without changes
+        run: |
+          set -eu
+          umask 077
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$RAILWAY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          mkdir evidence
+          timeout 130s ssh -T -i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com 'PYTHONDONTWRITEBYTECODE=1 python3 -' > evidence/forensics.json <<'PY'
+          import json,sqlite3,re,os
+          from pathlib import Path
+          base=Path('/data')
+          con=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True)
+          con.row_factory=sqlite3.Row;con.execute('PRAGMA query_only=ON')
+          words=re.compile(r'verbal|statut|assemble|direttiv|bilanc|contratt|accordo|regolament|certif|iscriz',re.I)
+          inventory={}
+          roots=[base/'tenants/default/media',base/'media',base/'top2_app/media',base/'tenant_backups',base/'backups']
+          for root in roots:
+              if not root.is_dir():continue
+              scanned=0;results=[]
+              for p in root.rglob('*'):
+                  if not p.is_file() or p.is_symlink():continue
+                  scanned+=1
+                  if words.search(p.name):
+                      results.append({'path':str(p.relative_to(base))[:220],'size':p.stat().st_size})
+              inventory[str(root.relative_to(base))]={'files_scanned':scanned,'matches':results[:250],'matches_count':len(results)}
+          tables={}
+          for table,columns in [('document_hub',['id','title','document_type','path','filename','status','deleted_at','archived_at','entity_type','entity_id','collaboratore_id','tesserato_id']),
+             ('documenti',['id','titolo','categoria','filename','original_filename','cartella','tesserato_id']),
+             ('document_deletion_tombstones',['source_table','source_id','path','deleted_at']),
+             ('bodymind_duplicate_records_archive',['source_table','file_path','archived_at']),
+             ('bodymind_orphan_records_archive',['source_table','file_path','archived_at'])]:
+              actual=[x['name'] for x in con.execute('PRAGMA table_info("'+table+'")')]
+              if not actual:continue
+              names=[v for v in columns if v in actual]
+              data=[]
+              for r in con.execute('SELECT '+','.join('"'+v+'"' for v in names)+' FROM "'+table+'"'):
+                  d=dict(zip(names,r))
+                  if words.search(' '.join(str(d.get(k) or '') for k in names)) or table=='document_deletion_tombstones':
+                      path=(d.get('path') or d.get('filename') or d.get('file_path') or '').strip()
+                      if path:
+                          p=Path(path)
+                          candidates=[p] if p.is_absolute() else [base/'tenants/default/media'/p,base/p]
+                          d['_exists']=any(x.is_file() for x in candidates)
+                      data.append(d)
+              tables[table]={'columns':names,'total':con.execute('SELECT count(*) FROM "'+table+'"').fetchone()[0],
+                              'matching':len(data),'rows':data[:200]}
+          con.close()
+          print(json.dumps({'inventory':inventory,'indexed_docs':tables},ensure_ascii=False,default=str))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: a371-document-forensics
+          path: evidence/forensics.json
+          retention-days: 1
+      - name: Remove SSH private key
+        if: always()
+        run: rm -f "$HOME/.ssh/id_ed25519"
