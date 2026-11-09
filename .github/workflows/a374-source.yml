@@ -1,0 +1,48 @@
+name: A374 route navigation exact source read only
+on:
+  push:
+    branches: [bodymind-a374-uscite-onlinepagamenti-audit-20261109]
+    paths: ['.github/workflows/a374-source.yml']
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env: { RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }} }
+    steps:
+      - name: Extract only active source slices and expense row metadata
+        run: |
+          set -eu
+          umask 077
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$RAILWAY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          mkdir evidence
+          timeout 105s ssh -T -i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com 'PYTHONDONTWRITEBYTECODE=1 python3 -' > evidence/source.json <<'PY'
+          import json,sqlite3,re
+          from pathlib import Path
+          root=Path('/data/top2_app/asd_app')
+          files={'core.py':[(3270,3550),(8140,8500),(8500,8730)],
+            'a293_online_payment_settings.py':[(1,485)],
+            'bodymind_a250_finance_view.py':[(1,220)],
+            'bodymind_a265_cashbook.py':[(1,190)],
+            'routes_contabilita.py':[(1,195)]}
+          result={}
+          for filename,intervals in files.items():
+              p=root/filename
+              if not p.is_file():continue
+              ls=p.read_text(errors='replace').splitlines()
+              snippets=[]
+              for a,b in intervals:
+                  snippets.append({'range':(a,min(b,len(ls))),
+                    'lines':[f'{i+1}: {ls[i]}' for i in range(a-1,min(b,len(ls))) if 0 <= i < len(ls)]})
+              result[filename]=snippets
+          db=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True)
+          db.row_factory=sqlite3.Row;db.execute('PRAGMA query_only=ON')
+          result['expenses']=[dict(r) for r in db.execute("SELECT id,data,categoria,ROUND(importo,2) AS amount,metodo,CASE WHEN allegato_path IS NULL OR allegato_path='' THEN 0 ELSE 1 END AS has_attachment FROM bodymind_uscite ORDER BY id")]
+          db.close()
+          print(json.dumps(result,ensure_ascii=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        with: {name: a374-route-source, path: evidence/source.json, retention-days: 1}
+      - if: always()
+        run: rm -f "$HOME/.ssh/id_ed25519"
