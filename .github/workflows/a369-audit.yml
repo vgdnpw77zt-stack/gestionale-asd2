@@ -1,0 +1,33 @@
+name: A369 read only UI audit
+on:
+  push:
+    branches: [bodymind-a369-documenti-20261109]
+    paths: [.github/workflows/a369-audit.yml]
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read application source
+        env:
+          RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
+        run: |
+          umask 077
+          mkdir -p evidence "$HOME/.ssh"
+          printf '%s\n' "$RAILWAY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          timeout 90s ssh -T -i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com 'PYTHONDONTWRITEBYTECODE=1 python3 -' > evidence/source.json <<'PY'
+          import pathlib,json,hashlib
+          root=pathlib.Path('/data/top2_app/asd_app')
+          result={}
+          for p in root.glob('*.py'):
+              s=p.read_text(errors='replace')
+              if any(x in s.lower() for x in ['documenti asd caricati','cartelle','documenti/asd']):
+                  result[p.name]={'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'content':s}
+          print(json.dumps(result))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: a369-source
+          path: evidence/source.json
+          retention-days: 1
+      - if: always()
+        run: rm -f "$HOME/.ssh/id_ed25519"
