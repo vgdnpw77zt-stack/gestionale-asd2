@@ -1,0 +1,23 @@
+name: A375 Uscite sidebar, reconciliation and SumUp regression
+on:
+  push:
+    branches: [bodymind-a375-uscite-sumup-sidebar-20261109]
+    paths:
+      - 'bootstrap/a375_uscite_nav.py'
+      - 'tests/test_a375_uscite_nav.py'
+      - '.github/workflows/a375-regression.yml'
+      - 'bootstrap/family_a362_wsgi.py'
+      - 'Dockerfile'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check module syntax and synthetic records without touching prod data
+        run: |
+          python3 -m py_compile bootstrap/a375_uscite_nav.py
+          python3 -m unittest discover -s tests -p 'test_a375_uscite_nav.py' -v
