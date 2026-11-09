@@ -34,3 +34,7 @@ install_a371(app)
 # A372: single reusable SumUp open-amount link on all eligible Family pages.
 from a372_sumup_shared import install as install_a372
 install_a372(app)
+
+# A375: restore outgoing expenses navigation and unify administrator payment settings.
+from a375_uscite_nav import install as install_a375
+install_a375(app)
