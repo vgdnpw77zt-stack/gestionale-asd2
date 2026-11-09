@@ -22,6 +22,16 @@ jobs:
               s=p.read_text(errors='replace')
               if any(x in s.lower() for x in ['documenti asd caricati','cartelle','documenti/asd']):
                   result[p.name]={'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'content':s}
+          inventory=[]
+          import os
+          for parent,dirs,files in os.walk('/data'):
+              dirs[:]=[d for d in dirs if not any(x in d.lower() for x in ['backup','.git','__pycache__'])]
+              if pathlib.Path(parent).name=='documenti_asd':
+                  base=pathlib.Path(parent)
+                  fs=[p for p in base.rglob('*') if p.is_file() and not p.is_symlink()]
+                  inventory.append({'root':str(base),'files':len(fs),'folders':sum(p.is_dir() for p in base.rglob('*')),'verbali_named':sum('verbal' in p.name.lower() for p in fs)})
+                  dirs[:]=[]
+          result['_inventory']=inventory
           print(json.dumps(result))
           PY
       - uses: actions/upload-artifact@v4
