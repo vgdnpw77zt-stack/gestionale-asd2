@@ -1,0 +1,19 @@
+name: A370 ASD folder browser regression
+on:
+  push:
+    branches: [bodymind-a370-document-folders-browser-20261109]
+    paths:
+      - 'bootstrap/a370_asd_folder_browser.py'
+      - 'tests/test_a370_asd_archive.py'
+      - '.github/workflows/a370-regression.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run synthetic file archive browsing tests
+        run: python3 -m unittest discover -s tests -p 'test_a370_asd_archive.py' -v
