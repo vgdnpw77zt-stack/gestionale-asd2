@@ -143,6 +143,8 @@ def persist_month(conn,cid,y,m,minutes,cents):
     row,docs,legacy=month_state(conn,cid,y,m)
     if legacy:raise ValueError('Sono già presenti ore giornaliere in questo mese. Non è possibile sommarle automaticamente: verificare lo storico prima di inserire il riepilogo.')
     if row and int(row['liquidato'] or 0):raise ValueError('Mese già liquidato: impossibile modificarlo')
+    if row and any(d['tipo']=='firmato' and d['revision']==row['revision'] for d in docs):
+        raise ValueError('Il foglio delle ore è già firmato. Conservare l’originale e predisporre una rettifica separata.')
     if row and any(d['tipo']=='da_firmare' and d['revision']==row['revision'] for d in docs):
         raise ValueError('Mese già chiuso con foglio PDF. Conservare il documento e predisporre una rettifica separata.')
     stamp=now_iso()
