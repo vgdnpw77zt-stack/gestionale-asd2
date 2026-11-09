@@ -1,0 +1,35 @@
+name: A368 UI regression
+on:
+  push:
+    branches: [bodymind-a368-collaboratori-ui-20261109]
+    paths: ['bootstrap/a368_collaboratori_ui.py', '.github/workflows/a368-test.yml']
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install Flask
+      - name: Response isolation and form preservation
+        run: |
+          python - <<'PY'
+          import sys
+          sys.path.insert(0,'bootstrap')
+          from flask import Flask
+          from a368_collaboratori_ui import install,JS
+          app=Flask(__name__)
+          fixture='<html><body><form method="post"><input name="csrf_token" value="test"><input name="ore" value="2"></form></body></html>'
+          for i,path in enumerate(['/collaboratori','/collaboratori/adempimenti/1','/pagamenti','/app-tesserato/test']):
+              app.add_url_rule(path,str(i),lambda:fixture)
+          install(app);install(app)
+          with app.test_client() as c:
+              for path in ['/collaboratori','/collaboratori/adempimenti/1']:
+                  r=c.get(path);s=r.get_data(as_text=True)
+                  assert s.count('id="a368-ui"')==1
+                  assert fixture.split('<body>')[1].split('</body>')[0] in s
+                  assert r.headers['Cache-Control']=='private, no-store'
+              for path in ['/pagamenti','/app-tesserato/test']:
+                  assert c.get(path).get_data(as_text=True)==fixture
+          open('/tmp/a368.js','w').write(JS)
+          print('PASS: scoped response, idempotency, CSRF/form preservation, unrelated pages unchanged')
+          PY
+          node --check /tmp/a368.js

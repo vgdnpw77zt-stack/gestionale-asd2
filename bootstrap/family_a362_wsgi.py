@@ -18,3 +18,7 @@ install_a366(app,importlib.import_module('asd_app.routes_bodymind_final'))
 # A367: administrator-only correction and audit of individual historical attendance.
 from a367_attendance_corrections import install as install_a367
 install_a367(app)
+
+# A368: scoped collaborator dialogs and compliance readability, no data writes.
+from a368_collaboratori_ui import install as install_a368
+install_a368(app)
