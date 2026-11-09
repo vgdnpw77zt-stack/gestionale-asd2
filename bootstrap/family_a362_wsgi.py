@@ -26,3 +26,7 @@ install_a368(app)
 # A370: original ASD folder archive, admin-only, read-only.
 from a370_asd_folder_browser import install as install_a370
 install_a370(app)
+
+# A371: monthly-only collaborator time sheets, signed documents and archive folders.
+from a371_monthly_collaborators import install as install_a371
+install_a371(app)
