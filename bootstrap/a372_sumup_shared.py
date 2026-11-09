@@ -94,7 +94,7 @@ def family_button(url, iban=''):
     return ('<section class="bm372-open" id="bm372-open-sumup" aria-label="Paga con SumUp a importo libero">'
             '<h3>Versa la quota con SumUp</h3>'
             '<p>Utilizza sempre questo stesso link. Inserisci tu l’importo concordato per il tuo corso: '
-            '50 €, 70 € o 90 € secondo la categoria assegnata dalla segreteria, salvo accordi individuali.</p>'
+            'secondo quanto concordato con la segreteria per il tuo corso.</p>'
             f'<a href="{safe}" target="_blank" rel="noopener noreferrer nofollow" referrerpolicy="no-referrer">'
             'Apri SumUp e inserisci l’importo ↗</a>'
             '<small>Per agevolare il riconoscimento del versamento, inserisci nome, cognome e mese nelle note '
@@ -105,7 +105,7 @@ def family_button(url, iban=''):
 
 def family_due(page):
     # A366 uses exactly this status chip only for an actually outstanding quote.
-    return bool(re.search(r'class=["\\']status-chip\\s+unpaid["\\']\\s*>\\s*Da pagare',page,re.I))
+    return bool(re.search(r"""class=["']status-chip\s+unpaid["']\s*>\s*Da pagare""",page,re.I))
 
 
 def install(app):
@@ -148,7 +148,7 @@ def install(app):
             iban=str(cfg.get('iban') or '').strip()
             page=page.replace(slot,family_button(url,iban)+slot,1)
             # Remove any old individual SumUp CTA in favor of one shared URL.
-            page=re.sub(r'<a\\b[^>]*class="pay-cta"[^>]*>[^<]*SumUp[^<]*</a>','',page,flags=re.I)
+            page=re.sub(r'<a\b[^>]*class="pay-cta"[^>]*>[^<]*SumUp[^<]*</a>','',page,flags=re.I)
             page=page.replace('</head>',CSS+'</head>',1)
             page=page.replace('Per il link SumUp o i dati del bonifico contatta la segreteria: non è disponibile un pagamento online già verificato per questa quota.','Puoi utilizzare il link SumUp condiviso qui sotto, oppure contattare la segreteria per il bonifico.')
             response.set_data(page)
@@ -160,7 +160,7 @@ def install(app):
         if request.path.rstrip('/') in ('/pagamenti','/impostazioni','/pagamenti-pro') and auth() and has_role('admin'):
             page=response.get_data(as_text=True)
             if 'bm372-admin-link' in page:return response
-            match=re.search(r'<main\\b[^>]*>',page,re.I)
+            match=re.search(r'<main\b[^>]*>',page,re.I)
             if not match:return response
             btn='<div style="margin:10px 0 18px"><a class="bm372-admin-link" href="/impostazioni/sumup-libero">🔗 Configura SumUp · link unico a importo libero</a></div>'
             page=page[:match.end()]+CSS+btn+page[match.end():]
