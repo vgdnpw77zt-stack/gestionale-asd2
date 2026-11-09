@@ -1,0 +1,104 @@
+name: A369 document folders readonly diagnostic
+on:
+  push:
+    branches: [bodymind-a369-documents-readonly-audit-20261109]
+    paths: ['.github/workflows/a369-documents-readonly.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Inspect original document paths and route code without writes
+        run: |
+          set -eu
+          umask 077
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$RAILWAY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          install -d -m 700 evidence
+          timeout 110s ssh -T -i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com 'PYTHONDONTWRITEBYTECODE=1 python3 -' > evidence/doc-audit.json <<'PY'
+          import json,sqlite3,hashlib,re,os
+          from pathlib import Path
+          root=Path('/data')
+          def inventory(folder,detail=False):
+              if not folder.is_dir():return {'exists':False}
+              subdirs=[];files=[];exts={}
+              for p in folder.rglob('*'):
+                  if not p.is_file() and not p.is_dir():continue
+                  rel=str(p.relative_to(folder))
+                  if p.is_dir():subdirs.append(rel)
+                  else:
+                      files.append(rel)
+                      ext=p.suffix.lower();exts[ext]=exts.get(ext,0)+1
+              return {'exists':True,'folder_count':len(subdirs),'file_count':len(files),
+                      'folders':sorted(subdirs)[:150] if detail else [],
+                      'files':sorted(files)[:250] if detail else [],
+                      'extensions':exts}
+          targets=['tenants/default/media/documenti_asd','media/documenti_asd',
+                   'top2_app/media/documenti_asd','tenants/default/media/modelli_asd',
+                   'tenants/default/media/tesserati','tenants/default/pdf',
+                   'tenants/default/backups','backups']
+          inv={p:inventory(root/p,detail='documenti_asd' in p) for p in targets}
+          # avoid listing raw all documents outside ASD directories; only summarize other places
+          allmedia=[]
+          for p in (root/'tenants/default/media',root/'media'):
+              if p.is_dir():
+                  for v in p.rglob('*'):
+                      if v.is_file() and re.search('verbal|contratt|statut|assembl|direttiv|bilanc',v.name,re.I):
+                          allmedia.append(str(v.relative_to(root))[:220])
+          conn=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True)
+          conn.execute('PRAGMA query_only=ON')
+          all_tables=[x[0] for x in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")]
+          tables={}
+          for t in all_tables:
+              if re.search('document|cartell|folder|archiv|upload|file|allegat|verbali',t,re.I):
+                  col=[x[1] for x in conn.execute('PRAGMA table_info("'+t.replace('"','""')+'")')]
+                  try:n=conn.execute('SELECT count(*) FROM "'+t.replace('"','""')+'"').fetchone()[0]
+                  except Exception:n=-1
+                  tables[t]={'columns':col,'count':n}
+          docs=[]
+          if 'documenti' in all_tables:
+              cols=tables.get('documenti',{}).get('columns')
+              colnames=[x[1] for x in conn.execute('PRAGMA table_info(documenti)')]
+              cols=list(set(colnames)&{'id','categoria','cartella','filename','original_filename','titolo','visibile','tesserato_id'})
+              # sensitive doc names only in private artifact, no actual file contents
+              query='SELECT '+','.join('"'+x+'"' for x in cols)+' FROM documenti ORDER BY id DESC LIMIT 250'
+              docs=[dict(zip(cols,row)) for row in conn.execute(query)]
+          conn.close()
+          source={}
+          selected=['asd_app/routes_documenti.py','asd_app/routes_rc2_document_workflow.py',
+                    'asd_app/routes_a200_documenti_modelli_fix.py','asd_app/routes_a158_truth_fix.py',
+                    'asd_app/routes_a159_total_audit_fix.py','asd_app/routes_a172_goldmax_hardfix.py',
+                    'asd_app/routes_a188_final_repair.py']
+          for name in selected:
+              p=root/'top2_app'/name
+              if p.is_file():source[name]={'bytes':p.stat().st_size,'source':p.read_text(errors='replace')[:190000]}
+          # all definitions/decorators for document routes, but no full other source
+          route_refs=[]
+          for p in (root/'top2_app/asd_app').glob('*.py'):
+              try:
+                  s=p.read_text(errors='replace')
+              except Exception:continue
+              lines=s.splitlines()
+              hits=[]
+              for i,line in enumerate(lines):
+                  if (('/documenti' in line or '/document-hub' in line or 'documenti_asd' in line)
+                      and (i<50000)):
+                      hits.append({'line':i+1,'code':line[:230]})
+              if hits:route_refs.append({'file':p.name,'hits':hits[:35]})
+          print(json.dumps({'inventory':inv,'documents_elsewhere':sorted(set(allmedia))[:180],
+             'tables':tables,'recent_docs':docs,'selected_source':source,
+             'route_refs':route_refs},ensure_ascii=False,default=str))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: a369-document-audit
+          path: evidence/doc-audit.json
+          retention-days: 1
+      - name: Remove SSH key
+        if: always()
+        run: rm -f "$HOME/.ssh/id_ed25519"
