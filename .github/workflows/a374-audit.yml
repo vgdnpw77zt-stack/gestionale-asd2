@@ -1,0 +1,68 @@
+name: A374 forensic check - Uscite and online payments (read only)
+on:
+  push:
+    branches: [bodymind-a374-uscite-onlinepagamenti-audit-20261109]
+    paths: ['.github/workflows/a374-audit.yml']
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Inspect current private ledger tables and route definitions without writes
+        run: |
+          set -eu
+          umask 077
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$RAILWAY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          mkdir evidence
+          timeout 100s ssh -T -i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com 'PYTHONDONTWRITEBYTECODE=1 python3 -' > evidence/uscite-routes.json <<'PY'
+          import re,sqlite3,json
+          from pathlib import Path
+          root=Path('/data')
+          db=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True)
+          db.row_factory=sqlite3.Row;db.execute('PRAGMA query_only=ON')
+          names=[r['name'] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")]
+          tables={}
+          for t in names:
+              if re.search(r'moviment|usci|spes|pagament|collaborator|ricevut|contab|bonific|document',t,re.I):
+                  cols=[r['name'] for r in db.execute('PRAGMA table_info("'+t.replace('"','""')+'")')]
+                  try:count=db.execute('SELECT count(*) n FROM "'+t.replace('"','""')+'"').fetchone()['n']
+                  except:count=-1
+                  tables[t]={'columns':cols,'count':count}
+                  if t=='movimenti':
+                      grp=db.execute("SELECT tipo,COUNT(*) AS n,ROUND(SUM(CAST(importo AS REAL)),2) AS euro FROM movimenti GROUP BY tipo ORDER BY tipo").fetchall()
+                      tables[t]['by_type']=[dict(r) for r in grp]
+                      tables[t]['by_period']=[dict(r) for r in db.execute("SELECT substr(data,1,7) AS mese,tipo,COUNT(*) AS n,ROUND(SUM(CAST(importo AS REAL)),2) AS euro FROM movimenti GROUP BY substr(data,1,7),tipo ORDER BY mese DESC,tipo LIMIT 32")]
+                      tables[t]['latest_rows']=[dict(r) for r in db.execute("SELECT id,data,tipo,categoria,ROUND(CAST(importo AS REAL),2) AS euro FROM movimenti ORDER BY id DESC LIMIT 18")]
+          db.close()
+          cfg=root/'tenants/default/config.json'
+          config={}
+          if cfg.is_file():
+              ob=json.loads(cfg.read_text())
+              config={'sumup_shared':ob.get('bodymind_sumup_open_amount'),
+                      'related_keys':[k for k in ob.keys() if re.search('sumup|pagament|payment|link|provider|online|iban',k,re.I)]}
+          pats=[r'uscit',r'pagamenti-online',r'pagament.*link',r'link.*atlet',r'quote-incassi',r'\bmovimenti\b',r'\bfinanza\b',r'\bspese\b']
+          allsource=[]
+          for p in (root/'top2_app').rglob('*.py'):
+              if any(i in p.parts for i in ('__pycache__','venv','.venv')):continue
+              try:s=p.read_text(errors='replace')
+              except:continue
+              matches=[]
+              ls=s.splitlines()
+              for idx,line in enumerate(ls):
+                  if any(re.search(t,line,re.I) for t in pats):
+                      matches.append({'line':idx+1,'text':line[:280]})
+              if matches:allsource.append({'file':str(p.relative_to(root/'top2_app')),'hits':matches[:50],'total_hits':len(matches)})
+          print(json.dumps({'tables':tables,'config':config,'code_hits':allsource[:100]},ensure_ascii=False,default=str))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: a374-uscite-readonly
+          path: evidence/uscite-routes.json
+          retention-days: 1
+      - if: always()
+        run: rm -f "$HOME/.ssh/id_ed25519"
