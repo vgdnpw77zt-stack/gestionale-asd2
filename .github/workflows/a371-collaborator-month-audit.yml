@@ -1,0 +1,48 @@
+name: A371 October collaborator migration-readiness check (read only)
+on:
+  push:
+    branches: [bodymind-a371-mensili-sumup-documenti-20261109]
+    paths: ['.github/workflows/a371-collaborator-month-audit.yml']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Query collaborator October hours and receipts without writes
+        run: |
+          set -eu
+          umask 077
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$RAILWAY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          mkdir evidence
+          timeout 100s ssh -T -i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com 'PYTHONDONTWRITEBYTECODE=1 python3 -' > evidence/hours.json <<'PY'
+          import json,sqlite3
+          db=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True)
+          db.row_factory=sqlite3.Row;db.execute('PRAGMA query_only=ON')
+          tables={r['name'] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+          collabs=[dict(r) for r in db.execute("SELECT id,nome,cognome,paga_oraria,attivo FROM collaboratori ORDER BY id")]
+          hours=[]
+          for r in collabs:
+              cid=r['id']
+              old=[dict(x) for x in db.execute("""SELECT id,data,ore,mese,anno,liquidato FROM ore_collaboratori
+                WHERE collaboratore_id=? AND COALESCE(mese,CAST(strftime('%m',data) AS INTEGER))=10
+                AND COALESCE(anno,CAST(strftime('%Y',data) AS INTEGER))=2026 ORDER BY id""",(cid,))]
+              receipts=db.execute('SELECT COUNT(*) FROM collaboratori_ricevute WHERE collaboratore_id=? AND anno=2026 AND mese=10',(cid,)).fetchone()[0]
+              summary=[]
+              if 'bodymind_collab_monthly' in tables:
+                  summary=[dict(x) for x in db.execute('SELECT id,anno,mese,minuti,tariffa_centesimi,revision FROM bodymind_collab_monthly WHERE collaboratore_id=? AND anno=2026 AND mese=10',(cid,))]
+              hours.append({'collaboratore_id':cid,'nome':r['nome'],'cognome':r['cognome'],'paga_oraria':r['paga_oraria'],
+                 'legacy_rows':old,'liquidation_receipts':receipts,'monthly_rows':summary})
+          print(json.dumps({'october':hours},ensure_ascii=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: a371-october-collaborator-diagnostics
+          path: evidence/hours.json
+          retention-days: 1
+      - if: always()
+        run: rm -f "$HOME/.ssh/id_ed25519"
