@@ -1,0 +1,46 @@
+name: A376 legacy automation and WhatsApp settings readonly audit
+on:
+  push:
+    branches: [bodymind-a376-semplifica-messaggi-pagamenti-20261109]
+    paths: ['.github/workflows/a376-automation-audit.yml']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Inspect old WhatsApp queue and automations page text and source paths
+        run: |
+          set -eu
+          umask 077
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$RAILWAY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          install -d evidence
+          timeout 100s ssh -T -i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com 'PYTHONDONTWRITEBYTECODE=1 python3 -' > evidence/ui.json <<'PY'
+          from pathlib import Path
+          import json,re
+          root=Path('/data/top2_app/asd_app')
+          pats=['whatsapp','coda invii','calendario mensilit','giorni rispetto','primo del mese','prima attivazione','backup esterno','link sumup assente','/motore-automazioni','/segreteria/whatsapp','/segreteria/comunicazioni','link sumup']
+          matches=[]
+          for p in root.glob('*.py'):
+              s=p.read_text(errors='replace')
+              lines=s.splitlines()
+              hits=[i for i,line in enumerate(lines) if any(w in line.casefold() for w in pats)]
+              if not hits:continue
+              samples=[]
+              for i in hits[:60]:
+                  start=max(0,i-3);end=min(len(lines),i+4)
+                  samples.append({'line':i+1,'source':'\n'.join(f'{j+1}: {lines[j]}' for j in range(start,end))})
+              matches.append({'file':p.name,'hits':len(hits),'samples':samples})
+          print(json.dumps(matches,ensure_ascii=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: a376-legacy-automation-source
+          path: evidence/ui.json
+          retention-days: 1
+      - if: always()
+        run: rm -f "$HOME/.ssh/id_ed25519"
