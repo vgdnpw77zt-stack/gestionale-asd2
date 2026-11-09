@@ -297,7 +297,7 @@ def render_page(conn,y,m,csrf,root,info=''):
                     <label>Carica foglio firmato (PDF, JPG o PNG, max 16 MB)<input type="file" name="allegato" accept=".pdf,.jpg,.jpeg,.png" required></label>
                     <button type="submit">Salva firmato nei documenti</button></form>'''
             if row['liquidato']:
-                docarea+='<p class="ok">Periodo già liquidato nel registro compensi.</p>'
+                docarea+='<p class="ok">Periodo liquidato nel registro compensi.</p><div class="links"><a class="btn secondary" href="/collaboratori/ricevute">Apri ricevute collaboratori</a></div>'
             else:
                 docarea+=f'''<form method="post" class="form" action="{base}/registra-pagamento" style="margin-top:16px"
                     onsubmit="return confirm('Hai verificato che il pagamento a questo collaboratore sia stato effettuato? Questa azione registrerà una uscita e una ricevuta.');">
