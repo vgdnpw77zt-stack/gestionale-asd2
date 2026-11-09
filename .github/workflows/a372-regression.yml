@@ -1,0 +1,26 @@
+name: A372 monthly hours and shared SumUp regressions
+on:
+  push:
+    branches: [bodymind-a372-monthly-open-sumup-20261109]
+    paths:
+      - 'bootstrap/a371_monthly_collaborators.py'
+      - 'bootstrap/a372_sumup_shared.py'
+      - 'tests/test_a371_monthly_collaborators.py'
+      - 'tests/test_a372_shared_sumup.py'
+      - '.github/workflows/a372-regression.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PDF library
+        run: python -m pip install --quiet reportlab
+      - name: Validate both Python modules and synthetic workflows
+        run: |
+          python -m py_compile bootstrap/a371_monthly_collaborators.py bootstrap/a372_sumup_shared.py
+          python -m unittest discover -s tests -p 'test_a371_monthly_collaborators.py' -v
+          python -m unittest discover -s tests -p 'test_a372_shared_sumup.py' -v
