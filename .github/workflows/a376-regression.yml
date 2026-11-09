@@ -1,0 +1,25 @@
+name: A376 WhatsApp queue cleanup regression
+on:
+  push:
+    branches: [bodymind-a376-semplifica-messaggi-pagamenti-20261109]
+    paths:
+      - 'bootstrap/a376_simple_communications.py'
+      - 'bootstrap/a375_uscite_nav.py'
+      - 'tests/test_a376_simple_communications.py'
+      - '.github/workflows/a376-regression.yml'
+      - 'bootstrap/family_a362_wsgi.py'
+      - 'Dockerfile'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check unchanged financial ledger and simple UI controls
+        run: |
+          python3 -m py_compile bootstrap/a375_uscite_nav.py bootstrap/a376_simple_communications.py
+          python3 -m unittest discover -s tests -p 'test_a375_uscite_nav.py' -v
+          python3 -m unittest discover -s tests -p 'test_a376_simple_communications.py' -v
