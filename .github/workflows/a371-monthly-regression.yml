@@ -1,0 +1,43 @@
+name: A371 collaborator monthly hours regression
+on:
+  push:
+    branches: [bodymind-a371-collaboratori-mensile-20261109]
+    paths:
+      - 'bootstrap/a371_monthly_collaborators.py'
+      - 'tests/test_a371_monthly_collaborators.py'
+      - '.github/workflows/a371-monthly-regression.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PDF runtime only
+        run: python -m pip install --quiet reportlab
+      - name: Compile and run unit tests on synthetic data
+        run: |
+          python -m py_compile bootstrap/a371_monthly_collaborators.py
+          python -m unittest discover -s tests -p 'test_a371_monthly_collaborators.py' -v
+      - name: Create report preview and bundled source for inspection
+        run: |
+          mkdir -p preview
+          python - <<'PY'
+          import importlib.util,sys,pathlib
+          sys.path.insert(0, str(pathlib.Path("tests").resolve()))
+          spec=importlib.util.spec_from_file_location("testsuite","tests/test_a371_monthly_collaborators.py")
+          mod=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(mod)
+          c=mod.connect()
+          collab=c.execute("SELECT * FROM collaboratori WHERE id=1").fetchone()
+          d={"minuti":2865,"tariffa_centesimi":1089}
+          pathlib.Path("preview/Foglio_Ore_Esempio_Ottobre_2026.pdf").write_bytes(mod.a.generate_pdf(collab,2026,10,d))
+          pathlib.Path("preview/a371_monthly_collaborators.py").write_text(pathlib.Path("bootstrap/a371_monthly_collaborators.py").read_text())
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: a371-synthetic-preview-source
+          path: preview/
+          retention-days: 2
