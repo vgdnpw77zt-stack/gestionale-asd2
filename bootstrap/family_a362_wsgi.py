@@ -22,3 +22,7 @@ install_a367(app)
 # A368: scoped collaborator dialogs and compliance readability, no data writes.
 from a368_collaboratori_ui import install as install_a368
 install_a368(app)
+
+# A370: original ASD folder archive, admin-only, read-only.
+from a370_asd_folder_browser import install as install_a370
+install_a370(app)
