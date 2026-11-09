@@ -3,12 +3,14 @@ on:
   push:
     branches: [bodymind-a374-uscite-onlinepagamenti-audit-20261109]
     paths: ['.github/workflows/a374-source.yml']
-permissions: {contents: read}
+permissions:
+  contents: read
 jobs:
   inspect:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    env: { RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }} }
+    env:
+      RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
     steps:
       - name: Extract only active source slices and expense row metadata
         run: |
@@ -43,6 +45,9 @@ jobs:
           print(json.dumps(result,ensure_ascii=False))
           PY
       - uses: actions/upload-artifact@v4
-        with: {name: a374-route-source, path: evidence/source.json, retention-days: 1}
+        with:
+          name: a374-route-source
+          path: evidence/source.json
+          retention-days: 1
       - if: always()
         run: rm -f "$HOME/.ssh/id_ed25519"
