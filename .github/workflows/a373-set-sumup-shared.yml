@@ -1,0 +1,76 @@
+name: A373 configure existing shared SumUp checkout in BodyMind (safe config-only)
+on:
+  push:
+    branches: [bodymind-a373-configura-sumup-libero-20261109]
+    paths: ['.github/workflows/a373-set-sumup-shared.yml']
+permissions:
+  contents: read
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      RAILWAY_SSH_KEY: ${{ secrets.BODYMIND_RAILWAY_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Apply approved open-amount link only to existing tenant config, atomically
+        run: |
+          set -eu
+          umask 077
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$RAILWAY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          timeout 110s ssh -T -i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 bodymind-app-production.up.railway.app@ssh.railway.com 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          import copy, json, os, stat, tempfile, urllib.parse
+          from pathlib import Path
+
+          url='https://pay.sumup.com/b2c/QO5TN5OX'
+          u=urllib.parse.urlsplit(url)
+          assert u.scheme=='https' and u.hostname=='pay.sumup.com' and u.path.startswith('/b2c/')
+          assert not u.username and not u.password and u.port in (None,443)
+          config=Path('/data/tenants/default/config.json')
+          if config.is_symlink() or not config.is_file():
+              raise RuntimeError('Existing tenant config unavailable or symlink; aborting without changes')
+          original=config.read_bytes()
+          cfg=json.loads(original)
+          if not isinstance(cfg,dict) or not cfg.get('nome_asd'):
+              raise RuntimeError('Unexpected tenant config; no changes')
+          previous=copy.deepcopy(cfg)
+          new_setting={'url':url,'enabled':True}
+          if cfg.get('bodymind_sumup_open_amount')==new_setting:
+              print('A373 SUMUP CONFIG ALREADY ACTIVE — unchanged, verified.')
+          else:
+              # Preserve every other key and the entire previous config as a private backup.
+              cfg['bodymind_sumup_open_amount']=new_setting
+              restore=Path('/data/tenants/default/.config-a373-before-sumup.json')
+              if not restore.exists():
+                  with restore.open('xb') as f:
+                      os.fchmod(f.fileno(),0o600)
+                      f.write(original)
+                      f.flush()
+                      os.fsync(f.fileno())
+              elif restore.is_symlink():
+                  raise RuntimeError('Backup path is a symlink; aborting')
+              if config.read_bytes()!=original:
+                  raise RuntimeError('Config changed during operation; aborting')
+              data=json.dumps(cfg,ensure_ascii=False,indent=4).encode('utf-8')
+              fd,tmp=tempfile.mkstemp(prefix='.config-a373-',suffix='.tmp',dir=str(config.parent))
+              try:
+                  os.fchmod(fd,stat.S_IMODE(config.stat().st_mode))
+                  with os.fdopen(fd,'wb') as f:
+                      f.write(data);f.flush();os.fsync(f.fileno())
+                  os.replace(tmp,config)
+                  dfd=os.open(str(config.parent),os.O_RDONLY)
+                  try:os.fsync(dfd)
+                  finally:os.close(dfd)
+              finally:
+                  if os.path.exists(tmp):os.unlink(tmp)
+          verify=json.loads(config.read_text(encoding='utf-8'))
+          assert verify.get('bodymind_sumup_open_amount')==new_setting
+          left={k:v for k,v in verify.items() if k!='bodymind_sumup_open_amount'}
+          right={k:v for k,v in previous.items() if k!='bodymind_sumup_open_amount'}
+          assert left==right, 'Unexpected unrelated config change'
+          print('A373 SUMUP SHARED ACTIVE AND VERIFIED — single reusable link, no DB changes.')
+          print('A373 SUMUP PROVIDER HOST: '+u.hostname)
+          PY
+      - name: Remove private SSH key
+        if: always()
+        run: rm -f "$HOME/.ssh/id_ed25519"
