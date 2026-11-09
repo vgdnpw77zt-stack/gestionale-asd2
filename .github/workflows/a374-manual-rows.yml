@@ -1,0 +1,13 @@
+name: A374 manual row counts
+on:
+  push:
+    branches: [bodymind-a374-uscite-onlinepagamenti-audit-20261109]
+    paths: ['.github/workflows/a374-manual-rows.yml']
+permissions:
+  contents: read
+jobs:
+  count:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo 'A374 read only checks - no data changes'
