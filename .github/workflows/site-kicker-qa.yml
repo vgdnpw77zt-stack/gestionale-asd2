@@ -39,6 +39,7 @@ jobs:
                   await page.locator(sel).scroll_into_view_if_needed()
                   await page.wait_for_timeout(500)
                   if width==390: await page.screenshot(path=f'evidence/live-{width}-{name}.png')
+                metrics['cards_after_scroll']=await page.locator('.program-card img').evaluate_all('(es)=>es.map(e=>({loaded:e.complete&&e.naturalWidth>0,src:e.src}))')
                 await page.screenshot(path=f'evidence/live-{width}-full.png',full_page=True)
                 if width<600:
                   await page.locator('.menu-btn').click()
@@ -49,13 +50,13 @@ jobs:
                 metrics.update(width=width,status=response.status,errors=errors)
                 results.append(metrics)
                 await context.close()
-              context=await browser.new_context(viewport={'width':390,'height':844},is_mobile=True,has_touch=True)
+              context=await browser.new_context(viewport={'width':375,'height':667},is_mobile=True,has_touch=True)
               page=await context.new_page()
               baseline=pathlib.Path('site/static/sunrise.css').read_text().split('/* A351-KICKER-ONLY')[0]
               await page.route('**/static/sunrise.css*',lambda route:route.fulfill(status=200,content_type='text/css',body=baseline))
               await page.goto('https://bodymindaerialstudio.life/',wait_until='networkidle',timeout=90000)
               await page.wait_for_timeout(1200)
-              await page.screenshot(path='evidence/baseline-A351-css-390-hero.png')
+              await page.screenshot(path='evidence/baseline-A351-css-375-hero.png')
               await browser.close()
             pathlib.Path('evidence/results.json').write_text(json.dumps(results,indent=2))
             print(json.dumps(results,indent=2))
@@ -66,6 +67,7 @@ jobs:
                 assert r['gap']>=8, 'Kicker overlaps medal strip'
                 assert r['menu_open'] and r['menu_anchor']=='#percorsi'
               assert not r['errors']
+              assert all(c['loaded'] for c in r['cards_after_scroll'])
           asyncio.run(main())
           PY
       - uses: actions/upload-artifact@v4
