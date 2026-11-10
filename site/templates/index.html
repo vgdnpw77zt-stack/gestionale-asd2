@@ -84,7 +84,7 @@
 
 <div class="hero-film reveal">
 <div class="film-outline" aria-hidden="true"></div>
-<video autoplay muted loop playsinline preload="auto" poster="{{ c.hero.image or c.visuals.gallery[2] }}" data-hero-video>
+<video muted loop playsinline preload="metadata" poster="{{ c.hero.image or c.visuals.gallery[2] }}" data-hero-video>
 <source src="{{ c.hero.video_file or url_for('static',filename='media/bodymind-performing-hero.mp4') }}" type="video/mp4">
 </video>
 <div class="film-shade"></div>
