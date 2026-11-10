@@ -20,7 +20,7 @@ jobs:
             results=[]
             async with async_playwright() as p:
               browser=await p.webkit.launch()
-              for width,height in [(375,667),(390,844),(430,932),(1440,1000)]:
+              for width,height in [(375,667)]:
                 context=await browser.new_context(viewport={'width':width,'height':height},device_scale_factor=1,is_mobile=width<600,has_touch=width<600)
                 page=await context.new_page()
                 errors=[]
@@ -34,7 +34,16 @@ jobs:
                   const v=document.querySelector('[data-hero-video]');
                   return {kicker:k,medals:m,gap:k.y-m.bottom,overflow:document.documentElement.scrollWidth-innerWidth,css:[...document.querySelectorAll('link[rel=stylesheet]')].map(e=>e.href),video:{paused:v.paused,time:v.currentTime,ready:v.readyState},cards:[...document.querySelectorAll('.program-card')].map(e=>{const img=e.querySelector('img'),o=e.querySelector('.program-content');return {src:img.src,loaded:img.complete&&img.naturalWidth>0,position:getComputedStyle(img).objectPosition,overlay:getComputedStyle(o).background,backdrop:getComputedStyle(o).backdropFilter}})}
                 }""")
+                metrics['hero_debug']=await page.evaluate("""()=>[...document.querySelectorAll('.hero-stage,.hero-copy,.hero-copy>* ,.hero-film,.achievement-marquee')].map(e=>({tag:e.tagName,cls:e.className,rect:{x:e.getBoundingClientRect().x,y:e.getBoundingClientRect().y,w:e.getBoundingClientRect().width,h:e.getBoundingClientRect().height},opacity:getComputedStyle(e).opacity,visibility:getComputedStyle(e).visibility,transform:getComputedStyle(e).transform,z:getComputedStyle(e).zIndex}))""")
                 await page.screenshot(path=f'evidence/live-{width}-hero.png')
+                if width==375:
+                  await page.wait_for_timeout(3000)
+                  await page.screenshot(path='evidence/live-375-delayed.png')
+                  await page.evaluate('scrollTo(0,1)')
+                  await page.wait_for_timeout(300)
+                  await page.evaluate('scrollTo(0,0)')
+                  await page.wait_for_timeout(1000)
+                  await page.screenshot(path='evidence/live-375-after-scroll.png')
                 for sel,name in [('#percorsi','training'),('.program-card.p2','competition'),('.program-card.p3','show'),('#kids','kids'),('#sedi','sedi'),('#contatti','contatti')]:
                   await page.locator(sel).scroll_into_view_if_needed()
                   await page.wait_for_timeout(500)
