@@ -122,3 +122,53 @@ a:focus-visible,button:focus-visible{outline:3px solid #F8C8A2;outline-offset:3p
 .section-light :is(.intro-right p,.location-card p,.location-card span,.locations-head p){color:#36555A}
 .section-blush .kids-copy>p{color:#39585D!important}
 .section-light :is(h1,h2,h3,h4),.section-blush :is(h1,h2,h3,h4){color:#173944}
+
+
+/* A378 — visible editorial hero refinement, desktop and mobile. No data changes. */
+.hero-stage{
+  background:
+    radial-gradient(ellipse 52% 62% at 77% 32%,rgba(177,103,121,.26),transparent 73%),
+    radial-gradient(ellipse 55% 65% at 11% 75%,rgba(52,148,161,.25),transparent 78%),
+    linear-gradient(125deg,#07131F 0%,#102A3A 42%,#263646 72%,#0A1A2B 100%)!important;
+  isolation:isolate;
+}
+.hero-stage:before{
+  content:"";position:absolute;inset:0;pointer-events:none;z-index:0;
+  background:radial-gradient(ellipse 65% 46% at 52% 50%,transparent 25%,rgba(2,9,20,.42) 100%);
+}
+.hero-stage:after{
+  opacity:.28;
+  background-image:
+    radial-gradient(1px 1px at 22px 47px,rgba(255,238,218,.82) 96%,transparent),
+    radial-gradient(1px 1px at 81px 23px,rgba(181,214,231,.8) 96%,transparent);
+}
+.hero-copy,.hero-film,.hero-foot{position:relative;z-index:1}
+.hero-copy h1{
+  font-family:"Cormorant Garamond",Georgia,serif;
+  font-weight:500!important;
+  letter-spacing:-.035em;
+  line-height:.94;
+  text-wrap:balance;
+  text-shadow:0 14px 55px rgba(0,0,0,.25);
+}
+.hero-signature{color:#F6C6B7!important;letter-spacing:.11em}
+.hero-text{color:#E1E6E9!important;line-height:1.7}
+.hero-film{filter:drop-shadow(0 30px 55px rgba(0,0,0,.26))}
+.hero-film .film-caption{
+  background:rgba(10,24,38,.72)!important;
+  border-color:rgba(249,220,203,.27)!important;
+  backdrop-filter:blur(14px);
+  -webkit-backdrop-filter:blur(14px);
+}
+.primary-btn{
+  background:linear-gradient(110deg,#F7DCCB,#D7B2B8)!important;
+  color:#172333!important;
+  border-color:rgba(255,240,226,.6)!important;
+}
+.primary-btn:hover{background:linear-gradient(110deg,#FFE9D9,#E9C3C9)!important}
+@media(max-width:767px){
+  .hero-stage{background:radial-gradient(ellipse 95% 48% at 60% 38%,rgba(145,91,119,.26),transparent 78%),linear-gradient(155deg,#081723,#142B3D 58%,#0B1D2C)!important}
+  .hero-copy h1{letter-spacing:-.025em;line-height:.98}
+  .hero-film{filter:drop-shadow(0 16px 32px rgba(0,0,0,.2))}
+}
+@media(prefers-reduced-motion:reduce){.hero-stage:after{animation:none!important}}
