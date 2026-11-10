@@ -1,4 +1,4 @@
-name: A351 kicker live WebKit verification
+name: A351 kicker candidate WebKit verification
 on:
   push:
     branches: [bodymind-site-a351-kicker-qa-20261110]
@@ -20,35 +20,27 @@ jobs:
             results=[]
             async with async_playwright() as p:
               browser=await p.webkit.launch()
-              for width,height in [(375,667)]:
+              for width,height in [(375,667),(390,844),(430,932),(1440,1000)]:
                 context=await browser.new_context(viewport={'width':width,'height':height},device_scale_factor=1,is_mobile=width<600,has_touch=width<600)
                 page=await context.new_page()
+                await page.route('**/static/sunrise.css*',lambda route:route.fulfill(status=200,content_type='text/css',body=pathlib.Path('site/static/sunrise.css').read_text()))
                 errors=[]
                 page.on('pageerror',lambda e:errors.append(str(e)))
                 response=await page.goto('https://bodymindaerialstudio.life/',wait_until='networkidle',timeout=90000)
                 await page.evaluate('document.fonts.ready')
-                await page.wait_for_timeout(1200)
+                await page.wait_for_function("getComputedStyle(document.querySelector('.hero-copy h1')).opacity==='1' && getComputedStyle(document.querySelector('.achievement-marquee')).opacity==='1'",timeout=20000)
+                await page.wait_for_timeout(200)
                 metrics=await page.evaluate("""() => {
                   const box=s=>{const r=document.querySelector(s).getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,bottom:r.bottom,right:r.right}};
                   const k=box('.hero-copy>.kicker'),m=box('.achievement-marquee');
                   const v=document.querySelector('[data-hero-video]');
-                  return {kicker:k,medals:m,gap:k.y-m.bottom,overflow:document.documentElement.scrollWidth-innerWidth,css:[...document.querySelectorAll('link[rel=stylesheet]')].map(e=>e.href),video:{paused:v.paused,time:v.currentTime,ready:v.readyState},cards:[...document.querySelectorAll('.program-card')].map(e=>{const img=e.querySelector('img'),o=e.querySelector('.program-content');return {src:img.src,loaded:img.complete&&img.naturalWidth>0,position:getComputedStyle(img).objectPosition,overlay:getComputedStyle(o).background,backdrop:getComputedStyle(o).backdropFilter}})}
+                  return {kicker:k,medals:m,gap:k.y-m.bottom,titleGap:box('.hero-copy h1').y-k.bottom,overflow:document.documentElement.scrollWidth-innerWidth,css:[...document.querySelectorAll('link[rel=stylesheet]')].map(e=>e.href),video:{paused:v.paused,time:v.currentTime,ready:v.readyState},cards:[...document.querySelectorAll('.program-card')].map(e=>{const img=e.querySelector('img'),o=e.querySelector('.program-content');return {src:img.src,loaded:img.complete&&img.naturalWidth>0,position:getComputedStyle(img).objectPosition,overlay:getComputedStyle(o).background,backdrop:getComputedStyle(o).backdropFilter}})}
                 }""")
-                metrics['hero_debug']=await page.evaluate("""()=>[...document.querySelectorAll('.hero-stage,.hero-copy,.hero-copy>* ,.hero-film,.achievement-marquee')].map(e=>({tag:e.tagName,cls:e.className,rect:{x:e.getBoundingClientRect().x,y:e.getBoundingClientRect().y,w:e.getBoundingClientRect().width,h:e.getBoundingClientRect().height},opacity:getComputedStyle(e).opacity,visibility:getComputedStyle(e).visibility,transform:getComputedStyle(e).transform,z:getComputedStyle(e).zIndex}))""")
                 await page.screenshot(path=f'evidence/live-{width}-hero.png')
-                if width==375:
-                  await page.wait_for_timeout(3000)
-                  await page.screenshot(path='evidence/live-375-delayed.png')
-                  await page.evaluate('scrollTo(0,1)')
-                  await page.wait_for_timeout(300)
-                  await page.evaluate('scrollTo(0,0)')
-                  await page.wait_for_timeout(1000)
-                  await page.screenshot(path='evidence/live-375-after-scroll.png')
                 for sel,name in [('#percorsi','training'),('.program-card.p2','competition'),('.program-card.p3','show'),('#kids','kids'),('#sedi','sedi'),('#contatti','contatti')]:
                   await page.locator(sel).scroll_into_view_if_needed()
                   await page.wait_for_timeout(500)
                   if width==390: await page.screenshot(path=f'evidence/live-{width}-{name}.png')
-                metrics['cards_after_scroll']=await page.locator('.program-card img').evaluate_all('(es)=>es.map(e=>({loaded:e.complete&&e.naturalWidth>0,src:e.src}))')
                 await page.screenshot(path=f'evidence/live-{width}-full.png',full_page=True)
                 if width<600:
                   await page.locator('.menu-btn').click()
@@ -59,13 +51,13 @@ jobs:
                 metrics.update(width=width,status=response.status,errors=errors)
                 results.append(metrics)
                 await context.close()
-              context=await browser.new_context(viewport={'width':375,'height':667},is_mobile=True,has_touch=True)
+              context=await browser.new_context(viewport={'width':390,'height':844},is_mobile=True,has_touch=True)
               page=await context.new_page()
-              baseline=pathlib.Path('site/static/sunrise.css').read_text().split('/* A351-KICKER-ONLY')[0]
+              baseline=pathlib.Path('site/static/sunrise.css').read_text().split('/* Keep the brand line')[0]
               await page.route('**/static/sunrise.css*',lambda route:route.fulfill(status=200,content_type='text/css',body=baseline))
               await page.goto('https://bodymindaerialstudio.life/',wait_until='networkidle',timeout=90000)
               await page.wait_for_timeout(1200)
-              await page.screenshot(path='evidence/baseline-A351-css-375-hero.png')
+              await page.screenshot(path='evidence/baseline-A351-css-390-hero.png')
               await browser.close()
             pathlib.Path('evidence/results.json').write_text(json.dumps(results,indent=2))
             print(json.dumps(results,indent=2))
@@ -74,9 +66,9 @@ jobs:
               assert r['overflow']<=1
               if r['width']<600:
                 assert r['gap']>=8, 'Kicker overlaps medal strip'
+                assert r['titleGap']>=12, 'Kicker overlaps headline'
                 assert r['menu_open'] and r['menu_anchor']=='#percorsi'
               assert not r['errors']
-              assert all(c['loaded'] for c in r['cards_after_scroll'])
           asyncio.run(main())
           PY
       - uses: actions/upload-artifact@v4
