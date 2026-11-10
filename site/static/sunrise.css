@@ -250,3 +250,56 @@ a:focus-visible,button:focus-visible{outline:3px solid #F8C8A2;outline-offset:3p
   }
   .contact-stage h2{font-size:clamp(64px,18vw,110px)!important}
 }
+
+
+/* A382 — structural mobile rebuild of course cards, not another overlay patch.
+   Image and copy occupy separate vertical bands; no absolute copy overlap. */
+@media(max-width:767px){
+  .program-grid{display:grid!important;grid-template-columns:minmax(0,1fr)!important;grid-template-rows:auto!important;gap:18px!important}
+  .program-grid .program-card,
+  .program-grid .program-card.p1,
+  .program-grid .program-card.p2,
+  .program-grid .program-card.p3{
+    display:flex!important;flex-direction:column!important;
+    min-height:0!important;height:auto!important;grid-row:auto!important;
+    overflow:hidden!important;border-radius:24px!important;
+    background:#0b1c29!important;
+  }
+  .program-grid .program-card .program-image,
+  .program-grid .program-card .program-image-link{
+    position:relative!important;inset:auto!important;
+    display:block!important;flex:0 0 auto!important;
+    width:100%!important;height:260px!important;min-height:0!important;
+    padding:0!important;margin:0!important;border-radius:0!important;
+    overflow:hidden!important;
+  }
+  .program-grid .program-card .program-image img{
+    position:absolute!important;inset:0!important;
+    width:100%!important;height:100%!important;
+    object-fit:cover!important;transform:none!important;
+  }
+  .program-grid .program-card .program-overlay{display:none!important}
+  .program-grid .program-card .program-content{
+    position:relative!important;inset:auto!important;
+    flex:0 0 auto!important;display:block!important;
+    width:100%!important;height:auto!important;
+    padding:24px 20px 26px!important;
+    background:#0b1c29!important;
+    transform:none!important;opacity:1!important;
+  }
+  .program-grid .program-card .program-content h3{
+    font-size:clamp(32px,9vw,48px)!important;line-height:1.08!important;
+    margin:8px 0 12px!important;white-space:normal!important;
+  }
+  .program-grid .program-card .program-content p{
+    color:#e2e8e9!important;line-height:1.55!important;
+    max-width:100%!important;
+  }
+  .program-grid .program-card .competition-palmares{
+    opacity:1!important;transform:none!important;
+    grid-template-columns:1fr!important;gap:8px!important;
+    margin-top:16px!important;
+  }
+  .program-grid .program-card .program-links{margin-top:16px!important}
+  .program-grid .program-card .program-links a{line-height:1.4!important}
+}
