@@ -172,3 +172,37 @@ a:focus-visible,button:focus-visible{outline:3px solid #F8C8A2;outline-offset:3p
   .hero-film{filter:drop-shadow(0 16px 32px rgba(0,0,0,.2))}
 }
 @media(prefers-reduced-motion:reduce){.hero-stage:after{animation:none!important}}
+
+
+/* A379 — fix real iPhone screenshot: marquee must not cover studio kicker.
+   Keep full-bleed video, restore dark gradient readability, make hero scroll naturally. */
+.hero-stage.hero-fullscreen:before{
+  background:linear-gradient(180deg,rgba(4,9,17,.65),rgba(5,11,21,.20) 30%,rgba(5,9,18,.48) 65%,rgba(3,8,16,.88)),
+             linear-gradient(90deg,rgba(5,10,20,.68),rgba(5,10,20,.08) 78%)!important;
+}
+@media(max-width:767px){
+  .hero-stage.hero-fullscreen{min-height:100svh;height:auto;overflow:hidden}
+  .hero-fullscreen .hero-copy{
+    min-height:100svh;height:auto;justify-content:flex-start;
+    padding:180px 22px 148px!important;
+    width:100%;
+  }
+  .hero-fullscreen .kicker{
+    display:block!important;visibility:visible!important;opacity:1!important;
+    position:relative;z-index:9;
+    margin:0 0 14px;
+    font-size:10px;line-height:1.6;letter-spacing:.14em;
+    color:#F5D8C8!important;
+  }
+  .hero-fullscreen .hero-copy h1{
+    margin:12px 0 20px;
+    font-size:clamp(58px,12.5vw,86px);
+    line-height:.92;
+  }
+  .achievement-marquee{top:86px;z-index:10}
+  .hero-fullscreen .hero-foot{z-index:7}
+}
+@media(max-width:380px){
+  .hero-fullscreen .hero-copy{padding-top:174px!important;padding-left:18px!important;padding-right:18px!important}
+  .hero-fullscreen .hero-copy h1{font-size:clamp(52px,12.5vw,68px)}
+}
