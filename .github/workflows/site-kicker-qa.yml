@@ -1,0 +1,76 @@
+name: A351 kicker live WebKit verification
+on:
+  push:
+    branches: [bodymind-site-a351-kicker-qa-20261110]
+    paths: [.github/workflows/site-kicker-qa.yml]
+jobs:
+  webkit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install playwright
+      - run: playwright install --with-deps webkit
+      - name: Verify public site and capture mobile evidence
+        run: |
+          mkdir -p evidence
+          python - <<'PY'
+          import asyncio,json,pathlib
+          from playwright.async_api import async_playwright
+          async def main():
+            results=[]
+            async with async_playwright() as p:
+              browser=await p.webkit.launch()
+              for width,height in [(375,667),(390,844),(430,932),(1440,1000)]:
+                context=await browser.new_context(viewport={'width':width,'height':height},device_scale_factor=1,is_mobile=width<600,has_touch=width<600)
+                page=await context.new_page()
+                errors=[]
+                page.on('pageerror',lambda e:errors.append(str(e)))
+                response=await page.goto('https://bodymindaerialstudio.life/',wait_until='networkidle',timeout=90000)
+                await page.evaluate('document.fonts.ready')
+                await page.wait_for_timeout(1200)
+                metrics=await page.evaluate("""() => {
+                  const box=s=>{const r=document.querySelector(s).getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,bottom:r.bottom,right:r.right}};
+                  const k=box('.hero-copy>.kicker'),m=box('.achievement-marquee');
+                  const v=document.querySelector('[data-hero-video]');
+                  return {kicker:k,medals:m,gap:k.y-m.bottom,overflow:document.documentElement.scrollWidth-innerWidth,css:[...document.querySelectorAll('link[rel=stylesheet]')].map(e=>e.href),video:{paused:v.paused,time:v.currentTime,ready:v.readyState},cards:[...document.querySelectorAll('.program-card')].map(e=>{const img=e.querySelector('img'),o=e.querySelector('.program-content');return {src:img.src,loaded:img.complete&&img.naturalWidth>0,position:getComputedStyle(img).objectPosition,overlay:getComputedStyle(o).background,backdrop:getComputedStyle(o).backdropFilter}})}
+                }""")
+                await page.screenshot(path=f'evidence/live-{width}-hero.png')
+                for sel,name in [('#percorsi','training'),('.program-card.p2','competition'),('.program-card.p3','show'),('#kids','kids'),('#sedi','sedi'),('#contatti','contatti')]:
+                  await page.locator(sel).scroll_into_view_if_needed()
+                  await page.wait_for_timeout(500)
+                  if width==390: await page.screenshot(path=f'evidence/live-{width}-{name}.png')
+                await page.screenshot(path=f'evidence/live-{width}-full.png',full_page=True)
+                if width<600:
+                  await page.locator('.menu-btn').click()
+                  metrics['menu_open']=await page.locator('.mobile-menu').is_visible()
+                  await page.locator('.mobile-menu a[href="#percorsi"]').click()
+                  await page.wait_for_timeout(700)
+                  metrics['menu_anchor']=await page.evaluate('location.hash')
+                metrics.update(width=width,status=response.status,errors=errors)
+                results.append(metrics)
+                await context.close()
+              context=await browser.new_context(viewport={'width':390,'height':844},is_mobile=True,has_touch=True)
+              page=await context.new_page()
+              baseline=pathlib.Path('site/static/sunrise.css').read_text().split('/* A351-KICKER-ONLY')[0]
+              await page.route('**/static/sunrise.css*',lambda route:route.fulfill(status=200,content_type='text/css',body=baseline))
+              await page.goto('https://bodymindaerialstudio.life/',wait_until='networkidle',timeout=90000)
+              await page.wait_for_timeout(1200)
+              await page.screenshot(path='evidence/baseline-A351-css-390-hero.png')
+              await browser.close()
+            pathlib.Path('evidence/results.json').write_text(json.dumps(results,indent=2))
+            print(json.dumps(results,indent=2))
+            for r in results:
+              assert r['status']==200
+              assert r['overflow']<=1
+              if r['width']<600:
+                assert r['gap']>=8, 'Kicker overlaps medal strip'
+                assert r['menu_open'] and r['menu_anchor']=='#percorsi'
+              assert not r['errors']
+          asyncio.run(main())
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: a351-kicker-webkit-evidence
+          path: evidence/
+          retention-days: 14
