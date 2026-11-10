@@ -206,3 +206,23 @@ a:focus-visible,button:focus-visible{outline:3px solid #F8C8A2;outline-offset:3p
   .hero-fullscreen .hero-copy{padding-top:174px!important;padding-left:18px!important;padding-right:18px!important}
   .hero-fullscreen .hero-copy h1{font-size:clamp(52px,12.5vw,68px)}
 }
+
+
+/* A380 — corrections grounded in the 10 Nov iPhone scroll recording.
+   The fixed CTA dock hides actual editorial content; primary CTA and contact links
+   already exist in the page. Remove only the redundant dock on mobile. */
+@media(max-width:767px){
+  .mobile-action-dock{display:none!important}
+  .program-card .program-content{
+    position:relative;
+    z-index:3;
+    background:linear-gradient(180deg,rgba(8,17,28,.74),rgba(8,17,28,.94))!important;
+    color:#fff;
+  }
+  .program-card .program-content h3,
+  .program-card .program-content p{color:#fff}
+  .program-card .program-content p:not(.program-eyebrow){line-height:1.55}
+  .program-card .program-links a{min-height:38px}
+  .program-card .program-image img{object-position:center 40%}
+  .site-header{backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+}
