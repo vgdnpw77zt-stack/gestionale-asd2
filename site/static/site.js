@@ -5,7 +5,7 @@
 const hero=document.querySelector(".hero-stage");
 const syncDock=()=>{
   if(!dock||!hero)return;
-  const outside=hero.getBoundingClientRect().bottom<=innerHeight;
+  const outside=scrollY>20 && hero.getBoundingClientRect().bottom<innerHeight-20;
   dock.classList.toggle("is-outside-hero",outside);
   dock.inert=outside;
   dock.setAttribute("aria-hidden",outside?"true":"false");
