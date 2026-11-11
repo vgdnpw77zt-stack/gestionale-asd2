@@ -166,8 +166,29 @@ def _audit_channel_readonly(conn):
                    'ricevute_anomale':truth['anomalie_ricevute']}
     except Exception as exc:
         canonical={'status':'BLOCK','reason':type(exc).__name__+': '+str(exc)[:160]}
+    for name in methods_names:
+        if canonical['status']=='OK':
+            r=report[name]; ca=canonical['per_metodo'][name]
+            recorded_in=v(r['pagamenti_euro'])+v(r['manuali_entrata_euro'])
+            recorded_out=v(r['uscite_euro'])+v(r['manuali_uscita_euro'])
+            if recorded_in!=v(ca['entrate']) or recorded_out!=v(ca['uscite']):
+                raise RuntimeError('Audit mismatch channel '+name)
+            if r['pagamenti_n']+r['manuali_entrata_n']!=int(ca['n_incassi']):
+                raise RuntimeError('Audit mismatch payment count '+name)
+    if canonical['status']!='OK':
+        raise RuntimeError('Canonical A237 audit blocked: '+canonical['reason'])
+    expense_match=[]
+    for m in unclassified:
+        hits=[int(x['id']) for x in es if v(x.get('importo'))==v(m['importo']) and
+               str(x.get('data') or '')==str(m.get('data') or '')]
+        expense_match.append({'movement_id':int(m['id']),'amount':str(v(m['importo'])),
+                              'matches_expense_ids':hits})
+    all_tables=[str(x['name']) for x in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")]
+    cash_tables=[name for name in all_tables if any(t in name.casefold() for t in
+                  ('cassa','banca','cash','bank','trasfer','versament','preliev','saldo','deposit'))]
     doc={'status':'AGGREGATE_READONLY','canonical':canonical,'channels':report,
-         'movimenti_non_mappati':len(unclassified),'income_mapped':len(manual_in),
+         'movimenti_non_mappati':len(unclassified),'unclassified_expense_crosscheck':expense_match,
+         'possible_cash_transfer_tables':cash_tables,'income_mapped':len(manual_in),
          'expense_mapped':len(manual_out),'specifics':evidence}
     print('BODYMIND CASH CHANNEL AUDIT '+json.dumps(doc,ensure_ascii=False,separators=(',',':')),flush=True)
     return doc
@@ -436,18 +457,19 @@ def install(app):
         verify.execute('PRAGMA query_only=ON')
         preview=owner_bilanci_html(verify,'')
         full=owner_bilanci_html(verify,'tutto')
-        if (any(s not in preview for s in ('id="bm-owner-bilanci"','Entrate registrate','Uscite registrate','Risultato contabile','Contanti · flusso netto')) or
+        if (any(s not in preview for s in ('id="bm-owner-bilanci"','Entrate registrate','Uscite registrate','Risultato del periodo','Contanti incassati')) or
                 'Non determinabile' in preview or 'Non determinabile' in full or
                 'Tutto lo storico' not in full):
             raise RuntimeError('Owner Bilanci financial rendering failed')
         # Aggregate amounts only: no personal data or documents are emitted to logs.
         cards_month=re.findall(r'<article class="bmbl-card"><span>(.*?)</span><strong>(.*?)</strong>',preview)
         cards_history=re.findall(r'<article class="bmbl-card"><span>(.*?)</span><strong>(.*?)</strong>',full)
-        if len(cards_month)!=6 or len(cards_history)!=6:
-            raise RuntimeError('Owner Bilanci expected six live accounting cards')
+        if len(cards_month)!=8 or len(cards_history)!=8:
+            raise RuntimeError('Owner Bilanci expected eight audited accounting cards')
         print('BODYMIND BILANCI VERIFIED NOVEMBER/CURRENT '+str(cards_month[:3]),flush=True)
         print('BODYMIND BILANCI VERIFIED HISTORY '+str(cards_history[:3]),flush=True)
         print('BODYMIND BILANCI CARD METHODS '+str(cards_month[3:]),flush=True)
+        print('BODYMIND BILANCI HISTORY CHANNELS '+str(cards_history[3:]),flush=True)
         _audit_channel_readonly(verify)
         print('BODYMIND OWNER BILANCI TRUE-LEDGER READONLY PREFLIGHT PASS',flush=True)
     finally:
