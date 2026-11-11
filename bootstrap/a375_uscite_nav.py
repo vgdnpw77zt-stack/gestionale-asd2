@@ -159,7 +159,10 @@ def owner_bilanci_html(conn, selected_month):
     match=(old_exp is not None and old_mov is not None and
            Decimal(str(old_exp['importo']))==Decimal('520') and
            Decimal(str(old_mov['importo']))==Decimal('520') and
-           str(old_exp.get('data') or '')==str(old_mov['data'] or ''))
+           str(old_exp.get('data') or '')==str(old_mov['data'] or '') and
+           any(name in str(old_exp.get('descrizione') or '').casefold()
+               and name in str(old_mov['descrizione'] or '').casefold()
+               for name in ('mastandrea','mastrandrea','elena')))
     if match:
         notice=('Il registro Uscite conserva la registrazione #10 da 520 € e il registro Movimenti il riferimento #134313 '
                 'della stessa data e dello stesso importo. In questa vista il movimento tecnico NON viene sommato '
@@ -221,6 +224,20 @@ def owner_bilanci_html(conn, selected_month):
 
 def install(app):
     from asd_app.core import admin_required, auth, has_role, db, layout
+    # Preflight the actual private SQLite in read-only mode before serving users.
+    # Fail the new worker rather than publish an untested accounting page.
+    import sqlite3
+    verify=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True,timeout=20)
+    verify.row_factory=sqlite3.Row
+    try:
+        verify.execute('PRAGMA query_only=ON')
+        preview=owner_bilanci_html(verify,'')
+        if 'id="bm-owner-bilanci"' not in preview or 'Bonifico 520' not in preview:
+            raise RuntimeError('Owner Bilanci live render failed')
+        print('BODYMIND OWNER BILANCI READONLY LIVE PREFLIGHT PASS',flush=True)
+    finally:
+        verify.close()
+
     @app.get('/owner/bilanci',endpoint='bm_owner_bilanci_readonly')
     @admin_required
     def owner_bilanci_readonly():
