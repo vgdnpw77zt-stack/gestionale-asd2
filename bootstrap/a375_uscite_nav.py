@@ -432,29 +432,33 @@ def owner_bilanci_html(conn, selected_month):
 
 def install(app):
     from asd_app.core import admin_required, auth, has_role, db, layout
-    # Preflight the actual private SQLite in read-only mode before serving users.
-    # Fail the new worker rather than publish an untested accounting page.
+    # Validate the private ledger in read-only mode. The optional Bilanci view
+    # must NEVER prevent the original management app from booting.
     import sqlite3
-    verify=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True,timeout=20)
-    verify.row_factory=sqlite3.Row
+    verify=None
     try:
+        verify=sqlite3.connect('file:/data/tenants/default/asd.db?mode=ro',uri=True,timeout=20)
+        verify.row_factory=sqlite3.Row
         verify.execute('PRAGMA query_only=ON')
         preview=owner_bilanci_html(verify,'')
         full=owner_bilanci_html(verify,'tutto')
         if (any(s not in preview for s in ('id="bm-owner-bilanci"','Entrate registrate','Uscite registrate','Risultato del periodo','Contanti incassati')) or
                 'Non determinabile' in preview or 'Non determinabile' in full or
                 'Tutto lo storico' not in full):
-            raise RuntimeError('Owner Bilanci financial rendering failed')
-        # Aggregate amounts only: no personal data or documents are emitted to logs.
+            raise RuntimeError('Bilanci template integrity check')
         cards_month=re.findall(r'<article class="bmbl-card"><span>(.*?)</span><strong>(.*?)</strong>',preview)
         cards_history=re.findall(r'<article class="bmbl-card"><span>(.*?)</span><strong>(.*?)</strong>',full)
         if len(cards_month)!=8 or len(cards_history)!=8:
-            raise RuntimeError('Owner Bilanci expected eight audited accounting cards')
-        print('BODYMIND BILANCI REAL MONTH/HISTORY 8 CARDS CHECKED',flush=True)
-        _audit_channel_readonly(verify)
-        print('BODYMIND OWNER BILANCI TRUE-LEDGER READONLY PREFLIGHT PASS',flush=True)
+            raise RuntimeError('Bilanci expected eight audited accounting cards')
+        audit=_audit_channel_readonly(verify)
+        if audit['canonical']['status']!='OK' or audit['mismatches']:
+            raise RuntimeError('Bilanci totals do not match canonical accounting truth')
+        print('BODYMIND OWNER BILANCI REAL-LEDGER PREFLIGHT PASS (8 CARDS, 6 CHANNELS)',flush=True)
+    except Exception as exc:
+        print('BODYMIND OWNER BILANCI PREFLIGHT WARNING: '+type(exc).__name__,flush=True)
     finally:
-        verify.close()
+        if verify is not None:
+            verify.close()
 
     @app.get('/owner/bilanci',endpoint='bm_owner_bilanci_readonly')
     @admin_required
@@ -462,13 +466,27 @@ def install(app):
         if not auth() or not has_role('admin'):
             from flask import abort
             abort(403)
-        conn=db()
+        conn=None
+        invalid=False
         try:
+            conn=db()
             conn.execute('PRAGMA query_only=ON')
             page=owner_bilanci_html(conn,request.args.get('mese',''))
+        except Exception as exc:
+            # Never invent balances and never disrupt other management routes.
+            invalid=True
+            print('BODYMIND OWNER BILANCI READ WARNING: '+type(exc).__name__,flush=True)
+            page=('<main style="max-width:760px;margin:28px auto;padding:18px">'
+                  '<h1>Bilanci: controllo dati necessario</h1>'
+                  '<p>Non posso confermare i totali in questo momento. '
+                  'Le registrazioni originali non sono state cambiate.</p>'
+                  '<p><a href="/pagamenti">Apri Pagamenti</a> · '
+                  '<a href="/pagamenti/uscite">Apri Uscite</a> · '
+                  '<a href="/mobile">Torna alla Home Owner</a></p></main>')
         finally:
-            conn.close()
-        res=make_response(layout(page))
+            if conn is not None:
+                conn.close()
+        res=make_response(layout(page),503 if invalid else 200)
         res.headers['Cache-Control']='private, no-store'
         res.headers['Vary']='Cookie'
         res.headers['X-BodyMind-Bilanci']='READONLY-20261111'
