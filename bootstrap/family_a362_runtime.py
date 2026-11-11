@@ -10,6 +10,7 @@ TEMPLATE_SHA='fc3510cb80b965a47360a70465cfeeb99032004f44dc81d143eb01b0b6692156'
 ASSETS=Path(__file__).parent
 SKY='''<div class="bm362-sky" aria-hidden="true"><div class="bm362-cloud"></div><div class="bm362-cloud bm362-cloud--near"></div><div class="bm362-stars"></div><svg class="bm362-waves" viewBox="0 0 800 400" preserveAspectRatio="none"><path d="M-100 270 Q160 70 380 270 T900 190"/><path d="M-100 310 Q140 100 390 280 T900 230"/><path d="M-100 330 Q190 150 410 305 T900 240"/></svg></div>'''
 SKY_MAIN='''<div class="bm362-sky bm362-sky--main" aria-hidden="true"><div class="bm362-cloud bm362-cloud--near"></div><div class="bm362-stars"></div><svg class="bm362-waves" viewBox="0 0 800 400" preserveAspectRatio="none"><path d="M-100 270 Q160 70 380 270 T900 190"/><path d="M-100 310 Q140 100 390 280 T900 230"/><path d="M-100 330 Q190 150 410 305 T900 240"/></svg></div>'''
+ATMOSPHERE='''<div class="bm364-atmosphere" aria-hidden="true"><div class="bm364-mist bm364-mist--left"></div><div class="bm364-mist bm364-mist--right"></div><div class="bm364-mist bm364-mist--horizon"></div><div class="bm364-flecks"></div></div>'''
 STUDIO='''<section class="bm362-studio"><div><strong>I miei momenti in volo</strong><p>Le tue foto, una colonna sonora e un film tutto tuo.</p></div><a class="pill" href="/app-tesserato/{{token}}/studio">Crea il mio film →</a></section>'''
 
 def compose(portal, verify=True):
@@ -28,9 +29,9 @@ def compose(portal, verify=True):
     portal=portal.replace('<script>','<script id="bm362-controls">',1)
     anchor='<section class="hero" id="top" aria-labelledby="heroTitle">'
     assert portal.count(anchor)==1
-    portal=portal.replace(anchor,anchor+SKY,1)
+    portal=portal.replace(anchor,anchor+SKY+ATMOSPHERE,1)
     portal=portal.replace('<main class="frame main">','<main class="frame main">'+SKY_MAIN+STUDIO,1)
-    portal=portal.replace('<body>','<body data-bodymind-family="A362" data-bodymind-scene="A363b">',1)
+    portal=portal.replace('<body>','<body data-bodymind-family="A362" data-bodymind-scene="A364">',1)
     nav=(ASSETS/'family_a362_navigation.js').read_text()
     portal=portal.replace('</body>','<script id="bm362-navigation">'+nav+'</script></body>',1)
     return portal
@@ -64,7 +65,7 @@ def install(app,portal_module):
         if request.endpoint!='app_tesserato' or response.status_code!=200 or response.mimetype!='text/html' or response.direct_passthrough:
             return response
         response.set_data(clean_response_markup(response.get_data(as_text=True)))
-        response.headers['X-BodyMind-Family-Release']='A363b'
+        response.headers['X-BodyMind-Family-Release']='A364'
         response.headers['Cache-Control']='private, no-store'
         response.headers.pop('ETag',None)
         return response
@@ -73,4 +74,4 @@ def install(app,portal_module):
     # Retire old diagnostic collection; retain the application's existing CSRF guard.
     if '_bm361_measure' in app.view_functions:
         app.view_functions['_bm361_measure']=lambda:('',410)
-    print('BODYMIND A363b LUMINOUS FAMILY SCENE READY; original source, functions and volume unchanged',flush=True)
+    print('BODYMIND A364 FOREGROUND NEBULA DEPTH READY; original source, functions and volume unchanged',flush=True)
