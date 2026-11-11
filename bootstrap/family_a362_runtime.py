@@ -30,7 +30,7 @@ def compose(portal, verify=True):
     assert portal.count(anchor)==1
     portal=portal.replace(anchor,anchor+SKY,1)
     portal=portal.replace('<main class="frame main">','<main class="frame main">'+SKY_MAIN+STUDIO,1)
-    portal=portal.replace('<body>','<body data-bodymind-family="A362" data-bodymind-scene="A363">',1)
+    portal=portal.replace('<body>','<body data-bodymind-family="A362" data-bodymind-scene="A363b">',1)
     nav=(ASSETS/'family_a362_navigation.js').read_text()
     portal=portal.replace('</body>','<script id="bm362-navigation">'+nav+'</script></body>',1)
     return portal
@@ -64,7 +64,7 @@ def install(app,portal_module):
         if request.endpoint!='app_tesserato' or response.status_code!=200 or response.mimetype!='text/html' or response.direct_passthrough:
             return response
         response.set_data(clean_response_markup(response.get_data(as_text=True)))
-        response.headers['X-BodyMind-Family-Release']='A363'
+        response.headers['X-BodyMind-Family-Release']='A363b'
         response.headers['Cache-Control']='private, no-store'
         response.headers.pop('ETag',None)
         return response
@@ -73,4 +73,4 @@ def install(app,portal_module):
     # Retire old diagnostic collection; retain the application's existing CSRF guard.
     if '_bm361_measure' in app.view_functions:
         app.view_functions['_bm361_measure']=lambda:('',410)
-    print('BODYMIND A363 AUTHENTICATED FAMILY SCENE READY; original source, functions and volume unchanged',flush=True)
+    print('BODYMIND A363b LUMINOUS FAMILY SCENE READY; original source, functions and volume unchanged',flush=True)
