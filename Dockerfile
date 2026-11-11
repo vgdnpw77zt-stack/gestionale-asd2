@@ -11,6 +11,7 @@ COPY bootstrap/a370_asd_folder_browser.py /opt/bodymind/
 COPY bootstrap/a371_monthly_collaborators.py bootstrap/a372_sumup_shared.py /opt/bodymind/
 COPY bootstrap/a375_uscite_nav.py /opt/bodymind/
 COPY bootstrap/a376_simple_communications.py /opt/bodymind/
+COPY bootstrap/a377_owner_home_compact.py /opt/bodymind/
 COPY bootstrap/a364_monthly_attendance.py bootstrap/a365_home_inline.py bootstrap/a366_family_dues_status.py bootstrap/a367_attendance_corrections.py /opt/bodymind/
 COPY bootstrap/clean_runtime_launcher.py /opt/bodymind/clean_runtime_launcher.py
 COPY bootstrap/family_a337.css.zlib.base64 /opt/bodymind/family_a337.css.zlib.base64
