@@ -411,9 +411,6 @@ def owner_bilanci_html(conn, selected_month):
         'non attribuiamo l’intera cifra al solo circuito SumUp. '
         'Il contante incassato non certifica la giacenza fisica: eventuali versamenti e '
         'trasferimenti tra cassa e banca richiedono verifica separata.</p></section>')
-    historic_note=('Entrate storiche registrate: '+money(total_pay+total_man)+
-                   ' · Uscite storiche registrate: '+money(total_exp+total_extra)+
-                   ' · Risultato storico: '+money(total_pay+total_man-total_exp-total_extra))
     warning_parts=[]
     if unclassified:warning_parts.append(str(len(unclassified))+' movimento/i tecnici non classificati separati dagli incassi e dalle uscite ufficiali, senza conteggio aggiuntivo')
     if manual_duplicates:warning_parts.append(str(len(manual_duplicates))+' movimento/i manuale/i simili a giustificativi: possibili coincidenze da esaminare, mantenuti nel calcolo A237 senza cancellazioni')
@@ -423,7 +420,7 @@ def owner_bilanci_html(conn, selected_month):
 
     css=(
       '<style>.bmbl{max-width:1080px;margin:18px auto 100px;padding:12px;color:#ecf5ff;box-sizing:border-box}'
-      '.bmbl *{box-sizing:border-box}.bmbl h1,.bmbl h2{color:#fff}.bmbl a{color:#bef0ff}'
+      '.bmbl *{box-sizing:border-box}.bmbl h1,.bmbl h2,.bmbl h3{color:#fff}.bmbl a{color:#bef0ff}'
       '.bmbl .bmbl-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:20px 0}'
       '.bmbl-card{border:1px solid #537b94;background:#19364e;border-radius:14px;padding:18px;min-width:0}'
       '.bmbl-card span,.bmbl-card small{display:block;color:#cbdfea}.bmbl-card strong{display:block;font-size:clamp(20px,3vw,26px);margin:8px 0;overflow-wrap:anywhere}'
@@ -460,7 +457,7 @@ def owner_bilanci_html(conn, selected_month):
                                      [ym(x['data']) for x in manual_income+manual_out if ym(x['data'])]),reverse=True))+
        '</select> <button type="submit">Mostra</button></form>'
        +'<div class="bmbl-grid">'+header_cards+'</div>'+cash_box+lifetime_summary
-       +missing_note+'<p class="bmbl-dim">'+h(canonical_status)+'. '+h(historic_note)+
+       +missing_note+'<p class="bmbl-dim">'+h(canonical_status)+
        '. I flussi bancari e contanti non attestano la giacenza effettiva del conto o della cassa.</p>'
        +warning+references+
        '<section><h2>Entrate e uscite per metodo</h2><div class="bmbl-scroll"><table class="bmbl-methods">'
