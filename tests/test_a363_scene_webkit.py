@@ -11,10 +11,14 @@ from playwright.async_api import async_playwright
 BASE=Path('bootstrap/family_a362_base.css').read_text()
 SCENE=Path('bootstrap/family_a362_scene.css').read_text()
 RUNTIME=Path('bootstrap/family_a362_runtime.py').read_text()
-assert 'data-bodymind-scene="A363b"' in RUNTIME
-assert "X-BodyMind-Family-Release']='A363b'" in RUNTIME
+assert 'data-bodymind-scene="A364"' in RUNTIME
+assert "X-BodyMind-Family-Release']='A364'" in RUNTIME
 assert "SOURCE_SHA='35afdadb806a9ad1f22188e7f20439356f7282dad3adb4fc867554485ee4f686'" in RUNTIME
 assert 'bm362-sky--main' in RUNTIME and 'bm362-sky--main' in SCENE
+assert 'ATMOSPHERE' in RUNTIME and 'bm364-atmosphere' in RUNTIME
+assert '.hero>.bm364-atmosphere' in SCENE and 'z-index:3' in SCENE
+assert 'bm364-left-drift' in SCENE and 'bm364-right-drift' in SCENE
+assert 'bm364-horizon-drift' in SCENE and 'bm364-flecks-shift' in SCENE
 assert '#ffc0d2' in SCENE and '#72ffe1' in SCENE
 assert 'bm363-luminous' in SCENE and 'bm362-wave' in SCENE
 assert 'hero-media .family-hero-video' in SCENE
@@ -28,6 +32,7 @@ HTML="""<!doctype html><html lang="it"><head><meta name="viewport" content="widt
 <section class="hero" id="top">
  <div class="bm362-sky"><div class="bm362-cloud"></div><div class="bm362-cloud bm362-cloud--near"></div><div class="bm362-stars"></div>
  <svg class="bm362-waves" viewBox="0 0 800 400"><path d="M0 0Q90 40 800 300"></path></svg></div>
+ <div class="bm364-atmosphere" aria-hidden="true"><div class="bm364-mist bm364-mist--left"></div><div class="bm364-mist bm364-mist--right"></div><div class="bm364-mist bm364-mist--horizon"></div><div class="bm364-flecks"></div></div>
  <div class="hero-media"><video class="family-hero-video" muted playsinline></video></div>
  <div class="frame hero-content"><div class="hero-intro"><span class="eyebrow">BODYMIND</span>
  <h1>Ciao, atleta</h1><p>Il tuo percorso</p><a class="pill" href="#corsi">Corsi</a><button id="familyHeroPlayback" class="hero-playback">Pausa</button></div></div>
@@ -47,6 +52,9 @@ JS="""() => {
  hero:x('.hero'),media:x('.hero-media'),intro:x('.hero-content'),
  video:x('.hero video'),hello:x('.hero h1'),cloud:x('.bm362-cloud'),
  waves:x('.bm362-waves'),mainSky:x('.main>.bm362-sky--main'),
+ fog:x('.hero>.bm364-atmosphere'),fogNearLeft:x('.bm364-mist--left'),fogNearRight:x('.bm364-mist--right'),fogHorizon:x('.bm364-mist--horizon'),
+ fogNearLeftBlend:getComputedStyle(document.querySelector('.bm364-mist--left')).mixBlendMode,
+ fogNearRightBlend:getComputedStyle(document.querySelector('.bm364-mist--right')).mixBlendMode,
  waveStroke:parseFloat(getComputedStyle(document.querySelector('.bm362-waves path')).strokeWidth),
  stardustOpacity:parseFloat(getComputedStyle(document.querySelector('.bm362-stars')).opacity),
  cloudLayers:getComputedStyle(document.querySelector('.bm362-cloud')).backgroundImage.split('radial-gradient(').length-1};
@@ -66,6 +74,12 @@ async def run():
    assert state['waveStroke']>=2.4,(width,'Waves are too faint',state['waveStroke'])
    assert state['stardustOpacity']>=0.90,(width,'Stardust opacity',state['stardustOpacity'])
    assert state['cloudLayers']>=4,(width,'Missing dense cloud layers',state['cloudLayers'])
+   assert state['fog']['pos']=='absolute' and int(state['fog']['z'])==3,(width,'Foreground fog is not above movie',state['fog'])
+   assert int(state['fog']['z'])>int(state['media']['z']),(width,'Mist hidden behind video',state)
+   assert state['fogNearLeft']['animation']=='bm364-left-drift',(width,'Left foreground mist static',state)
+   assert state['fogNearRight']['animation']=='bm364-right-drift',(width,'Right foreground mist static',state)
+   assert state['fogHorizon']['animation']=='bm364-horizon-drift',(width,'Horizon mist static',state)
+   assert state['fogNearLeftBlend']=='screen' and state['fogNearRightBlend']=='screen',(width,'Mist blend',state)
    if width<=760:
     assert state['media']['pos']=='absolute',(width,state['media'])
     assert state['intro']['pos']=='absolute',(width,state['intro'])
@@ -78,9 +92,13 @@ async def run():
    await page.wait_for_timeout(700)
    after=await page.locator('.bm362-cloud').first.evaluate('(e)=>getComputedStyle(e).transform')
    assert before!=after,(width,'clouds static')
+   fog_before=await page.locator('.bm364-mist--left').evaluate('(e)=>getComputedStyle(e).transform')
+   await page.wait_for_timeout(750)
+   fog_after=await page.locator('.bm364-mist--left').evaluate('(e)=>getComputedStyle(e).transform')
+   assert fog_before!=fog_after,(width,'Foreground mist animation static')
    await page.locator('a.pill').click()
    assert page.url.endswith('#corsi'),(width,'Corsi link failed')
-   print('A363b SYNTHETIC WEBKIT GEOMETRY PASS',width,height)
+   print('A364 SYNTHETIC WEBKIT GEOMETRY PASS',width,height)
    await page.close()
   await browser.close()
 asyncio.run(run())
