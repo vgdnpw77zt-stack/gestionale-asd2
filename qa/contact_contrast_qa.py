@@ -40,7 +40,7 @@ async def main():
         labels=[]
         for locator in ['#contatti > .section-label','#contatti .contact-links small']:
           for el in await page.locator(locator).all():
-            await el.scroll_into_view_if_needed(); await page.wait_for_timeout(600)
+            await el.evaluate("e=>e.scrollIntoView({block:'center',behavior:'instant'})"); await page.wait_for_timeout(600)
             data=await el.evaluate("e=>({text:e.textContent,color:getComputedStyle(e).color,box:e.getBoundingClientRect().toJSON()})")
             rgb=[int(x) for x in data['color'].replace('rgb(','').replace(')','').split(',')]
             await el.evaluate("e=>e.style.visibility='hidden'")
