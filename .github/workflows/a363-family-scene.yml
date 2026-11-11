@@ -1,7 +1,7 @@
-name: A363b luminous family scene WebKit QA (no private session)
+name: A364 foreground nebula iPhone WebKit QA (no private session)
 on:
   push:
-    branches: [bodymind-a363b-family-luminous-polish-20261111]
+    branches: [bodymind-a364-family-nebula-depth-20261111]
     paths:
       - '.github/workflows/a363-family-scene.yml'
       - 'bootstrap/family_a362_runtime.py'
