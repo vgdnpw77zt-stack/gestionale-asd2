@@ -355,9 +355,12 @@ def install(app):
     try:
         verify.execute('PRAGMA query_only=ON')
         preview=owner_bilanci_html(verify,'')
-        if 'id="bm-owner-bilanci"' not in preview or 'Bonifico 520' not in preview:
-            raise RuntimeError('Owner Bilanci live render failed')
-        print('BODYMIND OWNER BILANCI READONLY LIVE PREFLIGHT PASS',flush=True)
+        full=owner_bilanci_html(verify,'tutto')
+        if (any(s not in preview for s in ('id="bm-owner-bilanci"','Entrate registrate','Uscite registrate','Risultato contabile','Flusso netto')) or
+                'Non determinabile' in preview or 'Non determinabile' in full or
+                'Tutto lo storico' not in full):
+            raise RuntimeError('Owner Bilanci financial rendering failed')
+        print('BODYMIND OWNER BILANCI TRUE-LEDGER READONLY PREFLIGHT PASS',flush=True)
     finally:
         verify.close()
 
