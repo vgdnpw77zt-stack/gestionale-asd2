@@ -14,6 +14,51 @@ html{background:#071f31}body{background:radial-gradient(ellipse 90% 28% at 0% 21
 .bm362-cloud--near{inset:-12% -29%;background:radial-gradient(ellipse 30% 24% at 88% 17%,#ffd3bdb7 0%,#e899b483 48%,transparent 87%),radial-gradient(ellipse 35% 26% at 12% 65%,#8bffe3ba 0%,#3fada489 46%,transparent 88%),radial-gradient(ellipse 32% 22% at 72% 92%,#cdb7ffae 0%,#8f8bd15f 56%,transparent 90%),radial-gradient(ellipse 25% 15% at 60% 39%,#8dcef75e 0%,transparent 89%);animation:bm362-cloud-b 12s ease-in-out infinite alternate;will-change:transform}
 .bm362-stars{position:absolute;inset:0;opacity:.92;background-image:radial-gradient(1.4px 1.4px at 23px 31px,#fff8e9 83%,transparent),radial-gradient(1.1px 1.1px at 91px 117px,#b2fff4 85%,transparent),radial-gradient(1.8px 1.8px at 145px 72px,#ffe0ed 74%,transparent),radial-gradient(1.3px 1.3px at 60px 153px,#b4dfff 85%,transparent),radial-gradient(1px 1px at 193px 46px,#ffe9b9 85%,transparent);background-size:179px 197px,229px 247px,307px 293px,251px 273px,331px 309px;animation:bm362-dust 15s ease-in-out infinite alternate}
 .bm362-waves{position:absolute;width:180%;height:41%;left:-40%;bottom:0;opacity:.95;overflow:visible;animation:bm362-wave 11s ease-in-out infinite alternate}.bm362-waves path{fill:none;stroke:#86ffea;stroke-width:2.6;stroke-opacity:.96;filter:drop-shadow(0 0 4px #59e5d67a)}.bm362-waves path:nth-child(2){stroke:#ffc6d9;stroke-width:2.6;filter:drop-shadow(0 0 4px #e89cbd70)}.bm362-waves path:nth-child(3){stroke:#c9bbff;stroke-width:2.2;filter:drop-shadow(0 0 4px #9fa7e86d)}
+/* A364: true depth planes. Previous nebula was trapped at z:0 BEHIND an opaque
+   full-width film; extra opacity could never make it visible on iPhone.
+   These non-interactive clouds paint ABOVE the film but remain outside the
+   performer's central stage, with greeting/actions higher at z:4. */
+.hero>.bm364-atmosphere{position:absolute;inset:0;z-index:3;isolation:isolate;overflow:hidden;pointer-events:none;contain:paint}
+.bm364-mist{position:absolute;pointer-events:none;mix-blend-mode:screen;will-change:transform}
+.bm364-mist--left{left:-31%;top:-8%;width:96%;height:88%;opacity:.94;filter:blur(8px);
+ background:
+ radial-gradient(ellipse 35% 22% at 23% 19%,#a2fff0a8 0%,#2fa5b875 48%,transparent 84%),
+ radial-gradient(ellipse 38% 24% at 35% 42%,#58f5d3b6 0%,#127d987b 49%,transparent 85%),
+ radial-gradient(ellipse 30% 20% at 20% 67%,#65d1e9a4 0%,#3973b06a 52%,transparent 84%),
+ radial-gradient(ellipse 35% 20% at 51% 79%,#64b9e67a 0%,transparent 86%);
+ -webkit-mask-image:linear-gradient(to right,#000 0%,#000 49%,#0009 63%,transparent 88%);
+ mask-image:linear-gradient(to right,#000 0%,#000 49%,#0009 63%,transparent 88%);
+ animation:bm364-left-drift 19s ease-in-out infinite alternate}
+.bm364-mist--right{right:-29%;top:-11%;width:93%;height:89%;opacity:.92;filter:blur(7px);
+ background:
+ radial-gradient(ellipse 36% 21% at 76% 20%,#ffd0d6bd 0%,#db8eb189 47%,transparent 84%),
+ radial-gradient(ellipse 35% 26% at 61% 48%,#ff9bc3c1 0%,#a864ad82 50%,transparent 85%),
+ radial-gradient(ellipse 31% 20% at 83% 72%,#c6b0ffc1 0%,#7f8acb77 47%,transparent 83%),
+ radial-gradient(ellipse 29% 16% at 50% 83%,#9ccaf487 0%,transparent 83%);
+ -webkit-mask-image:linear-gradient(to left,#000 0%,#000 48%,#0009 64%,transparent 88%);
+ mask-image:linear-gradient(to left,#000 0%,#000 48%,#0009 64%,transparent 88%);
+ animation:bm364-right-drift 15s ease-in-out infinite alternate}
+.bm364-mist--horizon{left:-30%;bottom:-20%;width:160%;height:52%;opacity:.74;filter:blur(12px);
+ background:radial-gradient(ellipse 34% 35% at 11% 57%,#69ece3a1 0%,transparent 84%),
+ radial-gradient(ellipse 33% 33% at 87% 43%,#ee9fc2a5 0%,transparent 85%),
+ radial-gradient(ellipse 36% 26% at 47% 90%,#6fb3e579 0%,transparent 86%);
+ -webkit-mask-image:linear-gradient(to top,#000 0%,#000a 44%,transparent 94%);
+ mask-image:linear-gradient(to top,#000 0%,#000a 44%,transparent 94%);
+ animation:bm364-horizon-drift 31s ease-in-out infinite alternate}
+.bm364-flecks{position:absolute;inset:0;z-index:2;pointer-events:none;opacity:.8;
+ background-image:radial-gradient(1.5px 1.5px at 19px 33px,#fffad9 95%,transparent),
+ radial-gradient(1px 1px at 103px 119px,#cefff2 90%,transparent),
+ radial-gradient(1.7px 1.7px at 179px 71px,#ffcee1 85%,transparent),
+ radial-gradient(1.2px 1.2px at 29px 187px,#d7d0ff 90%,transparent);
+ background-size:231px 241px,293px 307px,337px 313px,373px 367px;
+ -webkit-mask-image:linear-gradient(90deg,#000 0%,#0005 23%,transparent 41%,transparent 64%,#0006 82%,#000 100%);
+ mask-image:linear-gradient(90deg,#000 0%,#0005 23%,transparent 41%,transparent 64%,#0006 82%,#000 100%);
+ animation:bm364-flecks-shift 24s linear infinite alternate}
+@keyframes bm364-left-drift{from{transform:translate3d(-6%,1%,0) scale(1)}to{transform:translate3d(10%,-5%,0) scale(1.09)}}
+@keyframes bm364-right-drift{from{transform:translate3d(7%,-5%,0) scale(1.09)}to{transform:translate3d(-10%,6%,0) scale(1)}}
+@keyframes bm364-horizon-drift{from{transform:translate3d(-3%,3%,0) scale(1)}to{transform:translate3d(5%,-4%,0) scale(1.06)}}
+@keyframes bm364-flecks-shift{from{transform:translate3d(-8px,0,0);opacity:.62}to{transform:translate3d(12px,11px,0);opacity:.93}}
+
 @keyframes bm362-cloud-a{from{transform:translate3d(-7%,4%,0) scale(1)}to{transform:translate3d(8%,-6%,0) scale(1.10)}}
 @keyframes bm362-cloud-b{from{transform:translate3d(7%,-5%,0) scale(1.09);opacity:.73}to{transform:translate3d(-8%,6%,0) scale(1);opacity:1}}
 @keyframes bm362-dust{from{transform:translate3d(0,-8px,0);opacity:.93}to{transform:translate3d(-16px,14px,0);opacity:1}}
@@ -40,7 +85,12 @@ main.main>.bm362-sky--main .bm362-waves{height:35%;opacity:.48;bottom:6%;animati
  .hero .hero-intro{display:block;max-width:390px;width:100%;padding:0;margin:0;background:transparent;border:0;box-shadow:none;backdrop-filter:none}
  .hero .eyebrow{font-size:10px;letter-spacing:.22em;color:#c7fff2}.hero h1{font-size:clamp(43px,11.5vw,56px);line-height:1.03;margin:8px 0 13px;text-shadow:0 3px 18px #061624eb}.hero p{font-size:14px;line-height:1.5;max-width:350px;margin-bottom:13px;color:#f0f8f7}.hero .pill{font-size:12px;min-height:43px}.hero-playback{font-size:11px;margin:4px 0;padding:9px}
  .bm362-cloud{inset:-10% -39%}.bm362-cloud--near{inset:-12% -37%}.bm362-stars{opacity:.96}.bm362-waves{height:40%;opacity:.98}
+ .bm364-mist--left{left:-34%;top:-7%;width:90%;height:91%;opacity:.97;filter:blur(7px)}
+ .bm364-mist--right{right:-34%;top:-7%;width:91%;height:91%;opacity:.94;filter:blur(6px)}
+ .bm364-mist--horizon{bottom:-22%;height:48%;opacity:.77;filter:blur(9px)}
+ .bm364-flecks{opacity:.94}
+
  .main>.stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.stat{display:block;min-height:142px;padding:15px}.stat .icon{width:30px;height:30px;font-size:16px;margin-bottom:9px}.stat small{font-size:11px}.stat strong{font-size:18px;margin:6px 0}.stat em{font-size:10px}.financial-grid{grid-template-columns:1fr}.panel{padding:18px}.bm362-studio{display:block}.bm362-studio a{margin-top:12px}.media-card{flex-basis:240px;height:320px}.hero-content .hero-intro{backdrop-filter:none}.bottom-nav{display:flex}
 }
-@media(prefers-reduced-motion:reduce){.hero::before,.bm362-cloud,.bm362-stars,.bm362-waves{animation:none}.bottom-nav,.bm362-menu{transition:none}}
+@media(prefers-reduced-motion:reduce){.hero::before,.bm362-cloud,.bm362-stars,.bm362-waves,.bm364-mist,.bm364-flecks{animation:none;will-change:auto}.bottom-nav,.bm362-menu{transition:none}}
 @media(forced-colors:active){.hero::before{display:none}.bm362-waves{opacity:.4}}
