@@ -81,7 +81,8 @@ html,body{background:#0C2533;color:#F8FCFA}
 }
 .manifesto-band{background:linear-gradient(135deg,#0C2938,#265D64 48%,#103241)!important}
 .section-label{color:#276D68}
-.section-dark .section-label,.section-wine .section-label{color:#B5E5D9}
+.section-dark .section-label,.section-wine .section-label,.contact-stage .section-label{color:#B5E5D9}
+.contact-stage .contact-links small{color:#D8EBE7}
 .intro-left h2 em,.section-heading h2 em,.movement-head h2 em,.locations-head h2 em,.gallery-heading h2 em,.method-title h2 em,.kids-copy h2 em{color:#A66758}
 .section-dark h2 em,.section-wine h2 em{color:#FFD1B2}
 .program-card,.film-card{background:#123C47;border-color:rgba(202,240,226,.23)}
