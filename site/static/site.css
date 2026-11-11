@@ -886,3 +886,6 @@ footer{display:grid;grid-template-columns:1fr 1fr auto auto;gap:30px;align-items
     background:linear-gradient(180deg,rgba(10,5,10,.12),transparent 36%,transparent 72%,rgba(9,4,8,.20));
   }
 }
+
+/* Clear the reading area after the opening scene. */
+@media(max-width:980px){.mobile-action-dock.is-outside-hero{opacity:0!important;visibility:hidden;pointer-events:none;transform:translateY(110%)!important}}
