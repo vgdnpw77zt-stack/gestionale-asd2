@@ -30,16 +30,13 @@ def nav_html(page,path):
         links=('<a class="bm375-out-menu" href="/pagamenti/uscite" style="display:block;padding:11px 14px;'
                'margin:4px;border-radius:10px;background:#174762;border:1px solid #6ca5bb;'
                'font-weight:800;color:#eff9ff;text-decoration:none">🧾 Uscite · Giustificativi</a>'
-               '<a class="bm375-out-menu" href="/contabilita/verifica" style="display:block;padding:11px 14px;'
-               'margin:4px;border-radius:10px;background:#174762;border:1px solid #6ca5bb;'
-               'font-weight:800;color:#eff9ff;text-decoration:none">🔎 Riconciliazione · Controllo</a>')
+               )
         chunk=chunk[:target.start()]+links+chunk[target.start():] if target else links+chunk
     page=page[:match.end()]+chunk+page[end:]
     if path in ('/','/pagamenti','/quote-incassi') and 'id="bm375-shortcuts"' not in page:
         bar=('<nav id="bm375-shortcuts" style="display:flex;gap:9px;flex-wrap:wrap;'
              'padding:14px;border-radius:14px;background:#153d58;border:1px solid #5792b0;margin:12px 0">'
              '<a href="/pagamenti/uscite" style="color:white;padding:9px">🧾 Uscite e allegati</a>'
-             '<a href="/contabilita/verifica" style="color:white;padding:9px">🔎 Riconciliazione</a>'
              '<a href="/impostazioni/sumup-libero" style="color:white;padding:9px">🔗 SumUp unico</a></nav>')
         m=re.search(r'<main\b[^>]*class=["\'][^"\']*\bcontent\b[^"\']*["\'][^>]*>',page,re.I)
         if m:page=page[:m.end()]+bar+page[m.end():]
@@ -474,6 +471,97 @@ def owner_bilanci_html(conn, selected_month):
 
 
 
+def _bodymind_operator_named_payments(conn, question):
+    """Deterministic Owner-only read of existing payments, grouped by athlete.
+
+    The cloud planner cannot substitute guesses for registered payment methods.
+    This function only handles requests for NAMES; all other operator prompts
+    fall through untouched to the original chat handler.
+    """
+    import unicodedata
+    from collections import defaultdict
+    from datetime import datetime
+    from decimal import Decimal
+    from zoneinfo import ZoneInfo
+    from asd_app.bodymind_a237_finance_truth import payment_active, payment_channel
+
+    raw=str(question or '')[:2000].strip()
+    normal=unicodedata.normalize('NFKD',raw)
+    normal=''.join(ch for ch in normal if not unicodedata.combining(ch)).casefold()
+    normal=' '.join(normal.split())
+    if not raw or not re.search(r'\b(chi|quali|quale|elenca\w*|lista|mostra\w*|nominativ\w*|alliev\w*|atlet\w*|ragazz\w*)\b',normal):
+        return None
+    if not re.search(r'\b(pagat\w*|incassat\w*|versat\w*|pagament\w*)\b',normal):
+        return None
+    if (re.search(r'\b(non|mancant\w*|insolut\w*|da\s+pagare|non\s+ancora)\b',normal)
+            or re.search(r'\b(registra\w*|modifica\w*|elimina\w*|annulla\w*|rimborsa\w*|sposta\w*)\b',normal)):
+        return None
+    if re.search(r'\b(contant\w*|cash)\b',normal):
+        method='contanti';label='contanti'
+    elif re.search(r'\b(bonific\w*)\b',normal):
+        method='bonifico';label='bonifico'
+    elif re.search(r'\b(sumup|pos|carta|carte)\b',normal):
+        method='carta_pos_sumup';label='Carta / POS / SumUp'
+    else:
+        return None
+
+    months={'gennaio':1,'febbraio':2,'marzo':3,'aprile':4,'maggio':5,'giugno':6,
+            'luglio':7,'agosto':8,'settembre':9,'ottobre':10,'novembre':11,'dicembre':12}
+    m=next((v for name,v in months.items() if re.search(r'\b'+name+r'\b',normal)),None)
+    year_match=re.search(r'\b(20\d{2})\b',normal)
+    year=int(year_match.group(1)) if year_match else (datetime.now(ZoneInfo('Europe/Rome')).year if m else None)
+    # Month requests refer to the quota's competence (pagamenti.mese / anno),
+    # as in the existing deterministic A259 operator facts engine.
+    athletes={int(r['id']):dict(r) for r in conn.execute('SELECT id,nome,cognome FROM tesserati')}
+    payments=[dict(r) for r in conn.execute('SELECT * FROM pagamenti ORDER BY id DESC')]
+    sums=defaultdict(lambda:Decimal('0.00'))
+    counts=defaultdict(int)
+    orphans=[]
+    total=Decimal('0.00');selected=0
+    for p in payments:
+        if not payment_active(p) or payment_channel(p.get('metodo_pagamento'))!=method:
+            continue
+        if m is not None and (int(p.get('mese') or 0)!=m or int(p.get('anno') or 0)!=year):
+            continue
+        if m is None and year is not None and int(p.get('anno') or 0)!=year:
+            continue
+        amount=Decimal(str(p.get('importo') or 0))
+        if not amount.is_finite() or amount<=0:
+            raise ValueError('Importo pagamento non valido')
+        tid=int(p.get('tesserato_id') or 0)
+        total+=amount;selected+=1
+        if tid not in athletes:
+            orphans.append(int(p['id']))
+            continue
+        sums[tid]+=amount;counts[tid]+=1
+    def euro(value):
+        return f'{value:,.2f}'.replace(',', '_').replace('.', ',').replace('_','.')+' €'
+    names=[]
+    lines=[]
+    for tid in sorted(sums, key=lambda key:(str(athletes[key].get('cognome') or '').casefold(),
+                                        str(athletes[key].get('nome') or '').casefold(),key)):
+        person=athletes[tid]
+        fullname=(' '.join(str(person.get(k) or '').strip() for k in ('nome','cognome'))).strip()
+        if not fullname:fullname='Tesserata #'+str(tid)
+        lines.append(fullname+' — '+euro(sums[tid])+' ('+str(counts[tid])+
+                     (' pagamento)' if counts[tid]==1 else ' pagamenti)'))
+        names.append({'id':tid,'name':fullname,'payments':counts[tid],'amount':str(sums[tid])})
+    period=(' · quota '+str(m).zfill(2)+'/'+str(year) if m is not None else
+            ' · anno '+str(year) if year is not None else ' · tutto lo storico')
+    warning=(' '+str(len(orphans))+' pagamenti senza anagrafica collegata: ID '+', '.join(str(k) for k in orphans[:20])+'.') if orphans else ''
+    suffix=(' La categoria Carta/POS/SumUp è aggregata: il metodo non prova che ogni pagamento sia transitato dal solo SumUp.'
+            if method=='carta_pos_sumup' else '')
+    reply=('Allieve che hanno pagato in '+label+period+': '+str(len(names))+
+           ' nominativi, '+str(selected)+' pagamenti, totale '+euro(total)+'. '+
+           ('\n'.join(lines) if lines else 'Nessuna allieva con pagamenti attivi per questo filtro.')+
+           warning+suffix)
+    return {'text':reply,'mode':'finance_athlete_names','cloud_ai':False,'allow_device_ai':False,
+            'method':method,'period':period,'athletes_count':len(names),
+            'count':selected,'amount':str(total),'names':names,
+            'links':[{'label':'Pagamenti','href':'/pagamenti'},
+                     {'label':'Bilanci','href':'/owner/bilanci'}]}
+
+
 def install(app):
     from asd_app.core import admin_required, auth, has_role, db, layout
     # Validate the private ledger in read-only mode. The optional Bilanci view
@@ -561,18 +649,51 @@ def install(app):
             return layout('<main><h1>Link individuali disattivati</h1><p>BodyMind usa il link SumUp '
               'unico a importo libero. I precedenti restano conservati.</p>'
               '<a href="/impostazioni/sumup-libero">Apri SumUp link unico</a></main>'),409
-        # Footer Bilanci: use the existing accounting page without forcing reconciliation.
-        # All other visits retain the original A375 reconciliation safeguard.
-        if (request.method=='GET' and request.path=='/contabilita'
-                and request.args.get('bm_owner_bilanci')!='1'):
-            c=db()
-            try:
-                pending=len(pending_movements(c))
-            except Exception:
-                return None
-            finally:c.close()
-            if pending:return redirect(CHECK,302)
+        # No mandatory outgoing-expense reconciliation. The original ledger
+        # remains untouched; show the verified Owner accounting view instead.
+        if request.method=='GET' and request.path=='/contabilita' and request.args.get('originale')!='1':
+            return redirect('/owner/bilanci',302)
         return None
+
+    # Operator names-by-payment-method: deterministic answer precedes the
+    # cloud-first planner; only authenticated administrators may read names.
+    @app.before_request
+    def owner_operator_payment_names():
+        if request.method!='POST' or request.path!='/operatore-bodymind/chat':
+            return None
+        if not auth() or not has_role('admin'):
+            return None  # Original @login_required route owns the rejection.
+        payload=request.get_json(silent=True) or {}
+        if not isinstance(payload,dict):
+            return None
+        question=str(payload.get('message') or '')
+        # Quickly reject unrelated prompts without querying the database.
+        if not any(token in question.casefold() for token in ('contant','cash','bonific','sumup','carta','pos')):
+            return None
+        conn=None
+        try:
+            conn=db()
+            conn.execute('PRAGMA query_only=ON')
+            result=_bodymind_operator_named_payments(conn,question)
+            if result is None:return None
+            from flask import jsonify
+            response=jsonify(result)
+            response.headers['Cache-Control']='private, no-store'
+            response.headers['Vary']='Cookie'
+            response.headers['X-BodyMind-Operator-Fact']='payment-names-readonly'
+            return response
+        except Exception as exc:
+            # Do not let a cloud model invent member names when the deterministic
+            # query fails; preserve the original app and data.
+            print('BODYMIND OPERATOR PAYMENT NAMES WARNING: '+type(exc).__name__,flush=True)
+            from flask import jsonify
+            response=jsonify({'text':'Non riesco a verificare in modo affidabile i nominativi dei pagamenti in questo momento. I dati non sono stati modificati.',
+                              'mode':'finance_read_error','cloud_ai':False,'allow_device_ai':False})
+            response.status_code=503
+            response.headers['Cache-Control']='private, no-store'
+            return response
+        finally:
+            if conn is not None:conn.close()
 
     @app.after_request
     def navigation(response):
