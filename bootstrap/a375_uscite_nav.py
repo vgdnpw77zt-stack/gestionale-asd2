@@ -112,6 +112,67 @@ def review_html(conn):
 
 
 
+def _audit_channel_readonly(conn):
+    """Aggregate-only fiscal audit; no personal details, no SQL writes."""
+    import json
+    from collections import Counter, defaultdict
+    from decimal import Decimal
+    from asd_app.bodymind_a237_finance_truth import snapshot, payment_channel, payment_active
+    from asd_app.bodymind_a253_manual import methods
+
+    def v(x):return Decimal(str(x if x is not None else 0)).quantize(Decimal('0.01'))
+    def sumstr(rows):return str(sum((v(r.get('importo')) for r in rows),Decimal('0.00')))
+    ps=[dict(x) for x in conn.execute('SELECT * FROM pagamenti')]
+    es=[dict(x) for x in conn.execute('SELECT * FROM bodymind_uscite')]
+    ms=[dict(x) for x in conn.execute('SELECT * FROM movimenti')]
+    active=[x for x in ps if payment_active(x)]
+    remap=methods(conn)
+    manual_in=[];manual_out=[]; unclassified=[]
+    for m in ms:
+        if m.get('pagamento_id') is not None or int(m.get('auto_generato') or 0):
+            continue
+        typ=str(m.get('tipo') or '').casefold()
+        if typ not in ('entrata','incasso','income','uscita','spesa','expense'):continue
+        if int(m['id']) not in remap:
+            if v(m['importo']):unclassified.append(m)
+            continue
+        m=dict(m,metodo=remap[int(m['id'])])
+        (manual_in if typ in ('entrata','incasso','income') else manual_out).append(m)
+    methods_names=('contanti','bonifico','carta_pos_sumup','addebito','altro','non_classificato')
+    report={}
+    for name in methods_names:
+        pays=[x for x in active if payment_channel(x.get('metodo_pagamento'))==name]
+        expense=[x for x in es if v(x.get('importo'))>0 and payment_channel(x.get('metodo'))==name]
+        manually_in=[x for x in manual_in if payment_channel(x.get('metodo'))==name]
+        manually_out=[x for x in manual_out if payment_channel(x.get('metodo'))==name]
+        report[name]={'pagamenti_n':len(pays),'pagamenti_euro':sumstr(pays),
+                      'manuali_entrata_n':len(manually_in),'manuali_entrata_euro':sumstr(manually_in),
+                      'uscite_n':len(expense),'uscite_euro':sumstr(expense),
+                      'manuali_uscita_n':len(manually_out),'manuali_uscita_euro':sumstr(manually_out)}
+    evidence=[]
+    for amount in (Decimal('520.00'),Decimal('700.00')):
+        found=[x for x in es if v(x.get('importo'))==amount]
+        evidence.append({'amount':str(amount),'uscite_count':len(found),
+                         'methods':sorted(set(str(x.get('metodo') or '') for x in found)),
+                         'expense_ids':[int(x['id']) for x in found],
+                         'ledger_same_amount_count':sum(1 for m in ms if v(m.get('importo'))==amount and str(m.get('tipo') or '') in ('uscita','spesa','expense'))})
+    try:
+        truth=snapshot()
+        canonical={'status':'OK','entrate':str(truth['entrate']),'uscite':str(truth['uscite']),
+                   'per_metodo':{k:{'entrate':str(truth['entrate_per_metodo'][k]),'uscite':str(truth['uscite_per_metodo'][k]),
+                                    'n_incassi':truth['movimenti_per_metodo'][k]} for k in methods_names},
+                   'da_verificare':str(truth['da_verificare_senza_correlazione']),
+                   'non_classificati':truth['movimenti_non_classificati'],
+                   'ricevute_anomale':truth['anomalie_ricevute']}
+    except Exception as exc:
+        canonical={'status':'BLOCK','reason':type(exc).__name__+': '+str(exc)[:160]}
+    doc={'status':'AGGREGATE_READONLY','canonical':canonical,'channels':report,
+         'movimenti_non_mappati':len(unclassified),'income_mapped':len(manual_in),
+         'expense_mapped':len(manual_out),'specifics':evidence}
+    print('BODYMIND CASH CHANNEL AUDIT '+json.dumps(doc,ensure_ascii=False,separators=(',',':')),flush=True)
+    return doc
+
+
 def owner_bilanci_html(conn, selected_month):
     """Read-only Owner view of the EXISTING payments, expenses and A253 manual ledger.
 
@@ -368,6 +429,7 @@ def install(app):
         print('BODYMIND BILANCI VERIFIED NOVEMBER/CURRENT '+str(cards_month[:3]),flush=True)
         print('BODYMIND BILANCI VERIFIED HISTORY '+str(cards_history[:3]),flush=True)
         print('BODYMIND BILANCI CARD METHODS '+str(cards_month[3:]),flush=True)
+        _audit_channel_readonly(verify)
         print('BODYMIND OWNER BILANCI TRUE-LEDGER READONLY PREFLIGHT PASS',flush=True)
     finally:
         verify.close()
