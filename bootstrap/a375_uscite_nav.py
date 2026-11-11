@@ -113,112 +113,235 @@ def review_html(conn):
 
 
 def owner_bilanci_html(conn, selected_month):
-    """Owner-only read-only reporting. Source-level totals are never bank/cash balances."""
+    """Read-only Owner view of the EXISTING payments, expenses and A253 manual ledger.
+
+    Uses the real ledger dates and original payment-activity classifier. Separately
+    labelled bank/cash *flows* are never misrepresented as available balances.
+    """
     from datetime import datetime
     from zoneinfo import ZoneInfo
     from html import escape as h
+    from collections import defaultdict
     from decimal import Decimal
-    from asd_app.bodymind_a237_finance_truth import payment_active
-    month = selected_month if re.fullmatch(r'\d{4}-(?:0[1-9]|1[0-2])', selected_month or '') else datetime.now(ZoneInfo('Europe/Rome')).strftime('%Y-%m')
-    def money(n):
-        v=Decimal(str(n if n is not None else 0))
-        return f'{v:,.2f}'.replace(',','_').replace('.',',').replace('_','.')+' €'
-    def ym(value):
-        t=str(value or '').strip()
-        return t[:7].replace('/','-') if re.match(r'^\d{4}[-/](?:0[1-9]|1[0-2])',t) else None
-    def paymonth(p):
-        for key in ('data_pagamento','data_incasso','paid_at'):
-            x=ym(p.get(key))
-            if x:return x
+    from asd_app.bodymind_a237_finance_truth import payment_active, payment_channel
+    from asd_app.bodymind_a253_manual import methods as a253_methods
+
+    ZERO = Decimal('0.00')
+    period = selected_month if (selected_month == 'tutto' or
+         re.fullmatch(r'\d{4}-(?:0[1-9]|1[0-2])', selected_month or '')) else datetime.now(ZoneInfo('Europe/Rome')).strftime('%Y-%m')
+    def val(raw):
+        d=Decimal(str(raw if raw is not None else 0))
+        if not d.is_finite():
+            raise ValueError('Importo non valido nel registro')
+        return d.quantize(Decimal('0.01'))
+    def money(raw):
+        return f'{val(raw):,.2f}'.replace(',', '_').replace('.', ',').replace('_', '.')+' €'
+    def ym(raw):
+        s=str(raw or '').strip()
+        a=re.match(r'^(\d{4})[-/](0[1-9]|1[0-2])(?:[-/]|T| |$)',s)
+        if a:return a.group(1)+'-'+a.group(2)
+        b=re.match(r'^\d{2}/(0[1-9]|1[0-2])/(\d{4})(?: |$)',s)
+        return b.group(2)+'-'+b.group(1) if b else None
+    def in_period(date):
+        return period=='tutto' or ym(date)==period
+    def fmt_date(value):
+        return h(str(value or 'Data non indicata'))
+    def channel(raw):
+        c=payment_channel(raw)
+        return c if c in ('contanti','bonifico','carta_pos_sumup','addebito','altro','non_classificato') else 'non_classificato'
+    def card(title,amount,note):
+        return ('<article class="bmbl-card"><span>'+h(title)+'</span><strong>'+money(amount)+
+                '</strong><small>'+h(note)+'</small></article>')
+
+    # Original source records. SQL SELECT only; the original payment engine decides active status.
+    ps=[dict(r) for r in conn.execute('SELECT * FROM pagamenti ORDER BY id DESC')]
+    es=[dict(r) for r in conn.execute('SELECT * FROM bodymind_uscite ORDER BY data DESC,id DESC')]
+    ms=[dict(r) for r in conn.execute('SELECT id,data,tipo,descrizione,importo,pagamento_id,auto_generato FROM movimenti ORDER BY id DESC')]
+    classified=a253_methods(conn)
+    linked=defaultdict(list)
+    for m in ms:
+        if (m['pagamento_id'] is not None and
+            str(m['tipo'] or '').strip().lower() in ('entrata','incasso','income') and ym(m['data'])):
+            linked[int(m['pagamento_id'])].append(str(m['data']))
+    def pay_date(p):
+        dates=linked.get(int(p['id'])) or []
+        if dates:return max(dates)
+        for field in ('data_pagamento','data_incasso','paid_at','data'):
+            if field in p and ym(p[field]):return str(p[field])
         return None
-    payments=[dict(r) for r in conn.execute('SELECT * FROM pagamenti ORDER BY id DESC')]
-    expenses=[dict(r) for r in conn.execute('SELECT * FROM bodymind_uscite ORDER BY data DESC,id DESC')]
-    active=[p for p in payments if payment_active(p)]
-    monthly_payments=[p for p in active if paymonth(p)==month]
-    unknown_paydates=sum(1 for p in active if not paymonth(p))
-    expenses=[x for x in expenses if Decimal(str(x.get('importo') or 0))>0]
-    monthly_expenses=[x for x in expenses if ym(x.get('data'))==month]
-    unknown_expdates=sum(1 for x in expenses if not ym(x.get('data')))
-    total_pay=sum((Decimal(str(p['importo'])) for p in monthly_payments),Decimal('0'))
-    total_out=sum((Decimal(str(x['importo'])) for x in monthly_expenses),Decimal('0'))
-    def pill(title,value,note):
-        return ('<div class="bmbl-card"><span>'+h(title)+'</span><strong>'+h(value)+
-                '</strong><small>'+h(note)+'</small></div>')
-    pay_status=('Completo per le date registrate' if unknown_paydates==0 else
-                f'{unknown_paydates} pagamenti attivi senza data utilizzabile')
-    out_status=('Solo registro Uscite; non somma movimenti tecnici' if unknown_expdates==0 else
-                f'{unknown_expdates} uscite senza data utilizzabile')
-    cards=(pill('Incassi da pagamenti nel mese',money(total_pay) if not unknown_paydates else 'Non determinabile',pay_status)+
-           pill('Uscite dal registro Uscite nel mese',money(total_out) if not unknown_expdates else 'Non determinabile',out_status)+
-           pill('Saldo bancario','Non determinabile','Mancano saldo iniziale e movimenti bancari completi')+
-           pill('Saldo fisico di cassa','Non determinabile','Richiede giacenza iniziale e trasferimenti')+
-           pill('Risultato netto completo','Non determinabile','I registri devono distinguere ogni movimento tecnico da una nuova operazione'))
-    ids=(10,134313)
-    old_exp=next((x for x in expenses if int(x['id'])==ids[0]),None)
-    old_mov=conn.execute('SELECT id,data,tipo,descrizione,importo,pagamento_id,auto_generato FROM movimenti WHERE id=?',(ids[1],)).fetchone()
-    match=(old_exp is not None and old_mov is not None and
-           Decimal(str(old_exp['importo']))==Decimal('520') and
-           Decimal(str(old_mov['importo']))==Decimal('520') and
-           str(old_exp.get('data') or '')==str(old_mov['data'] or '') and
-           any(name in str(old_exp.get('descrizione') or '').casefold()
-               and name in str(old_mov['descrizione'] or '').casefold()
-               for name in ('mastandrea','mastrandrea','elena')))
-    if match:
-        notice=('Il registro Uscite conserva la registrazione #10 da 520 € e il registro Movimenti il riferimento #134313 '
-                'della stessa data e dello stesso importo. In questa vista il movimento tecnico NON viene sommato '
-                'nuovamente alle uscite. Questo controllo non modifica o convalida i collegamenti nel database.')
-    else:
-        notice=('La corrispondenza storica tra uscita #10 e movimento #134313 da 520 € non è confermata '
-                'dai dati attuali: nessuna rettifica automatica è stata effettuata.')
-    def exp_rows():
-        return ''.join('<tr><td>'+h(str(x.get('data') or '—'))+'</td><td>'+h(str(x.get('descrizione') or '—'))+
-                       '</td><td>'+h(str(x.get('metodo') or 'non indicato'))+'</td><td>'+h(money(x['importo']))+
-                       '</td><td><a href="/pagamenti/uscite?modifica='+str(int(x['id']))+'">Apri #'+str(int(x['id']))+'</a></td></tr>'
-                       for x in monthly_expenses[:150])
-    def pay_rows():
-        return ''.join('<tr><td>'+h(str(paymonth(p) or '—'))+'</td><td>'+h(str(p.get('causale') or 'Pagamento'))+
-                       '</td><td>'+h(str(p.get('metodo_pagamento') or 'non indicato'))+'</td><td>'+h(money(p['importo']))+
-                       '</td><td>#'+str(int(p['id']))+'</td></tr>' for p in monthly_payments[:150])
+
+    valid_pay=[p for p in ps if payment_active(p)]
+    dated_pay=[p for p in valid_pay if in_period(pay_date(p))]
+    expenses=[x for x in es if val(x.get('importo'))>0]
+    dated_exp=[x for x in expenses if in_period(x.get('data'))]
+    missing_pay=sum(1 for x in valid_pay if not ym(pay_date(x)))
+    missing_exp=sum(1 for x in expenses if not ym(x.get('data')))
+    # A253-classified manual movements are separate from payments. Without that
+    # marker, an orphan ledger movement is NOT automatically a new incasso/spesa.
+    manual_income=[]; manual_out=[]; unclassified=[]
+    for m in ms:
+        if m['pagamento_id'] is not None or int(m['auto_generato'] or 0)!=0:
+            continue
+        t=str(m['tipo'] or '').strip().lower()
+        if t not in ('entrata','incasso','income','uscita','spesa','expense'):
+            continue
+        if int(m['id']) not in classified:
+            if val(m['importo'])!=0:unclassified.append(m)
+            continue
+        m=dict(m,metodo=classified[int(m['id'])])
+        if t in ('entrata','incasso','income'):manual_income.append(m)
+        else:manual_out.append(m)
+    # A manually classified expense with the same date+amount as a documented
+    # expense is NOT added again. The coincidence is shown for auditing.
+    expense_keys={(ym(x.get('data')),val(x['importo'])) for x in expenses}
+    manual_duplicates=[m for m in manual_out
+                       if (ym(m['data']),val(m['importo'])) in expense_keys]
+    distinct_manual_out=[m for m in manual_out if m not in manual_duplicates]
+    entered_man_in=[m for m in manual_income if in_period(m['data'])]
+    entered_man_out=[m for m in distinct_manual_out if in_period(m['data'])]
+    incoming=dated_pay+entered_man_in
+    outgoing=dated_exp+entered_man_out
+    def inflow_method(p):
+        return channel(p.get('metodo_pagamento') if 'metodo_pagamento' in p else p.get('metodo'))
+    def outflow_method(x):
+        return channel(x.get('metodo'))
+    income=sum((val(p.get('importo')) for p in incoming),ZERO)
+    expense=sum((val(x.get('importo')) for x in outgoing),ZERO)
+    in_channels={k:ZERO for k in ('contanti','bonifico','carta_pos_sumup','addebito','altro','non_classificato')}
+    out_channels={k:ZERO for k in in_channels}
+    for p in incoming:in_channels[inflow_method(p)]+=val(p.get('importo'))
+    for x in outgoing:out_channels[outflow_method(x)]+=val(x.get('importo'))
+    total_pay=sum((val(p.get('importo')) for p in valid_pay),ZERO)
+    total_man=sum((val(p.get('importo')) for p in manual_income),ZERO)
+    total_exp=sum((val(x.get('importo')) for x in expenses),ZERO)
+    total_extra=sum((val(x.get('importo')) for x in distinct_manual_out),ZERO)
+
+    # Compare against the canonical finance snapshot when it can be evaluated.
+    # A stale technical movement must not replace true payments with bogus zeros.
+    canonical_status='Controllo di coerenza tra registri'
+    if period=='tutto':
+        try:
+            from asd_app.bodymind_a237_finance_truth import snapshot
+            truth=snapshot()
+            if val(truth['entrate'])==income and val(truth['uscite'])==expense:
+                canonical_status='Totali coerenti con il motore contabile A237'
+            else:
+                canonical_status='Totali del registro da confrontare con il motore A237'
+        except (ValueError,RuntimeError,KeyError,TypeError,ImportError) as exc:
+            canonical_status='Registri visibili; controllo tecnico A237 ancora da risolvere'
+    missing_note=''
+    if period!='tutto' and (missing_pay or missing_exp):
+        missing_note=('<p class="bmbl-notice">Nel mese sono riportate soltanto le operazioni con data registrata. '
+                      +h(str(missing_pay))+' pagamenti e '+h(str(missing_exp))+
+                      ' uscite non hanno una data riconosciuta: sono comunque inclusi nei totali storici.</p>')
+    header_cards=(
+        card('Entrate registrate',income,'Pagamenti attivi e movimenti A253 distinti')+
+        card('Uscite registrate',expense,'Giustificativi e movimenti A253 non duplicati')+
+        card('Risultato contabile',income-expense,'Differenza entrate − uscite; NON saldo disponibile')+
+        card('Contanti · flusso netto',in_channels['contanti']-out_channels['contanti'],'Contanti incassati meno uscite in contanti')+
+        card('Bonifici · flusso netto',in_channels['bonifico']-out_channels['bonifico'],'Bonifici in entrata meno bonifici in uscita')+
+        card('Carta / POS / SumUp · incassi',in_channels['carta_pos_sumup'],'Metodo registrato; non identifica il singolo circuito'))
+    methods_table=[]
+    for key,label in [('contanti','Contanti'),('bonifico','Bonifici'),('carta_pos_sumup','Carta / POS / SumUp'),('addebito','Addebiti'),('altro','Altro'),('non_classificato','Metodo non classificato')]:
+        methods_table.append('<tr><td>'+h(label)+'</td><td>'+money(in_channels[key])+'</td><td>'+money(out_channels[key])+'</td><td>'+money(in_channels[key]-out_channels[key])+'</td></tr>')
+    def payment_rows():
+        rows=[]
+        for p in dated_pay[:200]:
+            rows.append('<tr><td>'+fmt_date(pay_date(p))+'</td><td>#'+str(int(p['id']))+
+                        ' · '+h(str(p.get('causale') or 'Pagamento'))+'</td><td>'+
+                        h(str(p.get('metodo_pagamento') or '—'))+'</td><td>'+money(p['importo'])+'</td></tr>')
+        for m in entered_man_in[:200]:
+            rows.append('<tr><td>'+fmt_date(m['data'])+'</td><td>Entrata manuale #'+str(int(m['id']))+
+                        ' · '+h(str(m.get('descrizione') or ''))+'</td><td>'+
+                        h(str(m.get('metodo') or '—'))+'</td><td>'+money(m['importo'])+'</td></tr>')
+        return ''.join(rows)
+    def expense_rows():
+        rows=[]
+        for x in dated_exp[:200]:
+            rows.append('<tr><td>'+fmt_date(x.get('data'))+'</td><td>'+
+                       h(str(x.get('descrizione') or 'Uscita'))+'</td><td>'+
+                       h(str(x.get('metodo') or '—'))+'</td><td>'+money(x['importo'])+
+                       '</td><td><a href="/pagamenti/uscite?modifica='+str(int(x['id']))+'">#'+str(int(x['id']))+'</a></td></tr>')
+        for m in entered_man_out[:200]:
+            rows.append('<tr><td>'+fmt_date(m.get('data'))+'</td><td>Uscita manuale · '+
+                       h(str(m.get('descrizione') or ''))+'</td><td>'+h(str(m.get('metodo') or '—'))+
+                       '</td><td>'+money(m['importo'])+'</td><td>Movimento #'+str(int(m['id']))+'</td></tr>')
+        return ''.join(rows)
+
+    historic_note=('Entrate storiche registrate: '+money(total_pay+total_man)+
+                   ' · Uscite storiche registrate: '+money(total_exp+total_extra)+
+                   ' · Risultato storico: '+money(total_pay+total_man-total_exp-total_extra))
+    warning_parts=[]
+    if unclassified:warning_parts.append(str(len(unclassified))+' movimenti tecnici senza classificazione A253 esclusi dai totali')
+    if manual_duplicates:warning_parts.append(str(len(manual_duplicates))+' movimento/i manuale/i con data e importo corrispondenti a un giustificativo, esclusi dal doppio conteggio')
+    if any(len(d)>1 for d in linked.values()):warning_parts.append('Presenti pagamenti con più movimenti di entrata collegati: controllare la prima nota')
+    warning='<p class="bmbl-notice">'+h('; '.join(warning_parts))+'. Nessun movimento è stato modificato.</p>' if warning_parts else ''
+    # Retain the historical 520/700 detail only as a lookup, never as a fixed sum.
+    flagged=[]
+    for amount,label in ((Decimal('520'),'Compenso collaboratrice'),(Decimal('700'),'Utilizzo spazi Palagym')):
+        found=[x for x in expenses if val(x['importo'])==amount and
+               any(term in str(x.get('descrizione') or '').casefold()
+                   for term in (('mastandrea','mastrandrea','elena') if amount==520 else ('palagym',)))]
+        if found:
+            flagged.append('<li>'+h(label)+': '+money(amount)+' · registrazione/i #'+
+                           ', #'.join(str(int(x['id'])) for x in found[:6])+' · '+
+                           ', '.join(h(str(x.get('data') or 'senza data')) for x in found[:6])+'</li>')
+    references=('<section><h2>Bonifico 520 € e Palagym · registrazioni esistenti</h2><ul>'+''.join(flagged)+
+                '</ul><p>Le scritture tecniche con importi coincidenti non sono aggiunte una seconda volta. '
+                'Nessun pagamento viene creato o rettificato.</p></section>') if flagged else ''
+
+    css=(
+      '<style>.bmbl{max-width:1080px;margin:18px auto 100px;padding:12px;color:#ecf5ff;box-sizing:border-box}'
+      '.bmbl *{box-sizing:border-box}.bmbl h1,.bmbl h2{color:#fff}.bmbl a{color:#bef0ff}'
+      '.bmbl .bmbl-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:20px 0}'
+      '.bmbl-card{border:1px solid #537b94;background:#19364e;border-radius:14px;padding:18px;min-width:0}'
+      '.bmbl-card span,.bmbl-card small{display:block;color:#cbdfea}.bmbl-card strong{display:block;font-size:clamp(20px,3vw,26px);margin:8px 0;overflow-wrap:anywhere}'
+      '.bmbl section{background:#0f283d;border:1px solid #456983;border-radius:14px;margin:16px 0;padding:16px}'
+      '.bmbl table{border-collapse:collapse;width:100%}.bmbl td,.bmbl th{text-align:left;vertical-align:top;border-bottom:1px solid #35546c;padding:10px;overflow-wrap:anywhere}'
+      '.bmbl .bmbl-scroll{overflow-x:auto}.bmbl .bmbl-scroll table{min-width:640px}'
+      '.bmbl-notice{line-height:1.6;border:1px solid #677785;border-radius:12px;padding:12px;background:#1b3346}'
+      '.bmbl input,.bmbl select,.bmbl button{padding:10px;border-radius:9px;font:inherit}'
+      '.bmbl p{line-height:1.55}.bmbl .bmbl-dim{color:#b7ccda;font-size:.92em}'
+      '@media(max-width:640px){.bmbl .bmbl-grid{grid-template-columns:1fr 1fr;gap:8px}.bmbl-card{padding:12px}'
+      '.bmbl-card strong{font-size:20px}.bmbl .bmbl-scroll table{min-width:0;display:block}'
+      '.bmbl .bmbl-scroll thead{display:none}.bmbl .bmbl-scroll tbody{display:block}'
+      '.bmbl .bmbl-scroll tr{display:block;margin:8px 0;padding:9px;border:1px solid #3d647c;border-radius:10px}'
+      '.bmbl .bmbl-scroll td{display:block;padding:5px;border:0}.bmbl .bmbl-scroll td:before{color:#b4d1df;font-weight:700}'
+      '.bmbl-in td:nth-child(1):before,.bmbl-out td:nth-child(1):before{content:"Data: "}'
+      '.bmbl-in td:nth-child(2):before,.bmbl-out td:nth-child(2):before{content:"Operazione: "}'
+      '.bmbl-in td:nth-child(3):before,.bmbl-out td:nth-child(3):before{content:"Metodo: "}'
+      '.bmbl-in td:nth-child(4):before,.bmbl-out td:nth-child(4):before{content:"Importo: "}'
+      '.bmbl-out td:nth-child(5):before{content:"Dettaglio: "}'
+      '.bmbl-methods td:nth-child(1):before{content:"Metodo: "}.bmbl-methods td:nth-child(2):before{content:"Entrate: "}'
+      '.bmbl-methods td:nth-child(3):before{content:"Uscite: "}.bmbl-methods td:nth-child(4):before{content:"Differenza: "}}'
+      '</style>')
     return (
-      '<main id="bm-owner-bilanci" class="bmbl"><style>'
-      '.bmbl{max-width:1060px;margin:18px auto 80px;padding:12px;color:#edf5ff}'
-      '.bmbl *{box-sizing:border-box}.bmbl h1,.bmbl h2{color:#fff}.bmbl a{color:#bceaff}'
-      '.bmbl .bmbl-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:18px 0}'
-      '.bmbl-card{background:#17344a;border:1px solid #5b7e98;border-radius:14px;padding:16px;min-width:0}'
-      '.bmbl-card span,.bmbl-card small{display:block;color:#d1e0ef}.bmbl-card strong{display:block;font-size:20px;margin:8px 0;overflow-wrap:anywhere}'
-      '.bmbl section{background:#10283d;border:1px solid #3f6880;border-radius:14px;padding:16px;margin:16px 0}'
-      '.bmbl .bmbl-scroll{overflow-x:auto}.bmbl table{border-collapse:collapse;width:100%;min-width:640px}'
-      '.bmbl td,.bmbl th{text-align:left;border-bottom:1px solid #35536b;padding:10px;font-size:13px;vertical-align:top}'
-      '.bmbl input,.bmbl button{padding:10px;border-radius:8px}.bmbl .bmbl-note{line-height:1.6;color:#e0e8f2}'
-      '@media(max-width:600px){.bmbl table{display:block;min-width:0}.bmbl thead{display:none}.bmbl tbody{display:block}'
-      '.bmbl tr{display:block;border:1px solid #37566d;border-radius:10px;margin:9px 0;padding:8px}'
-      '.bmbl td{display:block;border:0;padding:5px 3px;overflow-wrap:anywhere}.bmbl td:before{color:#a8c4d7;font-weight:600}'
-      '.bmbl-exp td:nth-child(1):before,.bmbl-pay td:nth-child(1):before{content:"Data: "}'
-      '.bmbl-exp td:nth-child(2):before{content:"Causale: "}.bmbl-exp td:nth-child(3):before,.bmbl-pay td:nth-child(3):before{content:"Metodo: "}'
-      '.bmbl-exp td:nth-child(4):before,.bmbl-pay td:nth-child(4):before{content:"Importo: "}'
-      '.bmbl-pay td:nth-child(2):before{content:"Causale: "}.bmbl-exp td:nth-child(5):before{content:"Dettaglio: "}'
-      '.bmbl-pay td:nth-child(5):before{content:"ID: "}}'
-      '</style><a href="/mobile">‹ Torna alla Home Owner</a><h1>Bilanci</h1>'
-      '<p>Vista di sola lettura sui registri reali. Non genera né modifica pagamenti, giustificativi o riconciliazioni.</p>'
-      '<form method="get" action="/owner/bilanci"><label for="bmbl-month">Periodo </label>'
-      '<input id="bmbl-month" name="mese" type="month" value="'+h(month)+'"><button type="submit">Mostra</button></form>'
-      '<div class="bmbl-grid">'+cards+'</div>'
-      '<section><h2>Bonifico 520 € — verifica delle due registrazioni</h2><p class="bmbl-note">'+h(notice)+'</p>'
-      '<p><a href="/pagamenti/uscite?modifica=10">Registro uscita #10</a> · '
-      '<a href="/contabilita/verifica">Verifica movimenti esistenti</a></p></section>'
-      '<section><h2>Uscite registrate del periodo ('+str(len(monthly_expenses))+')</h2>'
-      '<p class="bmbl-note">Ogni uscita viene mostrata una volta per ID del registro spese. '
-      'Non aggiungiamo automaticamente le registrazioni presenti anche in Movimenti.</p>'
-      '<div class="bmbl-scroll"><table class="bmbl-exp"><thead><tr><th>Data</th><th>Descrizione</th><th>Metodo</th><th>Importo</th><th>Documento</th></tr></thead>'
-      '<tbody>'+ (exp_rows() or '<tr><td colspan="5">Nessuna uscita con data nel periodo selezionato</td></tr>')+'</tbody></table></div></section>'
-      '<section><h2>Pagamenti attivi del periodo ('+str(len(monthly_payments))+')</h2>'
-      '<p class="bmbl-note">Sono inclusi solo gli incassi riconosciuti come attivi dal motore pagamenti; '
-      'movimenti manuali distinti non vengono sommati senza un collegamento verificabile.</p>'
-      '<div class="bmbl-scroll"><table class="bmbl-pay"><thead><tr><th>Data</th><th>Causale</th><th>Metodo</th><th>Importo</th><th>ID</th></tr></thead>'
-      '<tbody>'+(pay_rows() or '<tr><td colspan="5">Nessun pagamento attivo con data nel periodo selezionato</td></tr>')+'</tbody></table></div></section>'
-      '<p><a href="/pagamenti/uscite">Uscite e giustificativi</a> · '
-      '<a href="/contabilita/verifica">Controllo movimenti</a> · '
-      '<a href="/impostazioni/sumup-libero">Impostazioni SumUp</a></p></main>')
+       '<main id="bm-owner-bilanci" class="bmbl">'+css+
+       '<a href="/mobile">‹ Home Owner</a><h1>Bilanci</h1>'
+       '<p>Incassi, uscite e movimenti del gestionale originale. Consulta i dati senza nuove registrazioni.</p>'
+       '<form action="/owner/bilanci" method="get"><label for="bmbl-period">Periodo </label>'
+       '<select id="bmbl-period" name="mese"><option value="tutto"'+(' selected' if period=='tutto' else '')+'>Tutto lo storico</option>'
+       +''.join('<option value="'+h(k)+'"'+(' selected' if period==k else '')+'>'+h(k)+'</option>'
+                 for k in sorted(set([datetime.now(ZoneInfo('Europe/Rome')).strftime('%Y-%m')]+
+                                     [ym(pay_date(p)) for p in valid_pay if ym(pay_date(p))]+
+                                     [ym(x.get('data')) for x in expenses if ym(x.get('data'))]+
+                                     [ym(x['data']) for x in manual_income+manual_out if ym(x['data'])]),reverse=True))+
+       '</select> <button type="submit">Mostra</button></form>'
+       +'<div class="bmbl-grid">'+header_cards+'</div>'
+       +missing_note+'<p class="bmbl-dim">'+h(canonical_status)+'. '+h(historic_note)+
+       '. I flussi bancari e contanti non attestano la giacenza effettiva del conto o della cassa.</p>'
+       +warning+references+
+       '<section><h2>Entrate e uscite per metodo</h2><div class="bmbl-scroll"><table class="bmbl-methods">'
+       '<thead><tr><th>Metodo</th><th>Entrate</th><th>Uscite</th><th>Netto registrato</th></tr></thead><tbody>'+
+       ''.join(methods_table)+'</tbody></table></div></section>'+
+       '<section><h2>Entrate nel periodo ('+str(len(incoming))+')</h2><div class="bmbl-scroll">'
+       '<table class="bmbl-in"><thead><tr><th>Data</th><th>Operazione</th><th>Metodo</th><th>Importo</th></tr></thead><tbody>'+
+       (payment_rows() or '<tr><td colspan="4">Nessuna entrata nel periodo</td></tr>')+'</tbody></table></div></section>'+
+       '<section><h2>Uscite nel periodo ('+str(len(outgoing))+')</h2><div class="bmbl-scroll">'
+       '<table class="bmbl-out"><thead><tr><th>Data</th><th>Operazione</th><th>Metodo</th><th>Importo</th><th>Dettaglio</th></tr></thead><tbody>'+
+       (expense_rows() or '<tr><td colspan="5">Nessuna uscita nel periodo</td></tr>')+'</tbody></table></div></section>'+
+       '<p><a href="/pagamenti">Pagamenti</a> · <a href="/pagamenti/uscite">Uscite e giustificativi</a> · '
+       '<a href="/contabilita/verifica">Verifica tecnica dei movimenti</a></p></main>')
 
 
 
