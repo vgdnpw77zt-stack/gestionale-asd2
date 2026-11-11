@@ -1,4 +1,4 @@
-name: Contact contrast WebKit verification
+name: Contact label contrast WebKit verification
 on:
   push:
     branches: [bodymind-site-a351-contact-contrast-20261111]
