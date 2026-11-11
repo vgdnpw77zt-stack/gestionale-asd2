@@ -16,7 +16,7 @@ html{background:#071f31}body{background:radial-gradient(ellipse 90% 28% at 0% 21
 .bm362-waves{position:absolute;width:180%;height:41%;left:-40%;bottom:0;opacity:.95;overflow:visible;animation:bm362-wave 11s ease-in-out infinite alternate}.bm362-waves path{fill:none;stroke:#86ffea;stroke-width:2.6;stroke-opacity:.96;filter:drop-shadow(0 0 4px #59e5d67a)}.bm362-waves path:nth-child(2){stroke:#ffc6d9;stroke-width:2.6;filter:drop-shadow(0 0 4px #e89cbd70)}.bm362-waves path:nth-child(3){stroke:#c9bbff;stroke-width:2.2;filter:drop-shadow(0 0 4px #9fa7e86d)}
 @keyframes bm362-cloud-a{from{transform:translate3d(-7%,4%,0) scale(1)}to{transform:translate3d(8%,-6%,0) scale(1.10)}}
 @keyframes bm362-cloud-b{from{transform:translate3d(7%,-5%,0) scale(1.09);opacity:.73}to{transform:translate3d(-8%,6%,0) scale(1);opacity:1}}
-@keyframes bm362-dust{from{transform:translate3d(0,-8px,0);opacity:.65}to{transform:translate3d(-16px,14px,0);opacity:.96}}
+@keyframes bm362-dust{from{transform:translate3d(0,-8px,0);opacity:.93}to{transform:translate3d(-16px,14px,0);opacity:1}}
 @keyframes bm362-wave{from{transform:translate3d(-3%,0,0) rotate(-4deg)}to{transform:translate3d(5%,-7%,0) rotate(3deg)}}
 @keyframes bm363-luminous{from{transform:translate3d(-3%,3%,0);opacity:.65}to{transform:translate3d(3%,-3%,0);opacity:.88}}
 main.main{position:relative;isolation:isolate;width:min(1200px,calc(100% - 36px));display:flex;flex-direction:column;gap:0;margin:0 auto;padding:14px 0 40px;background:radial-gradient(ellipse 94% 29% at 6% 7%,#327f8945,transparent 80%),radial-gradient(ellipse 90% 38% at 94% 58%,#d17eaa31,transparent 85%),linear-gradient(180deg,#092638,#103547 38%,#0e2c42 78%,#091e32)}
