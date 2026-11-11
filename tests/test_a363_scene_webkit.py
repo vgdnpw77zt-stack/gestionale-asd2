@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Safe A363 WebKit style/interaction contract on a synthetic structure.
+"""Safe A363b WebKit style/interaction contract on a synthetic structure.
 
 This is deliberately NOT evidence of authenticated visual production QA.
 A real-family WebKit session and screenshots are required separately.
@@ -11,8 +11,8 @@ from playwright.async_api import async_playwright
 BASE=Path('bootstrap/family_a362_base.css').read_text()
 SCENE=Path('bootstrap/family_a362_scene.css').read_text()
 RUNTIME=Path('bootstrap/family_a362_runtime.py').read_text()
-assert 'data-bodymind-scene="A363"' in RUNTIME
-assert "X-BodyMind-Family-Release']='A363'" in RUNTIME
+assert 'data-bodymind-scene="A363b"' in RUNTIME
+assert "X-BodyMind-Family-Release']='A363b'" in RUNTIME
 assert "SOURCE_SHA='35afdadb806a9ad1f22188e7f20439356f7282dad3adb4fc867554485ee4f686'" in RUNTIME
 assert 'bm362-sky--main' in RUNTIME and 'bm362-sky--main' in SCENE
 assert '#f8a9c8' in SCENE and '#5ef2de' in SCENE
@@ -80,7 +80,7 @@ async def run():
    assert before!=after,(width,'clouds static')
    await page.locator('a.pill').click()
    assert page.url.endswith('#corsi'),(width,'Corsi link failed')
-   print('A363 SYNTHETIC WEBKIT GEOMETRY PASS',width,height)
+   print('A363b SYNTHETIC WEBKIT GEOMETRY PASS',width,height)
    await page.close()
   await browser.close()
 asyncio.run(run())
