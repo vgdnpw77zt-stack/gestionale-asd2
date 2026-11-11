@@ -115,10 +115,11 @@ def review_html(conn):
 def owner_bilanci_html(conn, selected_month):
     """Owner-only read-only reporting. Source-level totals are never bank/cash balances."""
     from datetime import datetime
+    from zoneinfo import ZoneInfo
     from html import escape as h
     from decimal import Decimal
-    from asd_app.bodymind_a237_finance_truth import payment_active, payment_channel
-    month = selected_month if re.fullmatch(r'\d{4}-(?:0[1-9]|1[0-2])', selected_month or '') else datetime.now().strftime('%Y-%m')
+    from asd_app.bodymind_a237_finance_truth import payment_active
+    month = selected_month if re.fullmatch(r'\d{4}-(?:0[1-9]|1[0-2])', selected_month or '') else datetime.now(ZoneInfo('Europe/Rome')).strftime('%Y-%m')
     def money(n):
         v=Decimal(str(n if n is not None else 0))
         return f'{v:,.2f}'.replace(',','_').replace('.',',').replace('_','.')+' €'
@@ -126,7 +127,7 @@ def owner_bilanci_html(conn, selected_month):
         t=str(value or '').strip()
         return t[:7].replace('/','-') if re.match(r'^\d{4}[-/](?:0[1-9]|1[0-2])',t) else None
     def paymonth(p):
-        for key in ('data_pagamento','data_incasso','paid_at','data','created_at'):
+        for key in ('data_pagamento','data_incasso','paid_at'):
             x=ym(p.get(key))
             if x:return x
         return None
