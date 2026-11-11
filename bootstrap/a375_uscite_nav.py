@@ -364,6 +364,53 @@ def owner_bilanci_html(conn, selected_month):
                        '</td><td>'+money(m['importo'])+'</td><td>Movimento #'+str(int(m['id']))+'</td></tr>')
         return ''.join(rows)
 
+    # Lifetime summary is computed from the SAME existing authenticated payment
+    # classifier and original expense/manual registers, independently of period.
+    life_in={k:ZERO for k in in_channels}
+    life_out={k:ZERO for k in out_channels}
+    life_in_count={k:0 for k in life_in}
+    life_out_count={k:0 for k in life_out}
+    for item in valid_pay+manual_income:
+        kind=inflow_method(item)
+        life_in[kind]+=val(item.get('importo'))
+        life_in_count[kind]+=1
+    for item in expenses+distinct_manual_out:
+        kind=outflow_method(item)
+        life_out[kind]+=val(item.get('importo'))
+        life_out_count[kind]+=1
+    life_income=sum(life_in.values(),ZERO)
+    life_expense=sum(life_out.values(),ZERO)
+    if (life_income!=total_pay+total_man or life_expense!=total_exp+total_extra):
+        raise RuntimeError('Totali storici incoerenti con le registrazioni originali')
+    misc=('addebito','altro','non_classificato')
+    def misc_amount(src):return sum((src[key] for key in misc),ZERO)
+    def misc_count(src):return sum(src[key] for key in misc)
+    def life_card(label, amount, count, item_name):
+        return card(label,amount,str(count)+' '+item_name+' registrati')
+    lifetime_summary=(
+        '<section id="bmbl-total-history" aria-label="Bilancio totale storico">'
+        '<h2>Bilancio totale — dall’inizio delle registrazioni</h2>'
+        '<p>Riepilogo complessivo sempre visibile, indipendente dal mese selezionato. '
+        'Include soltanto registrazioni attive e movimenti manuali classificati, '
+        'senza sommare due volte le scritture tecniche.</p>'
+        '<h3>Entrate totali per metodo</h3><div class="bmbl-grid">'
+        +life_card('Contanti incassati · totale',life_in['contanti'],life_in_count['contanti'],'incassi')
+        +life_card('Bonifici incassati · totale',life_in['bonifico'],life_in_count['bonifico'],'incassi')
+        +life_card('Carta / POS / SumUp · totale',life_in['carta_pos_sumup'],life_in_count['carta_pos_sumup'],'incassi')
+        +life_card('Altri metodi · totale',misc_amount(life_in),misc_count(life_in_count),'incassi')
+        +'</div><h3>Uscite totali per metodo</h3><div class="bmbl-grid">'
+        +life_card('Bonifici in uscita · totale',life_out['bonifico'],life_out_count['bonifico'],'uscite')
+        +life_card('Contanti in uscita · totale',life_out['contanti'],life_out_count['contanti'],'uscite')
+        +life_card('Carta / POS / SumUp · uscite',life_out['carta_pos_sumup'],life_out_count['carta_pos_sumup'],'uscite')
+        +life_card('Altri metodi · uscite',misc_amount(life_out),misc_count(life_out_count),'uscite')
+        +'</div><h3>Totali complessivi</h3><div class="bmbl-grid">'
+        +card('Entrate complessive',life_income,'Tutti gli incassi attivi registrati')
+        +card('Uscite complessive',life_expense,'Tutte le uscite registrate')
+        +card('Risultato complessivo',life_income-life_expense,'Entrate meno uscite: non equivale a un saldo bancario')
+        +'</div><p class="bmbl-dim">Gli incassi Carta/POS/SumUp sono una categoria aggregata; '
+        'non attribuiamo l’intera cifra al solo circuito SumUp. '
+        'Il contante incassato non certifica la giacenza fisica: eventuali versamenti e '
+        'trasferimenti tra cassa e banca richiedono verifica separata.</p></section>')
     historic_note=('Entrate storiche registrate: '+money(total_pay+total_man)+
                    ' · Uscite storiche registrate: '+money(total_exp+total_extra)+
                    ' · Risultato storico: '+money(total_pay+total_man-total_exp-total_extra))
@@ -412,7 +459,7 @@ def owner_bilanci_html(conn, selected_month):
                                      [ym(x.get('data')) for x in expenses if ym(x.get('data'))]+
                                      [ym(x['data']) for x in manual_income+manual_out if ym(x['data'])]),reverse=True))+
        '</select> <button type="submit">Mostra</button></form>'
-       +'<div class="bmbl-grid">'+header_cards+'</div>'+cash_box
+       +'<div class="bmbl-grid">'+header_cards+'</div>'+cash_box+lifetime_summary
        +missing_note+'<p class="bmbl-dim">'+h(canonical_status)+'. '+h(historic_note)+
        '. I flussi bancari e contanti non attestano la giacenza effettiva del conto o della cassa.</p>'
        +warning+references+
@@ -448,12 +495,17 @@ def install(app):
             raise RuntimeError('Bilanci template integrity check')
         cards_month=re.findall(r'<article class="bmbl-card"><span>(.*?)</span><strong>(.*?)</strong>',preview)
         cards_history=re.findall(r'<article class="bmbl-card"><span>(.*?)</span><strong>(.*?)</strong>',full)
-        if len(cards_month)!=8 or len(cards_history)!=8:
-            raise RuntimeError('Bilanci expected eight audited accounting cards')
+        if len(cards_month)!=19 or len(cards_history)!=19:
+            raise RuntimeError('Bilanci expected eight period cards and eleven lifetime cards')
+        section_pattern=r'<section id="bmbl-total-history".*?</section>'
+        current_total=re.search(section_pattern,preview,re.S)
+        historical_total=re.search(section_pattern,full,re.S)
+        if not current_total or not historical_total or current_total.group(0)!=historical_total.group(0):
+            raise RuntimeError('Historical summary missing or changed with period selection')
         audit=_audit_channel_readonly(verify)
         if audit['canonical']['status']!='OK' or audit['mismatches']:
             raise RuntimeError('Bilanci totals do not match canonical accounting truth')
-        print('BODYMIND OWNER BILANCI REAL-LEDGER PREFLIGHT PASS (8 CARDS, 6 CHANNELS)',flush=True)
+        print('BODYMIND OWNER BILANCI LIFETIME-AND-PERIOD PREFLIGHT PASS (19 CARDS, 6 CHANNELS)',flush=True)
     except Exception as exc:
         print('BODYMIND OWNER BILANCI PREFLIGHT WARNING: '+type(exc).__name__,flush=True)
     finally:
