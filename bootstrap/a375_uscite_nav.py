@@ -101,10 +101,11 @@ def review_html(conn):
       +('<div class="scroll"><table '+table_css+'><thead><tr><th>Movimento</th><th>Data</th>'
         '<th>Descrizione</th><th>Importo</th><th>Verifica</th></tr></thead><tbody>'
         +''.join(rows)+'</tbody></table></div>' if missing else '')
-      +'</section><section><h2>Riconciliazione</h2>'
-      '<p>Se un movimento ripete una spesa già registrata, bisogna rettificare il doppione '
-      'mantenendone la tracciabilità; se è distinto, va classificato con il metodo corretto. '
-      'Questo controllo non cancella, modifica o convalida automaticamente alcun movimento.</p>'
+      +'</section><section><h2>Controllo tecnico facoltativo</h2>'
+      '<p>Le uscite già documentate non richiedono un secondo pagamento né una nuova riconciliazione '
+      'per essere conteggiate. Eventuali scritture tecniche restano visibili ai fini di audit, '
+      'senza essere sommate una seconda volta alle uscite registrate. '
+      'Questo controllo non cancella, modifica o convalida alcun movimento.</p>'
       '</section></main>')
 
 
@@ -466,8 +467,7 @@ def owner_bilanci_html(conn, selected_month):
        '<section><h2>Uscite nel periodo ('+str(len(outgoing))+')</h2><div class="bmbl-scroll">'
        '<table class="bmbl-out"><thead><tr><th>Data</th><th>Operazione</th><th>Metodo</th><th>Importo</th><th>Dettaglio</th></tr></thead><tbody>'+
        (expense_rows() or '<tr><td colspan="5">Nessuna uscita nel periodo</td></tr>')+'</tbody></table></div></section>'+
-       '<p><a href="/pagamenti">Pagamenti</a> · <a href="/pagamenti/uscite">Uscite e giustificativi</a> · '
-       '<a href="/contabilita/verifica">Verifica tecnica dei movimenti</a></p></main>')
+       '<p><a href="/pagamenti">Pagamenti</a> · <a href="/pagamenti/uscite">Uscite e giustificativi</a></p></main>')
 
 
 
@@ -590,6 +590,19 @@ def install(app):
         audit=_audit_channel_readonly(verify)
         if audit['canonical']['status']!='OK' or audit['mismatches']:
             raise RuntimeError('Bilanci totals do not match canonical accounting truth')
+        # Cross-check the Operator's real athlete names and totals against A237.
+        # Never log member names or identifying information.
+        for question,channel_key in (
+                ('Chi ha pagato in contanti?','contanti'),
+                ('Quali allieve hanno pagato con bonifico?','bonifico'),
+                ('Elencami le allieve che hanno pagato con carta','carta_pos_sumup')):
+            actual=_bodymind_operator_named_payments(verify,question)
+            expected=audit['channels'][channel_key]
+            if (actual is None or actual['count']!=expected['pagamenti_n']
+                    or Decimal(actual['amount'])!=Decimal(expected['pagamenti_euro'])
+                    or len(actual['names'])!=actual['athletes_count']):
+                raise RuntimeError('Operator named payments mismatch '+channel_key)
+        print('BODYMIND OPERATOR NAMED PAYMENTS PREFLIGHT PASS (CASH/BANK/POS; NO NAMES LOGGED)',flush=True)
         print('BODYMIND OWNER BILANCI LIFETIME-AND-PERIOD PREFLIGHT PASS (19 CARDS, 6 CHANNELS)',flush=True)
     except Exception as exc:
         print('BODYMIND OWNER BILANCI PREFLIGHT WARNING: '+type(exc).__name__,flush=True)
