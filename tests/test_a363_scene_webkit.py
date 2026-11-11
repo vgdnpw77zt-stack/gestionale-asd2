@@ -46,7 +46,10 @@ JS="""() => {
  return {width:innerWidth,scrollWidth:document.documentElement.scrollWidth,
  hero:x('.hero'),media:x('.hero-media'),intro:x('.hero-content'),
  video:x('.hero video'),hello:x('.hero h1'),cloud:x('.bm362-cloud'),
- waves:x('.bm362-waves'),mainSky:x('.main>.bm362-sky--main')};
+ waves:x('.bm362-waves'),mainSky:x('.main>.bm362-sky--main'),
+ waveStroke:parseFloat(getComputedStyle(document.querySelector('.bm362-waves path')).strokeWidth),
+ stardustOpacity:parseFloat(getComputedStyle(document.querySelector('.bm362-stars')).opacity),
+ cloudLayers:getComputedStyle(document.querySelector('.bm362-cloud')).backgroundImage.split('radial-gradient(').length-1};
 }"""
 
 async def run():
@@ -60,6 +63,9 @@ async def run():
    assert state['video']['filter']=='none',(width,state['video'])
    assert state['cloud']['animation']=='bm362-cloud-a',(width,state['cloud'])
    assert state['waves']['animation']=='bm362-wave',(width,state['waves'])
+   assert state['waveStroke']>=2.4,(width,'Waves are too faint',state['waveStroke'])
+   assert state['stardustOpacity']>=0.90,(width,'Stardust opacity',state['stardustOpacity'])
+   assert state['cloudLayers']>=4,(width,'Missing dense cloud layers',state['cloudLayers'])
    if width<=760:
     assert state['media']['pos']=='absolute',(width,state['media'])
     assert state['intro']['pos']=='absolute',(width,state['intro'])
