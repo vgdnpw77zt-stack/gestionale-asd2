@@ -1,0 +1,19 @@
+name: Contact contrast WebKit verification
+on:
+  push:
+    branches: [bodymind-site-a351-contact-contrast-20261111]
+    paths: [.github/workflows/site-contact-qa.yml]
+jobs:
+  webkit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install playwright pillow
+      - run: playwright install --with-deps webkit
+      - run: python qa/contact_contrast_qa.py candidate
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: contact-contrast-webkit
+          path: contact-qa-*/
+          retention-days: 14
