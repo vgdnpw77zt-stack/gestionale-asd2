@@ -360,6 +360,14 @@ def install(app):
                 'Non determinabile' in preview or 'Non determinabile' in full or
                 'Tutto lo storico' not in full):
             raise RuntimeError('Owner Bilanci financial rendering failed')
+        # Aggregate amounts only: no personal data or documents are emitted to logs.
+        cards_month=re.findall(r'<article class="bmbl-card"><span>(.*?)</span><strong>(.*?)</strong>',preview)
+        cards_history=re.findall(r'<article class="bmbl-card"><span>(.*?)</span><strong>(.*?)</strong>',full)
+        if len(cards_month)!=6 or len(cards_history)!=6:
+            raise RuntimeError('Owner Bilanci expected six live accounting cards')
+        print('BODYMIND BILANCI VERIFIED NOVEMBER/CURRENT '+str(cards_month[:3]),flush=True)
+        print('BODYMIND BILANCI VERIFIED HISTORY '+str(cards_history[:3]),flush=True)
+        print('BODYMIND BILANCI CARD METHODS '+str(cards_month[3:]),flush=True)
         print('BODYMIND OWNER BILANCI TRUE-LEDGER READONLY PREFLIGHT PASS',flush=True)
     finally:
         verify.close()
