@@ -257,7 +257,9 @@ def owner_bilanci_html(conn, selected_month):
     expense_keys={(ym(x.get('data')),val(x['importo'])) for x in expenses}
     manual_duplicates=[m for m in manual_out
                        if (ym(m['data']),val(m['importo'])) in expense_keys]
-    distinct_manual_out=[m for m in manual_out if m not in manual_duplicates]
+    # A253 is authoritative for manual transactions. Coincidence alone is NOT proof
+    # of duplication: preserve each classified movement, and flag lookalikes for audit.
+    distinct_manual_out=list(manual_out)
     entered_man_in=[m for m in manual_income if in_period(m['data'])]
     entered_man_out=[m for m in distinct_manual_out if in_period(m['data'])]
     incoming=dated_pay+entered_man_in
@@ -270,8 +272,12 @@ def owner_bilanci_html(conn, selected_month):
     expense=sum((val(x.get('importo')) for x in outgoing),ZERO)
     in_channels={k:ZERO for k in ('contanti','bonifico','carta_pos_sumup','addebito','altro','non_classificato')}
     out_channels={k:ZERO for k in in_channels}
-    for p in incoming:in_channels[inflow_method(p)]+=val(p.get('importo'))
-    for x in outgoing:out_channels[outflow_method(x)]+=val(x.get('importo'))
+    in_counts={k:0 for k in in_channels}
+    out_counts={k:0 for k in in_channels}
+    for p in incoming:
+        k=inflow_method(p);in_channels[k]+=val(p.get('importo'));in_counts[k]+=1
+    for x in outgoing:
+        k=outflow_method(x);out_channels[k]+=val(x.get('importo'));out_counts[k]+=1
     total_pay=sum((val(p.get('importo')) for p in valid_pay),ZERO)
     total_man=sum((val(p.get('importo')) for p in manual_income),ZERO)
     total_exp=sum((val(x.get('importo')) for x in expenses),ZERO)
@@ -296,15 +302,27 @@ def owner_bilanci_html(conn, selected_month):
                       +h(str(missing_pay))+' pagamenti e '+h(str(missing_exp))+
                       ' uscite non hanno una data riconosciuta: sono comunque inclusi nei totali storici.</p>')
     header_cards=(
-        card('Entrate registrate',income,'Pagamenti attivi e movimenti A253 distinti')+
-        card('Uscite registrate',expense,'Giustificativi e movimenti A253 non duplicati')+
-        card('Risultato contabile',income-expense,'Differenza entrate − uscite; NON saldo disponibile')+
-        card('Contanti · flusso netto',in_channels['contanti']-out_channels['contanti'],'Contanti incassati meno uscite in contanti')+
-        card('Bonifici · flusso netto',in_channels['bonifico']-out_channels['bonifico'],'Bonifici in entrata meno bonifici in uscita')+
-        card('Carta / POS / SumUp · incassi',in_channels['carta_pos_sumup'],'Metodo registrato; non identifica il singolo circuito'))
+        card('Entrate registrate',income,'Tutti gli incassi attivi del periodo')+
+        card('Uscite registrate',expense,'Uscite effettivamente registrate')+
+        card('Risultato del periodo',income-expense,'Entrate meno uscite: non è un saldo bancario')+
+        card('Contanti incassati',in_channels['contanti'],str(in_counts['contanti'])+' pagamenti registrati')+
+        card('Contanti usciti',out_channels['contanti'],str(out_counts['contanti'])+' uscite registrate')+
+        card('Bonifici ricevuti',in_channels['bonifico'],str(in_counts['bonifico'])+' incassi registrati')+
+        card('Bonifici in uscita',out_channels['bonifico'],str(out_counts['bonifico'])+' pagamenti registrati')+
+        card('Carta / POS / SumUp',in_channels['carta_pos_sumup'],str(in_counts['carta_pos_sumup'])+' incassi: circuito specifico non sempre distinto'))
     methods_table=[]
     for key,label in [('contanti','Contanti'),('bonifico','Bonifici'),('carta_pos_sumup','Carta / POS / SumUp'),('addebito','Addebiti'),('altro','Altro'),('non_classificato','Metodo non classificato')]:
-        methods_table.append('<tr><td>'+h(label)+'</td><td>'+money(in_channels[key])+'</td><td>'+money(out_channels[key])+'</td><td>'+money(in_channels[key]-out_channels[key])+'</td></tr>')
+        methods_table.append('<tr><td>'+h(label)+'</td><td>'+str(in_counts[key])+'</td><td>'+money(in_channels[key])+
+            '</td><td>'+str(out_counts[key])+'</td><td>'+money(out_channels[key])+'</td><td>'+money(in_channels[key]-out_channels[key])+'</td></tr>')
+    cash_box=('<section id="bmbl-cassa"><h2>Contanti: incassi e cassa fisica</h2>'
+       '<p>Pagamenti registrati in contanti: <strong>'+str(in_counts['contanti'])+' per '+money(in_channels['contanti'])+'</strong>. '
+       'Uscite in contanti registrate: <strong>'+str(out_counts['contanti'])+' per '+money(out_channels['contanti'])+'</strong>.</p>'
+       '<p>Flusso contabile netto dei contanti nel periodo: <strong>'+money(in_channels['contanti']-out_channels['contanti'])+'</strong>. '
+       'Questa differenza NON è il denaro che si trova fisicamente in cassa.</p>'
+       '<p><strong>Giacenza fisica: non verificata.</strong> Per confrontarla servono la conta effettiva, '
+       'la giacenza iniziale, eventuali versamenti contanti sul conto, prelievi e uscite non ancora annotate. '
+       'I trasferimenti tra cassa e banca non sono nuovi ricavi o nuove spese.</p>'
+       '<p class="bmbl-dim">Non sono state create operazioni, né spostati importi tra contanti e bonifici.</p></section>')
     def payment_rows():
         rows=[]
         for p in dated_pay[:200]:
@@ -334,7 +352,7 @@ def owner_bilanci_html(conn, selected_month):
                    ' · Risultato storico: '+money(total_pay+total_man-total_exp-total_extra))
     warning_parts=[]
     if unclassified:warning_parts.append(str(len(unclassified))+' movimenti tecnici senza classificazione A253 esclusi dai totali')
-    if manual_duplicates:warning_parts.append(str(len(manual_duplicates))+' movimento/i manuale/i con data e importo corrispondenti a un giustificativo, esclusi dal doppio conteggio')
+    if manual_duplicates:warning_parts.append(str(len(manual_duplicates))+' movimento/i manuale/i simili a giustificativi: possibili coincidenze da esaminare, mantenuti nel calcolo A237 senza cancellazioni')
     if any(len(d)>1 for d in linked.values()):warning_parts.append('Presenti pagamenti con più movimenti di entrata collegati: controllare la prima nota')
     warning='<p class="bmbl-notice">'+h('; '.join(warning_parts))+'. Nessun movimento è stato modificato.</p>' if warning_parts else ''
     # Retain the historical 520/700 detail only as a lookup, never as a fixed sum.
@@ -373,8 +391,9 @@ def owner_bilanci_html(conn, selected_month):
       '.bmbl-in td:nth-child(3):before,.bmbl-out td:nth-child(3):before{content:"Metodo: "}'
       '.bmbl-in td:nth-child(4):before,.bmbl-out td:nth-child(4):before{content:"Importo: "}'
       '.bmbl-out td:nth-child(5):before{content:"Dettaglio: "}'
-      '.bmbl-methods td:nth-child(1):before{content:"Metodo: "}.bmbl-methods td:nth-child(2):before{content:"Entrate: "}'
-      '.bmbl-methods td:nth-child(3):before{content:"Uscite: "}.bmbl-methods td:nth-child(4):before{content:"Differenza: "}}'
+      '.bmbl-methods td:nth-child(1):before{content:"Metodo: "}.bmbl-methods td:nth-child(2):before{content:"N. incassi: "}'
+      '.bmbl-methods td:nth-child(3):before{content:"Entrate: "}.bmbl-methods td:nth-child(4):before{content:"N. uscite: "}'
+      '.bmbl-methods td:nth-child(5):before{content:"Uscite: "}.bmbl-methods td:nth-child(6):before{content:"Flusso netto: "}}'
       '</style>')
     return (
        '<main id="bm-owner-bilanci" class="bmbl">'+css+
@@ -388,12 +407,12 @@ def owner_bilanci_html(conn, selected_month):
                                      [ym(x.get('data')) for x in expenses if ym(x.get('data'))]+
                                      [ym(x['data']) for x in manual_income+manual_out if ym(x['data'])]),reverse=True))+
        '</select> <button type="submit">Mostra</button></form>'
-       +'<div class="bmbl-grid">'+header_cards+'</div>'
+       +'<div class="bmbl-grid">'+header_cards+'</div>'+cash_box
        +missing_note+'<p class="bmbl-dim">'+h(canonical_status)+'. '+h(historic_note)+
        '. I flussi bancari e contanti non attestano la giacenza effettiva del conto o della cassa.</p>'
        +warning+references+
        '<section><h2>Entrate e uscite per metodo</h2><div class="bmbl-scroll"><table class="bmbl-methods">'
-       '<thead><tr><th>Metodo</th><th>Entrate</th><th>Uscite</th><th>Netto registrato</th></tr></thead><tbody>'+
+       '<thead><tr><th>Metodo</th><th>N. incassi</th><th>Entrate</th><th>N. uscite</th><th>Uscite</th><th>Flusso netto</th></tr></thead><tbody>'+
        ''.join(methods_table)+'</tbody></table></div></section>'+
        '<section><h2>Entrate nel periodo ('+str(len(incoming))+')</h2><div class="bmbl-scroll">'
        '<table class="bmbl-in"><thead><tr><th>Data</th><th>Operazione</th><th>Metodo</th><th>Importo</th></tr></thead><tbody>'+
