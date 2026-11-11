@@ -1,73 +1,57 @@
-"""Owner-only, presentation-only mobile Home enhancements. No DB writes."""
-from flask import request
-from markupsafe import Markup
+"""A377: Owner-only Bilanci footer on /mobile; presentation-only, no DB access.
 
-_SCRIPT = r"""<script id="bm-owner-home-compact-v1">
-(function(){
-  if(window.__bmOwnerCompact) return;
-  window.__bmOwnerCompact=true;
-  function norm(s){return (s||'').replace(/\s+/g,' ').trim().toLocaleLowerCase('it');}
-  function init(){
-    if(!matchMedia('(max-width: 767px)').matches) return;
-    var root=document.querySelector('main')||document.body;
-    var headings=Array.from(root.querySelectorAll('h1,h2,h3,h4,h5,h6,.card-title,.section-title,strong,span,div,p')).filter(function(h){return h.children.length===0 && (norm(h.textContent).includes('certificato medico mancante') || norm(h.textContent).includes('mensilità da incassare'));});
-    if(!headings.some(function(h){return norm(h.textContent).includes('certificato medico mancante');}) || !headings.some(function(h){return norm(h.textContent).includes('mensilità da incassare');}))return;
-    function collapse(needle, id){
-      var heading=headings.find(function(h){return norm(h.textContent).includes(needle) && h.getBoundingClientRect().width>0;});
-      if(!heading) return;
-      var block=heading.closest('section,article,.card,.panel,.dashboard-card,.widget,.alert-card,.home-card')||heading.parentElement;
-      if(!block || block===root || block===document.body || block.querySelector('#'+id))return;
-      var summary=document.createElement('button');
-      summary.type='button';summary.id=id;
-      summary.setAttribute('aria-expanded','false');
-      summary.style.cssText='width:100%;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;background:transparent;border:0;color:inherit;font:inherit;text-align:left;cursor:pointer';
-      var title=document.createElement('span');title.textContent=heading.textContent.trim();
-      var arrow=document.createElement('span');arrow.textContent='⌄';arrow.setAttribute('aria-hidden','true');
-      summary.append(title,arrow);
-      var details=document.createElement('div');details.id=id+'-content';
-      summary.setAttribute('aria-controls',details.id);
-      if(heading.parentElement!==block){
-        // Preserve unknown nested card markup by hiding only the card's existing siblings.
-        var holder=heading.parentElement;
-        if(holder===root || holder===document.body)return;
-        Array.from(holder.children).forEach(function(child){if(child!==heading)details.appendChild(child);});
-        heading.replaceWith(summary);
-        holder.appendChild(details);
-      }else{
-        Array.from(block.children).forEach(function(child){if(child!==heading)details.appendChild(child);});
-        heading.replaceWith(summary);
-        block.appendChild(details);
-      }
-      details.hidden=true;
-      summary.addEventListener('click',function(){details.hidden=!details.hidden;summary.setAttribute('aria-expanded',String(!details.hidden));arrow.textContent=details.hidden?'⌄':'⌃';});
-    }
-    collapse('certificato medico mancante','bm-owner-cert-toggle');
-    collapse('mensilità da incassare','bm-owner-dues-toggle');
-    if(!document.getElementById('bm-owner-bilanci-link')){
-      var anchor=document.createElement('a');anchor.id='bm-owner-bilanci-link';
-      anchor.href='/contabilita';
-      anchor.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:12px;margin:16px 0;padding:18px;border-radius:15px;background:#19364b;color:#f8f7f4;border:1px solid #68869b;text-decoration:none;font-weight:700';
-      anchor.innerHTML='<span>▤ &nbsp; Bilanci <small style="display:block;font-weight:400;opacity:.85;margin-top:5px">Cassa · Banca · Entrate · Uscite</small></span><span aria-hidden="true">›</span>';
-      root.appendChild(anchor);
-    }
-  }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
-})();
-</script>"""
+The previous A377 collapsible-card experiment is intentionally disabled. This
+change does not depend on card titles, DOM selectors or JavaScript execution.
+"""
+import re
+from flask import request
+
+_FOOTER_ID = 'bm-owner-bilanci-footer'
+_FOOTER = '''
+<section id="bm-owner-bilanci-footer" aria-label="Accesso Bilanci" style="box-sizing:border-box;max-width:100%;margin:24px 12px calc(100px + env(safe-area-inset-bottom, 0px));padding:0;clear:both">
+  <a id="bm-owner-bilanci-link" href="/contabilita?bm_owner_bilanci=1" style="box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:70px;padding:16px 18px;border:1px solid #68869b;border-radius:15px;background:#19364b;color:#f8f7f4;text-decoration:none;font-weight:700;box-shadow:0 5px 20px rgba(0,0,0,.12)">
+    <span style="display:block;min-width:0">Bilanci<span style="display:block;font-size:.85em;font-weight:400;opacity:.85;margin-top:5px">Contabilità e movimenti</span></span>
+    <span aria-hidden="true" style="font-size:1.6em;line-height:1">›</span>
+  </a>
+</section>
+'''
+_CLOSING_MAIN = re.compile(r'</main\s*>', re.IGNORECASE)
+_CLOSING_BODY = re.compile(r'</body\s*>', re.IGNORECASE)
+
+
+def add_owner_bilanci_footer(html):
+    """Insert as the final Home content, never into the five-item mobile nav."""
+    if _FOOTER_ID in html:
+        return html  # Idempotent under other response hooks.
+    main_closings = list(_CLOSING_MAIN.finditer(html))
+    body_closings = list(_CLOSING_BODY.finditer(html))
+    if not body_closings:
+        return html  # Unknown page structure: fail closed.
+    # The closing main in a valid page ends the scrollable content, before nav.
+    # Some historical /mobile variants have no <main>: use body footer then.
+    anchor = main_closings[-1] if main_closings else body_closings[-1]
+    return html[:anchor.start()] + _FOOTER + html[anchor.start():]
+
 
 def install(app):
     from asd_app.core import auth, has_role
+
     @app.after_request
-    def owner_compact_home(response):
-        if (request.method!='GET' or request.path.startswith('/app-tesserato/') or
-            response.status_code!=200 or response.mimetype!='text/html' or
-            response.direct_passthrough or not auth() or not has_role('admin')):
+    def owner_bilanci_footer(response):
+        if (request.method != 'GET'
+                or request.path.rstrip('/') != '/mobile'
+                or response.status_code != 200
+                or response.mimetype != 'text/html'
+                or response.direct_passthrough
+                or not auth()
+                or not has_role('admin')):
             return response
-        page=response.get_data(as_text=True)
-        if 'bm-owner-home-compact-v1' in page or '</body>' not in page.lower():
-            return response
-        page=page.replace('</body>',_SCRIPT+'</body>',1)
-        response.set_data(page)
-        response.headers.pop('ETag',None)
-        response.headers['Cache-Control']='private, no-store'
+        original = response.get_data(as_text=True)
+        updated = add_owner_bilanci_footer(original)
+        if updated != original:
+            response.set_data(updated)
+            response.headers.pop('ETag', None)
+            response.headers['Cache-Control'] = 'private, no-store, max-age=0'
+            response.headers['Vary'] = 'Cookie'
+            response.headers['X-BodyMind-Owner-Bilanci'] = 'A377-footer'
         return response
