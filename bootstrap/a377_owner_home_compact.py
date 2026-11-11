@@ -9,7 +9,7 @@ from flask import request
 _FOOTER_ID = 'bm-owner-bilanci-footer'
 _FOOTER = '''
 <section id="bm-owner-bilanci-footer" aria-label="Accesso Bilanci" style="box-sizing:border-box;max-width:100%;margin:24px 12px calc(100px + env(safe-area-inset-bottom, 0px));padding:0;clear:both">
-  <a id="bm-owner-bilanci-link" href="/contabilita?bm_owner_bilanci=1" style="box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:70px;padding:16px 18px;border:1px solid #68869b;border-radius:15px;background:#19364b;color:#f8f7f4;text-decoration:none;font-weight:700;box-shadow:0 5px 20px rgba(0,0,0,.12)">
+  <a id="bm-owner-bilanci-link" href="/owner/bilanci" style="box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:70px;padding:16px 18px;border:1px solid #68869b;border-radius:15px;background:#19364b;color:#f8f7f4;text-decoration:none;font-weight:700;box-shadow:0 5px 20px rgba(0,0,0,.12)">
     <span style="display:block;min-width:0">Bilanci<span style="display:block;font-size:.85em;font-weight:400;opacity:.85;margin-top:5px">Contabilità e movimenti</span></span>
     <span aria-hidden="true" style="font-size:1.6em;line-height:1">›</span>
   </a>
