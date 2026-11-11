@@ -133,7 +133,10 @@ def install(app):
             return layout('<main><h1>Link individuali disattivati</h1><p>BodyMind usa il link SumUp '
               'unico a importo libero. I precedenti restano conservati.</p>'
               '<a href="/impostazioni/sumup-libero">Apri SumUp link unico</a></main>'),409
-        if request.method=='GET' and request.path=='/contabilita':
+        # Footer Bilanci: use the existing accounting page without forcing reconciliation.
+        # All other visits retain the original A375 reconciliation safeguard.
+        if (request.method=='GET' and request.path=='/contabilita'
+                and request.args.get('bm_owner_bilanci')!='1'):
             c=db()
             try:
                 pending=len(pending_movements(c))
