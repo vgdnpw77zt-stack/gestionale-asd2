@@ -111,8 +111,125 @@ def review_html(conn):
       '</section></main>')
 
 
+
+def owner_bilanci_html(conn, selected_month):
+    """Owner-only read-only reporting. Source-level totals are never bank/cash balances."""
+    from datetime import datetime
+    from html import escape as h
+    from decimal import Decimal
+    from asd_app.bodymind_a237_finance_truth import payment_active, payment_channel
+    month = selected_month if re.fullmatch(r'\d{4}-(?:0[1-9]|1[0-2])', selected_month or '') else datetime.now().strftime('%Y-%m')
+    def money(n):
+        v=Decimal(str(n if n is not None else 0))
+        return f'{v:,.2f}'.replace(',','_').replace('.',',').replace('_','.')+' €'
+    def ym(value):
+        t=str(value or '').strip()
+        return t[:7].replace('/','-') if re.match(r'^\d{4}[-/](?:0[1-9]|1[0-2])',t) else None
+    def paymonth(p):
+        for key in ('data_pagamento','data_incasso','paid_at','data','created_at'):
+            x=ym(p.get(key))
+            if x:return x
+        return None
+    payments=[dict(r) for r in conn.execute('SELECT * FROM pagamenti ORDER BY id DESC')]
+    expenses=[dict(r) for r in conn.execute('SELECT * FROM bodymind_uscite ORDER BY data DESC,id DESC')]
+    active=[p for p in payments if payment_active(p)]
+    monthly_payments=[p for p in active if paymonth(p)==month]
+    unknown_paydates=sum(1 for p in active if not paymonth(p))
+    expenses=[x for x in expenses if Decimal(str(x.get('importo') or 0))>0]
+    monthly_expenses=[x for x in expenses if ym(x.get('data'))==month]
+    unknown_expdates=sum(1 for x in expenses if not ym(x.get('data')))
+    total_pay=sum((Decimal(str(p['importo'])) for p in monthly_payments),Decimal('0'))
+    total_out=sum((Decimal(str(x['importo'])) for x in monthly_expenses),Decimal('0'))
+    def pill(title,value,note):
+        return ('<div class="bmbl-card"><span>'+h(title)+'</span><strong>'+h(value)+
+                '</strong><small>'+h(note)+'</small></div>')
+    pay_status=('Completo per le date registrate' if unknown_paydates==0 else
+                f'{unknown_paydates} pagamenti attivi senza data utilizzabile')
+    out_status=('Solo registro Uscite; non somma movimenti tecnici' if unknown_expdates==0 else
+                f'{unknown_expdates} uscite senza data utilizzabile')
+    cards=(pill('Incassi da pagamenti nel mese',money(total_pay) if not unknown_paydates else 'Non determinabile',pay_status)+
+           pill('Uscite dal registro Uscite nel mese',money(total_out) if not unknown_expdates else 'Non determinabile',out_status)+
+           pill('Saldo bancario','Non determinabile','Mancano saldo iniziale e movimenti bancari completi')+
+           pill('Saldo fisico di cassa','Non determinabile','Richiede giacenza iniziale e trasferimenti')+
+           pill('Risultato netto completo','Non determinabile','I registri devono distinguere ogni movimento tecnico da una nuova operazione'))
+    ids=(10,134313)
+    old_exp=next((x for x in expenses if int(x['id'])==ids[0]),None)
+    old_mov=conn.execute('SELECT id,data,tipo,descrizione,importo,pagamento_id,auto_generato FROM movimenti WHERE id=?',(ids[1],)).fetchone()
+    match=(old_exp is not None and old_mov is not None and
+           Decimal(str(old_exp['importo']))==Decimal('520') and
+           Decimal(str(old_mov['importo']))==Decimal('520') and
+           str(old_exp.get('data') or '')==str(old_mov['data'] or ''))
+    if match:
+        notice=('Il registro Uscite conserva la registrazione #10 da 520 € e il registro Movimenti il riferimento #134313 '
+                'della stessa data e dello stesso importo. In questa vista il movimento tecnico NON viene sommato '
+                'nuovamente alle uscite. Questo controllo non modifica o convalida i collegamenti nel database.')
+    else:
+        notice=('La corrispondenza storica tra uscita #10 e movimento #134313 da 520 € non è confermata '
+                'dai dati attuali: nessuna rettifica automatica è stata effettuata.')
+    def exp_rows():
+        return ''.join('<tr><td>'+h(str(x.get('data') or '—'))+'</td><td>'+h(str(x.get('descrizione') or '—'))+
+                       '</td><td>'+h(str(x.get('metodo') or 'non indicato'))+'</td><td>'+h(money(x['importo']))+
+                       '</td><td><a href="/pagamenti/uscite?modifica='+str(int(x['id']))+'">Apri #'+str(int(x['id']))+'</a></td></tr>'
+                       for x in monthly_expenses[:150])
+    def pay_rows():
+        return ''.join('<tr><td>'+h(str(paymonth(p) or '—'))+'</td><td>'+h(str(p.get('causale') or 'Pagamento'))+
+                       '</td><td>'+h(str(p.get('metodo_pagamento') or 'non indicato'))+'</td><td>'+h(money(p['importo']))+
+                       '</td><td>#'+str(int(p['id']))+'</td></tr>' for p in monthly_payments[:150])
+    return (
+      '<main id="bm-owner-bilanci" class="bmbl"><style>'
+      '.bmbl{max-width:1060px;margin:18px auto 80px;padding:12px;color:#edf5ff}'
+      '.bmbl *{box-sizing:border-box}.bmbl h1,.bmbl h2{color:#fff}.bmbl a{color:#bceaff}'
+      '.bmbl .bmbl-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:18px 0}'
+      '.bmbl-card{background:#17344a;border:1px solid #5b7e98;border-radius:14px;padding:16px;min-width:0}'
+      '.bmbl-card span,.bmbl-card small{display:block;color:#d1e0ef}.bmbl-card strong{display:block;font-size:20px;margin:8px 0;overflow-wrap:anywhere}'
+      '.bmbl section{background:#10283d;border:1px solid #3f6880;border-radius:14px;padding:16px;margin:16px 0}'
+      '.bmbl .bmbl-scroll{overflow-x:auto}.bmbl table{border-collapse:collapse;width:100%;min-width:640px}'
+      '.bmbl td,.bmbl th{text-align:left;border-bottom:1px solid #35536b;padding:10px;font-size:13px;vertical-align:top}'
+      '.bmbl input,.bmbl button{padding:10px;border-radius:8px}.bmbl .bmbl-note{line-height:1.6;color:#e0e8f2}'
+      '</style><a href="/mobile">‹ Torna alla Home Owner</a><h1>Bilanci</h1>'
+      '<p>Vista di sola lettura sui registri reali. Non genera né modifica pagamenti, giustificativi o riconciliazioni.</p>'
+      '<form method="get" action="/owner/bilanci"><label for="bmbl-month">Periodo </label>'
+      '<input id="bmbl-month" name="mese" type="month" value="'+h(month)+'"><button type="submit">Mostra</button></form>'
+      '<div class="bmbl-grid">'+cards+'</div>'
+      '<section><h2>Bonifico 520 € — verifica delle due registrazioni</h2><p class="bmbl-note">'+h(notice)+'</p>'
+      '<p><a href="/pagamenti/uscite?modifica=10">Registro uscita #10</a> · '
+      '<a href="/contabilita/verifica">Verifica movimenti esistenti</a></p></section>'
+      '<section><h2>Uscite registrate del periodo ('+str(len(monthly_expenses))+')</h2>'
+      '<p class="bmbl-note">Ogni uscita viene mostrata una volta per ID del registro spese. '
+      'Non aggiungiamo automaticamente le registrazioni presenti anche in Movimenti.</p>'
+      '<div class="bmbl-scroll"><table><thead><tr><th>Data</th><th>Descrizione</th><th>Metodo</th><th>Importo</th><th>Documento</th></tr></thead>'
+      '<tbody>'+ (exp_rows() or '<tr><td colspan="5">Nessuna uscita con data nel periodo selezionato</td></tr>')+'</tbody></table></div></section>'
+      '<section><h2>Pagamenti attivi del periodo ('+str(len(monthly_payments))+')</h2>'
+      '<p class="bmbl-note">Sono inclusi solo gli incassi riconosciuti come attivi dal motore pagamenti; '
+      'movimenti manuali distinti non vengono sommati senza un collegamento verificabile.</p>'
+      '<div class="bmbl-scroll"><table><thead><tr><th>Data</th><th>Causale</th><th>Metodo</th><th>Importo</th><th>ID</th></tr></thead>'
+      '<tbody>'+(pay_rows() or '<tr><td colspan="5">Nessun pagamento attivo con data nel periodo selezionato</td></tr>')+'</tbody></table></div></section>'
+      '<p><a href="/pagamenti/uscite">Uscite e giustificativi</a> · '
+      '<a href="/contabilita/verifica">Controllo movimenti</a> · '
+      '<a href="/impostazioni/sumup-libero">Impostazioni SumUp</a></p></main>')
+
+
+
 def install(app):
     from asd_app.core import admin_required, auth, has_role, db, layout
+    @app.get('/owner/bilanci',endpoint='bm_owner_bilanci_readonly')
+    @admin_required
+    def owner_bilanci_readonly():
+        if not auth() or not has_role('admin'):
+            from flask import abort
+            abort(403)
+        conn=db()
+        try:
+            conn.execute('PRAGMA query_only=ON')
+            page=owner_bilanci_html(conn,request.args.get('mese',''))
+        finally:
+            conn.close()
+        res=make_response(layout(page))
+        res.headers['Cache-Control']='private, no-store'
+        res.headers['Vary']='Cookie'
+        res.headers['X-BodyMind-Bilanci']='READONLY-20261111'
+        return res
+
     @app.get(CHECK,endpoint='bm375_manual_check')
     @admin_required
     def reconciliation():
