@@ -1,4 +1,4 @@
-name: A351 kicker candidate WebKit verification
+name: A351 kicker production WebKit verification
 on:
   push:
     branches: [bodymind-site-a351-kicker-qa-20261110]
@@ -23,7 +23,6 @@ jobs:
               for width,height in [(375,667),(390,844),(430,932),(1440,1000)]:
                 context=await browser.new_context(viewport={'width':width,'height':height},device_scale_factor=1,is_mobile=width<600,has_touch=width<600)
                 page=await context.new_page()
-                await page.route('**/static/sunrise.css*',lambda route:route.fulfill(status=200,content_type='text/css',body=pathlib.Path('site/static/sunrise.css').read_text()))
                 errors=[]
                 page.on('pageerror',lambda e:errors.append(str(e)))
                 response=await page.goto('https://bodymindaerialstudio.life/',wait_until='networkidle',timeout=90000)
@@ -41,6 +40,7 @@ jobs:
                   await page.locator(sel).scroll_into_view_if_needed()
                   await page.wait_for_timeout(500)
                   if width==390: await page.screenshot(path=f'evidence/live-{width}-{name}.png')
+                metrics['cards_after_scroll']=await page.locator('.program-card img').evaluate_all('(es)=>es.map(e=>({loaded:e.complete&&e.naturalWidth>0,src:e.src}))')
                 await page.screenshot(path=f'evidence/live-{width}-full.png',full_page=True)
                 if width<600:
                   await page.locator('.menu-btn').click()
@@ -63,6 +63,8 @@ jobs:
             print(json.dumps(results,indent=2))
             for r in results:
               assert r['status']==200
+              assert any('a351-kicker-flow-20261110' in u for u in r['css'])
+              assert all(c['loaded'] for c in r['cards_after_scroll'])
               assert r['overflow']<=1
               if r['width']<600:
                 assert r['gap']>=8, 'Kicker overlaps medal strip'
