@@ -15,7 +15,7 @@ assert 'data-bodymind-scene="A363b"' in RUNTIME
 assert "X-BodyMind-Family-Release']='A363b'" in RUNTIME
 assert "SOURCE_SHA='35afdadb806a9ad1f22188e7f20439356f7282dad3adb4fc867554485ee4f686'" in RUNTIME
 assert 'bm362-sky--main' in RUNTIME and 'bm362-sky--main' in SCENE
-assert '#f8a9c8' in SCENE and '#5ef2de' in SCENE
+assert '#ffc0d2' in SCENE and '#72ffe1' in SCENE
 assert 'bm363-luminous' in SCENE and 'bm362-wave' in SCENE
 assert 'hero-media .family-hero-video' in SCENE
 assert "bm360-cinematic" not in SCENE
