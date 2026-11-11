@@ -42,3 +42,7 @@ install_a375(app)
 # A376: simplify legacy WhatsApp queue; show active shared SumUp in Communications.
 from a376_simple_communications import install as install_a376
 install_a376(app)
+
+# Owner mobile Home: collapsible medical certificates / dues and accounting shortcut.
+from a377_owner_home_compact import install as install_owner_compact
+install_owner_compact(app)
