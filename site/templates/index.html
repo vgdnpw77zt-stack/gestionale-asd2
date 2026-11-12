@@ -30,7 +30,7 @@
 <div class="grain" aria-hidden="true"></div>
 
 <header class="site-header" data-nav>
-<a class="site-logo" href="#top" aria-label="BodyMind Aerial Studio"><img src="{{ c.visuals.logo }}" alt="BodyMind Aerial Studio"></a>
+<a class="site-logo" href="#top" aria-label="BodyMind Aerial Studio"><img src="{{ c.visuals.logo }}" onerror="this.onerror=null;this.src=\'https://bodymindaerialstudio.life/seed-media/logo?v=9\';" alt="BodyMind Aerial Studio"></a>
 <nav class="desktop-nav" aria-label="Navigazione principale">
 <a href="#percorsi">Percorsi</a><a href="#kids">Kids & Junior</a><a href="#movimento">In movimento</a><a href="#sedi">Sedi</a>
 </nav>
@@ -50,7 +50,7 @@
 <section class="bm-entrance" id="scena" aria-labelledby="bm-entrance-title" data-bodymind-public="stage-01">
   <div class="bm-entrance-light" aria-hidden="true"></div>
   <figure class="bm-entrance-photo">
-    <img src="{{ c.hero.image or c.visuals.gallery[3] }}"
+    <img src="{{ c.visuals.gallery[4] }}"
          alt="Danza aerea BodyMind: un momento autentico dello studio"
          fetchpriority="high" decoding="async"
          width="900" height="1200">
@@ -65,7 +65,7 @@
 
 <section class="bm-identity" aria-labelledby="bm-identity-title">
   <div class="bm-identity-photograph">
-    <img src="{{ c.visuals.gallery[1] }}"
+    <img src="{{ c.visuals.gallery[0] }}"
          alt="Una fotografia autentica dei percorsi BodyMind Aerial Studio"
          loading="lazy" decoding="async" width="880" height="1100">
     <span class="bm-identity-photo-label">BODYMIND / APRILIA</span>
@@ -237,7 +237,7 @@
 </div>
 
 <footer>
-<a class="footer-logo" href="#top"><img src="{{ c.visuals.logo }}" alt="BodyMind Aerial Studio"></a>
+<a class="footer-logo" href="#top"><img src="{{ c.visuals.logo }}" onerror="this.onerror=null;this.src=\'https://bodymindaerialstudio.life/seed-media/logo?v=9\';" alt="BodyMind Aerial Studio"></a>
 <div class="footer-meta"><span>BodyMind Aerial Studio ASD</span><span>Aprilia (LT)</span></div>
 <div class="footer-links"><a href="{{ c.links.family }}">Area Famiglie</a><a href="https://www.instagram.com/bodymind.aerialstudio/" target="_blank" rel="noopener">Instagram</a></div>
 <div class="footer-visits" aria-label="Visitatori unici del sito"><span>VISITE UNICHE</span><strong>{{ "{:,}".format(visits|int).replace(",", ".") }}</strong></div>
