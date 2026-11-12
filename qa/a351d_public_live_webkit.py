@@ -67,6 +67,8 @@ async def main():
    assert await page.locator('#kids').count()==1
    assert await page.locator('#contatti').count()==1
    if m:
+    dock_position=await page.locator('.mobile-action-dock').evaluate("(el)=>getComputedStyle(el).position")
+    assert dock_position=="relative",("Quick actions obscure course photos",w,dock_position)
     menu=page.locator('[data-menu]')
     await menu.click()
     assert await menu.get_attribute('aria-expanded')=="true",("Menu did not open",w)
