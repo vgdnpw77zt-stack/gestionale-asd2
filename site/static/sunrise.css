@@ -128,3 +128,20 @@ a:focus-visible,button:focus-visible{outline:3px solid #F8C8A2;outline-offset:3p
 @media(max-width:600px){
   .hero-stage.hero-fullscreen .hero-copy{padding-top:148px}
 }
+
+
+/* A351c — theatrical hero typography refinement, MOBILE ONLY.
+   Original film, poster, color grading, captions, navigation and layouts untouched.
+   390px: heading ~60px -> ~54px; signature 24px -> 22px.
+   Booking CTA remains its original accessible size. */
+@media (max-width:600px) {
+  .hero-stage.hero-fullscreen .hero-copy h1 {
+    font-size:clamp(49px,13.9vw,69px);
+    line-height:.91;
+    letter-spacing:-.055em;
+  }
+  .hero-stage.hero-fullscreen .hero-signature {
+    font-size:22px;
+    line-height:1.1;
+  }
+}
