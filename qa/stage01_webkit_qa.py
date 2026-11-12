@@ -24,6 +24,7 @@ def media_probe():
     for name,url in [
         ("original-hero","https://bodymindaerialstudio.life/static/media/bodymind-hero.webp"),
         ("gallery4","https://bodymindaerialstudio.life/seed-media/gallery4?v=7"),
+        ("gallery5","https://bodymindaerialstudio.life/seed-media/gallery5?v=9"),
         ("gallery2","https://bodymindaerialstudio.life/seed-media/gallery2?v=7"),
         ("competition","https://bodymindaerialstudio.life/static/media/bodymind-competition-double.webp"),
     ]:
@@ -44,12 +45,13 @@ const b=e.getBoundingClientRect(),c=getComputedStyle(e);
 return {x:b.x,y:b.y,width:b.width,height:b.height,
   visibility:c.visibility,display:c.display,opacity:c.opacity,fontSize:c.fontSize,
   position:c.position,objectFit:c.objectFit}};
-const img=document.querySelector('.bm-entrance-photo img');
+const img=document.querySelector('.bm-entrance-photo img'),logo=document.querySelector('.site-logo img');
 return {width:innerWidth,height:innerHeight,
  scrollWidth:document.documentElement.scrollWidth,
  hero:element('.bm-entrance'),title:element('.bm-entrance h1'),
  photo:element('.bm-entrance-photo img'),cta:element('.bm-entrance-cta'),
  identity:element('.bm-identity'),logo:element('.site-logo img'),
+ logoNaturalWidth:logo?.naturalWidth||0,
  media:{naturalWidth:img?.naturalWidth||0,naturalHeight:img?.naturalHeight||0,
  src:img?.getAttribute('src')?.split('?')[0]||null},
  tickerPresent:!!document.querySelector('.achievement-marquee'),
@@ -75,7 +77,8 @@ async def check_local(browser,width,height,mobile=False):
         pass
     await page.wait_for_timeout(250)
     state=await page.evaluate(JS)
-    assert state["media"]["naturalWidth"]>=600,"No usable authentic hero still: "+str(state["media"])
+    assert state["media"]["naturalWidth"]>=700,"No usable authentic hero still: "+str(state["media"])
+    assert state["logoNaturalWidth"]>=200,"Original BodyMind logo failed to load"
     assert state["scrollWidth"]<=width+2,f"Horizontal scroll {width}: "+str(state["scrollWidth"])
     assert state["title"] and state["cta"] and state["logo"]
     assert state["cta"]["width"]>=150 and state["cta"]["height"]>=44
