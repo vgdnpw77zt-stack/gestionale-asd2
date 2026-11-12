@@ -1,0 +1,45 @@
+name: BodyMind A351c theatrical film WebKit pre-release
+on:
+  push:
+    branches: [bodymind-site-a351-hero-type-refine-20261112]
+    paths:
+      - 'site/templates/index.html'
+      - 'site/static/sunrise.css'
+      - 'qa/a351c_live_video_webkit.py'
+      - '.github/workflows/a351c-theater-video.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-film:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install isolated Flask site and Apple WebKit engine
+        run: |
+          python -m pip install -r site/requirements.txt playwright
+          python -m playwright install --with-deps webkit
+      - name: Start isolated site, disposable data outside production
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/bodymind-a351c-preview
+          (cd site && SITE_DATA_DIR=/tmp/bodymind-a351c-preview gunicorn --bind 127.0.0.1:8765 --workers 1 --threads 2 --timeout 75 app:app > /tmp/bodymind-a351c.log 2>&1 &)
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:8765/healthz >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8765/healthz
+      - name: Compare production baseline and candidate in WebKit; require real advancing film frames
+        run: python qa/a351c_live_video_webkit.py
+      - name: Retain visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bodymind-a351c-theatrical-original-film-webkit
+          path: evidence/a351c/
+          retention-days: 7
