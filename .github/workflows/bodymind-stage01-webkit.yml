@@ -1,0 +1,43 @@
+name: BodyMind Stage 01 theatrical homepage — real media and WebKit QA
+on:
+  push:
+    branches: [bodymind-site-entrata-in-scena-20261112]
+    paths:
+      - 'site/templates/index.html'
+      - 'site/static/entrata-in-scena.css'
+      - 'qa/stage01_webkit_qa.py'
+      - '.github/workflows/bodymind-stage01-webkit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  stage01:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install public site, WebKit and image inspection
+        run: |
+          python -m pip install -r site/requirements.txt pillow playwright
+          python -m playwright install --with-deps webkit
+      - name: Start isolated Flask site with disposable /tmp data
+        run: |
+          mkdir -p /tmp/bodymind-stage01-site
+          (cd site && SITE_DATA_DIR=/tmp/bodymind-stage01-site gunicorn --bind 127.0.0.1:8765 --workers 1 --threads 2 --timeout 75 app:app > /tmp/stage01-gunicorn.log 2>&1 &)
+          for i in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:8765/healthz >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8765/healthz
+      - name: Inspect original public photo resolution and test real rendered template in WebKit
+        run: python qa/stage01_webkit_qa.py
+      - name: Upload viewport screenshots and media report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bodymind-stage01-visual-evidence
+          path: evidence/stage01/
+          retention-days: 7
