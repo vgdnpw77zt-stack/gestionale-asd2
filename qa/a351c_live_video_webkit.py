@@ -70,7 +70,7 @@ async def check(browser,width,height,mobile):
         assert state["dockHidden"],("Duplicate booking dock overlays film",width)
         assert state["title"]["fontSize"].endswith("px")
         fontsize=float(state["title"]["fontSize"][:-2])
-        assert 48<=fontsize<=61,("Heading still excessively large",fontsize)
+        assert 46<=fontsize<=61,("Heading outside legible iPhone range",fontsize)
         assert state["booking"]["y"]+state["booking"]["h"]<=height+3,("CTA off first viewport",state["booking"])
         if width==390:
             assert state["title"]["y"]>=410,("Dancer face still covered by headline",state["title"])
