@@ -5,7 +5,8 @@ on:
     paths: [.github/workflows/dock-qa.yml]
 jobs:
   webkit:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - run: pip install playwright
