@@ -13,8 +13,11 @@ body{background:var(--bm-stage-night);color:var(--bm-stage-ivory)}
  background:linear-gradient(180deg,rgba(6,11,16,.92),rgba(6,11,16,.46))!important;
  border-color:rgba(247,237,221,.11)!important;backdrop-filter:none!important}
 .site-header.scrolled{height:68px!important;background:rgba(8,15,21,.97)!important}
-.site-header .site-logo{width:166px;height:68px;display:flex;align-items:center}
-.site-header .site-logo img{display:block;max-width:100%;width:100%;height:56px;object-fit:contain;object-position:left center}
+.site-header .site-logo{width:211px;min-width:0;height:68px;display:flex;align-items:center;gap:5px;text-decoration:none;white-space:nowrap}
+.site-header .site-logo img{display:block;flex:0 0 62px;width:62px;height:56px;max-width:62px;object-fit:contain;object-position:center}
+.site-header .bm-brand-wordmark{display:flex;flex-direction:column;gap:2px;align-items:flex-start;justify-content:center;color:#f2ebdf;line-height:1}
+.site-header .bm-brand-wordmark strong{font:700 16px/1.05 var(--sans,Arial,sans-serif);letter-spacing:.065em}
+.site-header .bm-brand-wordmark small{font:600 9px/1.15 var(--sans,Arial,sans-serif);letter-spacing:.16em;color:#d5c5b5}
 .site-header .desktop-nav a{font-size:11px!important;letter-spacing:.05em!important;color:#eee8df}
 .site-header .header-cta{font-size:11px!important;letter-spacing:.02em!important;border:1px solid rgba(242,235,223,.52);
  background:transparent!important;border-radius:4px!important;padding:11px 16px!important}
@@ -80,8 +83,10 @@ body{background:var(--bm-stage-night);color:var(--bm-stage-ivory)}
  .site-header{height:70px!important;min-height:70px!important;padding:0 20px!important;
    background:rgba(6,11,17,.95)!important;backdrop-filter:none!important}
  .site-header.scrolled{height:65px!important}
- .site-header .site-logo{width:148px;height:66px}
- .site-header .site-logo img{height:56px}
+ .site-header .site-logo{width:190px;height:66px;gap:3px}
+ .site-header .site-logo img{flex-basis:54px;width:54px;max-width:54px;height:52px}
+ .site-header .bm-brand-wordmark strong{font-size:14px;letter-spacing:.045em}
+ .site-header .bm-brand-wordmark small{font-size:8px;letter-spacing:.13em}
  .mobile-menu{top:70px}
  .bm-entrance{display:block;min-height:670px;min-height:clamp(670px,100svh,900px);
    padding:0;background:radial-gradient(ellipse 72% 43% at 56% 25%,#2031424c,transparent 85%),
