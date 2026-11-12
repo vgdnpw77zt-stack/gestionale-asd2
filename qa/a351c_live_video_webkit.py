@@ -19,7 +19,7 @@ const b=el.getBoundingClientRect(),c=getComputedStyle(el);
 return {x:Math.round(b.x),y:Math.round(b.y),w:Math.round(b.width),h:Math.round(b.height),
  bottom:Math.round(b.bottom),fontSize:c.fontSize,position:c.position,visibility:c.visibility,
  opacity:c.opacity,color:c.color,background:c.backgroundImage};};
-const v=document.querySelector('[data-hero-video]');
+const v=document.querySelector('[data-hero-video]'),logo=document.querySelector('.site-logo img'),dock=document.querySelector('.mobile-action-dock');
 return {viewport:[innerWidth,innerHeight],scrollWidth:document.documentElement.scrollWidth,
   hero:box('.hero-stage.hero-fullscreen'),title:box('.hero-fullscreen .hero-copy h1'),
   copy:box('.hero-fullscreen .hero-copy'),signature:box('.hero-signature'),
@@ -28,6 +28,8 @@ return {viewport:[innerWidth,innerHeight],scrollWidth:document.documentElement.s
   videoState:{width:v?.videoWidth??0,height:v?.videoHeight??0,paused:v?.paused??true,
               ready:v?.readyState??0,time:v?.currentTime??0,muted:v?.muted,playsinline:v?.playsInline},
   ticker:!!document.querySelector('.achievement-marquee'),
+  logoNatural:logo?.naturalWidth??0,dockHidden:dock?.classList.contains('is-on-stage')??false,
+  heroProseDisplay:getComputedStyle(document.querySelector('.hero-fullscreen .hero-text')).display,
   competitor:!!document.querySelector('.competition-palmares'),
   kids:!!document.getElementById('kids'),
   booking:box('.hero-fullscreen .primary-btn'),
@@ -59,14 +61,19 @@ async def check(browser,width,height,mobile):
     assert state["video"]["w"]>=width-3 if mobile else state["video"]["w"]>500
     assert state["videoState"]["width"]>0 and state["videoState"]["height"]>0,("Video not decoded in WebKit",state["videoState"])
     assert state["controlsPlay"],"Native fallback button must be preserved"
+    assert state["logoNatural"]>0,("Original BodyMind logo unavailable, including public fallback",state["logoNatural"])
     assert not state["ticker"],"Top medal strip still blocks theatrical scene"
     assert state["competitor"] and state["kids"] and state["family"]
     assert "0a1018" in state["look"]["body"].lower() or "10, 16, 24" in state["look"]["body"],("Wrong new stage background",state["look"]["body"])
     if mobile:
+        assert state["heroProseDisplay"]=="none",("Duplicate long copy still covers performer",width)
+        assert state["dockHidden"],("Duplicate booking dock overlays film",width)
         assert state["title"]["fontSize"].endswith("px")
         fontsize=float(state["title"]["fontSize"][:-2])
         assert 48<=fontsize<=61,("Heading still excessively large",fontsize)
         assert state["booking"]["y"]+state["booking"]["h"]<=height+3,("CTA off first viewport",state["booking"])
+        if width==390:
+            assert state["title"]["y"]>=410,("Dancer face still covered by headline",state["title"])
         assert state["hero"]["h"]>=height-10,("Hero too short",state["hero"])
     before=await page.locator("[data-hero-video]").evaluate("(e)=>e.currentTime")
     await page.wait_for_timeout(1300)
@@ -81,6 +88,7 @@ async def check(browser,width,height,mobile):
     await page.screenshot(path=str(ROOT/f"new-webkit-{width}x{height}.png"),animations="disabled")
     if width==390:
         await page.locator('.editorial-intro').scroll_into_view_if_needed()
+        await page.locator('.editorial-intro .intro-left.reveal.in').wait_for(timeout=7000)
         await page.screenshot(path=str(ROOT/"new-identity-390.png"),animations="disabled")
     if mobile:
         menu=page.locator('[data-menu]')
