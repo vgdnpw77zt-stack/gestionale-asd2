@@ -26,6 +26,7 @@ JS="""() => {
               time:v?.currentTime,paused:v?.paused,muted:v?.muted,inline:v?.playsInline},
   heroTitle:box('.hero-copy h1'),firstCTA:box('.hero-actions .primary-btn'),
   dockPrimary:getComputedStyle(document.querySelector('.mobile-action.primary')).backgroundColor,
+  dockPosition:getComputedStyle(document.querySelector('.mobile-action-dock')).position,
   family:!!document.querySelector('a[href*="area-famiglie"]'),hasKids:!!document.querySelector('#kids'),
   hasShow:!!document.querySelector('.program-card.p3'),css:[...document.querySelectorAll('link[rel=stylesheet]')].map(x=>x.href)};
 }"""
@@ -77,6 +78,7 @@ async def check(browser,w,h):
    assert card["links"],("Lost navigation",card)
   assert state["cards"][1]["hasPalmares"]
   assert state["dockPrimary"]=="rgb(241, 229, 215)",("Old hot-pink dock survived",state["dockPrimary"])
+  assert state["dockPosition"]=="relative",("Floating booking bar covers photo captions",state["dockPosition"])
   await page.locator(".program-card.p1").scroll_into_view_if_needed()
   await page.wait_for_timeout(600)
   await page.locator(".program-card.p1").screenshot(path=str(OUT/f"training-{w}.png"),animations="disabled")
