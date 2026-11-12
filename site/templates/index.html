@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#170a14">
+<meta name="theme-color" content="#0b1119">
 <meta name="description" content="{{ c.seo.description }}">
 <meta name="robots" content="index,follow,max-image-preview:large">
 <link rel="canonical" href="https://bodymindaerialstudio.life/">
@@ -22,6 +22,7 @@
 <title>{{ c.seo.title }}</title>
 <link rel="stylesheet" href="{{ url_for('static',filename='site.css') }}?v=v28-desktop-glass">
 <link rel="stylesheet" href="{{ url_for('static',filename='sunrise.css') }}?v=a351-kicker-flow-20261110">
+<link rel="stylesheet" href="{{ url_for('static',filename='entrata-in-scena.css') }}?v=stage-01-20261112">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"SportsActivityLocation","name":"BodyMind Aerial Studio","url":"https://bodymindaerialstudio.life/","address":{"@type":"PostalAddress","addressLocality":"Aprilia","addressRegion":"LT","addressCountry":"IT"},"sameAs":["https://www.instagram.com/bodymind.aerialstudio/"]}</script>
 </head>
 <body>
@@ -33,79 +34,48 @@
 <nav class="desktop-nav" aria-label="Navigazione principale">
 <a href="#percorsi">Percorsi</a><a href="#kids">Kids & Junior</a><a href="#movimento">In movimento</a><a href="#sedi">Sedi</a>
 </nav>
-<a class="header-cta" href="#contatti">Prova BodyMind</a>
+<a class="header-cta" href="#contatti">Prenota una prova</a>
 <button class="menu-btn" type="button" data-menu aria-expanded="false" aria-controls="mobile-menu">Menu</button>
 </header>
 
 <div id="mobile-menu" class="mobile-menu" data-mobile-menu>
-<a href="#percorsi">Percorsi</a><a href="#kids">Kids & Junior</a><a href="#movimento">In movimento</a><a href="#sedi">Sedi e orari</a><a href="#contatti">Prenota una prova</a>
+<a href="#percorsi">Percorsi</a><a href="#kids">Kids & Junior</a><a href="#movimento">In movimento</a><a href="#sedi">Sedi e orari</a><a href="#contatti">Prenota una prova</a><a href="{{ c.links.family }}">Area Famiglie</a>
 </div>
 
 <main id="main-content">
 <div id="top"></div>
 
-<section class="hero-stage hero-fullscreen">
-<div class="achievement-marquee reveal" aria-label="Risultati BodyMind: 4 medaglie d’oro, 3 d’argento e 3 di bronzo">
-  <div class="achievement-window">
-    <div class="achievement-track">
-      <div class="achievement-set">
-        <span class="achievement-kicker">BODYMIND · COMPETITION</span>
-        <span class="achievement-medal gold"><i aria-hidden="true">🥇</i><strong>4</strong><em>ORI</em></span>
-        <span class="achievement-dot" aria-hidden="true"></span>
-        <span class="achievement-medal silver"><i aria-hidden="true">🥈</i><strong>3</strong><em>ARGENTI</em></span>
-        <span class="achievement-dot" aria-hidden="true"></span>
-        <span class="achievement-medal bronze"><i aria-hidden="true">🥉</i><strong>3</strong><em>BRONZI</em></span>
-        <span class="achievement-note">10 podi · tecnica, presenza, crescita</span>
-      </div>
-      <div class="achievement-set" aria-hidden="true">
-        <span class="achievement-kicker">BODYMIND · COMPETITION</span>
-        <span class="achievement-medal gold"><i>🥇</i><strong>4</strong><em>ORI</em></span>
-        <span class="achievement-dot"></span>
-        <span class="achievement-medal silver"><i>🥈</i><strong>3</strong><em>ARGENTI</em></span>
-        <span class="achievement-dot"></span>
-        <span class="achievement-medal bronze"><i>🥉</i><strong>3</strong><em>BRONZI</em></span>
-        <span class="achievement-note">10 podi · tecnica, presenza, crescita</span>
-      </div>
-    </div>
+<!-- BODYMIND "ENTRARE IN SCENA" — first complete mobile-first movement.
+     Real BodyMind media, existing booking and navigation. No altered athlete photos. -->
+<section class="bm-entrance" id="scena" aria-labelledby="bm-entrance-title" data-bodymind-public="stage-01">
+  <div class="bm-entrance-light" aria-hidden="true"></div>
+  <figure class="bm-entrance-photo">
+    <img src="{{ c.hero.image or c.visuals.gallery[3] }}"
+         alt="Danza aerea BodyMind: un momento autentico dello studio"
+         fetchpriority="high" decoding="async"
+         width="900" height="1200">
+  </figure>
+  <div class="bm-entrance-copy">
+    <p class="bm-entrance-kicker">Danza aerea <span aria-hidden="true">·</span> Aprilia</p>
+    <h1 id="bm-entrance-title">{{ c.hero.title }}</h1>
+    <a class="bm-entrance-cta" href="#contatti">Prenota una prova <span aria-hidden="true">↗</span></a>
   </div>
-</div>
-<div class="hero-light hero-light-a" aria-hidden="true"></div>
-<div class="hero-light hero-light-b" aria-hidden="true"></div>
-<div class="hero-copy">
-<p class="kicker reveal">BODYMIND AERIAL STUDIO · APRILIA</p>
-<h1 class="reveal">{{ c.hero.title }}</h1>
-<p class="hero-signature reveal">Danza aerea · performing arts · presenza</p>
-<p class="hero-text reveal">{{ c.hero.text }}</p>
-<div class="hero-actions reveal">
-<a class="primary-btn" href="#contatti">{{ c.hero.cta }}</a>
-<a class="text-link" href="#percorsi">Scopri i percorsi <span>↓</span></a>
-</div>
-</div>
-
-<div class="hero-film reveal">
-<div class="film-outline" aria-hidden="true"></div>
-<video autoplay muted loop playsinline preload="auto" poster="{{ c.hero.image or c.visuals.gallery[2] }}" data-hero-video>
-<source src="{{ c.hero.video_file or url_for('static',filename='media/bodymind-performing-hero.mp4') }}" type="video/mp4">
-</video>
-<div class="film-shade"></div>
-<button class="native-play" type="button" data-native-play hidden aria-label="Avvia il video">▶</button>
-<div class="film-caption"><strong>BodyMind</strong><span>Live movement · Aprilia</span></div>
-</div>
-
-<div class="hero-foot reveal">
-<span>Tessuti</span><span>Cerchio</span><span>Kids & Junior</span><span>Performance</span>
-</div>
+  <div class="bm-entrance-endline" aria-hidden="true"><span>TECNICA</span><span>ESPRESSIONE</span><span>LIBERTÀ</span></div>
 </section>
 
-<section class="editorial-intro section-light">
-<div class="intro-left reveal">
-<p class="section-label">IL NOSTRO LINGUAGGIO</p>
-<h2>Il corpo impara.<br><em>La mente si apre.</em></h2>
-</div>
-<div class="intro-right reveal">
-<p>{{ c.about.text }}</p>
-<div class="pill-row"><span>Tecnica</span><span>Forza</span><span>Fluidità</span><span>Espressione</span></div>
-</div>
+<section class="bm-identity" aria-labelledby="bm-identity-title">
+  <div class="bm-identity-photograph">
+    <img src="{{ c.visuals.gallery[1] }}"
+         alt="Una fotografia autentica dei percorsi BodyMind Aerial Studio"
+         loading="lazy" decoding="async" width="880" height="1100">
+    <span class="bm-identity-photo-label">BODYMIND / APRILIA</span>
+  </div>
+  <div class="bm-identity-content">
+    <p class="bm-identity-kicker">IL NOSTRO LINGUAGGIO</p>
+    <h2 id="bm-identity-title">Il gesto diventa <em>espressione.</em></h2>
+    <p>{{ c.about.text }}</p>
+    <a class="bm-identity-link" href="#percorsi">Scopri i percorsi <span aria-hidden="true">↗</span></a>
+  </div>
 </section>
 
 <section id="percorsi" class="programs section-dark">
