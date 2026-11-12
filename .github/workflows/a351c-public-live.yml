@@ -1,0 +1,31 @@
+name: BodyMind A351c REAL PUBLIC WebKit after deploy
+on:
+  push:
+    branches: [bodymind-site-a351-hero-type-refine-20261112]
+    paths:
+      - 'qa/a351c_public_live_webkit.py'
+      - '.github/workflows/a351c-public-live.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  live-webkit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install WebKit
+        run: |
+          python -m pip install playwright
+          python -m playwright install --with-deps webkit
+      - name: Inspect live public site, moving original film and all mobile links
+        run: python qa/a351c_public_live_webkit.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bodymind-a351c-public-verified-screens
+          path: evidence/a351c-live/
+          retention-days: 7
