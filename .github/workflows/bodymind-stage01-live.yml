@@ -1,0 +1,31 @@
+name: BodyMind Stage 01 public post-release WebKit (read-only)
+on:
+  push:
+    branches: [bodymind-site-entrata-in-scena-20261112]
+    paths:
+      - 'qa/stage01_live_webkit.py'
+      - '.github/workflows/bodymind-stage01-live.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install WebKit
+        run: |
+          python -m pip install playwright
+          python -m playwright install --with-deps webkit
+      - name: Inspect REAL public BodyMind page at four resolutions (GET-only)
+        run: python qa/stage01_live_webkit.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bodymind-stage01-production-screens
+          path: evidence/stage01-live/
+          retention-days: 7
