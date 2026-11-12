@@ -33,7 +33,9 @@ async def inspect(browser,w,h,mobile):
   greetingText:document.querySelector('.bm-entrance h1')?.textContent.trim()
  };
 }""")
- assert result["heroNatural"]==[764,1018],"Wrong real original BodyMind cover"
+ print("BODYMIND_LIVE_IMAGE_DEBUG "+json.dumps({"viewport":f"{w}x{h}","actual":result["heroNatural"],"logo":result["logoNatural"],"stage":result["hero"]},ensure_ascii=False),flush=True)
+ await page.screenshot(path=str(OUT/f"production-webkit-{w}x{h}.png"),animations="disabled")
+ assert result["heroNatural"]==[764,1018],"Wrong real original BodyMind cover: "+str(result["heroNatural"])
  assert result["logoNatural"]>=200,"Brand mark absent"
  assert result["scroll"]<=w+2,"Horizontal page overflow"
  assert result["cta"]["w"]>=150 and result["cta"]["h"]>=44
