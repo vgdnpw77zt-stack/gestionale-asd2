@@ -191,3 +191,174 @@ a:focus-visible,button:focus-visible{outline:3px solid #F8C8A2;outline-offset:3p
   .mobile-action-dock.is-on-stage{opacity:0!important;visibility:hidden!important;pointer-events:none!important}
 }
 @media(prefers-reduced-motion:reduce){.mobile-action-dock{transition:none!important}}
+
+
+/* A351d — PERCORSI: mobile editorial treatment ONLY. Designed around genuine
+   BodyMind aerial photographs. Original film, hero, CMS captions/links unchanged.
+   Training = warm rehearsal light; Competition and Show = theatrical midnight.
+   Captions form a separate reading band instead of covering faces or apparatus. */
+@media(max-width:600px){
+  .programs.section-dark{padding:68px 16px 78px}
+  .programs .section-heading h2{
+    font-size:clamp(43px,11.5vw,54px);
+    line-height:1.04;
+    letter-spacing:-.03em;
+  }
+  .programs .program-grid{
+    display:grid;
+    grid-template-columns:minmax(0,1fr);
+    grid-template-rows:auto;
+    min-height:0;
+    gap:26px;
+    margin-top:38px;
+  }
+  .programs .program-card{
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+    height:auto;
+    overflow:hidden;
+    border:0;
+    border-radius:12px;
+    background:#111925;
+    box-shadow:none;
+  }
+  .programs .program-card.p1{grid-row:auto;background:#F0E9E2}
+  .programs .program-card.p2{background:#171D2A}
+  .programs .program-card.p3{background:#25202B}
+  .programs .program-card .program-image{
+    position:relative;
+    z-index:1;
+    inset:auto;
+    left:auto;
+    right:auto;
+    top:auto;
+    bottom:auto;
+    width:100%;
+    height:auto;
+    aspect-ratio:1 / 1.05;
+    display:block;
+    overflow:hidden;
+    flex:none;
+    border-radius:0;
+    background:#0C1119;
+  }
+  .programs .program-card.p1 .program-image{background:#E8E3DF}
+  .programs .program-card .program-image:before{display:none}
+  .programs .program-card .program-image img,
+  .programs .program-card:hover .program-image img{
+    position:absolute;
+    inset:0;
+    display:block;
+    width:100%;
+    height:100%;
+    max-width:100%;
+    object-fit:contain;
+    object-position:center;
+    filter:none;
+    transform:none;
+    transition:none;
+  }
+  .programs .program-card .program-overlay{display:none}
+  .programs .program-card .program-content{
+    position:relative;
+    z-index:2;
+    inset:auto;
+    left:auto;
+    right:auto;
+    bottom:auto;
+    width:100%;
+    min-height:0;
+    margin:0;
+    padding:25px 24px 28px;
+    color:#F2EBE4;
+    text-shadow:none;
+    background:transparent;
+    border:0;
+    border-radius:0;
+    box-shadow:none;
+    -webkit-backdrop-filter:none;
+    backdrop-filter:none;
+  }
+  .programs .program-card.p1 .program-content{
+    background:#F0E9E2;
+    color:#23232A;
+  }
+  .programs .program-card .program-eyebrow{
+    margin:0 0 9px;
+    font-size:10px;
+    font-weight:800;
+    letter-spacing:.13em;
+    color:#D8B197;
+  }
+  .programs .program-card.p1 .program-eyebrow{color:#895C4D}
+  .programs .program-card .program-content h3{
+    font-size:clamp(37px,10.5vw,48px);
+    line-height:1.04;
+    letter-spacing:-.045em;
+    margin:0 0 15px;
+    color:#FFF3E9;
+  }
+  .programs .program-card.p1 .program-content h3{color:#26232A}
+  .programs .program-card .program-content>p{
+    max-width:33ch;
+    color:#DDD5CF;
+    font-size:14px;
+    line-height:1.65;
+    margin:0;
+    text-shadow:none;
+  }
+  .programs .program-card.p1 .program-content>p{color:#4C4748}
+  .programs .program-card .program-links{
+    margin-top:19px;
+    gap:12px 22px;
+    align-items:center;
+  }
+  .programs .program-card .program-links a,
+  .programs .program-card.p1 .program-links a,
+  .programs .program-card .program-links a:first-child{
+    padding:10px 0;
+    min-height:44px;
+    display:inline-flex;
+    align-items:center;
+    font-size:11px;
+    font-weight:750;
+    line-height:1.35;
+    letter-spacing:.04em;
+    text-transform:none;
+    background:transparent;
+    border:0;
+    border-bottom:1px solid rgba(231,201,180,.45);
+    border-radius:0;
+    box-shadow:none;
+    color:#F3DDCB;
+    text-decoration:none;
+    -webkit-backdrop-filter:none;
+    backdrop-filter:none;
+  }
+  .programs .program-card.p1 .program-links a,
+  .programs .program-card.p1 .program-links a:first-child{
+    color:#463B38;
+    border-bottom-color:rgba(96,70,61,.36);
+  }
+  .programs .competition-palmares{
+    display:grid;
+    grid-template-columns:1fr auto;
+    gap:10px;
+    margin-top:21px;
+    padding:14px 0 13px;
+    border:0;
+    border-top:1px solid rgba(242,221,203,.26);
+    border-bottom:1px solid rgba(242,221,203,.26);
+    border-radius:0;
+    background:transparent;
+    box-shadow:none;
+    -webkit-backdrop-filter:none;
+    backdrop-filter:none;
+    opacity:1;
+    transform:none;
+  }
+  .programs .palmares-medals{grid-column:1/-1;grid-row:2;gap:16px}
+  .programs .palmares-kicker,.programs .palmares-link{font-size:9px;color:#E8C4A8}
+  .programs .palmares-medals b{font-size:12px}
+}
