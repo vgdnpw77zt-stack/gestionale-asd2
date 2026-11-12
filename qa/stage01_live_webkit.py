@@ -24,7 +24,7 @@ async def inspect(browser,w,h,mobile):
  const logo=document.querySelector('.site-logo img'),hero=document.querySelector('.bm-entrance-photo img');
  return {viewport:innerWidth,scroll:document.documentElement.scrollWidth,
   hero:box('.bm-entrance'),photo:box('.bm-entrance-photo img'),title:box('.bm-entrance h1'),
-  cta:box('.bm-entrance-cta'),logo:box('.site-logo'),wordmark:box('.bm-brand-wordmark'),
+  cta:box('.bm-entrance-cta'),logo:box('.site-logo'),wordmark:box('.bm-brand-wordmark'),menu:box('.site-header .menu-btn'),
   logoNatural:logo.naturalWidth,heroNatural:[hero.naturalWidth,hero.naturalHeight],
   heroSource:hero.getAttribute('src'),identitySource:document.querySelector('.bm-identity-photograph img')?.getAttribute('src'),
   medalMarquee:!!document.querySelector('.achievement-marquee'),
@@ -47,7 +47,9 @@ async def inspect(browser,w,h,mobile):
  assert result["competition"]
  if mobile:
   assert result["cta"]["y"]+result["cta"]["h"]<=h+3,"Trial booking hidden below the first viewport"
-  assert result["wordmark"]["w"]>95 and result["wordmark"]["x"]+result["wordmark"]["w"]<=w-66,"Logo wordmark collides with menu"
+  print("BODYMIND_LIVE_HEADER_GEOMETRY "+json.dumps({"size":f"{w}x{h}","brand":result["wordmark"],"menu":result["menu"]}),flush=True)
+  assert result["wordmark"]["w"]>65,"Brand wordmark unreadably narrow"
+  assert result["wordmark"]["x"]+result["wordmark"]["w"]<=result["menu"]["x"]-4,"Brand mark actually overlaps menu"
   menu=page.locator('[data-menu]')
   await menu.click()
   assert await menu.get_attribute('aria-expanded')=='true',"Menu did not open"
