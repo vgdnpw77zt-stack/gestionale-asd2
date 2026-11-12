@@ -39,6 +39,13 @@ async def check(browser,w,h):
  assert resp and resp.status==200
  await page.wait_for_function("() => document.querySelector('[data-hero-video]')?.videoWidth > 0",timeout=26000)
  await page.wait_for_timeout(1300)
+ # These original course photographs are intentionally loading=lazy.
+ # Scroll to each card, triggering the browser's real network fetch.
+ for selector in [".program-card.p1", ".program-card.p2", ".program-card.p3"]:
+  await page.locator(selector).scroll_into_view_if_needed()
+  await page.wait_for_function(
+   "(sel) => { const img=document.querySelector(sel+' .program-image img'); return !!img && img.complete && img.naturalWidth>0; }",
+   arg=selector,timeout=22000)
  state=await page.evaluate(JS)
  assert state["scrollWidth"]<=w+2,("horizontal overflow",w,state["scrollWidth"])
  assert len(state["cards"])==3
