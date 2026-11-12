@@ -362,12 +362,31 @@ a:focus-visible,button:focus-visible{outline:3px solid #F8C8A2;outline-offset:3p
   .programs .palmares-kicker,.programs .palmares-link{font-size:9px;color:#E8C4A8}
   .programs .palmares-medals b{font-size:12px}
 
-  /* Remove the obsolete fuchsia mobile booking dock: a nonintrusive,
-     high-contrast warm-ivory CTA stays tappable after the hero. */
-  .mobile-action-dock{
-    background:rgba(12,17,27,.96);
-    border-color:rgba(232,209,190,.29);
-    box-shadow:0 14px 32px rgba(4,8,15,.24);
+  /* Keep booking/Instagram links but do NOT pin them above performer
+     photos or editorial captions. They live between contact and footer. */
+  body{padding-bottom:env(safe-area-inset-bottom)}
+  .mobile-action-dock,
+  .mobile-action-dock.is-scrolling{
+    position:relative;
+    z-index:1;
+    inset:auto;
+    left:auto;right:auto;top:auto;bottom:auto;
+    display:grid;
+    width:calc(100% - 32px);
+    max-width:520px;
+    margin:18px auto 20px;
+    padding:7px;
+    opacity:1!important;
+    visibility:visible!important;
+    pointer-events:auto!important;
+    transform:none!important;
+    transition:none;
+    background:#111823;
+    border:1px solid rgba(232,209,190,.29);
+    border-radius:13px;
+    box-shadow:none;
+    -webkit-backdrop-filter:none;
+    backdrop-filter:none;
   }
   .mobile-action.primary{
     color:#171A22;
