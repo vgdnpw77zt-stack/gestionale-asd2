@@ -236,7 +236,7 @@ a:focus-visible,button:focus-visible{outline:3px solid #F8C8A2;outline-offset:3p
     bottom:auto;
     width:100%;
     height:auto;
-    aspect-ratio:1 / 1.05;
+    aspect-ratio:auto;
     display:block;
     overflow:hidden;
     flex:none;
@@ -247,11 +247,11 @@ a:focus-visible,button:focus-visible{outline:3px solid #F8C8A2;outline-offset:3p
   .programs .program-card .program-image:before{display:none}
   .programs .program-card .program-image img,
   .programs .program-card:hover .program-image img{
-    position:absolute;
-    inset:0;
+    position:relative;
+    inset:auto;
     display:block;
     width:100%;
-    height:100%;
+    height:auto;
     max-width:100%;
     object-fit:contain;
     object-position:center;
@@ -361,4 +361,22 @@ a:focus-visible,button:focus-visible{outline:3px solid #F8C8A2;outline-offset:3p
   .programs .palmares-medals{grid-column:1/-1;grid-row:2;gap:16px}
   .programs .palmares-kicker,.programs .palmares-link{font-size:9px;color:#E8C4A8}
   .programs .palmares-medals b{font-size:12px}
+
+  /* Remove the obsolete fuchsia mobile booking dock: a nonintrusive,
+     high-contrast warm-ivory CTA stays tappable after the hero. */
+  .mobile-action-dock{
+    background:rgba(12,17,27,.96);
+    border-color:rgba(232,209,190,.29);
+    box-shadow:0 14px 32px rgba(4,8,15,.24);
+  }
+  .mobile-action.primary{
+    color:#171A22;
+    background:#F1E5D7;
+    box-shadow:none;
+  }
+  .mobile-action.secondary{
+    color:#F2E9DE;
+    background:rgba(255,255,255,.055);
+    border-color:rgba(237,212,190,.29);
+  }
 }
