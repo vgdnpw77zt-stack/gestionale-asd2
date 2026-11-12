@@ -26,6 +26,7 @@ async def inspect(browser,w,h,mobile):
   hero:box('.bm-entrance'),photo:box('.bm-entrance-photo img'),title:box('.bm-entrance h1'),
   cta:box('.bm-entrance-cta'),logo:box('.site-logo'),wordmark:box('.bm-brand-wordmark'),
   logoNatural:logo.naturalWidth,heroNatural:[hero.naturalWidth,hero.naturalHeight],
+  heroSource:hero.getAttribute('src'),identitySource:document.querySelector('.bm-identity-photograph img')?.getAttribute('src'),
   medalMarquee:!!document.querySelector('.achievement-marquee'),
   familyLink:!!document.querySelector('a[href*="area-famiglie"]'),
   sections:['percorsi','kids','movimento','sedi','contatti'].map(id=>[id,!!document.getElementById(id)]),
@@ -35,6 +36,8 @@ async def inspect(browser,w,h,mobile):
 }""")
  print("BODYMIND_LIVE_IMAGE_DEBUG "+json.dumps({"viewport":f"{w}x{h}","actual":result["heroNatural"],"logo":result["logoNatural"],"stage":result["hero"]},ensure_ascii=False),flush=True)
  await page.screenshot(path=str(OUT/f"production-webkit-{w}x{h}.png"),animations="disabled")
+ assert result["heroSource"]=="/seed-media/gallery5?v=9",("Wrong production hero URL",result["heroSource"])
+ assert result["identitySource"]=="/seed-media/gallery1?v=9",("Wrong production identity URL",result["identitySource"])
  assert result["heroNatural"]==[764,1018],"Wrong real original BodyMind cover: "+str(result["heroNatural"])
  assert result["logoNatural"]>=200,"Brand mark absent"
  assert result["scroll"]<=w+2,"Horizontal page overflow"
