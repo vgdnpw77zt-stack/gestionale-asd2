@@ -75,6 +75,9 @@ async def check_local(browser,width,height,mobile=False):
         await page.wait_for_function("() => !!document.querySelector('.bm-entrance-photo img')?.naturalWidth",timeout=25000)
     except Exception:
         pass
+    # The live logo is served from the public BodyMind domain in the
+    # isolated CI preview; it may finish after the hero JPEG.
+    await page.wait_for_function("() => !!document.querySelector('.site-logo img')?.naturalWidth",timeout=18000)
     await page.wait_for_timeout(250)
     state=await page.evaluate(JS)
     assert state["media"]["naturalWidth"]>=700,"No usable authentic hero still: "+str(state["media"])
