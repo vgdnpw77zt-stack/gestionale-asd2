@@ -158,3 +158,36 @@ a:focus-visible,button:focus-visible{outline:3px solid #F8C8A2;outline-offset:3p
                linear-gradient(90deg,rgba(6,9,16,.29),transparent 44%,transparent 79%,rgba(6,9,16,.16));
   }
 }
+
+/* A351c visual QA correction: on iPhone give the AERIAL PERFORMER the central
+   stage. Remove only redundant hero prose; it remains in the identity section.
+   The booking action stays visible, above browser chrome. */
+.hero-stage.hero-fullscreen .hero-actions .primary-btn{
+  font-size:13px;
+  letter-spacing:.055em;
+}
+@media(min-width:601px){
+  .hero-stage.hero-fullscreen .hero-copy h1{font-size:clamp(62px,8.1vw,139px)}
+}
+@media(max-width:600px){
+  .hero-stage.hero-fullscreen .hero-copy{
+    padding:112px 18px 112px;
+    justify-content:flex-end;
+  }
+  .hero-stage.hero-fullscreen .hero-copy h1{
+    font-size:clamp(47px,13vw,57px);
+    line-height:.94;
+    letter-spacing:-.048em;
+    margin:13px 0 12px;
+  }
+  .hero-stage.hero-fullscreen .hero-copy .kicker{
+    font-size:11px;
+    letter-spacing:.105em;
+    color:#F0D8C6;
+  }
+  .hero-stage.hero-fullscreen .hero-signature{font-size:20px;line-height:1.15;margin-bottom:12px}
+  .hero-stage.hero-fullscreen .hero-text,
+  .hero-stage.hero-fullscreen .hero-actions .text-link{display:none}
+  .mobile-action-dock.is-on-stage{opacity:0!important;visibility:hidden!important;pointer-events:none!important}
+}
+@media(prefers-reduced-motion:reduce){.mobile-action-dock{transition:none!important}}
