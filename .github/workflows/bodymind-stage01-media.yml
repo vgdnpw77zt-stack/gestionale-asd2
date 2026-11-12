@@ -1,0 +1,27 @@
+name: BodyMind original media photographic review
+on:
+  push:
+    branches: [bodymind-site-entrata-in-scena-20261112]
+    paths:
+      - 'qa/stage01_media_contact_sheet.py'
+      - '.github/workflows/bodymind-stage01-media.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  originals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pillow
+      - run: python qa/stage01_media_contact_sheet.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bodymind-public-originals-contact-sheet
+          path: evidence/stage01/media/
+          retention-days: 7
