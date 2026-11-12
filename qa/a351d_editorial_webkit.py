@@ -39,6 +39,12 @@ async def check(browser,w,h):
  assert resp and resp.status==200
  await page.wait_for_function("() => document.querySelector('[data-hero-video]')?.videoWidth > 0",timeout=26000)
  await page.wait_for_timeout(1300)
+ # Check the hero while actually onscreen. WebKit may throttle rendering
+ # of a video that has moved far outside the viewport; that is normal.
+ before=await page.locator('[data-hero-video]').evaluate("(v)=>v.currentTime")
+ await page.wait_for_timeout(1050)
+ after=await page.locator('[data-hero-video]').evaluate("(v)=>v.currentTime")
+ assert after>before and not await page.locator('[data-hero-video]').evaluate("(v)=>v.paused"),("Visible hero did not autoplay",before,after)
  # These original course photographs are intentionally loading=lazy.
  # Scroll to each card, triggering the browser's real network fetch.
  for selector in [".program-card.p1", ".program-card.p2", ".program-card.p3"]:
@@ -57,10 +63,6 @@ async def check(browser,w,h):
  assert state["video"]["inline"] and state["video"]["muted"] and not state["video"]["paused"]
  assert state["family"] and state["hasKids"] and state["hasShow"]
  assert any("a351d-editorial-percorsi-20261112" in s for s in state["css"])
- before=await page.locator('[data-hero-video]').evaluate("(v)=>v.currentTime")
- await page.wait_for_timeout(950)
- after=await page.locator('[data-hero-video]').evaluate("(v)=>v.currentTime")
- assert after>before,("Hero playback did not advance",before,after)
  if mobile:
   for i,card in enumerate(state["cards"]):
    assert card["img"][0]>=600 and card["img"][1]>=600,("Course image is low-quality or missing",card)
