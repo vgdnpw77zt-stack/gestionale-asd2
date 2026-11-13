@@ -399,3 +399,42 @@ a:focus-visible,button:focus-visible{outline:3px solid #F8C8A2;outline-offset:3p
     border-color:rgba(237,212,190,.29);
   }
 }
+
+
+/* A351e — restore authentic historic medal ticker ABOVE original film.
+   Only the existing home achievement strip is styled here. No changes to
+   the video, performer imagery, Competition palmares or course grid.
+   Avoid blur/backdrop filters in the scrolling layer to protect iOS video. */
+.hero-stage.hero-fullscreen .achievement-marquee{
+  top:112px;
+  left:clamp(18px,5vw,76px);
+  right:clamp(18px,5vw,76px);
+  min-height:44px;
+  background:linear-gradient(92deg,rgba(9,15,24,.91),rgba(34,31,42,.91) 50%,rgba(11,18,28,.91));
+  border:1px solid rgba(231,205,175,.29);
+  box-shadow:0 8px 24px rgba(3,8,17,.28);
+  -webkit-backdrop-filter:none;
+  backdrop-filter:none;
+  pointer-events:none;
+}
+.hero-stage.hero-fullscreen .achievement-kicker{color:#E1B997}
+.hero-stage.hero-fullscreen .achievement-note{color:#EBD5C2}
+.hero-stage.hero-fullscreen .achievement-medal em{color:#E7D9CD}
+.hero-stage.hero-fullscreen .achievement-medal.gold strong{color:#F1D58A}
+.hero-stage.hero-fullscreen .achievement-medal.silver strong{color:#F2F0EC}
+.hero-stage.hero-fullscreen .achievement-medal.bronze strong{color:#DBAC8A}
+@media(max-width:980px){
+ .hero-stage.hero-fullscreen .achievement-marquee{
+  top:88px;left:16px;right:16px;min-height:42px;
+ }
+}
+@media(max-width:600px){
+ .hero-stage.hero-fullscreen .achievement-marquee{
+  top:86px;left:12px;right:12px;min-height:40px;
+  box-shadow:0 4px 15px rgba(3,8,17,.23);
+ }
+ .hero-stage.hero-fullscreen .achievement-set{min-height:38px}
+}
+@media(prefers-reduced-motion:reduce){
+ .hero-stage.hero-fullscreen .achievement-track{animation:none!important;transform:none!important;will-change:auto}
+}
