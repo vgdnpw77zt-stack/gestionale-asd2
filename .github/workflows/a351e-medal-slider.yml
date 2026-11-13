@@ -1,0 +1,45 @@
+name: BodyMind A351e restored medals — original movie WebKit QA
+on:
+  push:
+    branches: [bodymind-site-a351e-medal-slider-20261113]
+    paths:
+      - 'site/templates/index.html'
+      - 'site/static/sunrise.css'
+      - 'qa/a351e_medal_slider_webkit.py'
+      - '.github/workflows/a351e-medal-slider.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-medals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Flask dependencies and WebKit
+        run: |
+          python -m pip install -r site/requirements.txt playwright
+          python -m playwright install --with-deps webkit
+      - name: Start isolated site with temporary local data
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/bodymind-a351e-test
+          (cd site && SITE_DATA_DIR=/tmp/bodymind-a351e-test gunicorn --bind 127.0.0.1:8765 --workers 1 --threads 2 --timeout 75 app:app > /tmp/a351e-site.log 2>&1 &)
+          for i in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:8765/healthz >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8765/healthz
+      - name: Test restored medal slider, moving original video and iPhone layout in WebKit
+        run: python qa/a351e_medal_slider_webkit.py
+      - name: Retain real browser screenshots for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bodymind-a351e-original-medal-slider-webkit
+          path: evidence/a351e/
+          retention-days: 7
