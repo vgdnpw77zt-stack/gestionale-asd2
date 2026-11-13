@@ -1,0 +1,32 @@
+name: BodyMind A351e live medal ticker — Safari WebKit verification
+on:
+  push:
+    branches: [bodymind-site-a351e-medal-slider-20261113]
+    paths:
+      - 'qa/a351e_live_webkit.py'
+      - '.github/workflows/a351e-live-medals.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  live-medals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install WebKit for production read-only QA
+        run: |
+          python -m pip install playwright
+          python -m playwright install --with-deps webkit
+      - name: Verify LIVE public BodyMind medal slider, original video autoplay and mobile UI
+        run: python qa/a351e_live_webkit.py
+      - name: Preserve live screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bodymind-a351e-live-medals-safari-proof
+          path: evidence/a351e-live/
+          retention-days: 7
