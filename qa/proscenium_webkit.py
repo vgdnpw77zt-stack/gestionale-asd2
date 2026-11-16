@@ -64,6 +64,14 @@ async def check(browser,w,h,mobile):
  assert await page.locator(".pro-route a").count()==4,("Functional journey links absent",w)
  assert await page.locator("#competition, #show").count()==2,("Course anchors absent",w)
  if mobile:
+  bounds=await page.evaluate("""() => {
+   const b=s=>{let e=document.querySelector(s);if(!e)return null;let r=e.getBoundingClientRect();return {top:r.top,bottom:r.bottom,left:r.left,right:r.right}};
+   return {heading:b('.movement .movement-head'),card:b('.movement .film-grid .film-card')};
+  }""")
+  assert bounds["heading"] and bounds["card"]
+  assert bounds["card"]["top"]>=bounds["heading"]["bottom"]+6,("Movement art overlaps intro heading",w,bounds)
+
+ if mobile:
   assert 0<=state["title"]["y"]<h and state["title"]["bottom"]<=h-2,("Headline not in first viewport",w,state["title"])
   assert 0<=state["cta"]["y"] and state["cta"]["bottom"]<=h+2,("Booking CTA not in first viewport",w,state["cta"])
  before=await page.locator('[data-hero-video]').evaluate("(v)=>v.currentTime")
