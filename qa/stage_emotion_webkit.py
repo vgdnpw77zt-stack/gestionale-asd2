@@ -81,7 +81,19 @@ async def check(browser,w,h,mobile):
  assert offset!=offset_after,("Medal strip doesn't move",w)
  await page.screenshot(path=str(OUT/f"hero-medals-original-film-{w}x{h}.png"),animations="disabled")
  if w in (390,1440):
-  await page.screenshot(path=str(OUT/f"full-home-{w}x{h}.jpg"),full_page=True,type="jpeg",quality=77,animations="disabled")
+  # Activate lazy media before a full document capture, as a real visitor scrolls.
+  height=await page.evaluate("document.documentElement.scrollHeight")
+  for pos in range(0,int(height),540):
+   await page.evaluate("(y)=>window.scrollTo(0,y)",pos)
+   await page.wait_for_timeout(65)
+  await page.wait_for_timeout(900)
+  await page.evaluate("window.scrollTo(0,0)")
+  await page.wait_for_timeout(350)
+  await page.screenshot(path=str(OUT/f"full-home-{w}x{h}.jpg"),full_page=True,type="jpeg",quality=84,animations="disabled")
+  # Photo assets are intentionally the same user-provided gallery files.
+  assert await page.locator(".program-card img").count()==3
+  loaded=await page.locator(".program-card img").evaluate_all("(els)=>els.map(e=>({ok:e.complete && e.naturalWidth>0,src:e.currentSrc}))")
+  assert all(i["ok"] for i in loaded),("Original course photos failed to load",w,loaded)
 
  await page.emulate_media(reduced_motion="reduce")
  assert await page.locator('.achievement-track').evaluate("(e)=>getComputedStyle(e).animationName")=="none",("Reduced motion ignored",w)
