@@ -1,0 +1,45 @@
+name: BodyMind Premiere isolated Safari WebKit QA
+on:
+  push:
+    branches: [bodymind-site-cinematic-stage-20261116]
+    paths:
+      - 'site/templates/index.html'
+      - 'site/static/stage-emotion.css'
+      - 'qa/stage_emotion_webkit.py'
+      - '.github/workflows/stage-emotion-webkit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install site and WebKit
+        run: |
+          python -m pip install -r site/requirements.txt playwright
+          python -m playwright install --with-deps webkit
+      - name: Start isolated Flask website using disposable local data
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/bodymind-premiere-test
+          (cd site && SITE_DATA_DIR=/tmp/bodymind-premiere-test gunicorn --bind 127.0.0.1:8765 --workers 1 --threads 2 --timeout 75 app:app > /tmp/bodymind-premiere-site.log 2>&1 &)
+          for i in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:8765/healthz >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8765/healthz
+      - name: Test video, medals, navigation and four responsive viewports
+        run: python qa/stage_emotion_webkit.py
+      - name: Archive screenshots and machine-readable results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bodymind-premiere-stage-webkit-screenshots
+          path: evidence/premiere/
+          retention-days: 7
