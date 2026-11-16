@@ -516,3 +516,9 @@ footer{background:#0A080C!important}
 @media(prefers-reduced-motion:reduce){
  .journey-rail a,.program-outro a{transition:none!important}
 }
+
+/* Progressive visibility safety: page copy and authentic photographs must be
+   readable even if an observer is late, a user captures the whole page,
+   or a mobile browser throttles scroll observers. The cinematic film and
+   medals remain our intentional motion. */
+.reveal,.reveal.in{opacity:1!important;transform:none!important;transition:none!important}
