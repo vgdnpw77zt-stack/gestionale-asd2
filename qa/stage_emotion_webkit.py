@@ -63,6 +63,15 @@ async def check(browser,w,h,mobile):
  assert any("stage-emotion.css" in x for x in state["css"]),("Cinematic layer missing",w,state["css"])
  assert state["cta"] and state["cta"]["width"]>=84,("CTA not visible in DOM",w)
  assert state["film"]["width"]>=w*.5,("Video stage too narrow",w,state["film"])
+ assert await page.locator(".journey-rail a").count()==4,("Journey links missing",w)
+ assert await page.locator("#programma-1, #programma-2, #programma-3").count()==3,("Course anchor missing",w)
+ assert await page.locator(".program-outro a[href='#contatti']").count()==1,("Course booking link missing",w)
+ assert await page.locator(".film-still img").count()==1,("Authentic movement photograph missing",w)
+ if mobile:
+  assert state["title"]["y"]>=0 and state["title"]["bottom"]<=h-5,("Title not visible in first screen",w,state["title"])
+  assert state["cta"]["y"]>=0 and state["cta"]["bottom"]<=h+2,("CTA not visible in first screen",w,state["cta"])
+  assert state["film"]["height"]>=h*.85,("Hero movie is not full viewport",w,state["film"])
+
  before=await page.locator('[data-hero-video]').evaluate("(v)=>v.currentTime")
  offset=await page.locator('.achievement-track').evaluate("(e)=>getComputedStyle(e).transform")
  await page.wait_for_timeout(1100)
@@ -71,6 +80,9 @@ async def check(browser,w,h,mobile):
  assert after>before and not await page.locator('[data-hero-video]').evaluate("(v)=>v.paused"),("Autoplay frozen",w,before,after)
  assert offset!=offset_after,("Medal strip doesn't move",w)
  await page.screenshot(path=str(OUT/f"hero-medals-original-film-{w}x{h}.png"),animations="disabled")
+ if w in (390,1440):
+  await page.screenshot(path=str(OUT/f"full-home-{w}x{h}.jpg"),full_page=True,type="jpeg",quality=77,animations="disabled")
+
  await page.emulate_media(reduced_motion="reduce")
  assert await page.locator('.achievement-track').evaluate("(e)=>getComputedStyle(e).animationName")=="none",("Reduced motion ignored",w)
  assert await page.locator('.achievement-marquee').is_visible()
@@ -80,6 +92,7 @@ async def check(browser,w,h,mobile):
   assert await menu.get_attribute("aria-expanded")=="true",("Menu blocked",w)
   await menu.click()
   assert await menu.get_attribute("aria-expanded")=="false"
+ assert await page.locator(".journey-rail a[href='#programma-1']").get_attribute("href")=="#programma-1"
  assert not errors,("JS error",errors)
  RESULTS.append({"viewport":f"{w}x{h}","medalRibbonBelowHeader":True,
                  "videoOriginalPlaying":True,"medalMovement":True,"reducedMotion":True,
