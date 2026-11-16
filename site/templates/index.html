@@ -148,6 +148,7 @@
 </article>
 {% endfor %}
 </div>
+<div class="program-outro reveal"><p>Il primo passo? Vieni a scoprire il tuo movimento.</p><a href="#contatti">Prenota una prova <span aria-hidden="true">↗</span></a></div>
 </section>
 
 <section id="kids" class="kids-focus section-blush">
@@ -198,7 +199,7 @@
 {% if c.videos|length > 3 and c.videos[3].url %}
 {% set video = c.videos[3] %}
 <a class="film-card reveal" href="{{ video.url }}" target="_blank" rel="noopener">
-<div class="film-card-art art4" aria-hidden="true"><span class="art-ring"></span><span class="art-line"></span><span class="art-glow"></span></div>
+<div class="film-still"><img src="{{ c.visuals.gallery[3] }}" alt="Un momento autentico di BodyMind Aerial Studio" loading="lazy" decoding="async"></div>
 <div class="film-card-gradient"></div>
 <div class="film-card-copy"><small>BODYMIND FILM</small><h3>{{ video.title }}</h3><p>{{ video.subtitle }}</p><span>Guarda ↗</span></div>
 </a>
