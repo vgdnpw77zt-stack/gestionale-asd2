@@ -74,7 +74,7 @@
 <div class="hero-light hero-light-b" aria-hidden="true"></div>
 <div class="hero-copy">
 <p class="kicker reveal">BODYMIND AERIAL STUDIO · APRILIA</p>
-<h1 class="reveal">{{ c.hero.title }}</h1>
+<h1 class="reveal hero-editorial-title">{% if c.hero.title == 'Il corpo sale. La mente si libera.' %}<span class="hero-title-first">Il corpo sale.</span><em class="hero-title-second">La mente si libera.</em>{% else %}{{ c.hero.title }}{% endif %}</h1>
 <p class="hero-signature reveal">Danza aerea · performing arts · presenza</p>
 <p class="hero-text reveal">{{ c.hero.text }}</p>
 <div class="hero-actions reveal">
