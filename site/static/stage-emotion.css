@@ -1,0 +1,190 @@
+/* BODYMIND — ENTRARE IN SCENA
+   Isolated editorial art-direction pass, based on A351e.
+   Preserve all original photography, video, medal numbers, copy, links and CMS data.
+   No dependency on JavaScript and no changes to the family/owner app.
+   Impeccable: committed visual hierarchy, contrast, real content first.
+   Emil Kowalski: intentional motion; never animate the performer or frequent UI.
+*/
+:root{
+  --stage-night:#0b0710;
+  --stage-velvet:#241222;
+  --stage-warm:#e2b99b;
+  --stage-ivory:#fff5eb;
+  --stage-mist:#d8c9c9;
+  --stage-ease:cubic-bezier(.23,1,.32,1);
+}
+html,body{background:var(--stage-night);color:var(--stage-ivory)}
+.grain{opacity:.01}
+.site-header{
+  background:linear-gradient(180deg,rgba(8,5,11,.95),rgba(8,5,11,.15));
+  border-bottom-color:transparent;
+  box-shadow:none;
+}
+.site-header.scrolled{
+  background:rgba(11,7,16,.96);
+  border-bottom:1px solid rgba(226,185,155,.19);
+  box-shadow:0 10px 32px rgba(0,0,0,.21);
+}
+.site-header:after{background:linear-gradient(90deg,transparent,rgba(226,185,155,.3),transparent)}
+.desktop-nav a{color:#f1e6df}
+.desktop-nav a:hover,.text-link span{color:var(--stage-warm)}
+.header-cta{border:1px solid rgba(226,185,155,.62);background:rgba(8,5,11,.19)}
+.header-cta:hover{background:var(--stage-ivory);color:var(--stage-night)}
+.hero-stage.hero-fullscreen{
+  background:radial-gradient(ellipse at 73% 38%,#2e1d2f 0%,#120b19 49%,#08060d 100%)!important;
+  isolation:isolate;
+}
+.hero-stage.hero-fullscreen:before{
+  background:
+   linear-gradient(90deg,rgba(9,6,13,.97) 0%,rgba(11,7,16,.83) 28%,rgba(12,7,17,.37) 50%,rgba(11,7,16,.02) 76%),
+   linear-gradient(180deg,rgba(9,6,13,.20),transparent 38%,rgba(9,6,13,.50) 100%);
+}
+.hero-stage.hero-fullscreen:after{
+  background:radial-gradient(ellipse 23% 40% at 79% 28%,rgba(218,163,132,.08),transparent 100%);
+}
+.hero-stage.hero-fullscreen .hero-film{
+  left:45%;
+  right:0;
+  top:0;
+  bottom:0;
+  width:55%;
+  height:100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:transparent;
+}
+.hero-stage.hero-fullscreen .hero-film video{
+  position:relative;
+  inset:auto;
+  display:block;
+  width:100%;
+  height:100%;
+  max-width:720px;
+  object-fit:contain!important;
+  object-position:50% 49%;
+  -webkit-mask-image:none!important;
+  mask-image:none!important;
+  background:transparent!important;
+  filter:none!important;
+  -webkit-filter:none!important;
+  box-shadow:none!important;
+}
+.hero-stage.hero-fullscreen .hero-copy{
+  width:min(830px,61%);
+  padding:178px clamp(24px,6vw,96px) 126px;
+}
+.hero-stage.hero-fullscreen .hero-copy h1{
+  max-width:10ch;
+  font-size:clamp(62px,7.1vw,112px);
+  line-height:.92;
+  letter-spacing:-.038em;
+  font-weight:600;
+  color:var(--stage-ivory);
+  text-shadow:0 12px 32px rgba(0,0,0,.35);
+}
+.hero-stage.hero-fullscreen .hero-signature{
+  color:var(--stage-warm);
+  font-size:clamp(23px,2.2vw,35px);
+  line-height:1.08;
+}
+.hero-stage.hero-fullscreen .hero-text{color:#e6d9d3;max-width:460px}
+.hero-stage.hero-fullscreen .hero-copy .kicker{
+  color:#f1d9c6;
+  font-size:10px;
+  letter-spacing:.12em;
+}
+.hero-stage.hero-fullscreen .primary-btn{
+  background:var(--stage-ivory)!important;
+  color:#160c17!important;
+  border:1px solid var(--stage-ivory)!important;
+  box-shadow:0 12px 30px rgba(0,0,0,.18)!important;
+  transition:transform 150ms var(--stage-ease),background-color 180ms ease,color 180ms ease;
+}
+.hero-stage.hero-fullscreen .primary-btn:active{transform:scale(.97)}
+.hero-stage.hero-fullscreen .primary-btn:hover{background:#e9c5ad!important}
+.hero-stage.hero-fullscreen .hero-foot{border-color:rgba(235,214,198,.19);color:#efe0d6}
+.hero-stage.hero-fullscreen .achievement-marquee{
+  top:112px;
+  left:clamp(22px,6vw,96px);
+  right:clamp(22px,6vw,96px);
+  min-height:44px;
+  border-radius:4px;
+  background:rgba(15,10,20,.78);
+  border:1px solid rgba(226,185,155,.28);
+  box-shadow:none;
+  -webkit-backdrop-filter:none;
+  backdrop-filter:none;
+  opacity:1!important;
+  transform:none!important;
+}
+.hero-stage.hero-fullscreen .achievement-kicker{color:#f4d7bd}
+.hero-stage.hero-fullscreen .achievement-note{color:#f3dfd4}
+.hero-stage.hero-fullscreen .achievement-medal em{color:#ecddd3}
+.hero-stage.hero-fullscreen .achievement-track{animation-duration:30s}
+.section-dark{background:linear-gradient(165deg,#0c0811,#1c0f20 78%,#100914)!important}
+.section-wine{background:linear-gradient(145deg,#1b0d1b,#301b2d 57%,#170b19)!important}
+.manifesto-band{background:linear-gradient(135deg,#100813,#301628 48%,#100914)!important}
+.section-light{background:linear-gradient(135deg,#f5eee8,#e9dcd5 58%,#f5eee7)!important}
+.section-blush{background:linear-gradient(135deg,#f2e7e1,#f3ece7 53%,#e9d9d4)!important}
+.section-dark h2 em,.section-wine h2 em{color:#edc4ae}
+.section-light h2 em,.section-blush h2 em{color:#9c5b67}
+.program-card,.film-card{background:#190f1d}
+.primary-btn:focus-visible,.site-header a:focus-visible,.menu-btn:focus-visible{
+  outline:3px solid #f5c8a8;
+  outline-offset:3px;
+}
+@media(max-width:980px){
+  .hero-stage.hero-fullscreen .hero-film{left:0;width:100%}
+  .hero-stage.hero-fullscreen .hero-copy{width:100%}
+  .hero-stage.hero-fullscreen:before{
+    background:linear-gradient(180deg,rgba(8,5,11,.28) 0%,rgba(8,5,11,.05) 40%,rgba(8,5,11,.58) 70%,rgba(8,5,11,.96) 100%);
+  }
+  .hero-stage.hero-fullscreen .achievement-marquee{top:88px;left:16px;right:16px}
+}
+@media(max-width:600px){
+  .hero-stage.hero-fullscreen{min-height:100svh}
+  .hero-stage.hero-fullscreen .hero-film{inset:0;width:100%;height:100%}
+  .hero-stage.hero-fullscreen .hero-film video{
+    width:100%;
+    height:100%;
+    object-fit:contain!important;
+    object-position:center 33%;
+  }
+  .hero-stage.hero-fullscreen:before{
+    background:
+      linear-gradient(180deg,rgba(8,5,11,.18) 0%,transparent 22%,transparent 49%,rgba(8,5,11,.48) 68%,rgba(8,5,11,.98) 97%),
+      linear-gradient(90deg,rgba(8,5,11,.14),transparent 40%,transparent 70%,rgba(8,5,11,.12));
+  }
+  .hero-stage.hero-fullscreen:after{background:none}
+  .hero-stage.hero-fullscreen .hero-copy{
+    padding:140px 18px 110px;
+    justify-content:flex-end;
+    min-height:100svh;
+  }
+  .hero-stage.hero-fullscreen .hero-copy h1{
+    font-size:clamp(43px,11.8vw,54px);
+    letter-spacing:-.029em;
+    line-height:1.01;
+    max-width:11ch;
+    margin:10px 0 10px;
+  }
+  .hero-stage.hero-fullscreen .hero-signature{font-size:19px;line-height:1.16;margin-bottom:10px}
+  .hero-stage.hero-fullscreen .hero-copy .kicker{font-size:10px;letter-spacing:.09em}
+  .hero-stage.hero-fullscreen .hero-copy .hero-actions{margin-top:12px}
+  .hero-stage.hero-fullscreen .hero-actions .primary-btn{font-size:12px;min-height:48px}
+  .hero-stage.hero-fullscreen .achievement-marquee{
+    top:86px;
+    left:12px;
+    right:12px;
+    min-height:40px;
+    border-radius:3px;
+    background:rgba(14,9,18,.86);
+  }
+  .hero-stage.hero-fullscreen .hero-foot{bottom:15px}
+  .programs .program-card{border-radius:4px}
+}
+@media(prefers-reduced-motion:reduce){
+  .hero-stage.hero-fullscreen .achievement-track{animation:none!important}
+  .hero-stage.hero-fullscreen .primary-btn{transition:none}
+}
