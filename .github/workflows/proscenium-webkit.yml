@@ -1,0 +1,45 @@
+name: BodyMind proscenium / authentic-media Safari preview
+on:
+  push:
+    branches: [bodymind-site-theatre-ux-proposal-20261116]
+    paths:
+      - 'site/templates/index.html'
+      - 'site/static/proscenium.css'
+      - 'qa/proscenium_webkit.py'
+      - '.github/workflows/proscenium-webkit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install website and Safari WebKit
+        run: |
+          python -m pip install -r site/requirements.txt playwright
+          python -m playwright install --with-deps webkit
+      - name: Start disposable local preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/bodymind-proscenium-preview
+          (cd site && SITE_DATA_DIR=/tmp/bodymind-proscenium-preview gunicorn --bind 127.0.0.1:8765 --workers 1 --threads 2 --timeout 75 app:app > /tmp/bodymind-proscenium.log 2>&1 &)
+          for i in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:8765/healthz >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8765/healthz
+      - name: Check layout, original media, navigation, first-frame CTA and capture complete pages
+        run: python qa/proscenium_webkit.py
+      - name: Keep authentic browser screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bodymind-proscenium-authentic-preview
+          path: evidence/proscenium/
+          retention-days: 7
