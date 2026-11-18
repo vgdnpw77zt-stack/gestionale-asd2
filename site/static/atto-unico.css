@@ -463,3 +463,11 @@ footer{display:grid;grid-template-columns:auto 1fr auto;gap:25px;align-items:cen
  .achievement-track{animation:none!important;transform:none!important}
 }
 @media(hover:none){.achievement-marquee:hover .achievement-track{animation-play-state:running}}
+
+/* Finishing QA: competition is a single intentional word, never an orphan N. */
+@media(max-width:600px){
+ .act-2 .act-body h3{font-size:clamp(28px,9.4vw,47px)!important;letter-spacing:-.072em!important;white-space:nowrap!important;overflow-wrap:normal!important}
+ .site-logo img{transform:scale(1.18);transform-origin:left center}
+}
+.skip-link{top:0;transform:translateY(-170%);transition:transform .15s var(--ease)}
+.skip-link:focus{transform:translateY(0)}
