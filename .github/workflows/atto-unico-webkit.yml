@@ -1,0 +1,45 @@
+name: BODYMIND Atto Unico — original media / WebKit approval preview
+on:
+  push:
+    branches: [bodymind-site-atto-unico-20261118]
+    paths:
+      - 'site/templates/index.html'
+      - 'site/static/atto-unico.css'
+      - 'qa/atto_unico_webkit.py'
+      - '.github/workflows/atto-unico-webkit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  safari-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install isolated test dependencies and WebKit
+        run: |
+          python -m pip install -r site/requirements.txt playwright
+          python -m playwright install --with-deps webkit
+      - name: Boot temporary Flask site without production data
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/bodymind-atto-unico-preview
+          (cd site && SITE_DATA_DIR=/tmp/bodymind-atto-unico-preview gunicorn --bind 127.0.0.1:8765 --workers 1 --threads 2 --timeout 75 app:app > /tmp/bodymind-atto-unico.log 2>&1 &)
+          for i in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:8765/healthz >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8765/healthz
+      - name: Check original film/photos and visual layout, capture iPhone and desktop
+        run: python qa/atto_unico_webkit.py
+      - name: Preserve screenshots including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bodymind-atto-unico-visual-proof
+          path: evidence/atto-unico/
+          retention-days: 7
