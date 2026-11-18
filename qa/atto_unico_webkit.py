@@ -57,6 +57,14 @@ async def test_one(browser,w,h,mobile):
   assert await page.locator(".location-card").count()>=2
   assert await page.locator(".contact-links a").count()>=2
   if mobile:
+    comp=await page.locator("#competition h3").evaluate("""e=>{
+      const cs=getComputedStyle(e);return {text:e.textContent.trim(),scroll:e.scrollWidth,client:e.clientWidth,
+      lineHeight:parseFloat(cs.lineHeight),height:e.getBoundingClientRect().height,whiteSpace:cs.whiteSpace}
+    }""")
+    assert comp["text"]=="COMPETITION",("Unexpected Competition copy",w)
+    assert comp["scroll"]<=comp["client"]+2,("Competition heading cropped horizontally",w,comp)
+    assert comp["height"]<=comp["lineHeight"]+3,("Competition heading wraps",w,comp)
+  if mobile:
     assert metrics["title"]["top"]>=0 and metrics["title"]["bottom"]<h-1,("Hero title not in first screen",w,metrics)
     assert metrics["cta"]["top"]>=0 and metrics["cta"]["bottom"]<=h+2,("Booking CTA outside first screen",w,metrics)
   before=await page.locator("[data-hero-video]").evaluate("(e)=>e.currentTime")
