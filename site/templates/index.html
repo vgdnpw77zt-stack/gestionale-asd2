@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0A1018">
+<meta name="theme-color" content="#110A12">
 <meta name="description" content="{{ c.seo.description }}">
 <meta name="robots" content="index,follow,max-image-preview:large">
 <link rel="canonical" href="https://bodymindaerialstudio.life/">
@@ -20,8 +20,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500;1,600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <title>{{ c.seo.title }}</title>
-<link rel="stylesheet" href="{{ url_for('static',filename='site.css') }}?v=v28-desktop-glass">
-<link rel="stylesheet" href="{{ url_for('static',filename='sunrise.css') }}?v=a351e-medal-slider-20261113">
+<link rel="stylesheet" href="{{ url_for('static',filename='atto-unico.css') }}?v=20261118-1">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"SportsActivityLocation","name":"BodyMind Aerial Studio","url":"https://bodymindaerialstudio.life/","address":{"@type":"PostalAddress","addressLocality":"Aprilia","addressRegion":"LT","addressCountry":"IT"},"sameAs":["https://www.instagram.com/bodymind.aerialstudio/"]}</script>
 </head>
 <body>
@@ -44,233 +43,229 @@
 <main id="main-content">
 <div id="top"></div>
 
-<section class="hero-stage hero-fullscreen">
-<div class="achievement-marquee reveal" aria-label="Risultati BodyMind: 4 medaglie d’oro, 3 d’argento e 3 di bronzo">
-  <div class="achievement-window">
-    <div class="achievement-track">
-      <div class="achievement-set">
-        <span class="achievement-kicker">BODYMIND · COMPETITION</span>
-        <span class="achievement-medal gold"><i aria-hidden="true">🥇</i><strong>4</strong><em>ORI</em></span>
-        <span class="achievement-dot" aria-hidden="true"></span>
-        <span class="achievement-medal silver"><i aria-hidden="true">🥈</i><strong>3</strong><em>ARGENTI</em></span>
-        <span class="achievement-dot" aria-hidden="true"></span>
-        <span class="achievement-medal bronze"><i aria-hidden="true">🥉</i><strong>3</strong><em>BRONZI</em></span>
-        <span class="achievement-note">10 podi · tecnica, presenza, crescita</span>
-      </div>
-      <div class="achievement-set" aria-hidden="true">
-        <span class="achievement-kicker">BODYMIND · COMPETITION</span>
-        <span class="achievement-medal gold"><i>🥇</i><strong>4</strong><em>ORI</em></span>
-        <span class="achievement-dot"></span>
-        <span class="achievement-medal silver"><i>🥈</i><strong>3</strong><em>ARGENTI</em></span>
-        <span class="achievement-dot"></span>
-        <span class="achievement-medal bronze"><i>🥉</i><strong>3</strong><em>BRONZI</em></span>
-        <span class="achievement-note">10 podi · tecnica, presenza, crescita</span>
-      </div>
-    </div>
-  </div>
-</div>
-<div class="hero-light hero-light-a" aria-hidden="true"></div>
-<div class="hero-light hero-light-b" aria-hidden="true"></div>
-<div class="hero-copy">
-<p class="kicker reveal">BODYMIND AERIAL STUDIO · APRILIA</p>
-<h1 class="reveal">{{ c.hero.title }}</h1>
-<p class="hero-signature reveal">Danza aerea · performing arts · presenza</p>
-<p class="hero-text reveal">{{ c.hero.text }}</p>
-<div class="hero-actions reveal">
-<a class="primary-btn" href="#contatti">{{ c.hero.cta }}</a>
-<a class="text-link" href="#percorsi">Scopri i percorsi <span>↓</span></a>
-</div>
-</div>
-
-<div class="hero-film reveal">
-<div class="film-outline" aria-hidden="true"></div>
-<video autoplay muted loop playsinline preload="auto" poster="/seed-media/gallery5?v=9" data-hero-video>
-<source src="{{ c.hero.video_file or url_for('static',filename='media/bodymind-performing-hero.mp4') }}" type="video/mp4">
-</video>
-<div class="film-shade"></div>
-<button class="native-play" type="button" data-native-play hidden aria-label="Avvia il video">▶</button>
-<div class="film-caption"><strong>BodyMind</strong><span>Live movement · Aprilia</span></div>
-</div>
-
-<div class="hero-foot reveal">
-<span>Tessuti</span><span>Cerchio</span><span>Kids & Junior</span><span>Performance</span>
-</div>
+<!-- OPENING SCENE: unchanged original moving film and intact achievements -->
+<section class="hero-stage hero-fullscreen" aria-labelledby="main-title">
+ <div class="hero-film" aria-label="Film originale BodyMind">
+   <video autoplay muted loop playsinline preload="auto" poster="/seed-media/gallery5?v=9" data-hero-video>
+     <source src="{{ c.hero.video_file or url_for('static',filename='media/bodymind-performing-hero.mp4') }}" type="video/mp4">
+   </video>
+   <button class="native-play" type="button" data-native-play hidden aria-label="Avvia il video">▶</button>
+ </div>
+ <div class="scene-curtain" aria-hidden="true"></div>
+ <div class="scene-edition" aria-hidden="true"><span>BODYMIND</span><span>AERIAL / APRILIA</span></div>
+ <div class="achievement-marquee" aria-label="Risultati BodyMind: 4 medaglie d’oro, 3 d’argento e 3 di bronzo">
+  <div class="achievement-window"><div class="achievement-track">
+   <div class="achievement-set">
+     <span class="achievement-kicker">BODYMIND · COMPETITION</span>
+     <span class="achievement-medal gold"><i aria-hidden="true">🥇</i><strong>4</strong><em>ORI</em></span>
+     <span class="achievement-dot" aria-hidden="true"></span>
+     <span class="achievement-medal silver"><i aria-hidden="true">🥈</i><strong>3</strong><em>ARGENTI</em></span>
+     <span class="achievement-dot" aria-hidden="true"></span>
+     <span class="achievement-medal bronze"><i aria-hidden="true">🥉</i><strong>3</strong><em>BRONZI</em></span>
+     <span class="achievement-note">10 podi · tecnica, presenza, crescita</span>
+   </div>
+   <div class="achievement-set" aria-hidden="true">
+     <span class="achievement-kicker">BODYMIND · COMPETITION</span>
+     <span class="achievement-medal gold"><i>🥇</i><strong>4</strong><em>ORI</em></span>
+     <span class="achievement-dot" aria-hidden="true"></span>
+     <span class="achievement-medal silver"><i>🥈</i><strong>3</strong><em>ARGENTI</em></span>
+     <span class="achievement-dot" aria-hidden="true"></span>
+     <span class="achievement-medal bronze"><i>🥉</i><strong>3</strong><em>BRONZI</em></span>
+     <span class="achievement-note">10 podi · tecnica, presenza, crescita</span>
+   </div>
+  </div></div>
+ </div>
+ <div class="hero-copy">
+   <p class="kicker">DANZA AEREA · APRILIA</p>
+   <h1 id="main-title">{% if c.hero.title == 'Il corpo sale. La mente si libera.' %}<span class="title-sans">Il corpo sale.</span><em class="title-serif">La mente<br>si libera.</em>{% else %}{{ c.hero.title }}{% endif %}</h1>
+   <p class="hero-signature">Dove la tecnica diventa emozione.</p>
+   <p class="hero-text">{{ c.hero.text }}</p>
+   <div class="hero-actions">
+     <a class="primary-btn" href="#contatti">{{ c.hero.cta }} <span aria-hidden="true">↗</span></a>
+     <a class="text-link" href="#percorsi">Entra in scena <span aria-hidden="true">↓</span></a>
+   </div>
+ </div>
+ <div class="hero-foot"><span>01 / ENTRARE IN SCENA</span><span>SCOPRI BODYMIND <b aria-hidden="true">↓</b></span></div>
 </section>
 
-<section class="editorial-intro section-light">
-<div class="intro-left reveal">
-<p class="section-label">IL NOSTRO LINGUAGGIO</p>
-<h2>Il corpo impara.<br><em>La mente si apre.</em></h2>
-</div>
-<div class="intro-right reveal">
-<p>{{ c.about.text }}</p>
-<div class="pill-row"><span>Tecnica</span><span>Forza</span><span>Fluidità</span><span>Espressione</span></div>
-</div>
+<!-- PACE: section transition that feels like a theatre program, not cards -->
+<nav class="acts-index" aria-label="Esplora i percorsi">
+ <span class="acts-index-label">SCEGLI IL TUO PERCORSO</span>
+ <div class="acts-index-links">
+   <a href="#training"><b>01</b> Training</a>
+   <a href="#competition"><b>02</b> Competition</a>
+   <a href="#show"><b>03</b> Show</a>
+   <a href="#kids"><b>04</b> Kids &amp; Junior</a>
+ </div>
+</nav>
+
+<section class="editorial-intro" aria-labelledby="essence-title">
+ <div class="intro-mark"><span>BODY</span><span>MIND</span><span class="intro-plus">+</span></div>
+ <div class="intro-text">
+   <p class="eyebrow">L’ESSENZA / BODYMIND</p>
+   <h2 id="essence-title">Non solo<br><em>un movimento.</em><br>Una sensazione.</h2>
+   <p>{{ c.about.text }}</p>
+   <a class="ink-link" href="#percorsi">Scopri i nostri percorsi <span aria-hidden="true">↗</span></a>
+ </div>
 </section>
 
-<section id="percorsi" class="programs section-dark">
-<div class="section-heading reveal">
-<p class="section-label">PERCORSI</p>
-<h2>Tre modi di entrare<br><em>nel movimento.</em></h2>
-</div>
+<section id="percorsi" class="chapter-intro">
+ <div class="chapter-intro-top"><span>CAPITOLO 01</span><span>TECNICA / GARA / SCENA</span></div>
+ <h2>Tre modi di<br><em>vivere l'aria.</em></h2>
+ <p>Ogni percorso ha il proprio ritmo. Tutti parlano lo stesso linguaggio: BodyMind.</p>
+</section>
+
+<!-- ORIGINAL course photography from SAME three gallery entries; no substitutions -->
 {% set program_images = [c.visuals.gallery[0], c.visuals.gallery[4], c.visuals.gallery[5]] %}
-{% set program_eyebrows = ['ALLENAMENTO', 'GARA', 'SPETTACOLO'] %}
-<div class="program-grid">
+{% set program_eyebrows = ['IL LAVORO', 'LA PRECISIONE', 'LA SCENA'] %}
 {% for item in c.courses %}
-<article class="program-card p{{ loop.index }} reveal">
-{% if c.videos|length > loop.index0 and c.videos[loop.index0].url %}<a class="program-image program-image-link" style="--program-bg:url('{{ program_images[loop.index0] }}')" href="{{ c.videos[loop.index0].url }}" target="_blank" rel="noopener" aria-label="Guarda {{ item.title }} BodyMind"><img src="{{ program_images[loop.index0] }}" alt="{{ item.title }} BodyMind" loading="lazy"></a>{% else %}<div class="program-image" style="--program-bg:url('{{ program_images[loop.index0] }}')"><img src="{{ program_images[loop.index0] }}" alt="{{ item.title }} BodyMind" loading="lazy"></div>{% endif %}
-<div class="program-overlay"></div>
-<div class="program-content">
-<p class="program-eyebrow">{{ program_eyebrows[loop.index0] }}</p>
-<h3>{{ item.title }}</h3>
-<p>{{ item.text }}</p>
-{% if loop.index == 2 %}
-<a class="competition-palmares" href="{{ c.videos[loop.index0].url }}" target="_blank" rel="noopener" aria-label="Palmarès BodyMind Competition: 10 podi, 4 ori, 3 argenti, 3 bronzi. Guarda il reel">
-  <span class="palmares-kicker">PALMARÈS · 10 PODI</span>
-  <span class="palmares-medals"><b>🥇 4</b><b>🥈 3</b><b>🥉 3</b></span>
-  <span class="palmares-link">Guarda il reel ↗</span>
-</a>
-{% endif %}
-<div class="program-links">
-{% if c.videos|length > loop.index0 and c.videos[loop.index0].url %}<a href="{{ c.videos[loop.index0].url }}" target="_blank" rel="noopener">Vedi in movimento ↗</a>{% endif %}
-<a href="#sedi">Sedi e orari</a>
-</div>
-</div>
-</article>
+<section id="{{ ['training','competition','show'][loop.index0] }}" class="act act-{{ loop.index }}" aria-labelledby="act-title-{{loop.index}}">
+ <div class="act-image-wrap">
+   {% if c.videos|length > loop.index0 and c.videos[loop.index0].url %}<a class="act-image-link" href="{{ c.videos[loop.index0].url }}" target="_blank" rel="noopener" aria-label="Guarda il percorso {{ item.title }} BodyMind">{% else %}<div class="act-image-link">{% endif %}
+     <img class="act-image" src="{{ program_images[loop.index0] }}" loading="lazy" decoding="async" alt="{{ item.title }} BodyMind — fotografia originale">
+   {% if c.videos|length > loop.index0 and c.videos[loop.index0].url %}</a>{% else %}</div>{% endif %}
+   <span class="act-edge" aria-hidden="true">{{ '%02d'|format(loop.index) }}</span>
+ </div>
+ <div class="act-body">
+   <div class="act-eyebrow"><span>ATTO {{ '%02d'|format(loop.index) }}</span><span>{{ program_eyebrows[loop.index0] }}</span></div>
+   <h3 id="act-title-{{ loop.index }}">{{ item.title }}</h3>
+   <p>{{ item.text }}</p>
+   {% if loop.index == 2 %}
+     <div class="competition-palmares" aria-label="Risultati agonistici BodyMind: 10 podi, 4 ori, 3 argenti, 3 bronzi">
+       <span>IL PALMARÈS</span><strong>10<small>PODI</small></strong>
+       <p>4 ori <span>·</span> 3 argenti <span>·</span> 3 bronzi</p>
+     </div>
+   {% endif %}
+   <div class="act-links">
+     {% if c.videos|length > loop.index0 and c.videos[loop.index0].url %}<a class="act-play" href="{{ c.videos[loop.index0].url }}" target="_blank" rel="noopener">Guarda in movimento <span aria-hidden="true">↗</span></a>{% endif %}
+     <a class="act-join" href="#contatti">Vieni a provare <span aria-hidden="true">↗</span></a>
+   </div>
+ </div>
+</section>
 {% endfor %}
-</div>
+
+<section class="manifesto-band" aria-label="Il nostro manifesto">
+ <span class="manifesto-pre">UN CORPO. INFINITE POSSIBILITÀ.</span>
+ <p>Forza senza rigidità.<br><em>Tecnica senza paura.</em><br>Espressione senza filtri.</p>
+ <span class="manifesto-line" aria-hidden="true"></span>
 </section>
 
-<section id="kids" class="kids-focus section-blush">
-{% if c.kids and c.kids.video_file %}
-<div class="kids-image kids-reel-native reveal" data-kids-video-shell>
-  <video muted loop playsinline preload="metadata" data-kids-video aria-label="Kids & Junior BodyMind">
-    <source src="{{ c.kids.video_file }}" type="video/mp4">
-  </video>
-  <div class="kids-video-shade" aria-hidden="true"></div>
-  <div class="kids-video-ui" aria-hidden="true">
-    <span>KIDS &amp; JUNIOR</span>
-    <small><i></i> IN MOVIMENTO</small>
+<!-- KIDS: keep native video where available; original fallback otherwise -->
+<section id="kids" class="kids-focus">
+ <div class="kids-copy">
+  <span class="eyebrow">UN MONDO PER CRESCERE / 04</span>
+  <h2>Piccoli gesti.<br><em>Grandi voli.</em></h2>
+  <p>Coordinazione, fiducia, tecnica e creatività. Un percorso pensato per le più giovani, con progressioni adatte all’età e al livello.</p>
+  {% if c.venues|length > 1 %}
+  <div class="kids-venue">
+    <strong>{{ c.venues[1].name }}</strong>
+    <span>{{ c.venues[1].days }} · {{ c.venues[1].address }}</span>
+    {% if c.venues[1].kids_time %}<span>Kids {{ c.venues[1].kids_time }}</span>{% elif c.venues[1].time %}<span>{{ c.venues[1].time }}</span>{% endif %}
   </div>
-</div>
-{% else %}
-<div class="kids-image kids-visual-fallback reveal" aria-label="Kids & Junior BodyMind">
-  <span class="kids-fallback-ring" aria-hidden="true"></span>
-  <span class="kids-fallback-line" aria-hidden="true"></span>
-  <div class="kids-fallback-copy"><small>BODYMIND AERIAL STUDIO</small><strong>KIDS<br>&amp; JUNIOR</strong></div>
-</div>
-{% endif %}
-<div class="kids-copy reveal">
-<p class="section-label">KIDS & JUNIOR</p>
-<h2>Crescere<br><em>in aria.</em></h2>
-<p>Coordinazione, fiducia, tecnica e creatività. Un percorso pensato per le più giovani, con progressioni adatte all’età e al livello.</p>
-{% if c.venues|length > 1 %}
-<div class="kids-venue">
-<strong>{{ c.venues[1].name }}</strong>
-<span>{{ c.venues[1].address }}</span>
-<span>{{ c.venues[1].days }}</span>
-{% if c.venues[1].kids_time %}<span class="kids-time-line"><b>Kids</b> {{ c.venues[1].kids_time }}</span>{% elif c.venues[1].time %}<span>{{ c.venues[1].time }}</span>{% endif %}
-</div>
-{% endif %}
-<div class="kids-actions">
-{% if c.kids and c.kids.reel_url %}<a class="dark-btn" href="{{ c.kids.reel_url }}" target="_blank" rel="noopener">Guarda Kids & Junior ↗</a>{% endif %}
-<a class="dark-link" href="#contatti">Chiedi una prova</a>
-</div>
-</div>
+  {% endif %}
+  <div class="kids-actions">
+    {% if c.kids and c.kids.reel_url %}<a class="dark-btn" href="{{ c.kids.reel_url }}" target="_blank" rel="noopener">Guarda Kids & Junior ↗</a>{% endif %}
+    <a class="dark-link" href="#contatti">Chiedi una prova ↗</a>
+  </div>
+ </div>
+ {% if c.kids and c.kids.video_file %}
+ <div class="kids-image kids-reel-native" data-kids-video-shell>
+   <video muted loop playsinline preload="metadata" data-kids-video aria-label="Video originale Kids & Junior BodyMind"><source src="{{ c.kids.video_file }}" type="video/mp4"></video>
+   <div class="kids-video-ui"><span>KIDS &amp; JUNIOR</span><small>IN MOVIMENTO</small></div>
+ </div>
+ {% else %}
+ <div class="kids-image kids-visual-fallback" aria-label="Kids & Junior BodyMind — illustrazione originale">
+   <span class="kids-fallback-ring" aria-hidden="true"></span>
+   <span class="kids-fallback-line" aria-hidden="true"></span>
+   <div class="kids-fallback-copy"><small>BODYMIND AERIAL STUDIO</small><strong>KIDS<br>&amp; JUNIOR</strong></div>
+ </div>
+ {% endif %}
 </section>
 
-<section id="movimento" class="movement section-wine">
-<div class="movement-head reveal">
-<p class="section-label">BODYMIND IN MOVIMENTO</p>
-<h2>La scena non si spiega.<br><em>Si guarda.</em></h2>
-<p class="movement-invite reveal">Clicca e dai un’occhiata dentro BodyMind.</p>
-</div>
-<div class="film-grid film-grid-single">
-{% if c.videos|length > 3 and c.videos[3].url %}
-{% set video = c.videos[3] %}
-<a class="film-card reveal" href="{{ video.url }}" target="_blank" rel="noopener">
-<div class="film-card-art art4" aria-hidden="true"><span class="art-ring"></span><span class="art-line"></span><span class="art-glow"></span></div>
-<div class="film-card-gradient"></div>
-<div class="film-card-copy"><small>BODYMIND FILM</small><h3>{{ video.title }}</h3><p>{{ video.subtitle }}</p><span>Guarda ↗</span></div>
-</a>
-{% endif %}
-</div>
+<section id="movimento" class="movement">
+ <div class="movement-head">
+  <span class="eyebrow">FUORI DALLA CARTA / DENTRO LA SCENA</span>
+  <h2>La scena non<br>si spiega.<br><em>Si guarda.</em></h2>
+  <p>Un frammento di BodyMind. Non una promessa, ma il movimento reale.</p>
+ </div>
+ <div class="film-grid film-grid-single">
+ {% if c.videos|length > 3 and c.videos[3].url %}
+ {% set video = c.videos[3] %}
+ <a class="film-card" href="{{ video.url }}" target="_blank" rel="noopener" aria-label="Guarda {{ video.title }}">
+  <span class="film-card-art art4" aria-hidden="true"><span class="art-ring"></span><span class="art-line"></span><span class="art-glow"></span></span>
+  <span class="film-card-gradient"></span>
+  <span class="film-card-copy"><small>BODYMIND / THE FILM</small><strong>{{ video.title }}</strong><span>{{ video.subtitle }}</span><b>GUARDA IL REEL ↗</b></span>
+ </a>
+ {% endif %}
+ </div>
 </section>
 
-<section class="manifesto-band">
-<p class="reveal">Forza senza rigidità.<br><em>Tecnica senza paura.</em><br>Espressione senza filtri.</p>
+<section class="method" aria-labelledby="method-title">
+ <div class="method-title">
+   <span class="eyebrow">IL METODO BODYMIND</span>
+   <h2 id="method-title">Allenare il gesto.<br><em>Costruire presenza.</em></h2>
+ </div>
+ <div class="method-grid">
+  <article><span>01 / TECNICA</span><h3>Precisione</h3><p>Fondamenta chiare, progressioni e controllo dell’attrezzo.</p></article>
+  <article><span>02 / FORZA</span><h3>Preparazione</h3><p>Condizionamento fisico funzionale al movimento e alla sicurezza.</p></article>
+  <article><span>03 / ESPRESSIONE</span><h3>Qualità</h3><p>Fluidità, musicalità e presenza scenica.</p></article>
+  <article><span>04 / CRESCITA</span><h3>Consapevolezza</h3><p>Fiducia, ascolto, autonomia e rapporto con il proprio corpo.</p></article>
+ </div>
 </section>
 
-<section id="sedi" class="locations section-light">
-<div class="locations-head reveal">
-<p class="section-label">SEDI E ORARI</p>
-<h2>Aprilia.<br><em>Due spazi, un metodo.</em></h2>
-<p>Consulta la sede del tuo gruppo. Giorni e orari vengono aggiornati direttamente da BodyMind.</p>
-</div>
-<div class="location-grid">
-{% for venue in c.venues %}
-{% if venue.name %}
-<article class="location-card reveal">
-<div class="location-top"><div><small>BODYMIND · APRILIA</small><h3>{{ venue.name }}</h3></div><a href="{{ maps_url(venue.address) }}" target="_blank" rel="noopener">Apri mappa ↗</a></div>
-<p class="address">{{ venue.address }}</p>
-{% if not (venue.kids_time or venue.adult_time) %}<p class="course-name">{{ venue.course }}</p>{% endif %}
-{% if venue.kids_time or venue.adult_time %}
-<div class="schedule-stack">
-  <div class="schedule-row schedule-days"><span>{{ venue.days }}</span><strong>Orari</strong></div>
-  {% if venue.kids_time %}<div class="schedule-row schedule-detail"><span>Kids</span><strong>{{ venue.kids_time }}</strong></div>{% endif %}
-  {% if venue.adult_time %}<div class="schedule-row schedule-detail"><span>Adult</span><strong>{{ venue.adult_time }}</strong></div>{% endif %}
-</div>
-{% else %}
-<div class="schedule-row"><span>{{ venue.days }}</span>{% if venue.time %}<strong>{{ venue.time }}</strong>{% endif %}</div>
-{% endif %}
-{% if venue.note %}<p class="note">{{ venue.note }}</p>{% endif %}
-</article>
-{% endif %}
-{% endfor %}
-</div>
-</section>
-
-<section class="method section-wine">
-<div class="method-title reveal">
-<p class="section-label">IL METODO BODYMIND</p>
-<h2>Allenare il gesto.<br><em>Costruire presenza.</em></h2>
-</div>
-<div class="method-grid">
-<article class="reveal"><span>TECNICA</span><h3>Precisione</h3><p>Fondamenta chiare, progressioni e controllo dell’attrezzo.</p></article>
-<article class="reveal"><span>FORZA</span><h3>Preparazione</h3><p>Condizionamento fisico funzionale al movimento e alla sicurezza.</p></article>
-<article class="reveal"><span>ESPRESSIONE</span><h3>Qualità</h3><p>Fluidità, musicalità e presenza scenica.</p></article>
-<article class="reveal"><span>CRESCITA</span><h3>Consapevolezza</h3><p>Fiducia, ascolto, autonomia e rapporto con il proprio corpo.</p></article>
-</div>
+<section id="sedi" class="locations">
+ <div class="locations-head">
+  <span class="eyebrow">ORARI / INFORMAZIONI</span>
+  <h2>Ci vediamo<br><em>in aria.</em></h2>
+  <p>Due spazi ad Aprilia. Giorni e orari aggiornati direttamente da BodyMind.</p>
+ </div>
+ <div class="location-grid">
+ {% for venue in c.venues %}{% if venue.name %}
+  <article class="location-card">
+   <div class="location-top"><span>0{{ loop.index }} / APRILIA</span><h3>{{ venue.name }}</h3></div>
+   <p class="address">{{ venue.address }}</p>
+   {% if not (venue.kids_time or venue.adult_time) %}<p class="course-name">{{ venue.course }}</p>{% endif %}
+   <div class="schedule">
+    <span>{{ venue.days }}</span>
+    {% if venue.kids_time or venue.adult_time %}
+      {% if venue.kids_time %}<div><span>Kids</span><strong>{{ venue.kids_time }}</strong></div>{% endif %}
+      {% if venue.adult_time %}<div><span>Adult</span><strong>{{ venue.adult_time }}</strong></div>{% endif %}
+    {% elif venue.time %}<strong>{{ venue.time }}</strong>{% endif %}
+   </div>
+   {% if venue.note %}<p class="note">{{ venue.note }}</p>{% endif %}
+   <a class="map-link" href="{{ maps_url(venue.address) }}" target="_blank" rel="noopener">Apri la mappa ↗</a>
+  </article>
+ {% endif %}{% endfor %}
+ </div>
 </section>
 
 <section id="contatti" class="contact-stage">
-<div class="contact-aura" aria-hidden="true"></div>
-<p class="section-label reveal">INIZIA DA QUI</p>
-<h2 class="reveal">Vieni a<br><em>volare.</em></h2>
-<div class="contact-layout">
-<p class="contact-copy reveal">Scrivici per una prova o per capire quale percorso è più adatto. Ti aiutiamo a scegliere sede, gruppo e livello.</p>
-<div class="contact-links reveal">
-{% set ig=c.contact.instagram or '@bodymind.aerialstudio' %}
-<a href="{{ ig if ig.startswith('http') else 'https://www.instagram.com/' + ig|replace('@','')|replace('/','') + '/' }}" target="_blank" rel="noopener"><small>Instagram</small><strong>{{ ig }}</strong><span>↗</span></a>
-{% if c.contact.whatsapp %}<a href="https://wa.me/{{ c.contact.whatsapp|replace(' ','')|replace('+','') }}" target="_blank" rel="noopener"><small>WhatsApp</small><strong>{{ c.contact.whatsapp }}</strong><span>↗</span></a>{% endif %}
-{% if c.contact.phone %}<a href="tel:{{ c.contact.phone|replace(' ','') }}"><small>Telefono</small><strong>{{ c.contact.phone }}</strong><span>↗</span></a>{% endif %}
-{% if c.contact.email %}<a href="mailto:{{ c.contact.email }}"><small>Email</small><strong>{{ c.contact.email }}</strong><span>↗</span></a>{% endif %}
-<a href="{{ c.links.family }}"><small>Già con noi?</small><strong>Area Famiglie</strong><span>↗</span></a>
-</div>
-</div>
+ <div class="contact-aura" aria-hidden="true"></div>
+ <span class="eyebrow">L'INIZIO È UN GESTO</span>
+ <h2>Vieni a<br><em>volare.</em></h2>
+ <div class="contact-layout">
+  <p class="contact-copy">Scrivici per una prova o per capire quale percorso è più adatto. Ti aiutiamo a scegliere sede, gruppo e livello.</p>
+  <div class="contact-links">
+   {% set ig=c.contact.instagram or '@bodymind.aerialstudio' %}
+   <a href="{{ ig if ig.startswith('http') else 'https://www.instagram.com/' + ig|replace('@','')|replace('/','') + '/' }}" target="_blank" rel="noopener"><small>INSTAGRAM</small><strong>{{ ig }}</strong><span>↗</span></a>
+   {% if c.contact.whatsapp %}<a href="https://wa.me/{{ c.contact.whatsapp|replace(' ','')|replace('+','') }}" target="_blank" rel="noopener"><small>WHATSAPP</small><strong>{{ c.contact.whatsapp }}</strong><span>↗</span></a>{% endif %}
+   {% if c.contact.phone %}<a href="tel:{{ c.contact.phone|replace(' ','') }}"><small>TELEFONO</small><strong>{{ c.contact.phone }}</strong><span>↗</span></a>{% endif %}
+   {% if c.contact.email %}<a href="mailto:{{ c.contact.email }}"><small>EMAIL</small><strong>{{ c.contact.email }}</strong><span>↗</span></a>{% endif %}
+   <a href="{{ c.links.family }}"><small>GIÀ CON NOI?</small><strong>Area Famiglie</strong><span>↗</span></a>
+  </div>
+ </div>
 </section>
 </main>
 
 <div class="mobile-action-dock" aria-label="Azioni rapide">
-  <a class="mobile-action primary" href="#contatti">Prenota prova</a>
-  <a class="mobile-action secondary" href="https://www.instagram.com/bodymind.aerialstudio/" target="_blank" rel="noopener">Instagram ↗</a>
+ <a class="mobile-action primary" href="#contatti">Prenota prova</a>
+ <a class="mobile-action secondary" href="https://www.instagram.com/bodymind.aerialstudio/" target="_blank" rel="noopener">Instagram ↗</a>
 </div>
-
 <footer>
-<a class="footer-logo" href="#top"><img src="{{ c.visuals.logo }}" onerror="this.onerror=null;this.src='https://bodymindaerialstudio.life/seed-media/logo?v=9';" alt="BodyMind Aerial Studio"></a>
-<div class="footer-meta"><span>BodyMind Aerial Studio ASD</span><span>Aprilia (LT)</span></div>
-<div class="footer-links"><a href="{{ c.links.family }}">Area Famiglie</a><a href="https://www.instagram.com/bodymind.aerialstudio/" target="_blank" rel="noopener">Instagram</a></div>
-<div class="footer-visits" aria-label="Visitatori unici del sito"><span>VISITE UNICHE</span><strong>{{ "{:,}".format(visits|int).replace(",", ".") }}</strong></div>
+ <a class="footer-logo" href="#top"><img src="{{ c.visuals.logo }}" onerror="this.onerror=null;this.src='https://bodymindaerialstudio.life/seed-media/logo?v=9';" alt="BodyMind Aerial Studio"></a>
+ <div class="footer-meta"><span>BodyMind Aerial Studio ASD</span><span>Aprilia (LT)</span></div>
+ <div class="footer-links"><a href="{{ c.links.family }}">Area Famiglie</a><a href="https://www.instagram.com/bodymind.aerialstudio/" target="_blank" rel="noopener">Instagram</a></div>
+ <div class="footer-visits" aria-label="Visitatori unici del sito"><span>VISITE UNICHE</span><strong>{{ "{:,}".format(visits|int).replace(",", ".") }}</strong></div>
 </footer>
 
 <script>window.BODYMIND_ANALYTICS_SESSION={{ analytics_session|tojson }};</script>
