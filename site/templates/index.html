@@ -100,7 +100,9 @@
 </nav>
 
 <section class="editorial-intro" aria-labelledby="essence-title">
- <div class="intro-mark"><span>BODY</span><span>MIND</span><span class="intro-plus">+</span></div>
+ <div class="intro-mark">
+   <img class="intro-brand-logo" src="{{ c.visuals.logo }}" onerror="this.onerror=null;this.src='https://bodymindaerialstudio.life/seed-media/logo?v=9';" alt="BodyMind Aerial Studio — logo ufficiale" loading="lazy" decoding="async">
+ </div>
  <div class="intro-text">
    <p class="eyebrow">L’ESSENZA / BODYMIND</p>
    <h2 id="essence-title">Non solo<br><em>un movimento.</em><br>Una sensazione.</h2>
@@ -174,9 +176,9 @@
    <div class="kids-video-ui"><span>KIDS &amp; JUNIOR</span><small>IN MOVIMENTO</small></div>
  </div>
  {% else %}
- <div class="kids-image kids-visual-fallback" aria-label="Kids & Junior BodyMind — illustrazione originale">
-   <span class="kids-fallback-ring" aria-hidden="true"></span>
-   <span class="kids-fallback-line" aria-hidden="true"></span>
+ <div class="kids-image kids-photo-stage">
+   <img src="{{ c.visuals.gallery[1] }}" alt="Una fotografia originale BodyMind Aerial Studio" loading="lazy" decoding="async">
+   <div class="kids-photo-shade" aria-hidden="true"></div>
    <div class="kids-fallback-copy"><small>BODYMIND AERIAL STUDIO</small><strong>KIDS<br>&amp; JUNIOR</strong></div>
  </div>
  {% endif %}
@@ -192,7 +194,7 @@
  {% if c.videos|length > 3 and c.videos[3].url %}
  {% set video = c.videos[3] %}
  <a class="film-card" href="{{ video.url }}" target="_blank" rel="noopener" aria-label="Guarda {{ video.title }}">
-  <span class="film-card-art art4" aria-hidden="true"><span class="art-ring"></span><span class="art-line"></span><span class="art-glow"></span></span>
+  <img class="film-card-photo" src="{{ c.visuals.gallery[2] }}" alt="Fotografia originale BodyMind Aerial Studio" loading="lazy" decoding="async">
   <span class="film-card-gradient"></span>
   <span class="film-card-copy"><small>BODYMIND / THE FILM</small><strong>{{ video.title }}</strong><span>{{ video.subtitle }}</span><b>GUARDA IL REEL ↗</b></span>
  </a>
