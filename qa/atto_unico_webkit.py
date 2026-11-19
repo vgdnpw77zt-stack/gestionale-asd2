@@ -85,10 +85,15 @@ async def test_one(browser,w,h,mobile):
     await page.wait_for_timeout(350)
     images=await page.locator(".act-image").evaluate_all("(es)=>es.map(e=>({ok:e.complete&&e.naturalWidth>0,src:e.currentSrc}))")
     assert len(images)==3 and all(x["ok"] for x in images),("Original photographs unavailable",w,images)
+    assets=await page.locator(".intro-brand-logo,.kids-photo-stage>img,.film-card-photo").evaluate_all(
+      "(els)=>els.map(e=>({loaded:e.complete&&e.naturalWidth>0,src:e.getAttribute('src')}))")
+    assert len(assets)==3 and all(e["loaded"] for e in assets),("Brand logo or original gallery reused failed to load",w,assets)
+    assert "/seed-media" in assets[0]["src"],("Brand logo not original CMS asset",w,assets)
+    assert "/seed-media/gallery" in assets[1]["src"] and "/seed-media/gallery" in assets[2]["src"],("New photos not existing gallery media",w,assets)
     await page.screenshot(path=str(OUT/f"home-completa-{w}x{h}.jpg"),
       full_page=True,type="jpeg",quality=82,animations="disabled")
     if w==390:
-      for key,sel in [("training","#training"),("competition","#competition"),("show","#show"),("kids","#kids"),("metodo",".method"),("contatti","#contatti")]:
+      for key,sel in [("brand",".editorial-intro"),("training","#training"),("competition","#competition"),("show","#show"),("kids","#kids"),("movimento","#movimento"),("metodo",".method"),("contatti","#contatti")]:
         await page.locator(sel).scroll_into_view_if_needed()
         await page.wait_for_timeout(150)
         await page.locator(sel).screenshot(path=str(OUT/f"section-{key}-390.png"),animations="disabled")
