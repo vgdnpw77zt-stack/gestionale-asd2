@@ -158,13 +158,22 @@
   <span class="eyebrow">UN MONDO PER CRESCERE / 04</span>
   <h2>Piccoli gesti.<br><em>Grandi voli.</em></h2>
   <p>Coordinazione, fiducia, tecnica e creatività. Un percorso pensato per le più giovani, con progressioni adatte all’età e al livello.</p>
-  {% if c.venues|length > 1 %}
-  <div class="kids-venue">
-    <strong>{{ c.venues[1].name }}</strong>
-    <span>{{ c.venues[1].days }} · {{ c.venues[1].address }}</span>
-    {% if c.venues[1].kids_time %}<span>Kids {{ c.venues[1].kids_time }}</span>{% elif c.venues[1].time %}<span>{{ c.venues[1].time }}</span>{% endif %}
+  <div class="kids-venues" aria-label="Sedi Kids e Junior">
+    {% for venue in c.venues[:2] %}
+    {% if venue.name %}
+    <div class="kids-venue">
+      <strong>{{ venue.name }}</strong>
+      <span>{{ venue.days }} · {{ venue.address }}</span>
+      {% if venue.kids_time %}
+        <span>Kids {{ venue.kids_time }}</span>
+      {% elif venue.time %}
+        <span>Fascia corsi {{ venue.time }}</span>
+      {% endif %}
+      {% if venue.note %}<small>{{ venue.note }}</small>{% endif %}
+    </div>
+    {% endif %}
+    {% endfor %}
   </div>
-  {% endif %}
   <div class="kids-actions">
     {% if c.kids and c.kids.reel_url %}<a class="dark-btn" href="{{ c.kids.reel_url }}" target="_blank" rel="noopener">Guarda Kids & Junior ↗</a>{% endif %}
     <a class="dark-link" href="#contatti">Chiedi una prova ↗</a>
