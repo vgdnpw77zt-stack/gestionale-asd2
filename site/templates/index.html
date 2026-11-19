@@ -176,9 +176,9 @@
    <div class="kids-video-ui"><span>KIDS &amp; JUNIOR</span><small>IN MOVIMENTO</small></div>
  </div>
  {% else %}
- <div class="kids-image kids-photo-stage">
-   <img src="{{ c.visuals.gallery[1] }}" alt="Una fotografia originale BodyMind Aerial Studio" loading="lazy" decoding="async">
-   <div class="kids-photo-shade" aria-hidden="true"></div>
+ <div class="kids-image kids-visual-fallback" aria-label="Kids & Junior BodyMind — grafica della versione pubblicata">
+   <span class="kids-fallback-ring" aria-hidden="true"></span>
+   <span class="kids-fallback-line" aria-hidden="true"></span>
    <div class="kids-fallback-copy"><small>BODYMIND AERIAL STUDIO</small><strong>KIDS<br>&amp; JUNIOR</strong></div>
  </div>
  {% endif %}
@@ -194,7 +194,7 @@
  {% if c.videos|length > 3 and c.videos[3].url %}
  {% set video = c.videos[3] %}
  <a class="film-card" href="{{ video.url }}" target="_blank" rel="noopener" aria-label="Guarda {{ video.title }}">
-  <img class="film-card-photo" src="{{ c.visuals.gallery[2] }}" alt="Fotografia originale BodyMind Aerial Studio" loading="lazy" decoding="async">
+  <span class="film-card-art art4" aria-hidden="true"><span class="art-ring"></span><span class="art-line"></span><span class="art-glow"></span></span>
   <span class="film-card-gradient"></span>
   <span class="film-card-copy"><small>BODYMIND / THE FILM</small><strong>{{ video.title }}</strong><span>{{ video.subtitle }}</span><b>GUARDA IL REEL ↗</b></span>
  </a>
@@ -267,6 +267,18 @@
  <a class="footer-logo" href="#top"><img src="{{ c.visuals.logo }}" onerror="this.onerror=null;this.src='https://bodymindaerialstudio.life/seed-media/logo?v=9';" alt="BodyMind Aerial Studio"></a>
  <div class="footer-meta"><span>BodyMind Aerial Studio ASD</span><span>Aprilia (LT)</span></div>
  <div class="footer-links"><a href="{{ c.links.family }}">Area Famiglie</a><a href="https://www.instagram.com/bodymind.aerialstudio/" target="_blank" rel="noopener">Instagram</a></div>
+ <div class="safeguarding" data-safeguarding>
+  <button class="safeguarding-trigger" type="button" data-safeguarding-trigger aria-controls="safeguarding-panel" aria-expanded="false" aria-label="Informazioni e contatti safeguarding">
+    <span>Safeguarding</span><span class="safeguarding-icon" aria-hidden="true">ⓘ</span>
+  </button>
+  <div class="safeguarding-panel" id="safeguarding-panel" role="group" aria-label="Safeguarding, tutela e contatti">
+    <strong>La tutela delle persone viene prima di tutto.</strong>
+    <p>Il safeguarding promuove un ambiente sportivo sicuro, prevenendo e contrastando abusi, violenze, discriminazioni e comportamenti inappropriati.</p>
+    <p class="safeguarding-referent">Contatto per le famiglie: <b>De Angelis Daniele</b></p>
+    <a href="mailto:dan24378@icloud.com">dan24378@icloud.com</a>
+    <a href="https://wa.me/393515187943" target="_blank" rel="noopener noreferrer">WhatsApp BodyMind · 351 5187943 ↗</a>
+  </div>
+ </div>
  <div class="footer-visits" aria-label="Visitatori unici del sito"><span>VISITE UNICHE</span><strong>{{ "{:,}".format(visits|int).replace(",", ".") }}</strong></div>
 </footer>
 
