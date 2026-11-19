@@ -54,6 +54,12 @@ async def test_one(browser,w,h,mobile):
   assert await page.locator(".act").count()==3 and await page.locator("#training,#competition,#show").count()==3
   assert await page.locator(".acts-index a").count()==4
   assert await page.locator(".competition-palmares").count()==1
+  assert await page.locator("#kids .kids-venue").count()==2,("Kids/Junior must list two venues",w)
+  kids_venues=await page.locator("#kids .kids-venue").all_text_contents()
+  assert any("Palagym" in item for item in kids_venues),("Palagym not listed in Kids/Junior",w,kids_venues)
+  assert any("Pianeta Forma" in item for item in kids_venues),("Pianeta Forma missing from Kids/Junior",w,kids_venues)
+  assert any("Lunedì e mercoledì" in item for item in kids_venues),("Palagym days missing",w,kids_venues)
+  assert any("Martedì e giovedì" in item for item in kids_venues),("Pianeta Forma days missing",w,kids_venues)
   assert await page.locator(".location-card").count()>=2
   assert await page.locator(".contact-links a").count()>=2
   if mobile:
