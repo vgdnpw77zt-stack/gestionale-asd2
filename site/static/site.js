@@ -55,3 +55,27 @@ if(analyticsSession){
   document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="hidden")endSession()});
 }
 })();
+
+/* Safeguarding: mouse hover is CSS; tap/click persists the panel until
+   a second activation, Escape, or a click away. Keyboard focus works in CSS. */
+(()=>{
+  const box=document.querySelector("[data-safeguarding]");
+  const trigger=box?.querySelector("[data-safeguarding-trigger]");
+  if(!box||!trigger)return;
+  const setOpen=value=>{
+    box.classList.toggle("is-open",value);
+    trigger.setAttribute("aria-expanded",String(value));
+  };
+  trigger.addEventListener("click",event=>{
+    event.stopPropagation();
+    setOpen(!box.classList.contains("is-open"));
+  });
+  document.addEventListener("click",event=>{
+    if(!box.contains(event.target))setOpen(false);
+  });
+  document.addEventListener("keydown",event=>{
+    if(event.key==="Escape"&&box.classList.contains("is-open")){
+      setOpen(false);trigger.focus();
+    }
+  });
+})();
