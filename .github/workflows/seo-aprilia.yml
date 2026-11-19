@@ -1,0 +1,31 @@
+name: BodyMind — SEO locale Aprilia (senza toccare il gestionale)
+on:
+  push:
+    branches: [bodymind-site-seo-aprilia-20261119]
+    paths:
+      - 'site/app.py'
+      - 'site/seo_pages.py'
+      - 'site/templates/index.html'
+      - 'site/templates/seo_local.html'
+      - 'site/static/seo-local.css'
+      - 'site/static/atto-unico.css'
+      - 'qa/seo_aprilia.py'
+      - '.github/workflows/seo-aprilia.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  seo-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Flask in CI sandbox
+        run: pip install -r site/requirements.txt
+      - name: Python syntax check
+        run: python -m compileall -q site/seo_pages.py site/app.py qa/seo_aprilia.py
+      - name: Verify SEO HTML, metadata, original media and sitemap
+        run: python qa/seo_aprilia.py
