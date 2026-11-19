@@ -517,8 +517,13 @@ footer{display:grid;grid-template-columns:auto 1fr auto;gap:25px;align-items:cen
   transform:translateY(7px);
   transition:opacity .16s var(--ease),transform .16s var(--ease),visibility .16s;
 }
-.safeguarding:is(:hover,:focus-within,.is-open) .safeguarding-panel{
+.safeguarding.is-open .safeguarding-panel{
   opacity:1;visibility:visible;pointer-events:auto;transform:translateY(0);
+}
+@media(hover:hover) and (pointer:fine){
+ .safeguarding:hover .safeguarding-panel{
+   opacity:1;visibility:visible;pointer-events:auto;transform:translateY(0);
+ }
 }
 .safeguarding-panel:after{
   content:"";position:absolute;left:23px;bottom:-6px;width:10px;height:10px;
