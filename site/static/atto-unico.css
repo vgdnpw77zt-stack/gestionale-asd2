@@ -546,3 +546,20 @@ footer{display:grid;grid-template-columns:auto 1fr auto;gap:25px;align-items:cen
 @media(prefers-reduced-motion:reduce){
  .safeguarding-panel{transition:none}
 }
+
+
+/* SEO navigation: unobtrusive links so visitors and crawlers can discover
+   the four genuinely informative BodyMind course pages. */
+.footer-local-search{grid-column:1/-1;display:flex;align-items:center;flex-wrap:wrap;
+  gap:12px 20px;padding:22px 0 10px;border-top:1px solid rgba(225,175,148,.18)}
+.footer-local-search p{margin:0;width:100%;max-width:860px;font-size:12px;
+  line-height:1.65;color:#c7b5ad;letter-spacing:0}
+.footer-local-search a{font-size:11px;font-weight:750;text-underline-offset:5px;
+  text-decoration:underline;text-decoration-color:#cc9b816c;color:#ead5c8}
+.footer-local-search a:hover{color:#ffe3cf}
+#safeguarding{scroll-margin-top:160px}
+@media(max-width:600px){
+ .footer-local-search{gap:13px 17px;align-items:flex-start}
+ .footer-local-search p{font-size:11px}
+ .footer-local-search a{font-size:11px;line-height:1.4}
+}
