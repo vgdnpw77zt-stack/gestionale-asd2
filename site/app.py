@@ -4,6 +4,7 @@ from pathlib import Path
 from functools import wraps
 from copy import deepcopy
 from urllib.parse import quote_plus, urlparse
+from xml.sax.saxutils import escape as xml_escape
 from flask import Flask, render_template, request, redirect, url_for, session, flash, send_from_directory, Response, abort
 from seo_pages import (ORIGIN as SEO_ORIGIN, PAGES as SEO_PAGES, ORDER as SEO_ORDER,
                        NAV_LABELS as SEO_NAV_LABELS, HOME_TITLE as SEO_HOME_TITLE,
@@ -665,11 +666,36 @@ def robots():
 
 @app.get("/sitemap.xml")
 def sitemap():
-    urls=[SEO_ORIGIN+"/"] + [SEO_ORIGIN+"/"+slug for slug in SEO_ORDER]
-    entries="".join("<url><loc>"+url+"</loc></url>" for url in urls)
+    """Normal pages and their real published photographs, using Google's image extension."""
+    c=load_content()
+    photos=(c.get("visuals") or {}).get("gallery") or []
+    slots={"":(0,1,2,4,5)}
+    for slug in SEO_ORDER:
+        slots[slug]=(SEO_PAGES[slug]["photo"],)
+    entries=[]
+    for slug,indices in slots.items():
+        url=SEO_ORIGIN+("/"+slug if slug else "/")
+        images=[]
+        for index in indices:
+            if index>=len(photos):
+                continue
+            src=str(photos[index])
+            parsed=urlparse(src)
+            # Don't insert arbitrary external or non-http URLs into the sitemap.
+            if src.startswith("/") and not src.startswith("//"):
+                image_url=SEO_ORIGIN+src
+            elif parsed.scheme=="https" and parsed.netloc=="bodymindaerialstudio.life":
+                image_url=src
+            else:
+                continue
+            images.append("<image:image><image:loc>"+xml_escape(image_url)+
+                          "</image:loc></image:image>")
+        entries.append("<url><loc>"+xml_escape(url)+"</loc>"+
+                       "".join(images)+"</url>")
     return Response('<?xml version="1.0" encoding="UTF-8"?>'+
-                    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+
-                    entries+'</urlset>',mimetype="application/xml")
+                    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" '+
+                    'xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">'+
+                    "".join(entries)+'</urlset>',mimetype="application/xml")
 
 @app.route("/studio-admin/login", methods=["GET","POST"])
 def admin_login():
