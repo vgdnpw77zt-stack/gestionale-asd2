@@ -30,6 +30,9 @@ for slug,data in PAGES.items():
     check(f'<title>{data["title"]}</title>' in h,f"{slug}: title incorrect")
     check(f'<link rel="canonical" href="{ORIGIN}/{slug}">' in h,f"{slug}: canonical")
     check(data["description"] in unescape(h),f"{slug}: missing meta description")
+    check('property="og:image:alt" content="'+data["photo_alt"]+'"' in unescape(h),f"{slug}: photo open graph alt missing")
+    check('name="twitter:image"' in h,f"{slug}: Twitter image missing")
+    check("primaryImageOfPage" in h,f"{slug}: structured photo missing")
     check(f'<h1 id="titolo-pagina">{data["h1"]}</h1>' in h,f"{slug}: H1")
     check("content=\"index,follow" in h and "noindex" not in h,f"{slug}: robots")
     check('href="/#contatti"' in h,f"{slug}: missing conversion CTA")
@@ -52,6 +55,10 @@ h=home.get_data(as_text=True)
 check("Danza Aerea e Cerchio Aereo ad Aprilia" in h or "BodyMind Aerial Studio | Danza Aerea ad Aprilia" in h,
       "Home title not specialized")
 check("seo-local.css" not in h,"Home design must stay original")
+check('name="twitter:image"' in h and 'property="og:image:alt"' in h,"Home image metadata missing")
+check('alt="Performer BodyMind durante un esercizio aereo in costume rosso ad Aprilia"' in h,"Movement image alt lost")
+check('alt="Allieva BodyMind in un esercizio sul cerchio aereo' in h,"Kids alt lost")
+
 check("atto-unico.css" in h,"Original design stylesheet lost")
 check("data-hero-video" in h,"Original autoplay video removed")
 check("data-kids-video-shell" in h or "kids-photo-stage" in h,"Kids media lost")
@@ -71,6 +78,13 @@ ns={'sm':'http://www.sitemaps.org/schemas/sitemap/0.9'}
 urls=[n.text for n in root.findall('.//sm:loc',ns)]
 expected={ORIGIN+"/"}|{ORIGIN+"/"+s for s in ORDER}
 check(set(urls)==expected,"Sitemap URLs incorrect: "+str(urls))
+image_ns={'image':'http://www.google.com/schemas/sitemap-image/1.1'}
+images=[node.text for node in root.findall('.//image:loc',image_ns)]
+check(len(images)>=9,"Sitemap should expose actual photos (5 home + 4 pages): "+str(images))
+check(all(img.startswith(ORIGIN+"/seed-media/gallery") for img in images),"Unexpected externally hosted sitemap photo")
+check(len(set(images))>=5,"Sitemap image diversity missing")
+print("PASS original image SEO sitemap",len(images),"references")
+
 print("PASS sitemap",len(urls),"canonical URLs")
 
 robots=client.get("/robots.txt")
