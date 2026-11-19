@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#110A12">
-<meta name="description" content="{{ c.seo.description }}">
+<meta name="description" content="{{ seo_description }}">
 <meta name="robots" content="index,follow,max-image-preview:large">
 <link rel="canonical" href="https://bodymindaerialstudio.life/">
 <meta property="og:type" content="website">
 <meta property="og:locale" content="it_IT">
-<meta property="og:title" content="{{ c.seo.title }}">
-<meta property="og:description" content="{{ c.seo.description }}">
+<meta property="og:title" content="{{ seo_title }}">
+<meta property="og:description" content="{{ seo_description }}">
 <meta property="og:url" content="https://bodymindaerialstudio.life/">
 <meta property="og:image" content="https://bodymindaerialstudio.life/seed-media/gallery4?v=9">
 <meta name="twitter:card" content="summary_large_image">
@@ -19,9 +19,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500;1,600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<title>{{ c.seo.title }}</title>
+<title>{{ seo_title }}</title>
 <link rel="stylesheet" href="{{ url_for('static',filename='atto-unico.css') }}?v=20261118-1">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"SportsActivityLocation","name":"BodyMind Aerial Studio","url":"https://bodymindaerialstudio.life/","address":{"@type":"PostalAddress","addressLocality":"Aprilia","addressRegion":"LT","addressCountry":"IT"},"sameAs":["https://www.instagram.com/bodymind.aerialstudio/"]}</script>
+<script type="application/ld+json">{{ seo_jsonld|tojson }}</script>
 </head>
 <body>
 <a class="skip-link" href="#main-content">Vai al contenuto</a>
@@ -124,7 +124,7 @@
 <section id="{{ ['training','competition','show'][loop.index0] }}" class="act act-{{ loop.index }}" aria-labelledby="act-title-{{loop.index}}">
  <div class="act-image-wrap">
    {% if c.videos|length > loop.index0 and c.videos[loop.index0].url %}<a class="act-image-link" href="{{ c.videos[loop.index0].url }}" target="_blank" rel="noopener" aria-label="Guarda il percorso {{ item.title }} BodyMind">{% else %}<div class="act-image-link">{% endif %}
-     <img class="act-image" src="{{ program_images[loop.index0] }}" loading="lazy" decoding="async" alt="{{ item.title }} BodyMind — fotografia originale">
+     <img class="act-image" src="{{ program_images[loop.index0] }}" loading="lazy" decoding="async" alt="{{ ['Allenamento di cerchio aereo BodyMind nella sala di Aprilia', 'Due atlete BodyMind durante un esercizio di acrobatica aerea', 'Esibizione di cerchio aereo BodyMind al tramonto'][loop.index0] }}">
    {% if c.videos|length > loop.index0 and c.videos[loop.index0].url %}</a>{% else %}</div>{% endif %}
    <span class="act-edge" aria-hidden="true">{{ '%02d'|format(loop.index) }}</span>
  </div>
@@ -276,7 +276,11 @@
  <a class="footer-logo" href="#top"><img src="{{ c.visuals.logo }}" onerror="this.onerror=null;this.src='https://bodymindaerialstudio.life/seed-media/logo?v=9';" alt="BodyMind Aerial Studio"></a>
  <div class="footer-meta"><span>BodyMind Aerial Studio ASD</span><span>Aprilia (LT)</span></div>
  <div class="footer-links"><a href="{{ c.links.family }}">Area Famiglie</a><a href="https://www.instagram.com/bodymind.aerialstudio/" target="_blank" rel="noopener">Instagram</a></div>
- <div class="safeguarding" data-safeguarding>
+ <nav class="footer-local-search" aria-label="Esplora i corsi di danza aerea ad Aprilia">
+  <p>Scopri la danza aerea e il cerchio aereo ad Aprilia. BodyMind propone percorsi per ragazze e adulte, secondo età, livello e disponibilità dei gruppi.</p>
+  {% for slug in seo_nav_order %}<a href="/{{ slug }}">{{ seo_nav_labels[slug] }}</a>{% endfor %}
+ </nav>
+ <div class="safeguarding" id="safeguarding" data-safeguarding>
   <button class="safeguarding-trigger" type="button" data-safeguarding-trigger aria-controls="safeguarding-panel" aria-expanded="false" aria-label="Informazioni e contatti safeguarding">
     <span>Safeguarding</span><span class="safeguarding-icon" aria-hidden="true">ⓘ</span>
   </button>
