@@ -140,6 +140,18 @@ async def test_one(browser,w,h,mobile):
   await ctx.close()
 
 async def main():
+  # Regression guard based on the actual published A351 image slot mapping.
+  # Training, Competition, Show must keep gallery1 / gallery5 / gallery6.
+  # Kids must keep its native CMS video, and additional imagery is fallback only.
+  template=Path("site/templates/index.html").read_text(encoding="utf-8")
+  assert "{% set program_images = [c.visuals.gallery[0], c.visuals.gallery[4], c.visuals.gallery[5]] %}" in template, "Published course photos have been remapped"
+  assert 'id="{{ [\'training\',\'competition\',\'show\'][loop.index0] }}"' in template, "Course-photo ordering changed"
+  assert '{% if c.kids and c.kids.video_file %}' in template, "Original Kids video gate removed"
+  assert 'data-kids-video-shell' in template and 'src="{{ c.kids.video_file }}"' in template, "Original Kids movie removed"
+  kids=template.split('<section id="kids"',1)[1].split('</section>',1)[0]
+  assert '{% else %}' in kids and 'src="{{ c.visuals.gallery[1] }}"' in kids, "Kids extra photo must be fallback only"
+  assert 'src="{{ c.visuals.gallery[2] }}"' in template, "Added photo for originally empty movement panel lost"
+  assert 'href="mailto:dan24378@icloud.com"' in template and 'https://wa.me/393515187943' in template, "Safeguarding contact changed"
   async with async_playwright() as p:
     browser=await p.webkit.launch()
     for w,h,m in [(320,700,True),(390,844,True),(430,932,True),(1440,900,False)]:
