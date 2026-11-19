@@ -85,11 +85,11 @@ async def test_one(browser,w,h,mobile):
     await page.wait_for_timeout(350)
     images=await page.locator(".act-image").evaluate_all("(es)=>es.map(e=>({ok:e.complete&&e.naturalWidth>0,src:e.currentSrc}))")
     assert len(images)==3 and all(x["ok"] for x in images),("Original photographs unavailable",w,images)
-    assets=await page.locator(".intro-brand-logo,.kids-photo-stage>img,.film-card-photo").evaluate_all(
-      "(els)=>els.map(e=>({loaded:e.complete&&e.naturalWidth>0,src:e.getAttribute('src')}))")
-    assert len(assets)==3 and all(e["loaded"] for e in assets),("Brand logo or original gallery reused failed to load",w,assets)
-    assert "/seed-media" in assets[0]["src"],("Brand logo not original CMS asset",w,assets)
-    assert "/seed-media/gallery" in assets[1]["src"] and "/seed-media/gallery" in assets[2]["src"],("New photos not existing gallery media",w,assets)
+    logo=await page.locator(".intro-brand-logo").evaluate("(e)=>({loaded:e.complete&&e.naturalWidth>0,src:e.getAttribute('src')})")
+    assert logo["loaded"] and "/seed-media" in logo["src"],("Official BodyMind logo not loaded",w,logo)
+    assert await page.locator(".kids-image.kids-visual-fallback").count()==1,("Previously published Kids illustration replaced",w)
+    assert await page.locator(".film-card-art.art4").count()==1,("Previously published In movimento art replaced",w)
+    assert await page.locator(".kids-photo-stage,.film-card-photo").count()==0,("Unexpected substituted media",w)
     await page.screenshot(path=str(OUT/f"home-completa-{w}x{h}.jpg"),
       full_page=True,type="jpeg",quality=82,animations="disabled")
     if w==390:
@@ -105,6 +105,32 @@ async def test_one(browser,w,h,mobile):
     assert await menu.get_attribute("aria-expanded")=="true"
     await menu.click()
     assert await menu.get_attribute("aria-expanded")=="false"
+  safeguarding=page.locator("[data-safeguarding]")
+  assert await safeguarding.count()==1,("Safeguarding footer reference missing",w)
+  panel=page.locator("#safeguarding-panel")
+  trigger=page.locator("[data-safeguarding-trigger]")
+  assert "De Angelis Daniele" in await panel.inner_text()
+  assert "abusi" in await panel.inner_text() and "discriminazioni" in await panel.inner_text()
+  assert await page.locator('#safeguarding-panel a[href="mailto:dan24378@icloud.com"]').count()==1
+  assert await page.locator('#safeguarding-panel a[href="https://wa.me/393515187943"]').count()==1
+  await trigger.scroll_into_view_if_needed()
+  await page.wait_for_timeout(200)
+  if mobile:
+    await trigger.click()
+    assert await trigger.get_attribute("aria-expanded")=="true"
+    assert await panel.is_visible(),("Safeguarding popover did not open on tap",w)
+    if w==390:
+      await page.screenshot(path=str(OUT/"footer-safeguarding-390.png"),animations="disabled")
+    await page.keyboard.press("Escape")
+    assert await trigger.get_attribute("aria-expanded")=="false"
+    assert not await panel.is_visible(),("Safeguarding popover did not close on Escape",w)
+  else:
+    await trigger.hover()
+    assert await panel.is_visible(),("Safeguarding hover did not open",w)
+    await page.screenshot(path=str(OUT/"footer-safeguarding-1440.png"),animations="disabled")
+    await page.mouse.move(0,0)
+    await page.wait_for_timeout(220)
+    assert not await panel.is_visible(),("Safeguarding hover did not close",w)
   assert not errors,("JS console exception",w,errors)
   OUTCOME.append({"screen":f"{w}x{h}","result":"PASS","videoOriginal":True,
       "samePhotos":True,"medalsMoving":True,"headlineAndCtaVisible":True,
