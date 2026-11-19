@@ -2,6 +2,7 @@
 No live infrastructure, APIs, original photographs or family documents are touched.
 """
 import os, sys, json, re, tempfile
+from html import unescape
 from pathlib import Path
 from urllib.parse import urlsplit
 from xml.etree import ElementTree
@@ -28,7 +29,7 @@ for slug,data in PAGES.items():
     pages[slug]=h
     check(f'<title>{data["title"]}</title>' in h,f"{slug}: title incorrect")
     check(f'<link rel="canonical" href="{ORIGIN}/{slug}">' in h,f"{slug}: canonical")
-    check(data["description"] in h,f"{slug}: missing meta description")
+    check(data["description"] in unescape(h),f"{slug}: missing meta description")
     check(f'<h1 id="titolo-pagina">{data["h1"]}</h1>' in h,f"{slug}: H1")
     check("content=\"index,follow" in h and "noindex" not in h,f"{slug}: robots")
     check('href="/#contatti"' in h,f"{slug}: missing conversion CTA")
