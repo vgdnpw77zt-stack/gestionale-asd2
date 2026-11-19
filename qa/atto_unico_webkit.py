@@ -87,9 +87,10 @@ async def test_one(browser,w,h,mobile):
     assert len(images)==3 and all(x["ok"] for x in images),("Original photographs unavailable",w,images)
     logo=await page.locator(".intro-brand-logo").evaluate("(e)=>({loaded:e.complete&&e.naturalWidth>0,src:e.getAttribute('src')})")
     assert logo["loaded"] and "/seed-media" in logo["src"],("Official BodyMind logo not loaded",w,logo)
-    assert await page.locator(".kids-image.kids-visual-fallback").count()==1,("Previously published Kids illustration replaced",w)
-    assert await page.locator(".film-card-art.art4").count()==1,("Previously published In movimento art replaced",w)
-    assert await page.locator(".kids-photo-stage,.film-card-photo").count()==0,("Unexpected substituted media",w)
+    assets=await page.locator(".kids-photo-stage>img,.film-card-photo").evaluate_all(
+      "(es)=>es.map(e=>({ok:e.complete&&e.naturalWidth>0,src:e.getAttribute('src')}))")
+    assert len(assets)==2 and all(e["ok"] for e in assets),("New photography in formerly blank panels did not load",w,assets)
+    assert all("/seed-media/gallery" in e["src"] for e in assets),("Photo from outside original BodyMind gallery",w,assets)
     await page.screenshot(path=str(OUT/f"home-completa-{w}x{h}.jpg"),
       full_page=True,type="jpeg",quality=82,animations="disabled")
     if w==390:
@@ -109,8 +110,9 @@ async def test_one(browser,w,h,mobile):
   assert await safeguarding.count()==1,("Safeguarding footer reference missing",w)
   panel=page.locator("#safeguarding-panel")
   trigger=page.locator("[data-safeguarding-trigger]")
-  assert "De Angelis Daniele" in await panel.inner_text()
-  assert "abusi" in await panel.inner_text() and "discriminazioni" in await panel.inner_text()
+  panel_copy=await panel.text_content()
+  assert "De Angelis Daniele" in panel_copy,("Missing family safeguarding contact",w,panel_copy)
+  assert "abusi" in panel_copy and "discriminazioni" in panel_copy
   assert await page.locator('#safeguarding-panel a[href="mailto:dan24378@icloud.com"]').count()==1
   assert await page.locator('#safeguarding-panel a[href="https://wa.me/393515187943"]').count()==1
   await trigger.scroll_into_view_if_needed()
