@@ -5,6 +5,12 @@ from functools import wraps
 from copy import deepcopy
 from urllib.parse import quote_plus, urlparse
 from flask import Flask, render_template, request, redirect, url_for, session, flash, send_from_directory, Response, abort
+from seo_pages import (ORIGIN as SEO_ORIGIN, PAGES as SEO_PAGES, ORDER as SEO_ORDER,
+                       NAV_LABELS as SEO_NAV_LABELS, HOME_TITLE as SEO_HOME_TITLE,
+                       HOME_DESCRIPTION as SEO_HOME_DESCRIPTION,
+                       OLD_HOME_TITLE as SEO_OLD_TITLE,
+                       OLD_HOME_DESCRIPTION as SEO_OLD_DESCRIPTION,
+                       organization_jsonld, page_jsonld)
 from werkzeug.utils import secure_filename
 
 BASE = Path(__file__).resolve().parent
@@ -570,7 +576,32 @@ def home():
     is_bot=_is_obvious_bot()
     visits = _site_visit_count(increment=not is_bot)
     analytics_session = "" if is_bot else _analytics_start_session()
-    return render_template("index.html", c=load_content(), visits=visits, analytics_session=analytics_session)
+    c=load_content()
+    current_title=(c.get("seo") or {}).get("title") or ""
+    current_description=(c.get("seo") or {}).get("description") or ""
+    # Preserve any custom SEO titles set from studio-admin.
+    seo_title=(SEO_HOME_TITLE if not current_title or current_title==SEO_OLD_TITLE else current_title)
+    seo_description=(SEO_HOME_DESCRIPTION if not current_description or current_description==SEO_OLD_DESCRIPTION else current_description)
+    return render_template("index.html", c=c, visits=visits, analytics_session=analytics_session,
+                           seo_title=seo_title,seo_description=seo_description,
+                           seo_jsonld=organization_jsonld(c),
+                           seo_nav_labels=SEO_NAV_LABELS,seo_nav_order=SEO_ORDER)
+
+
+@app.get("/danza-aerea-aprilia")
+@app.get("/cerchio-aereo-aprilia")
+@app.get("/tessuti-aerei-aprilia")
+@app.get("/danza-aerea-ragazze-donne-aprilia")
+def seo_local_page():
+    slug=request.path.strip("/")
+    source=SEO_PAGES.get(slug)
+    if not source:
+        abort(404)
+    page=deepcopy(source)
+    page["slug"]=slug
+    c=load_content()
+    return render_template("seo_local.html",c=c,page=page,canonical=SEO_ORIGIN+"/"+slug,
+                           nav_labels=SEO_NAV_LABELS,seo_data=page_jsonld(page,c))
 
 @app.post("/analytics/event")
 def analytics_event():
@@ -634,7 +665,11 @@ def robots():
 
 @app.get("/sitemap.xml")
 def sitemap():
-    return Response("""<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://bodymindaerialstudio.life/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url></urlset>""", mimetype="application/xml")
+    urls=[SEO_ORIGIN+"/"] + [SEO_ORIGIN+"/"+slug for slug in SEO_ORDER]
+    entries="".join("<url><loc>"+url+"</loc></url>" for url in urls)
+    return Response('<?xml version="1.0" encoding="UTF-8"?>'+
+                    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+
+                    entries+'</urlset>',mimetype="application/xml")
 
 @app.route("/studio-admin/login", methods=["GET","POST"])
 def admin_login():
