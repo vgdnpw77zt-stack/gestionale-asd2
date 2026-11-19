@@ -59,8 +59,8 @@ PAGES = {
   "label":"TESSUTI AEREI / APRILIA",
   "h1":"Tessuti aerei ad Aprilia",
   "lead":"I tessuti aerei uniscono la preparazione fisica al linguaggio espressivo del movimento. Il lavoro è progressivo: familiarizzare con l'attrezzo, apprendere le basi e costruire nel tempo sequenze sempre più consapevoli.",
-  "photo":1,
-  "photo_alt":"Foto originale delle attività BodyMind Aerial Studio ad Aprilia",
+  "photo":4,
+  "photo_alt":"Due atlete BodyMind si esibiscono sui tessuti aerei ad Aprilia",
   "sections":[
    ("Tecnica prima dell'effetto scenico", "Il percorso parte da prese, controllo, coordinazione, mobilità e gestione del corpo in sospensione. Le progressioni vengono adattate alle possibilità delle partecipanti, anziché puntare subito alle figure più complesse."),
    ("Tessuti, cerchio e danza aerea", "I tessuti rappresentano uno degli strumenti della danza aerea, insieme al cerchio. Ogni attrezzo ha richieste tecniche diverse: lo studio può indicarti quali corsi sono effettivamente disponibili nella tua fascia d'età."),
@@ -122,6 +122,9 @@ def organization_jsonld(c):
       "alternateName":"BodyMind Aerial Studio",
       "url":ORIGIN+"/",
       "logo":ORIGIN+"/seed-media/logo?v=9",
+      "image":[ORIGIN+"/seed-media/gallery1?v=9",
+               ORIGIN+"/seed-media/gallery5?v=9",
+               ORIGIN+"/seed-media/gallery6?v=9"],
       "description":"Associazione sportiva dilettantistica di danza aerea, cerchio aereo e tessuti ad Aprilia.",
       "sameAs":["https://www.instagram.com/bodymind.aerialstudio/"],
       "areaServed":{"@type":"City","name":"Aprilia"},
@@ -139,6 +142,9 @@ def page_jsonld(page,c):
     url=ORIGIN+"/"+slug
     webpage={"@type":"WebPage","@id":url+"#webpage","url":url,"name":page["title"],
              "description":page["description"],"inLanguage":"it-IT",
+             "primaryImageOfPage":{"@type":"ImageObject",
+               "contentUrl":ORIGIN+"/seed-media/gallery"+str(page["photo"]+1)+"?v=9",
+               "name":page["photo_alt"]},
              "about":{"@id":ORIGIN+"/#organizzazione"}}
     breadcrumb={"@type":"BreadcrumbList","@id":url+"#breadcrumb","itemListElement":[
         {"@type":"ListItem","position":1,"name":"Home","item":ORIGIN+"/"},
