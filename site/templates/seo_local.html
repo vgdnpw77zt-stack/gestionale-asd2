@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#120B15">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<title>{{ page.title }}</title>
+<meta name="description" content="{{ page.description }}">
+<link rel="canonical" href="{{ canonical }}">
+<meta property="og:type" content="article">
+<meta property="og:locale" content="it_IT">
+<meta property="og:title" content="{{ page.title }}">
+<meta property="og:description" content="{{ page.description }}">
+<meta property="og:url" content="{{ canonical }}">
+<meta property="og:image" content="https://bodymindaerialstudio.life/seed-media/gallery{{ page.photo+1 }}?v=9">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/favicon.ico">
+<link rel="apple-touch-icon" href="/seed-media/logo?v=9">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500;1,600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static',filename='seo-local.css') }}?v=20261119-1">
+<script type="application/ld+json">{{ seo_data|tojson }}</script>
+</head>
+<body>
+<a class="skip" href="#contenuto">Vai al contenuto</a>
+<header class="seo-header">
+ <a class="seo-logo" href="/" aria-label="Torna alla homepage BodyMind">
+  <img src="{{ c.visuals.logo }}" alt="BodyMind Aerial Studio ASD" onerror="this.onerror=null;this.src='/seed-media/logo?v=9'">
+ </a>
+ <nav aria-label="Navigazione principale">
+  <a href="/#percorsi">Percorsi</a>
+  <a href="/#kids">Kids &amp; Junior</a>
+  <a href="/#sedi">Sedi</a>
+  <a class="seo-header-cta" href="/#contatti">Prenota una prova</a>
+ </nav>
+</header>
+<main id="contenuto">
+ <section class="seo-hero" aria-labelledby="titolo-pagina">
+  <div class="seo-hero-text">
+   <nav class="breadcrumbs" aria-label="Percorso di navigazione"><a href="/">BodyMind</a><span aria-hidden="true">/</span><span>Aprilia</span></nav>
+   <p class="eyebrow">{{ page.label }}</p>
+   <h1 id="titolo-pagina">{{ page.h1 }}</h1>
+   <p class="seo-lead">{{ page.lead }}</p>
+   <div class="seo-actions">
+    <a class="seo-button" href="/#contatti">Chiedi una lezione di prova <span aria-hidden="true">↗</span></a>
+    <a class="seo-text-link" href="#come-funziona">Scopri il percorso <span aria-hidden="true">↓</span></a>
+   </div>
+  </div>
+  <div class="seo-hero-visual">
+   <img src="{{ c.visuals.gallery[page.photo] }}" alt="{{ page.photo_alt }}" fetchpriority="high" decoding="async">
+   <span class="seo-image-label">BODYMIND / APRILIA</span>
+  </div>
+ </section>
+
+ <section class="seo-introbar" aria-label="Informazioni essenziali">
+  <span><b>DISCIPLINA</b> Danza aerea e attrezzi aerei</span>
+  <span><b>LOCALITÀ</b> Aprilia (LT)</span>
+  <span><b>PERCORSO</b> Gruppi secondo età e livello</span>
+ </section>
+
+ <section class="seo-chapters" id="come-funziona">
+  <div class="seo-chapters-top"><p class="eyebrow">IL PERCORSO BODYMIND</p><h2>Iniziare in aria.<br><em>Con il tuo ritmo.</em></h2></div>
+  <div class="seo-chapters-list">
+    {% for title, body in page.sections %}
+    <article>
+      <span class="section-number">{{ '%02d'|format(loop.index) }}</span>
+      <div><h3>{{ title }}</h3><p>{{ body }}</p></div>
+    </article>
+    {% endfor %}
+  </div>
+ </section>
+
+ <section class="seo-venues" id="sedi-corsi">
+  <div class="seo-venues-header"><p class="eyebrow">LE NOSTRE SEDI DEI CORSI</p><h2>Ci trovi<br><em>ad Aprilia.</em></h2>
+   <p>BodyMind svolge le proprie attività presso spazi sportivi di Aprilia. Gli orari sono fasce generali: prima di venire, verifica la disponibilità del corso e del gruppo più adatto.</p>
+  </div>
+  <div class="seo-venues-grid">
+  {% for venue in c.venues[:2] %}{% if venue.name %}
+   <div class="seo-venue">
+    <h3>{{ venue.name }}</h3>
+    <p>{{ venue.address }}</p>
+    <p>{{ venue.days }}</p>
+    {% if venue.kids_time %}<p>Kids: {{ venue.kids_time }}</p>{% endif %}
+    {% if venue.adult_time %}<p>Adulti: {{ venue.adult_time }}</p>{% endif %}
+    {% if venue.time %}<p>Fascia corsi: {{ venue.time }}</p>{% endif %}
+    {% if venue.note %}<small>{{ venue.note }}</small>{% endif %}
+    <a href="{{ maps_url(venue.address) }}" target="_blank" rel="noopener noreferrer">Indicazioni <span aria-hidden="true">↗</span></a>
+   </div>
+  {% endif %}{% endfor %}
+  </div>
+ </section>
+
+ <section class="seo-faq" aria-labelledby="faq-heading">
+  <div><p class="eyebrow">DOMANDE FREQUENTI</p><h2 id="faq-heading">Prima di<br><em>cominciare.</em></h2></div>
+  <div class="seo-faq-items">
+   {% for question, answer in page.faqs %}
+   <details><summary>{{ question }}</summary><p>{{ answer }}</p></details>
+   {% endfor %}
+  </div>
+ </section>
+
+ <section class="seo-discover" aria-labelledby="altri-corsi">
+  <p class="eyebrow">ESPLORA BODYMIND</p>
+  <h2 id="altri-corsi">Altri modi<br>di volare.</h2>
+  <nav aria-label="Altri corsi di danza aerea ad Aprilia">
+  {% for slug in page.related %}
+  <a href="/{{ slug }}"><span>{{ nav_labels[slug] }}</span><span aria-hidden="true">↗</span></a>
+  {% endfor %}
+  </nav>
+ </section>
+
+ <section class="seo-final">
+   <p class="eyebrow">IL TUO PRIMO PASSO</p>
+   <h2>Ci vediamo<br><em>in aria.</em></h2>
+   <p>Raccontaci quale disciplina ti interessa e se cerchi un corso Junior o adulti. Per le ragazze minorenni il contatto può essere avviato da un genitore o tutore.</p>
+   <div class="seo-actions">
+    <a class="seo-button light" href="https://wa.me/393515187943" target="_blank" rel="noopener noreferrer">Scrivi a BodyMind su WhatsApp <span aria-hidden="true">↗</span></a>
+    <a class="seo-text-link" href="/#contatti">Tutti i contatti <span aria-hidden="true">↗</span></a>
+   </div>
+ </section>
+</main>
+<footer class="seo-footer">
+ <a href="/" class="seo-footer-brand">BodyMind Aerial Studio ASD</a>
+ <p>Danza aerea, cerchio e tessuti · Aprilia (LT)</p>
+ <div><a href="/#sedi">Sedi e orari</a><a href="/#contatti">Contatti</a><a href="https://www.instagram.com/bodymind.aerialstudio/" target="_blank" rel="noopener noreferrer">Instagram</a><a href="/#safeguarding">Safeguarding</a></div>
+</footer>
+</body>
+</html>
