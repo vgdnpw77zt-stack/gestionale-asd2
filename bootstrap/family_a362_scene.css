@@ -253,6 +253,8 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{border-color:#ef
  .hero-playback{min-height:44px;padding:9px}
  .bm362-cloud{opacity:.6}.bm362-stars{opacity:.48}
  main.main{width:calc(100% - 24px);padding:12px 0 42px}
+ /* Keep absolute decorative sky within viewport at 320px (was +6px). */
+ main.main>.bm362-sky--main{inset:0 -12px auto}
  .main>.stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:0}
  .stat{min-height:116px;padding:13px 12px;border-radius:11px}
  .stat .icon,.stat:nth-child(n) .icon{width:31px;height:31px}
