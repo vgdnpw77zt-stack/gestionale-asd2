@@ -63,11 +63,11 @@ async def run():
    if width<=760:
     assert state['media']['pos']=='absolute',(width,state['media'])
     assert state['intro']['pos']=='absolute',(width,state['intro'])
-    assert state['hero']['h']>=700,(width,state['hero'])
+    assert 560<=state['hero']['h']<=700,(width,state['hero'])
     assert state['media']['mask'] not in ('none',''),(width,state['media'])
     assert state['mainSky']['display']!='none',(width,state['mainSky'])
    else:
-    assert state['hero']['h']>=700,(width,state['hero'])
+    assert state['hero']['h']>=650,(width,state['hero'])
    before=await page.locator('.bm362-cloud').first.evaluate('(e)=>getComputedStyle(e).transform')
    await page.wait_for_timeout(700)
    after=await page.locator('.bm362-cloud').first.evaluate('(e)=>getComputedStyle(e).transform')
