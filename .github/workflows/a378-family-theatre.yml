@@ -1,0 +1,47 @@
+name: BodyMind A378 — Family Theatre WebKit QA
+on:
+  push:
+    branches: [bodymind-a378-family-theatre-20261120]
+    paths:
+      - 'bootstrap/family_a362_scene.css'
+      - 'bootstrap/family_a362_navigation.js'
+      - 'tests/test_a363_scene_webkit.py'
+      - 'tests/test_a378_family_theatre.py'
+      - '.github/workflows/a378-family-theatre.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  family-iphone:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile frozen runtime — no app source or data writes
+        run: python -m py_compile bootstrap/family_a362_runtime.py bootstrap/family_a362_wsgi.py
+      - name: Install WebKit browser
+        run: |
+          python -m pip install playwright
+          python -m playwright install --with-deps webkit
+      - name: Original scene regression 320 / 390 / 430 / desktop
+        run: python tests/test_a363_scene_webkit.py
+      - name: A378 new visual/interaction contract 320 / 375 / 390 / 430 / desktop
+        run: python tests/test_a378_family_theatre.py
+      - name: Check files stay scoped to family-only visuals
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          css=Path('bootstrap/family_a362_scene.css').read_text()
+          js=Path('bootstrap/family_a362_navigation.js').read_text()
+          assert '.main>#corsi{order:1}' in css
+          assert '.main>#pagamenti{order:2}' in css
+          assert '.main>#media{order:3}' in css
+          assert 'setOpen(mobile.matches)' in js
+          assert 'bm351-private-album' in js
+          assert 'family-hero-video' in css
+          print('A378 SAFE FAMILY-ONLY VISUAL OVERLAY PASS')
+          PY
